@@ -22,6 +22,7 @@
 - Use `extensions/<name>/index.ts` for extension entrypoints.
 - Include `extensions/<name>/README.md` with purpose, usage, behavior, and notable limits.
 - Avoid loose `extensions/*.ts` files.
+- Put Tau custom extension events in `shared/events.ts`; use `emitTauEvent`/`onTauEvent` instead of raw `pi.events` for Tau events.
 - Add extra extension files only when they clearly improve readability.
 - Defer long-lived resources until `session_start` or the command/tool that needs them.
 - Clean up session-scoped resources in `session_shutdown`.

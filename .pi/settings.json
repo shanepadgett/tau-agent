@@ -1,5 +1,32 @@
 {
   "packages": [
-    ".."
+    "..",
+    {
+      "source": "git:github.com/shanepadgett/crumbs",
+      "extensions": [
+        "-extensions/caveman/index.ts",
+        "-extensions/commit/index.ts",
+        "-extensions/cost-report/index.ts",
+        "-extensions/crumbs-doctor/index.ts",
+        "-extensions/guardian/index.ts",
+        "-extensions/mcp/index.ts",
+        "-extensions/notify/index.ts",
+        "-extensions/quiet-validators/index.ts",
+        "-extensions/repo-scaffold/index.ts",
+        "-extensions/skills-manager/index.ts",
+        "-extensions/status-line/index.ts",
+        "-extensions/terminal-clear/index.ts"
+      ],
+      "skills": [
+        "-skills/html-artifact/SKILL.md",
+        "-skills/pencil-design/SKILL.md",
+        "-skills/refactor-execute/SKILL.md",
+        "-skills/refactor-opportunities/SKILL.md",
+        "-skills/repo-founder/SKILL.md"
+      ],
+      "themes": [
+        "-themes/nord-wave.json"
+      ]
+    }
   ]
 }
