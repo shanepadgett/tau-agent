@@ -15,7 +15,10 @@ Run:
 - Waits for the active agent turn to finish.
 - Reads git status, recent commit subjects, staged/unstaged diffs, and bounded snippets from untracked files.
 - Includes user intent from the active conversation branch since the last successful `/commit`.
-- Calls the selected model directly so the prompt and response are not added to active chat context.
+- Calls commit models directly so the prompt and response are not added to active chat context.
+- Falls back through the commit model tier list when generation fails.
+- Skips remaining models from a provider when the failure looks provider/account-level, such as auth, billing, credits, quota, or rate limits.
+- Cools down provider/account-level failures for one day before trying that provider again.
 - Generates and validates a strict conventional commit message.
 - Opens the generated commit message for review in the editor, then validates the reviewed message before committing.
 - Asks for commit confirmation, then asks whether to push after commit.

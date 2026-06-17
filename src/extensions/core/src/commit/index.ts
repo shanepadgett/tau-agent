@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { complete, type Message } from "@earendil-works/pi-ai";
+import { type Api, complete, type Message, type Model } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { createGitRunner, type GitRunner } from "../../../../shared/git.ts";
 
@@ -13,6 +13,8 @@ const MAX_UNTRACKED_FILES = 12;
 const MAX_UNTRACKED_FILE_CHARS = 6_000;
 const MAX_UNTRACKED_CONTENT_CHARS = 30_000;
 const COMMIT_MARKER_TYPE = "tau.commit";
+const COMMIT_PROVIDER_COOLDOWN_TYPE = "tau.commit.provider-cooldown";
+const COMMIT_PROVIDER_COOLDOWN_MS = 86_400_000; // 1 day
 const CONVENTIONAL_COMMIT_TYPES = new Set([
 	"feat",
 	"fix",
@@ -30,6 +32,13 @@ interface CommitMarker {
 	hash: string;
 	subject: string;
 	timestamp: number;
+}
+
+interface CommitProviderCooldown {
+	provider: string;
+	failedAt: number;
+	expiresAt: number;
+	reason: string;
 }
 
 const COMMIT_MODEL_TIERS = [
@@ -64,15 +73,12 @@ export function registerCommit(pi: ExtensionAPI): void {
 
 				const evidence = await collectCommitEvidence(git, ctx.signal);
 				const intentMessages = collectCommitIntent(ctx.sessionManager.getBranch());
-				const commitModel = await resolveCommitModel(ctx);
-
-				ctx.ui.setStatus(
-					"commit",
-					`generating commit message with ${commitModel.model.provider}/${commitModel.model.id}`,
-				);
-				const generatedMessage = await generateCommitMessage(
+				const commitModels = await resolveCommitModels(ctx);
+				const providerCooldowns = collectActiveCommitProviderCooldowns(ctx.sessionManager.getBranch(), Date.now());
+				const generatedMessage = await generateCommitMessageWithFallback(
+					pi,
 					ctx,
-					commitModel,
+					applyCommitProviderCooldowns(commitModels, providerCooldowns),
 					buildCommitPrompt(status, evidence, intentMessages),
 				);
 
@@ -132,22 +138,41 @@ interface CommitEvidence {
 	untrackedBlocks: string[];
 }
 
-type CommitModel = Awaited<ReturnType<typeof resolveCommitModel>>;
+interface CommitModel {
+	model: Model<Api>;
+	auth: { apiKey: string; headers?: Record<string, string> };
+	reasoning: (typeof COMMIT_MODEL_TIERS)[number]["reasoning"] | undefined;
+}
 
-async function resolveCommitModel(ctx: ExtensionCommandContext) {
+interface CommitModelFailure {
+	model: CommitModel;
+	error: Error;
+	skippedProvider: boolean;
+}
+
+class CommitModelRequestError extends Error {}
+
+class CommitModelOutputError extends Error {}
+
+async function resolveCommitModels(ctx: ExtensionCommandContext): Promise<CommitModel[]> {
+	const candidates: CommitModel[] = [];
+
 	for (const tier of COMMIT_MODEL_TIERS) {
 		const model = ctx.modelRegistry.find(tier.provider, tier.model);
 		if (!model) continue;
 
 		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
-		if (auth.ok && auth.apiKey) return { model, auth: { ...auth, apiKey: auth.apiKey }, reasoning: tier.reasoning };
+		if (auth.ok && auth.apiKey)
+			candidates.push({ model, auth: { ...auth, apiKey: auth.apiKey }, reasoning: tier.reasoning });
 	}
 
+	if (candidates.length > 0) return candidates;
 	if (!ctx.model) throw new Error("No model selected and no commit model available.");
+
 	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
 	if (!auth.ok) throw new Error(auth.error);
 	if (!auth.apiKey) throw new Error(`No API key for ${ctx.model.provider}.`);
-	return { model: ctx.model, auth: { ...auth, apiKey: auth.apiKey }, reasoning: undefined };
+	return [{ model: ctx.model, auth: { ...auth, apiKey: auth.apiKey }, reasoning: undefined }];
 }
 
 async function collectCommitEvidence(git: GitRunner, signal: AbortSignal | undefined): Promise<CommitEvidence> {
@@ -220,6 +245,50 @@ function collectCommitIntent(entries: readonly SessionEntry[]): string[] {
 	return messages;
 }
 
+function collectActiveCommitProviderCooldowns(
+	entries: readonly SessionEntry[],
+	now: number,
+): Map<string, CommitProviderCooldown> {
+	const cooldowns = new Map<string, CommitProviderCooldown>();
+
+	for (const entry of entries) {
+		if (entry.type !== "custom" || entry.customType !== COMMIT_PROVIDER_COOLDOWN_TYPE) continue;
+
+		const cooldown = parseCommitProviderCooldown(entry.data);
+		if (!cooldown || cooldown.expiresAt <= now) continue;
+
+		const existing = cooldowns.get(cooldown.provider);
+		if (!existing || cooldown.expiresAt > existing.expiresAt) cooldowns.set(cooldown.provider, cooldown);
+	}
+
+	return cooldowns;
+}
+
+function parseCommitProviderCooldown(data: unknown): CommitProviderCooldown | undefined {
+	if (!data || typeof data !== "object") return undefined;
+
+	const record = data as Record<string, unknown>;
+	if (typeof record.provider !== "string") return undefined;
+	if (typeof record.failedAt !== "number") return undefined;
+	if (typeof record.expiresAt !== "number") return undefined;
+	if (typeof record.reason !== "string") return undefined;
+
+	return {
+		provider: record.provider,
+		failedAt: record.failedAt,
+		expiresAt: record.expiresAt,
+		reason: record.reason,
+	};
+}
+
+function applyCommitProviderCooldowns(
+	commitModels: readonly CommitModel[],
+	providerCooldowns: ReadonlyMap<string, CommitProviderCooldown>,
+): readonly CommitModel[] {
+	const availableModels = commitModels.filter((commitModel) => !providerCooldowns.has(commitModel.model.provider));
+	return availableModels.length > 0 ? availableModels : commitModels;
+}
+
 function extractUserMessageText(content: string | Message["content"]): string {
 	if (typeof content === "string") return content;
 
@@ -275,6 +344,41 @@ function buildCommitPrompt(status: string, evidence: CommitEvidence, intentMessa
 	].join("\n");
 }
 
+async function generateCommitMessageWithFallback(
+	pi: ExtensionAPI,
+	ctx: ExtensionCommandContext,
+	commitModels: readonly CommitModel[],
+	prompt: string,
+): Promise<string> {
+	const failedProviders = new Set<string>();
+	const failures: CommitModelFailure[] = [];
+
+	for (const commitModel of commitModels) {
+		if (failedProviders.has(commitModel.model.provider)) continue;
+
+		ctx.ui.setStatus(
+			"commit",
+			`generating commit message with ${commitModel.model.provider}/${commitModel.model.id}`,
+		);
+
+		try {
+			return await generateCommitMessage(ctx, commitModel, prompt);
+		} catch (error) {
+			if (ctx.signal?.aborted) throw new Error("Commit cancelled.");
+
+			const normalizedError = normalizeError(error);
+			const skippedProvider = shouldSkipProviderAfterFailure(normalizedError);
+			failures.push({ model: commitModel, error: normalizedError, skippedProvider });
+			if (skippedProvider) {
+				recordCommitProviderCooldown(pi, commitModel.model.provider, normalizedError.message);
+				failedProviders.add(commitModel.model.provider);
+			}
+		}
+	}
+
+	throw new Error(formatCommitModelFailures(failures));
+}
+
 async function generateCommitMessage(
 	ctx: ExtensionCommandContext,
 	commitModel: CommitModel,
@@ -294,13 +398,57 @@ async function generateCommitMessage(
 			signal: ctx.signal,
 			reasoning: commitModel.reasoning,
 		},
-	);
-	if (response.stopReason === "error") throw new Error(response.errorMessage || "Commit message generation failed.");
+	).catch((error: unknown) => {
+		throw new CommitModelRequestError(error instanceof Error ? error.message : String(error));
+	});
+
+	if (response.stopReason === "error") {
+		throw new CommitModelRequestError(response.errorMessage || "Commit message generation failed.");
+	}
 	if (response.stopReason === "aborted") throw new Error("Commit cancelled.");
 
-	return validateCommitMessage(
-		cleanCommitMessage(response.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")),
+	try {
+		return validateCommitMessage(
+			cleanCommitMessage(response.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")),
+		);
+	} catch (error) {
+		throw new CommitModelOutputError(error instanceof Error ? error.message : String(error));
+	}
+}
+
+function recordCommitProviderCooldown(pi: ExtensionAPI, provider: string, reason: string): void {
+	const failedAt = Date.now();
+	pi.appendEntry<CommitProviderCooldown>(COMMIT_PROVIDER_COOLDOWN_TYPE, {
+		provider,
+		failedAt,
+		expiresAt: failedAt + COMMIT_PROVIDER_COOLDOWN_MS,
+		reason: reason.slice(0, 300),
+	});
+}
+
+function normalizeError(error: unknown): Error {
+	return error instanceof Error ? error : new Error(String(error));
+}
+
+function shouldSkipProviderAfterFailure(error: Error): boolean {
+	if (!(error instanceof CommitModelRequestError)) return false;
+
+	const message = error.message.toLowerCase();
+	return /\b(?:401|402|403|429)\b|quota|credit|billing|payment|subscription|balance|insufficient|rate.?limit|too many requests|unauthori[sz]ed|forbidden|authentication|api key|permission|access denied|not entitled/.test(
+		message,
 	);
+}
+
+function formatCommitModelFailures(failures: readonly CommitModelFailure[]): string {
+	if (failures.length === 0) return "No commit model available.";
+
+	return [
+		"Commit message generation failed for all available commit models:",
+		...failures.map(({ model, error, skippedProvider }) => {
+			const suffix = skippedProvider ? " (skipped remaining provider models)" : "";
+			return `- ${model.model.provider}/${model.model.id}: ${error.message}${suffix}`;
+		}),
+	].join("\n");
 }
 
 function cleanCommitMessage(rawMessage: string): string {
