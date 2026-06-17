@@ -19,6 +19,10 @@
 
 ## Pi Extension Practices
 
+- Use `extensions/<name>/index.ts` for extension entrypoints.
+- Include `extensions/<name>/README.md` with purpose, usage, behavior, and notable limits.
+- Avoid loose `extensions/*.ts` files.
+- Add extra extension files only when they clearly improve readability.
 - Defer long-lived resources until `session_start` or the command/tool that needs them.
 - Clean up session-scoped resources in `session_shutdown`.
 - Store durable extension state in session entries or tool result `details` when appropriate.

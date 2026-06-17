@@ -1,6 +1,6 @@
 # tau-agent
 
-Personal pi extensions, skills, prompts, and themes.
+Tau is a custom agentic harness built with pi extensions
 
 ## Development
 

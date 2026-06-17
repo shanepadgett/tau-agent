@@ -1,3 +1,6 @@
 [submodule "references/pi"]
 	path = references/pi
 	url = git@github.com:earendil-works/pi.git
+[submodule "references/crumbs"]
+	path = references/crumbs
+	url = git@github.com:shanepadgett/crumbs.git

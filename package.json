@@ -3,11 +3,11 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "Personal pi extensions, skills, prompts, and themes",
+	"description": "Tau is a custom agentic harness built with pi extensions",
 	"license": "MIT",
 	"pi": {
 		"extensions": [
-			"./extensions"
+			"./extensions/*/index.ts"
 		],
 		"skills": [
 			"./skills"
