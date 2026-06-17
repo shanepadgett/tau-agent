@@ -3,7 +3,7 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { complete, type Message } from "@earendil-works/pi-ai";
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { createGitRunner, type GitRunner } from "../../../../shared/git.ts";
 
 const COMMIT_TIMEOUT_MS = 120_000;
@@ -12,6 +12,7 @@ const MAX_DIFF_CHARS = 80_000;
 const MAX_UNTRACKED_FILES = 12;
 const MAX_UNTRACKED_FILE_CHARS = 6_000;
 const MAX_UNTRACKED_CONTENT_CHARS = 30_000;
+const COMMIT_MARKER_TYPE = "tau.commit";
 const CONVENTIONAL_COMMIT_TYPES = new Set([
 	"feat",
 	"fix",
@@ -24,6 +25,12 @@ const CONVENTIONAL_COMMIT_TYPES = new Set([
 	"build",
 	"revert",
 ]);
+
+interface CommitMarker {
+	hash: string;
+	subject: string;
+	timestamp: number;
+}
 
 const COMMIT_MODEL_TIERS = [
 	{ provider: "github-copilot", model: "gemini-3.5-flash", reasoning: "high" },
@@ -56,13 +63,18 @@ export function registerCommit(pi: ExtensionAPI): void {
 				}
 
 				const evidence = await collectCommitEvidence(git, ctx.signal);
+				const intentMessages = collectCommitIntent(ctx.sessionManager.getBranch());
 				const commitModel = await resolveCommitModel(ctx);
 
 				ctx.ui.setStatus(
 					"commit",
 					`generating commit message with ${commitModel.model.provider}/${commitModel.model.id}`,
 				);
-				const generatedMessage = await generateCommitMessage(ctx, commitModel, buildCommitPrompt(status, evidence));
+				const generatedMessage = await generateCommitMessage(
+					ctx,
+					commitModel,
+					buildCommitPrompt(status, evidence, intentMessages),
+				);
 
 				const message = ctx.hasUI ? await ctx.ui.editor("Edit commit message", generatedMessage) : generatedMessage;
 				if (!message?.trim()) {
@@ -90,6 +102,11 @@ export function registerCommit(pi: ExtensionAPI): void {
 				await commitAllChanges(git, validatedMessage);
 
 				const hash = await git.run(["rev-parse", "--short", "HEAD"]);
+				pi.appendEntry<CommitMarker>(COMMIT_MARKER_TYPE, {
+					hash,
+					subject: validatedMessage.split("\n")[0] || validatedMessage,
+					timestamp: Date.now(),
+				});
 				if (shouldPush) {
 					ctx.ui.setStatus("commit", "pushing");
 					await git.run(["push"], false, PUSH_TIMEOUT_MS);
@@ -184,7 +201,43 @@ async function readUntrackedBlock(repoRoot: string, file: string, signal: AbortS
 	}
 }
 
-function buildCommitPrompt(status: string, evidence: CommitEvidence): string {
+function collectCommitIntent(entries: readonly SessionEntry[]): string[] {
+	let messages: string[] = [];
+
+	for (const entry of entries) {
+		if (entry.type === "custom" && entry.customType === COMMIT_MARKER_TYPE) {
+			messages = [];
+			continue;
+		}
+
+		if (entry.type !== "message" || entry.message.role !== "user") continue;
+
+		const text = extractUserMessageText(entry.message.content).trim();
+		if (!text || /^\/commit(?:\s|$)/.test(text)) continue;
+		messages.push(text);
+	}
+
+	return messages;
+}
+
+function extractUserMessageText(content: string | Message["content"]): string {
+	if (typeof content === "string") return content;
+
+	return content
+		.flatMap((part) => {
+			if (part.type === "text") return [part.text];
+			if (part.type === "image") return ["[image omitted]"];
+			return [];
+		})
+		.join("\n");
+}
+
+function formatCommitIntent(messages: readonly string[]): string {
+	if (messages.length === 0) return "(none)";
+	return messages.map((message, index) => `[${index + 1}]\n${message}`).join("\n\n");
+}
+
+function buildCommitPrompt(status: string, evidence: CommitEvidence, intentMessages: readonly string[]): string {
 	return [
 		"Write a git commit message for all current repository changes.",
 		"Always use this strict conventional commit format:",
@@ -197,9 +250,13 @@ function buildCommitPrompt(status: string, evidence: CommitEvidence): string {
 		"Do not include a body unless the header has !.",
 		"Do not wrap in markdown or code fences.",
 		"Use recent commit subjects only as secondary style guidance; these rules take priority.",
+		"Use current user intent only as secondary context for why changes were made; git evidence is authoritative.",
 		"",
 		"Recent commit subjects:",
 		evidence.recentSubjects || "(none)",
+		"",
+		"Current user intent since last successful commit:",
+		formatCommitIntent(intentMessages),
 		"",
 		"Git status:",
 		status,

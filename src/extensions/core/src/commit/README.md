@@ -14,11 +14,13 @@ Run:
 
 - Waits for the active agent turn to finish.
 - Reads git status, recent commit subjects, staged/unstaged diffs, and bounded snippets from untracked files.
+- Includes user intent from the active conversation branch since the last successful `/commit`.
 - Calls the selected model directly so the prompt and response are not added to active chat context.
 - Generates and validates a strict conventional commit message.
 - Opens the generated commit message for review in the editor, then validates the reviewed message before committing.
 - Asks for commit confirmation, then asks whether to push after commit.
 - Runs `git add -A` and commits with the reviewed message.
+- Records a hidden session marker after a successful commit so later `/commit` runs ignore older user intent.
 - Runs `git push` if requested.
 
 ## Commit message rules
@@ -35,3 +37,4 @@ Run:
 - Does not create multiple commits.
 - Push uses plain `git push` and requires the branch/upstream to be configured.
 - Diff and untracked file evidence is size-limited before sending to the model.
+- Conversation intent includes text user messages on the active pi branch since the last successful `/commit`.
