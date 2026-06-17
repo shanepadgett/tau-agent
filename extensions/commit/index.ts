@@ -13,12 +13,36 @@ const MAX_UNTRACKED_FILES = 12;
 const MAX_UNTRACKED_FILE_CHARS = 6_000;
 const MAX_UNTRACKED_CONTENT_CHARS = 30_000;
 
+const COMMIT_MODEL_TIERS = [
+	{ provider: "github-copilot", model: "gemini-3.5-flash", reasoning: "high" },
+	{ provider: "github-copilot", model: "gpt-5.4-mini", reasoning: "high" },
+	{ provider: "github-copilot", model: "claude-haiku-4.5", reasoning: "high" },
+	{ provider: "openai-codex", model: "gpt-5.4-mini", reasoning: "high" },
+	{ provider: "anthropic", model: "claude-haiku-4-5", reasoning: "high" },
+] as const;
+
 export default function commitExtension(pi: ExtensionAPI): void {
 	pi.registerCommand("commit", {
 		description: "Generate a commit message and commit all changes",
 		handler: async (_args, ctx) => {
 			await ctx.waitForIdle();
 			ctx.ui.setStatus("commit", "preparing commit");
+
+			const resolveCommitModel = async () => {
+				for (const tier of COMMIT_MODEL_TIERS) {
+					const model = ctx.modelRegistry.find(tier.provider, tier.model);
+					if (!model) continue;
+
+					const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+					if (auth.ok && auth.apiKey) return { model, auth, reasoning: tier.reasoning };
+				}
+
+				if (!ctx.model) throw new Error("No model selected and no commit model available.");
+				const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
+				if (!auth.ok) throw new Error(auth.error);
+				if (!auth.apiKey) throw new Error(`No API key for ${ctx.model.provider}.`);
+				return { model: ctx.model, auth, reasoning: undefined };
+			};
 
 			let repoRoot = ctx.cwd;
 			const runGit = async (args: string[], optional = false, timeout = GIT_TIMEOUT_MS): Promise<string> => {
@@ -83,12 +107,12 @@ export default function commitExtension(pi: ExtensionAPI): void {
 				}
 
 				// Call the provider directly; do not add this prompt/response to active chat context.
-				if (!ctx.model) throw new Error("No model selected.");
-				const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
-				if (!auth.ok) throw new Error(auth.error);
-				if (!auth.apiKey) throw new Error(`No API key for ${ctx.model.provider}.`);
+				const commitModel = await resolveCommitModel();
 
-				ctx.ui.setStatus("commit", "generating commit message");
+				ctx.ui.setStatus(
+					"commit",
+					`generating commit message with ${commitModel.model.provider}/${commitModel.model.id}`,
+				);
 				const prompt = [
 					"Write a git commit message for all current repository changes.",
 					"Use recent commit subjects as style guidance.",
@@ -121,9 +145,14 @@ export default function commitExtension(pi: ExtensionAPI): void {
 					timestamp: Date.now(),
 				};
 				const response = await complete(
-					ctx.model,
+					commitModel.model,
 					{ messages: [userMessage] },
-					{ apiKey: auth.apiKey, headers: auth.headers, signal: ctx.signal },
+					{
+						apiKey: commitModel.auth.apiKey,
+						headers: commitModel.auth.headers,
+						signal: ctx.signal,
+						reasoning: commitModel.reasoning,
+					},
 				);
 				if (response.stopReason === "error")
 					throw new Error(response.errorMessage || "Commit message generation failed.");
