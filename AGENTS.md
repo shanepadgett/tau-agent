@@ -9,6 +9,7 @@
 
 ## Code Quality
 
+- Exclude `references/` from code-based searches unless explicitly told otherwise.
 - Use strict TypeScript and erasable syntax only.
 - No `any` unless necessary.
 - Use top-level imports only; avoid dynamic inline imports.
@@ -16,6 +17,14 @@
 - Check installed package types or docs for external APIs; do not guess.
 - Do not preserve backward compatibility unless explicitly asked.
 - Do not remove intentional behavior without asking.
+
+## Tool Use
+
+- Keep context small: every command should return only data needed for the current decision.
+- Filter bash output at the source with targeted paths, globs, `rg`, `find` constraints, `head`, counts, or structured summaries.
+- Prefer compact, high-signal output over raw dumps; avoid commands that can flood the window.
+- Batch independent reads/searches/checks when it saves turns and keeps output readable.
+- Spend turns deliberately: complete the work within available turns without sacrificing verification.
 
 ## Pi Extension Practices
 
