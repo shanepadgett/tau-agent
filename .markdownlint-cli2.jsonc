@@ -1,0 +1,40 @@
+{
+	// Keep markdownlint scoped to source/docs owned by this package.
+	"globs": [
+		"*.md",
+		".pi/**/*.md",
+		"prompts/**/*.md",
+		"skills/**/*.md",
+		"themes/**/*.md"
+	],
+	"ignores": [
+		"node_modules/**",
+		"references/**",
+		".pi/sessions/**",
+		".pi/cache/**",
+		".pi/tmp/**",
+		".pi/temp/**",
+		".pi/logs/**"
+	],
+	"gitignore": true,
+	"frontMatter": "^---[^]*?---[\\r\\n]+",
+
+	"config": {
+		"default": true,
+		"MD003": {
+			"style": "atx"
+		},
+		"MD007": {
+			"indent": 2
+		},
+		"MD013": false,
+		"MD024": {
+			"siblings_only": true
+		},
+		"MD033": {
+			"allowed_elements": ["br", "details", "summary"]
+		},
+		"MD041": false,
+		"MD055": false
+	}
+}

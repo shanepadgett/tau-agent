@@ -1,0 +1,3 @@
+[submodule "references/pi"]
+	path = references/pi
+	url = git@github.com:earendil-works/pi.git

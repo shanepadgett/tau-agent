@@ -1,0 +1,112 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.*
+.yarn/*
+!.yarn/patches/
+!.yarn/plugins/
+!.yarn/releases/
+!.yarn/sdks/
+!.yarn/versions/
+
+# Package manager caches
+.npm/
+.pnpm-store/
+.yarn/cache/
+.bun/install/cache/
+
+# Build output / generated artifacts
+dist/
+build/
+out/
+lib/
+esm/
+cjs/
+types/
+*.tsbuildinfo
+*.d.ts.map
+
+# Test / coverage output
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+*.lcov
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+bun-debug.log*
+lerna-debug.log*
+
+# Runtime / temp files
+tmp/
+temp/
+.cache/
+.parcel-cache/
+.vite/
+.turbo/
+.rspack-cache/
+.next/
+.nuxt/
+.svelte-kit/
+.vercel/
+.netlify/
+.DS_Store
+Thumbs.db
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Editor / IDE
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# TypeScript / lint / format caches
+.eslintcache
+.stylelintcache
+.prettier-cache
+
+# Pi generated/local state and packaged bundles
+.pi-cache/
+.pi-local/
+.pi-output/
+.pi-sandbox/
+.pi/sessions/
+.pi/cache/
+.pi/tmp/
+.pi/temp/
+.pi/logs/
+*.pi-pack
+*.tgz
+
+# Agent/browser automation artifacts
+screenshots/
+traces/
+videos/
+recordings/
+
+# Local-only notes and scratch files
+*.local.*
+TODO.local.md
+scratch/
