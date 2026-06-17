@@ -7,6 +7,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const GIT_TIMEOUT_MS = 10_000;
 const COMMIT_TIMEOUT_MS = 120_000;
+const PUSH_TIMEOUT_MS = 120_000;
 const MAX_DIFF_CHARS = 80_000;
 const MAX_UNTRACKED_FILES = 12;
 const MAX_UNTRACKED_FILE_CHARS = 6_000;
@@ -143,6 +144,7 @@ export default function commitExtension(pi: ExtensionAPI): void {
 					return;
 				}
 
+				let shouldPush = false;
 				if (ctx.hasUI) {
 					const changedFiles = status.split("\n").filter(Boolean).length;
 					const confirmed = await ctx.ui.confirm(
@@ -153,6 +155,8 @@ export default function commitExtension(pi: ExtensionAPI): void {
 						ctx.ui.notify("Commit cancelled.", "info");
 						return;
 					}
+
+					shouldPush = await ctx.ui.confirm("Push after commit?", "Run `git push` after the commit succeeds?");
 				}
 
 				ctx.ui.setStatus("commit", "committing");
@@ -167,7 +171,13 @@ export default function commitExtension(pi: ExtensionAPI): void {
 				}
 
 				const hash = await runGit(["rev-parse", "--short", "HEAD"]);
-				ctx.ui.notify(`Committed ${hash}: ${message.trim().split("\n")[0]}`, "info");
+				if (shouldPush) {
+					ctx.ui.setStatus("commit", "pushing");
+					await runGit(["push"], false, PUSH_TIMEOUT_MS);
+					ctx.ui.notify(`Committed and pushed ${hash}: ${message.trim().split("\n")[0]}`, "info");
+				} else {
+					ctx.ui.notify(`Committed ${hash}: ${message.trim().split("\n")[0]}`, "info");
+				}
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				ctx.ui.notify(`Commit failed: ${message}`, "error");

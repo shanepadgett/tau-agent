@@ -16,11 +16,13 @@ Run:
 - Reads git status, recent commit subjects, staged/unstaged diffs, and bounded snippets from untracked files.
 - Calls the selected model directly so the prompt and response are not added to active chat context.
 - Opens the generated commit message for review in the editor.
-- Asks for confirmation.
+- Asks for commit confirmation, then asks whether to push after commit.
 - Runs `git add -A` and commits with the reviewed message.
+- Runs `git push` if requested.
 
 ## Notes
 
 - Always commits all uncommitted changes.
 - Does not create multiple commits.
+- Push uses plain `git push` and requires the branch/upstream to be configured.
 - Diff and untracked file evidence is size-limited before sending to the model.
