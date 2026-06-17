@@ -12,6 +12,18 @@ const MAX_DIFF_CHARS = 80_000;
 const MAX_UNTRACKED_FILES = 12;
 const MAX_UNTRACKED_FILE_CHARS = 6_000;
 const MAX_UNTRACKED_CONTENT_CHARS = 30_000;
+const CONVENTIONAL_COMMIT_TYPES = new Set([
+	"feat",
+	"fix",
+	"docs",
+	"refactor",
+	"test",
+	"chore",
+	"perf",
+	"ci",
+	"build",
+	"revert",
+]);
 
 const COMMIT_MODEL_TIERS = [
 	{ provider: "github-copilot", model: "gemini-3.5-flash", reasoning: "high" },
@@ -74,15 +86,16 @@ export default function commitExtension(pi: ExtensionAPI): void {
 				}
 
 				ctx.ui.setStatus("commit", "committing");
-				await commitAllChanges(git, message);
+				const validatedMessage = validateCommitMessage(message);
+				await commitAllChanges(git, validatedMessage);
 
 				const hash = await git.run(["rev-parse", "--short", "HEAD"]);
 				if (shouldPush) {
 					ctx.ui.setStatus("commit", "pushing");
 					await git.run(["push"], false, PUSH_TIMEOUT_MS);
-					ctx.ui.notify(`Committed and pushed ${hash}: ${message.trim().split("\n")[0]}`, "info");
+					ctx.ui.notify(`Committed and pushed ${hash}: ${validatedMessage.split("\n")[0]}`, "info");
 				} else {
-					ctx.ui.notify(`Committed ${hash}: ${message.trim().split("\n")[0]}`, "info");
+					ctx.ui.notify(`Committed ${hash}: ${validatedMessage.split("\n")[0]}`, "info");
 				}
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
@@ -174,10 +187,16 @@ async function readUntrackedBlock(repoRoot: string, file: string, signal: AbortS
 function buildCommitPrompt(status: string, evidence: CommitEvidence): string {
 	return [
 		"Write a git commit message for all current repository changes.",
-		"Use recent commit subjects as style guidance.",
-		"Prefer conventional commit style if it fits.",
-		"Return only the commit message: subject line, optional blank line, optional body.",
+		"Always use this strict conventional commit format:",
+		"<type>[optional scope][!]: <description>",
+		"Allowed types: feat, fix, docs, refactor, test, chore, perf, ci, build, revert.",
+		"Optional scope must be lowercase kebab-case, singular, and useful; omit it for broad or unrelated changes.",
+		"Subject must be one concise line, imperative, no trailing period, max 100 characters.",
+		"For non-breaking changes, return exactly one line and no body.",
+		"For breaking changes, add ! to the header and include exactly one body paragraph starting with BREAKING CHANGE:.",
+		"Do not include a body unless the header has !.",
 		"Do not wrap in markdown or code fences.",
+		"Use recent commit subjects only as secondary style guidance; these rules take priority.",
 		"",
 		"Recent commit subjects:",
 		evidence.recentSubjects || "(none)",
@@ -222,7 +241,9 @@ async function generateCommitMessage(
 	if (response.stopReason === "error") throw new Error(response.errorMessage || "Commit message generation failed.");
 	if (response.stopReason === "aborted") throw new Error("Commit cancelled.");
 
-	return cleanCommitMessage(response.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"));
+	return validateCommitMessage(
+		cleanCommitMessage(response.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")),
+	);
 }
 
 function cleanCommitMessage(rawMessage: string): string {
@@ -232,6 +253,29 @@ function cleanCommitMessage(rawMessage: string): string {
 	message = message.replace(/^commit message:\s*/i, "").trim();
 	if (!message) throw new Error("Model returned an empty commit message.");
 	return message;
+}
+
+function validateCommitMessage(rawMessage: string): string {
+	const message = rawMessage.trim();
+	const [header = "", ...bodyLines] = message.split("\n");
+	const headerMatch = header.match(/^([a-z]+)(?:\(([a-z0-9]+(?:-[a-z0-9]+)*)\))?(!)?: (.+)$/);
+	if (!headerMatch) throw new Error("Commit message must use conventional commit format.");
+
+	const [, type, , breakingMark, subject] = headerMatch;
+	if (!type || !CONVENTIONAL_COMMIT_TYPES.has(type)) throw new Error(`Unsupported commit type: ${type || "missing"}.`);
+	if (!subject || subject.length > 100) throw new Error("Commit subject must be 1-100 characters.");
+	if (subject.endsWith(".")) throw new Error("Commit subject must not end with a period.");
+
+	const body = bodyLines.join("\n").trim();
+	if (!breakingMark && body) throw new Error("Commit body is only allowed for breaking changes.");
+	if (breakingMark && !body.startsWith("BREAKING CHANGE: ")) {
+		throw new Error("Breaking commits must include a body starting with BREAKING CHANGE:.");
+	}
+	if (breakingMark && body.split("\n\n").filter((paragraph) => paragraph.trim()).length !== 1) {
+		throw new Error("Breaking commits must include exactly one BREAKING CHANGE paragraph.");
+	}
+
+	return body ? `${header}\n\n${body}` : header;
 }
 
 async function commitAllChanges(git: GitRunner, message: string): Promise<void> {
