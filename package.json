@@ -20,10 +20,10 @@
 		]
 	},
 	"peerDependencies": {
-		"@earendil-works/pi-ai": "*",
-		"@earendil-works/pi-coding-agent": "*",
-		"@earendil-works/pi-tui": "*",
-		"typebox": "*"
+		"@earendil-works/pi-ai": "^0.79.3",
+		"@earendil-works/pi-coding-agent": "^0.79.3",
+		"@earendil-works/pi-tui": "^0.79.3",
+		"typebox": "^1.1.38"
 	},
 	"devDependencies": {
 		"@earendil-works/pi-ai": "0.79.3",
