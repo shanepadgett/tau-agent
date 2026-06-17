@@ -17,6 +17,7 @@
 - Check installed package types or docs for external APIs; do not guess.
 - Do not preserve backward compatibility unless explicitly asked.
 - Do not remove intentional behavior without asking.
+- When deleting or replacing code/resources, clean up obsolete files, empty folders, stale docs, and dead references in the same change.
 
 ## Tool Use
 
@@ -28,10 +29,11 @@
 
 ## Pi Extension Practices
 
-- Use `extensions/<name>/index.ts` for extension entrypoints.
-- Include `extensions/<name>/README.md` with purpose, usage, behavior, and notable limits.
-- Avoid loose `extensions/*.ts` files.
-- Put Tau custom extension events in `shared/events.ts`; use `emitTauEvent`/`onTauEvent` instead of raw `pi.events` for Tau events.
+- Use `src/extensions/<name>/index.ts` for extension entrypoints.
+- Include `src/extensions/<name>/README.md` with purpose, usage, behavior, and notable limits.
+- Avoid loose `src/extensions/*.ts` files.
+- When asked to create a new extension, first ask whether it belongs in `src/extensions/core` or should be standalone/toggleable under `src/extensions/<name>`.
+- Put Tau custom extension events in `src/shared/events.ts`; use `emitTauEvent`/`onTauEvent` instead of raw `pi.events` for Tau events.
 - Add extra extension files only when they clearly improve readability.
 - Defer long-lived resources until `session_start` or the command/tool that needs them.
 - Clean up session-scoped resources in `session_shutdown`.

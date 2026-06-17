@@ -13,7 +13,7 @@ depends = ["check:biome", "check:types", "check:markdown"]
 
 [tasks."check:biome"]
 description = "Run Biome checks"
-run = "biome check --write --error-on-warnings --no-errors-on-unmatched extensions"
+run = "biome check --write --error-on-warnings --no-errors-on-unmatched src"
 
 [tasks."check:markdown"]
 description = "Run Markdown checks"
@@ -21,4 +21,4 @@ run = "markdownlint-cli2 --fix"
 
 [tasks."check:types"]
 description = "Run TypeScript checks"
-run = "if find extensions -name '*.ts' -print -quit | grep -q .; then ./node_modules/.bin/tsgo --noEmit; else echo 'No TypeScript files to check'; fi"
+run = "if find src -name '*.ts' -print -quit | grep -q .; then ./node_modules/.bin/tsgo --noEmit; else echo 'No TypeScript files to check'; fi"

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { complete, type Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { createGitRunner, type GitRunner } from "../../shared/git.ts";
+import { createGitRunner, type GitRunner } from "../../../../shared/git.ts";
 
 const COMMIT_TIMEOUT_MS = 120_000;
 const PUSH_TIMEOUT_MS = 120_000;
@@ -33,7 +33,7 @@ const COMMIT_MODEL_TIERS = [
 	{ provider: "anthropic", model: "claude-haiku-4-5", reasoning: "high" },
 ] as const;
 
-export default function commitExtension(pi: ExtensionAPI): void {
+export function registerCommit(pi: ExtensionAPI): void {
 	pi.registerCommand("commit", {
 		description: "Generate a commit message and commit all changes",
 		handler: async (_args, ctx) => {

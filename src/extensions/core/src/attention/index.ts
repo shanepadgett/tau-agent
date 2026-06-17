@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { emitTauEvent, onTauEvent } from "../../shared/events.js";
+import { emitTauEvent, onTauEvent } from "../../../../shared/events.js";
 
 const DEFAULT_TITLE = "Tau";
 const DEFAULT_BODY = "Ready for input";
@@ -15,7 +15,7 @@ function oscText(value: string): string {
 		.trim();
 }
 
-export default function attentionExtension(pi: ExtensionAPI): void {
+export function registerAttention(pi: ExtensionAPI): void {
 	onTauEvent(pi, "tau:attention", (data) => {
 		const raw: unknown = data;
 		const record = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};

@@ -1,4 +1,4 @@
-# commit
+# Commit
 
 Generate a git commit message from current repository changes, then commit all changes.
 
@@ -29,7 +29,7 @@ Run:
 - Breaking commits must use `!` and exactly one body paragraph starting with `BREAKING CHANGE:`.
 - Bodies are rejected for non-breaking commits.
 
-## Notes
+## Limits
 
 - Always commits all uncommitted changes.
 - Does not create multiple commits.
