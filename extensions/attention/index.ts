@@ -1,4 +1,3 @@
-import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { emitTauEvent, onTauEvent } from "../../shared/events.js";
@@ -32,9 +31,13 @@ export default function attentionExtension(pi: ExtensionAPI): void {
 			process.env.CMUX_SESSION ||
 			Object.keys(process.env).some((key) => key.startsWith("CMUX_"))
 		) {
-			execFile("cmux", ["notify", "--title", title, "--body", body], (error) => {
-				if (error) process.stdout.write(osc777);
-			});
+			pi.exec("cmux", ["notify", "--title", title, "--body", body], { timeout: 2000 })
+				.then((result) => {
+					if (result.code !== 0) process.stdout.write(osc777);
+				})
+				.catch(() => {
+					process.stdout.write(osc777);
+				});
 			return;
 		}
 
