@@ -4,3 +4,6 @@
 [submodule "references/crumbs"]
 	path = references/crumbs
 	url = git@github.com:shanepadgett/crumbs.git
+[submodule "references/pi-ask"]
+	path = references/pi-ask
+	url = git@github.com:eko24ive/pi-ask.git
