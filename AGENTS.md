@@ -6,7 +6,6 @@
 - Keep code, patches, logs, errors, identifiers, and technical terms exact.
 - No emojis. Ever.
 - Answer questions before making edits.
-- Ground all answers in code. Never answer from knowledge only.
 
 ## Code Quality
 
@@ -15,7 +14,7 @@
 - No `any` unless necessary.
 - Use top-level imports only; avoid dynamic inline imports.
 - Inline single-use helpers unless extracting them clearly improves readability.
-- Check installed package types or docs for external APIs; do not guess.
+- For external APIs, check installed types or docs only when current context does not already include the needed API details.
 - Do not preserve backward compatibility unless explicitly asked.
 - Do not remove intentional behavior without asking.
 - When deleting or replacing code/resources, clean up obsolete files, empty folders, stale docs, and dead references in the same change.
@@ -28,11 +27,13 @@
 - Prefer compact, high-signal output over raw dumps; avoid commands that can flood the window.
 - Batch independent reads/searches/checks when it saves turns and keeps output readable.
 - Spend turns deliberately: complete the work within available turns without sacrificing verification.
-- When the user directly targets an existing extension folder, do not use subagents or read unrelated files. Read, in full: every file in that extension folder; every file in `src/shared/`; root-level files that may apply to the requested change. Then move directly to discussion/planning if requested, or implementation when unambiguous.
 
-## Tau Customization Creation
+## Tau Customization Workflow
 
-- If asked to manually create Tau extensions, prompts, themes, or skills outside `/tau-new`, refuse in one sentence and tell the user to use `/tau-new <extension|prompt|theme|skill>`.
+- If the user intends to create a Tau extension, prompt, theme, or skill, deny manual creation outside `/tau-new`; require `/tau-new <extension|prompt|theme|skill>`.
+- If the user intends to edit an existing Tau extension, prompt, theme, or skill, deny the operation unless the relevant resource was injected by `/tau-edit`.
+- General questions, discussion, and non-editing codebase exploration do not require `/tau-new` or `/tau-edit`.
+- Treat injected Tau context file contents as authoritative. Do not reread injected files unless you edited them, the user says they changed, or needed content is missing from context.
 
 ## Commands
 
