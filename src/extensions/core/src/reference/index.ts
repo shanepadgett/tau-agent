@@ -42,16 +42,12 @@ export function registerReference(pi: ExtensionAPI): void {
 			}
 
 			const references = await pickReferences(pi, ctx);
-			if (references) await sendReferencePrompt(pi, ctx, references);
+			if (references) await sendReferencePrompt(ctx, references);
 		},
 	});
 }
 
-async function sendReferencePrompt(
-	pi: ExtensionAPI,
-	ctx: ExtensionCommandContext,
-	references: readonly ReferenceItem[],
-): Promise<void> {
+async function sendReferencePrompt(ctx: ExtensionCommandContext, references: readonly ReferenceItem[]): Promise<void> {
 	const prompt = await ctx.ui.editor("Reference prompt", "");
 	if (!prompt?.trim()) {
 		ctx.ui.notify("Reference prompt cancelled.", "info");
@@ -59,13 +55,9 @@ async function sendReferencePrompt(
 	}
 
 	const message = buildReferencePrompt(references, prompt);
-	if (ctx.isIdle()) {
-		pi.sendUserMessage(message);
-	} else {
-		pi.sendUserMessage(message, { deliverAs: "followUp" });
-	}
+	ctx.ui.setEditorText(message);
 }
 
 function buildReferencePrompt(references: readonly ReferenceItem[], prompt: string): string {
-	return [...referenceLines(references), "", "<request>", prompt.trim(), "</request>"].join("\n");
+	return [...referenceLines(references), "", "Request:", "", prompt.trim()].join("\n");
 }
