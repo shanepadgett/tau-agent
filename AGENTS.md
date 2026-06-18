@@ -6,6 +6,7 @@
 - Keep code, patches, logs, errors, identifiers, and technical terms exact.
 - No emojis. Ever.
 - Answer questions before making edits.
+- Ground all answers in code. Never answer from knowledge only.
 
 ## Code Quality
 
@@ -21,11 +22,13 @@
 
 ## Tool Use
 
+- Always read and apply the `ponytail` skill first; if no ponytail level is already active, treat it as lite mode for all work.
 - Keep context small: every command should return only data needed for the current decision.
 - Filter bash output at the source with targeted paths, globs, `rg`, `find` constraints, `head`, counts, or structured summaries.
 - Prefer compact, high-signal output over raw dumps; avoid commands that can flood the window.
 - Batch independent reads/searches/checks when it saves turns and keeps output readable.
 - Spend turns deliberately: complete the work within available turns without sacrificing verification.
+- When the user directly targets an existing extension folder, do not use subagents or read unrelated files. Read, in full: every file in that extension folder; every file in `src/shared/`; root-level files that may apply to the requested change. Then move directly to discussion/planning if requested, or implementation when unambiguous.
 
 ## Tau Customization Creation
 
