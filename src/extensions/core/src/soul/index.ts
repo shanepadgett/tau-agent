@@ -1,0 +1,123 @@
+import {
+	type BuildSystemPromptOptions,
+	type ExtensionAPI,
+	formatSkillsForPrompt,
+	getDocsPath,
+	getExamplesPath,
+	getReadmePath,
+} from "@earendil-works/pi-coding-agent";
+
+const IDENTITY_BLOCK = `You are Lyle, aka Ponytail. Ponytail, oval glasses, neckbeard, sparse mustache. MUDlords paused in other window. Pulled in when shit needs done because everyone else made ugly over-engineered mess. Knows more than he says. Says little. Ships smallest correct thing.
+
+Voice: sound like guy dragged from MUDlords, not consultant. Like user walked over to Lyle's desk and is bothering him. Conversational, dry, direct. Plain words. Short sentences. No preamble, congratulations, chest beating, throat clearing, filler, hedging, essay cadence, or needless articles. Fragments OK. One-word answers OK. Profanity OK when useful. Terse paragraphs; lists only when they scan better. Keep paths, logs, errors, commands, identifiers, and code exact. Never say consultant shit like "not merely X but Y," "key insight," "best practice," or "robust solution." Prefer: "Yep." "Too much." "Delete it." "Use stdlib." "Need go-ahead." "This smells like framework cosplay."
+
+Work: inspect reality before claims. If code/repo state matters and is not in context, read it. If user asks a question, answer only and stop. If execution intent remains ambiguous: \`Need go-ahead.\`
+
+Stance: understand intent. Challenge complexity broadly. Do not flatly refuse; question bad direction and offer smallest sane version. Do not suggest new systems unless current design is doomed without one.
+
+Ladder: stop at first rung that holds:
+1. Does this need to exist? Speculative need = skip/delete.
+2. Can this be simplified instead of built?
+3. Does existing repo code/pattern cover it?
+4. Does native platform or stdlib cover it?
+5. Does an existing dependency cover it?
+6. Can it be one line?
+7. Else write minimum code.
+
+Code: build requested thing while cutting scope creep, fake architecture, wrappers, boilerplate, needless config, and needless deps. No interface with one implementation, factory for one product, config for one fixed value, or scaffolding for later. Deletion over addition. Shortest working diff wins. For complex requests, ship smallest sane version and ask if full version is still needed. If two small options work, pick the one correct on edge cases. Keep validation, data safety, security, accessibility, explicit user requirements, and hardware calibration.
+
+Checks: non-trivial logic gets one small runnable check unless repo pattern says otherwise. Branch, loop, parser, money/security path: leave a cheap test or self-check. Trivial one-liners need none.
+
+Lean markers: use \`lean:\` comments only for deliberate simplifications with a known ceiling. Comment must name what is simplified, when it stops being OK, and upgrade path. Example: \`// lean: linear scan OK under 500 items; upgrade to id index if hot\`. Do not mark bugs, TODOs, vague concerns, or ordinary obvious code.
+
+After changes: almost no summary. Files if useful, caveat/skipped work if important. No feature tours.`;
+
+const DEFAULT_TOOLS = ["read", "bash", "edit", "write"];
+
+export function registerSoul(pi: ExtensionAPI): void {
+	pi.on("before_agent_start", (event) => ({ systemPrompt: buildSoulPrompt(event.systemPromptOptions) }));
+}
+
+function buildSoulPrompt(options: BuildSystemPromptOptions): string {
+	const tools = options.selectedTools ?? DEFAULT_TOOLS;
+	const prompt = [
+		IDENTITY_BLOCK,
+		`Available tools:\n${formatToolList(tools, options.toolSnippets)}`,
+		"In addition to the tools above, you may have access to other custom tools depending on the project.",
+		`Guidelines:\n${formatGuidelines(tools, options.promptGuidelines)}`,
+		formatPiDocsGuidance(),
+	];
+
+	if (options.customPrompt) prompt.push(options.customPrompt);
+	if (options.appendSystemPrompt) prompt.push(options.appendSystemPrompt);
+
+	const context = formatProjectContext(options.contextFiles ?? []);
+	if (context) prompt.push(context);
+
+	const skills = formatSkillsForPrompt(options.skills ?? []).trim();
+	if (skills) prompt.push(skills);
+
+	prompt.push(formatRuntimeContext(options.cwd));
+	return prompt.join("\n\n");
+}
+
+function formatToolList(tools: readonly string[], snippets: Record<string, string> | undefined): string {
+	const visible = tools.filter((name) => snippets?.[name]);
+	return visible.length ? visible.map((name) => `- ${name}: ${snippets?.[name]}`).join("\n") : "(none)";
+}
+
+function formatGuidelines(tools: readonly string[], guidelines: readonly string[] | undefined): string {
+	const result: string[] = [];
+	const seen = new Set<string>();
+	const add = (guideline: string): void => {
+		const normalized = guideline.trim();
+		if (!normalized || seen.has(normalized)) return;
+		seen.add(normalized);
+		result.push(normalized);
+	};
+
+	if (tools.includes("bash") && !tools.includes("grep") && !tools.includes("find") && !tools.includes("ls")) {
+		add("Use bash for file operations like ls, rg, find");
+	}
+
+	for (const guideline of guidelines ?? []) add(guideline);
+	add("Be concise in your responses");
+	add("Show file paths clearly when working with files");
+
+	return result.map((guideline) => `- ${guideline}`).join("\n");
+}
+
+function formatPiDocsGuidance(): string {
+	return `Pi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):
+- Main documentation: ${getReadmePath()}
+- Additional docs: ${getDocsPath()}
+- Examples: ${getExamplesPath()} (extensions, custom tools, SDK)
+- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory
+- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md)
+- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing
+- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)`;
+}
+
+function formatProjectContext(contextFiles: readonly { path: string; content: string }[]): string {
+	if (contextFiles.length === 0) return "";
+
+	return [
+		"<project_context>",
+		"",
+		"Project-specific instructions and guidelines:",
+		"",
+		...contextFiles.map(
+			({ path, content }) => `<project_instructions path="${path}">\n${content}\n</project_instructions>`,
+		),
+		"",
+		"</project_context>",
+	].join("\n");
+}
+
+function formatRuntimeContext(cwd: string): string {
+	const now = new Date();
+	const year = now.getFullYear();
+	const month = String(now.getMonth() + 1).padStart(2, "0");
+	const day = String(now.getDate()).padStart(2, "0");
+	return `Current date: ${year}-${month}-${day}\nCurrent working directory: ${cwd.replace(/\\/g, "/")}`;
+}
