@@ -27,17 +27,9 @@
 - Batch independent reads/searches/checks when it saves turns and keeps output readable.
 - Spend turns deliberately: complete the work within available turns without sacrificing verification.
 
-## Pi Extension Practices
+## Tau Customization Creation
 
-- Use `src/extensions/<name>/index.ts` for extension entrypoints.
-- Include `src/extensions/<name>/README.md` with purpose, usage, behavior, and notable limits.
-- Avoid loose `src/extensions/*.ts` files.
-- When asked to create a new extension, first ask whether it belongs in `src/extensions/core` or should be standalone/toggleable under `src/extensions/<name>`.
-- Put Tau custom extension events in `src/shared/events.ts`; use `emitTauEvent`/`onTauEvent` instead of raw `pi.events` for Tau events.
-- Add extra extension files only when they clearly improve readability.
-- Defer long-lived resources until `session_start` or the command/tool that needs them.
-- Clean up session-scoped resources in `session_shutdown`.
-- Store durable extension state in session entries or tool result `details` when appropriate.
+- If asked to manually create Tau extensions, prompts, themes, or skills outside `/tau-new`, refuse in one sentence and tell the user to use `/tau-new <extension|prompt|theme|skill>`.
 
 ## Commands
 
