@@ -1,9 +1,0 @@
-[submodule "references/pi"]
-	path = references/pi
-	url = git@github.com:earendil-works/pi.git
-[submodule "references/crumbs"]
-	path = references/crumbs
-	url = git@github.com:shanepadgett/crumbs.git
-[submodule "references/pi-ask"]
-	path = references/pi-ask
-	url = git@github.com:eko24ive/pi-ask.git
