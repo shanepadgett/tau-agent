@@ -38,6 +38,10 @@ export default function tauEdit(pi: ExtensionAPI): void {
 		const context = pendingContexts.shift();
 		if (!context) return;
 
+		event.systemPromptOptions.appendSystemPrompt = [event.systemPromptOptions.appendSystemPrompt, context]
+			.filter(Boolean)
+			.join("\n\n");
+
 		return { systemPrompt: `${event.systemPrompt}\n\n${context}` };
 	});
 }
