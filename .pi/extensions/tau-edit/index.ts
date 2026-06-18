@@ -7,6 +7,7 @@ import {
 	type TabbedMultiSelectSelection,
 	type TabbedMultiSelectTab,
 } from "../../../src/shared/tui/tabbed-multi-select.ts";
+import { pickReferences, referenceLines, type ReferenceItem } from "../../../src/shared/reference-picker.ts";
 
 type ResourceKind = "local-extension" | "core-extension" | "standalone-extension" | "prompt" | "theme" | "skill";
 
@@ -71,9 +72,11 @@ async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void
 
 	const prompt = await readPrompt(ctx);
 	if (!prompt) return;
+	const references = await getReferences(pi, ctx);
+	if (references === null) return;
 
 	pendingContexts.push(await buildContext(ctx.cwd, selected));
-	const message = buildMessage(prompt);
+	const message = buildMessage(prompt, references);
 	if (ctx.isIdle()) pi.sendUserMessage(message);
 	else pi.sendUserMessage(message, { deliverAs: "followUp" });
 }
@@ -87,6 +90,13 @@ async function readPrompt(ctx: ExtensionCommandContext): Promise<string | null> 
 		if (trimmed) return trimmed;
 		title = "Description required: describe what you want to work on";
 	}
+}
+
+async function getReferences(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<ReferenceItem[] | null> {
+	const choice = await ctx.ui.select("Attach reference repos?", ["no", "yes"]);
+	if (choice === undefined) return null;
+	if (choice !== "yes") return [];
+	return (await pickReferences(pi, ctx)) ?? null;
 }
 
 async function discoverResources(cwd: string): Promise<Resource[]> {
@@ -160,24 +170,21 @@ async function buildContext(cwd: string, resources: Resource[]): Promise<string>
 	const sharedFiles = resources.some((resource) => resource.kind.endsWith("extension")) ? await listFiles(cwd, "src/shared") : [];
 	const resourceBlocks = await Promise.all(resources.map((resource) => renderResource(cwd, resource)));
 
-	return `<tau_context>
-<root_files>
-${rootFiles.map((path) => `<file path="${escapeXml(path)}" />`).join("\n")}
-</root_files>
-${
-		sharedFiles.length > 0
-			? `<shared_files>
-${sharedFiles.map((path) => `<file path="${escapeXml(path)}" />`).join("\n")}
-</shared_files>`
-			: ""
-	}
-<selected_resources>
-${resourceBlocks.join("\n")}
-</selected_resources>
-</tau_context>`;
+	return [
+		"Tau context:",
+		"",
+		"Root files:",
+		...rootFiles.map((path) => `- ${path}`),
+		...(sharedFiles.length > 0 ? ["", "Shared files:", ...sharedFiles.map((path) => `- ${path}`)] : []),
+		"",
+		"Selected resources:",
+		resourceBlocks.join("\n\n"),
+	].join("\n");
 }
 
-function buildMessage(request: string): string {
+function buildMessage(request: string, references: readonly ReferenceItem[]): string {
+	const refs = referenceLines(references);
+
 	return [
 		"# /tau-edit request",
 		"",
@@ -185,9 +192,9 @@ function buildMessage(request: string): string {
 		"",
 		"Root/shared files are injected as file names only. Read them only when this request directly requires their contents; do not read them for discovery.",
 		"",
-		"<request>",
+		...(refs.length > 0 ? [...refs, ""] : []),
+		"Request:",
 		request,
-		"</request>",
 	].join("\n");
 }
 
@@ -196,15 +203,12 @@ async function renderResource(cwd: string, resource: Resource): Promise<string> 
 	const blocks = await Promise.all(
 		files.map(async (path) => {
 			const content = await readFile(join(cwd, path), "utf8");
-			return `<file path="${escapeXml(path)}">
-${fencedFileContent(path, content)}
-</file>`;
+			return `File: ${path}
+${fencedFileContent(path, content)}`;
 		}),
 	);
 
-	return `<resource kind="${escapeXml(resource.kind)}" name="${escapeXml(resource.name)}" path="${escapeXml(resource.path)}">
-${blocks.join("\n")}
-</resource>`;
+	return [`Resource: ${resource.name}`, `Kind: ${resource.kind}`, `Path: ${resource.path}`, "", blocks.join("\n\n")].join("\n");
 }
 
 async function listResourceFiles(cwd: string, path: string): Promise<string[]> {
@@ -256,10 +260,6 @@ function errorCode(error: unknown): string | undefined {
 	return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
 		? error.code
 		: undefined;
-}
-
-function escapeXml(value: string): string {
-	return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 
 function fencedFileContent(path: string, content: string): string {

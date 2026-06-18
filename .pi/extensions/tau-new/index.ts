@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionCommandContext, SlashCommandSource } from "@earendil-works/pi-coding-agent";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { pickReferences, referenceLines, type ReferenceItem } from "../../../src/shared/reference-picker.ts";
 
 const KINDS = ["extension", "prompt", "theme", "skill"] as const;
 const PLACEMENTS = ["core", "standalone", "local"] as const;
@@ -58,7 +59,9 @@ async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext, args: string)
 	const description = await getDescription(ctx, subject, name);
 	if (!description) return;
 
-	const message = buildMessage(subject, name, description);
+	const references = await getReferences(pi, ctx);
+	if (references === null) return;
+	const message = buildMessage(subject, name, description, references);
 	if (ctx.isIdle()) pi.sendUserMessage(message);
 	else pi.sendUserMessage(message, { deliverAs: "followUp" });
 }
@@ -116,6 +119,13 @@ async function getDescription(ctx: ExtensionCommandContext, subject: Subject, na
 	}
 }
 
+async function getReferences(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<ReferenceItem[] | null> {
+	const choice = await ctx.ui.select("Attach reference repos?", ["no", "yes"]);
+	if (choice === undefined) return null;
+	if (choice !== "yes") return [];
+	return (await pickReferences(pi, ctx)) ?? null;
+}
+
 function checkName(pi: ExtensionAPI, ctx: ExtensionCommandContext, subject: Subject, name: string): Check {
 	if (!name) return { state: "empty", message: "Enter a kebab-case name." };
 	if (!NAME_PATTERN.test(name)) return { state: "invalid", message: "Use lowercase letters, numbers, and single hyphens only." };
@@ -157,7 +167,9 @@ function collisionPaths(subject: Subject, name: string): string[] {
 	return subject.kind === "extension" ? [target, `${target}.ts`] : [target];
 }
 
-function buildMessage(subject: Subject, name: string, description: string): string {
+function buildMessage(subject: Subject, name: string, description: string, references: readonly ReferenceItem[]): string {
+	const refs = referenceLines(references);
+
 	return [
 		"# /tau-new scaffold request",
 		"",
@@ -170,9 +182,8 @@ function buildMessage(subject: Subject, name: string, description: string): stri
 		...(name ? ["Target path(s):", ...targets(subject, name).map((target) => `- ${target}`)] : ["Target path(s): work out after naming"]),
 		"",
 		"Description:",
-		"<description>",
 		description,
-		"</description>",
+		...(refs.length > 0 ? ["", ...refs] : []),
 		"",
 		"Read relevant Pi docs first:",
 		...docs(subject).map((doc) => `- ${doc}`),
