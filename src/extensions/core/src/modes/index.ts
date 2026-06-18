@@ -6,6 +6,7 @@ import type {
 	SessionEntry,
 } from "@earendil-works/pi-coding-agent";
 import { type AutocompleteItem, Key } from "@earendil-works/pi-tui";
+import { setTauFooterItem } from "../../../../shared/events.ts";
 
 const MODE_STATE_TYPE = "tau.mode";
 const DEFAULT_MODE = "act";
@@ -131,6 +132,7 @@ export function registerModes(pi: ExtensionAPI): void {
 
 		activeMode = name;
 		updateStatus(ctx, activeMode);
+		updateFooter(pi, activeMode);
 
 		if (options.persist !== false) persistMode(pi, activeMode, activeCandidateIndex);
 		if (!options.quiet) ctx.ui.notify(`Mode: ${config.label}`, "info");
@@ -257,6 +259,14 @@ async function applyPreferredModel(
 
 function updateStatus(ctx: ExtensionContext, activeMode: ModeName | undefined): void {
 	ctx.ui.setStatus("tau-mode", activeMode ? ctx.ui.theme.fg("accent", `mode:${activeMode}`) : undefined);
+}
+
+function updateFooter(pi: ExtensionAPI, activeMode: ModeName | undefined): void {
+	setTauFooterItem(pi, {
+		id: "tau-mode",
+		text: activeMode ? `mode:${activeMode}` : undefined,
+		priority: 100,
+	});
 }
 
 function persistMode(pi: ExtensionAPI, name: ModeName, candidateIndex: number | undefined): void {

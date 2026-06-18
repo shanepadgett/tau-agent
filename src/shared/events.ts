@@ -5,7 +5,18 @@ export type TauAgentEvents = {
 		title?: string;
 		body?: string;
 	};
+	"tau:footer-item": {
+		id: string;
+		text?: string;
+		priority?: number;
+	};
 };
+
+export interface TauFooterItem {
+	id: string;
+	text?: string;
+	priority?: number;
+}
 
 type EventAPI = Pick<ExtensionAPI, "events">;
 
@@ -25,4 +36,12 @@ export function onTauEvent<Name extends keyof TauAgentEvents>(
 	return pi.events.on(name, (data) => {
 		handler(data as TauAgentEvents[Name]);
 	});
+}
+
+export function setTauFooterItem(pi: EventAPI, item: TauFooterItem): void {
+	emitTauEvent(pi, "tau:footer-item", item);
+}
+
+export function clearTauFooterItem(pi: EventAPI, id: string): void {
+	emitTauEvent(pi, "tau:footer-item", { id });
 }
