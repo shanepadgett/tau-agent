@@ -27,6 +27,7 @@
       "themes": [
         "-themes/nord-wave.json"
       ]
-    }
+    },
+    "git:github.com/DietrichGebert/ponytail"
   ]
 }
