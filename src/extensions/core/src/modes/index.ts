@@ -10,8 +10,8 @@ import { type AutocompleteItem, Key } from "@earendil-works/pi-tui";
 const MODE_STATE_TYPE = "tau.mode";
 const DEFAULT_MODE = "act";
 const MODE_ORDER = ["plan", "act", "review", "debug"] as const;
-const PLAN_TOOLS = ["read", "grep", "find", "ls", "webresearch"];
-const DEFAULT_TOOLS = ["read", "grep", "ls", "webresearch", "bash", "apply_patch"];
+const PLAN_TOOLS = ["read", "grep", "find", "ls"];
+const NON_PLAN_TOOLS = ["read", "grep", "find", "ls", "bash"];
 
 type ModeName = (typeof MODE_ORDER)[number];
 
@@ -117,13 +117,16 @@ export function registerModes(pi: ExtensionAPI): void {
 			options.quiet === true,
 		);
 
-		if (leavingPlan) {
-			pi.setActiveTools(filterKnownTools(pi, previousTools ?? DEFAULT_TOOLS));
-			previousTools = undefined;
-		}
-
 		if (name === "plan") {
 			pi.setActiveTools(filterKnownTools(pi, PLAN_TOOLS));
+		} else {
+			pi.setActiveTools(
+				filterKnownTools(
+					pi,
+					ensureTools(leavingPlan ? (previousTools ?? []) : pi.getActiveTools(), NON_PLAN_TOOLS),
+				),
+			);
+			if (leavingPlan) previousTools = undefined;
 		}
 
 		activeMode = name;
@@ -295,6 +298,10 @@ function filterKnownToolNames(names: readonly string[], known: ReadonlySet<strin
 	return names.filter((name) => known.has(name));
 }
 
+function ensureTools(names: readonly string[], required: readonly string[]): string[] {
+	return [...new Set([...names, ...required])];
+}
+
 function nextMode(current: ModeName | undefined): ModeName {
 	if (!current) return MODE_ORDER[0];
 	return MODE_ORDER[(MODE_ORDER.indexOf(current) + 1) % MODE_ORDER.length] ?? MODE_ORDER[0];
@@ -315,6 +322,8 @@ function demo(): void {
 	if (nextMode("debug") !== "plan") throw new Error("mode cycle failed");
 	const filtered = filterKnownToolNames(["read", "missing", "ls"], new Set(["read", "ls"]));
 	if (filtered.join(",") !== "read,ls") throw new Error("tool filter failed");
+	const ensured = ensureTools(["custom_tool", "read"], ["read", "grep", "bash"]);
+	if (ensured.join(",") !== "custom_tool,read,grep,bash") throw new Error("tool ensure failed");
 }
 
 if (process.argv[1]?.replace(/\\/g, "/").endsWith("src/extensions/core/src/modes/index.ts")) demo();

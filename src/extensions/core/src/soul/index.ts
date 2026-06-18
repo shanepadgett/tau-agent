@@ -46,7 +46,7 @@ function buildSoulPrompt(options: BuildSystemPromptOptions): string {
 		IDENTITY_BLOCK,
 		`Available tools:\n${formatToolList(tools, options.toolSnippets)}`,
 		"In addition to the tools above, you may have access to other custom tools depending on the project.",
-		`Guidelines:\n${formatGuidelines(tools, options.promptGuidelines)}`,
+		`Guidelines:\n${formatGuidelines(options.promptGuidelines)}`,
 		formatPiDocsGuidance(),
 	];
 
@@ -68,7 +68,7 @@ function formatToolList(tools: readonly string[], snippets: Record<string, strin
 	return visible.length ? visible.map((name) => `- ${name}: ${snippets?.[name]}`).join("\n") : "(none)";
 }
 
-function formatGuidelines(tools: readonly string[], guidelines: readonly string[] | undefined): string {
+function formatGuidelines(guidelines: readonly string[] | undefined): string {
 	const result: string[] = [];
 	const seen = new Set<string>();
 	const add = (guideline: string): void => {
@@ -77,10 +77,6 @@ function formatGuidelines(tools: readonly string[], guidelines: readonly string[
 		seen.add(normalized);
 		result.push(normalized);
 	};
-
-	if (tools.includes("bash") && !tools.includes("grep") && !tools.includes("find") && !tools.includes("ls")) {
-		add("Use bash for file operations like ls, rg, find");
-	}
 
 	for (const guideline of guidelines ?? []) add(guideline);
 	add("Be concise in your responses");
