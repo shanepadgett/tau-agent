@@ -62,14 +62,13 @@ export function registerCommit(pi: ExtensionAPI): void {
 
 			try {
 				const git = createGitRunner(pi, ctx);
-				const root = await git.run(["rev-parse", "--show-toplevel"], true);
+				const root = await git.run(["rev-parse", "--show-toplevel"], { optional: true });
 				if (!root) {
 					ctx.ui.notify("No git repository found.", "info");
 					return;
 				}
-				git.cwd = root;
 
-				const status = await git.run(["status", "--porcelain=v1", "--untracked-files=all"]);
+				const status = await git.run(["status", "--porcelain=v1", "--untracked-files=all"], { cwd: root });
 				if (!status) {
 					ctx.ui.notify("No uncommitted changes detected.", "info");
 					return;
@@ -80,9 +79,9 @@ export function registerCommit(pi: ExtensionAPI): void {
 				// complete, uniform picture: tracked edits and new files alike, with
 				// binary handling free. This command always commits all changes, so
 				// staging early matches its contract.
-				await git.run(["add", "-A"]);
+				await git.run(["add", "-A"], { cwd: root });
 
-				const evidence = await collectEvidence(git, ctx.sessionManager.getBranch());
+				const evidence = await collectEvidence(git, root, ctx.sessionManager.getBranch());
 				const candidates = await resolveCandidates(ctx);
 				const generated = await generateMessage(ctx, candidates, buildPrompt(evidence));
 
@@ -108,14 +107,14 @@ export function registerCommit(pi: ExtensionAPI): void {
 				}
 
 				ctx.ui.setStatus("commit", "committing");
-				await commitStaged(git, message);
+				await commitStaged(git, root, message);
 
-				const hash = await git.run(["rev-parse", "--short", "HEAD"]);
+				const hash = await git.run(["rev-parse", "--short", "HEAD"], { cwd: root });
 				pi.appendEntry<CommitMarker>(COMMIT_MARKER_TYPE, { hash, subject, timestamp: Date.now() });
 
 				if (shouldPush) {
 					ctx.ui.setStatus("commit", "pushing");
-					await git.run(["push"], false, PUSH_TIMEOUT_MS);
+					await git.run(["push"], { cwd: root, timeout: PUSH_TIMEOUT_MS });
 					ctx.ui.notify(`Committed and pushed ${hash}: ${subject}`, "info");
 				} else {
 					ctx.ui.notify(`Committed ${hash}: ${subject}`, "info");
@@ -129,10 +128,10 @@ export function registerCommit(pi: ExtensionAPI): void {
 	});
 }
 
-async function collectEvidence(git: GitRunner, entries: readonly SessionEntry[]): Promise<CommitEvidence> {
+async function collectEvidence(git: GitRunner, cwd: string, entries: readonly SessionEntry[]): Promise<CommitEvidence> {
 	const [recentSubjects, diff] = await Promise.all([
-		git.run(["log", "-12", "--pretty=format:%s"], true),
-		git.run(["diff", "--cached", "--stat", "--patch", "--no-color", "--no-ext-diff"], true),
+		git.run(["log", "-12", "--pretty=format:%s"], { cwd, optional: true }),
+		git.run(["diff", "--cached", "--stat", "--patch", "--no-color", "--no-ext-diff"], { cwd, optional: true }),
 	]);
 	return { recentSubjects, diff, intent: collectIntent(entries) };
 }
@@ -298,11 +297,11 @@ function validateMessage(rawMessage: string): string {
 	return body ? `${header}\n\n${body}` : header;
 }
 
-async function commitStaged(git: GitRunner, message: string): Promise<void> {
+async function commitStaged(git: GitRunner, cwd: string, message: string): Promise<void> {
 	const messageFile = join(tmpdir(), `pi-commit-${randomUUID()}.txt`);
 	try {
 		await writeFile(messageFile, `${message}\n`, "utf8");
-		await git.run(["commit", "-F", messageFile], false, COMMIT_TIMEOUT_MS);
+		await git.run(["commit", "-F", messageFile], { cwd, timeout: COMMIT_TIMEOUT_MS });
 	} finally {
 		await rm(messageFile, { force: true });
 	}

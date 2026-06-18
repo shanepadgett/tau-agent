@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { type AutocompleteItem, Key, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { createGitRunner, type GitRunner } from "../../../../shared/git.ts";
 
 const REFERENCES_DIR = join(homedir(), ".local", "share", "tau-agent", "references");
 const CLONE_TIMEOUT_MS = 300_000;
@@ -11,6 +12,7 @@ const UPDATE_TIMEOUT_MS = 120_000;
 interface ReferenceItem {
 	name: string;
 	path: string;
+	dirty: boolean;
 }
 
 type ReferencePanelAction =
@@ -35,15 +37,16 @@ export function registerReference(pi: ExtensionAPI): void {
 		},
 		handler: async (args, ctx) => {
 			await ctx.waitForIdle();
+			const git = createGitRunner(pi, ctx);
 
 			const trimmed = args.trim();
 			const [head = "", ...rest] = trimmed.split(/\s+/);
 			if (head === "new") {
 				const url = rest.join(" ").trim();
 				if (url) {
-					await cloneReference(pi, ctx, url);
+					await cloneReference(git, ctx, url);
 				} else {
-					await promptAndCloneReference(pi, ctx);
+					await promptAndCloneReference(git, ctx);
 				}
 				return;
 			}
@@ -58,13 +61,13 @@ export function registerReference(pi: ExtensionAPI): void {
 				return;
 			}
 
-			await openReferencePanel(pi, ctx);
+			await openReferencePanel(pi, git, ctx);
 		},
 	});
 }
 
-async function openReferencePanel(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
-	let references = await loadReferences();
+async function openReferencePanel(pi: ExtensionAPI, git: GitRunner, ctx: ExtensionCommandContext): Promise<void> {
+	let references = await loadReferences(git);
 
 	while (true) {
 		const result = await showReferencePanel(ctx, references);
@@ -72,14 +75,14 @@ async function openReferencePanel(pi: ExtensionAPI, ctx: ExtensionCommandContext
 		if (result.action === "cancel") return;
 
 		if (result.action === "new") {
-			await promptAndCloneReference(pi, ctx);
-			references = await loadReferences();
+			await promptAndCloneReference(git, ctx);
+			references = await loadReferences(git);
 			continue;
 		}
 
 		if (result.action === "update") {
-			await updateReferences(pi, ctx, references);
-			references = await loadReferences();
+			await updateReferences(git, ctx, references);
+			references = await loadReferences(git);
 			continue;
 		}
 
@@ -118,11 +121,19 @@ async function showReferencePanel(
 				if (references.length === 0) {
 					lines.push(truncateToWidth(theme.fg("muted", "No reference folders. Press n for new."), renderWidth));
 				} else {
+					if (references.some((item) => item.dirty)) {
+						lines.push(
+							truncateToWidth(theme.fg("warning", "Warning: dirty reference repos are read-only."), renderWidth),
+						);
+						lines.push("");
+					}
+
 					for (const [index, item] of references.entries()) {
 						const active = index === cursor;
 						const pointer = active ? theme.fg("accent", "> ") : "  ";
 						const box = selected.has(item.path) ? "[x]" : "[ ]";
-						const label = active ? theme.fg("accent", item.name) : theme.fg("text", item.name);
+						const name = item.dirty ? `${item.name} *` : item.name;
+						const label = active ? theme.fg("accent", name) : theme.fg(item.dirty ? "warning" : "text", name);
 						lines.push(truncateToWidth(`${pointer}${box} ${label}`, renderWidth));
 					}
 				}
@@ -211,7 +222,7 @@ function buildReferencePrompt(references: readonly ReferenceItem[], prompt: stri
 	].join("\n");
 }
 
-async function promptAndCloneReference(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
+async function promptAndCloneReference(git: GitRunner, ctx: ExtensionCommandContext): Promise<void> {
 	if (!ctx.hasUI) {
 		ctx.ui.notify("Use /reference new <git-url> in non-interactive mode.", "error");
 		return;
@@ -223,10 +234,10 @@ async function promptAndCloneReference(pi: ExtensionAPI, ctx: ExtensionCommandCo
 		return;
 	}
 
-	await cloneReference(pi, ctx, url);
+	await cloneReference(git, ctx, url);
 }
 
-async function cloneReference(pi: ExtensionAPI, ctx: ExtensionCommandContext, rawUrl: string): Promise<void> {
+async function cloneReference(git: GitRunner, ctx: ExtensionCommandContext, rawUrl: string): Promise<void> {
 	const url = rawUrl.trim();
 	if (!url) {
 		ctx.ui.notify("Git URL is required.", "error");
@@ -247,13 +258,7 @@ async function cloneReference(pi: ExtensionAPI, ctx: ExtensionCommandContext, ra
 
 	ctx.ui.setStatus("reference", `cloning ${name}`);
 	try {
-		const result = await pi.exec("git", ["clone", url, target], {
-			cwd: root,
-			signal: ctx.signal,
-			timeout: CLONE_TIMEOUT_MS,
-		});
-		if (result.code !== 0) throw new Error(execDetails(result));
-
+		await git.run(["clone", url, target], { cwd: root, timeout: CLONE_TIMEOUT_MS });
 		ctx.ui.notify(`Added ${name} to ${target}`, "info");
 	} catch (error) {
 		ctx.ui.notify(`New reference failed: ${errorText(error)}`, "error");
@@ -262,18 +267,27 @@ async function cloneReference(pi: ExtensionAPI, ctx: ExtensionCommandContext, ra
 	}
 }
 
-async function loadReferences(): Promise<ReferenceItem[]> {
+async function loadReferences(git: GitRunner): Promise<ReferenceItem[]> {
 	const root = referenceRoot();
 	await mkdir(root, { recursive: true });
 
-	return (await readdir(root, { withFileTypes: true }))
+	const refs = (await readdir(root, { withFileTypes: true }))
 		.filter((entry) => entry.isDirectory())
 		.map((entry) => ({ name: entry.name, path: join(root, entry.name) }))
 		.sort((left, right) => left.name.localeCompare(right.name));
+
+	const references: ReferenceItem[] = [];
+	for (const ref of refs) {
+		references.push({
+			...ref,
+			dirty: (await git.run(["status", "--porcelain=v1"], { cwd: ref.path, optional: true })).length > 0,
+		});
+	}
+	return references;
 }
 
 async function updateReferences(
-	pi: ExtensionAPI,
+	git: GitRunner,
 	ctx: ExtensionCommandContext,
 	references: readonly ReferenceItem[],
 ): Promise<void> {
@@ -288,15 +302,11 @@ async function updateReferences(
 
 	try {
 		for (const ref of references) {
-			const result = await pi.exec("git", ["pull", "--ff-only", "--quiet"], {
-				cwd: ref.path,
-				signal: ctx.signal,
-				timeout: UPDATE_TIMEOUT_MS,
-			});
-			if (result.code === 0) {
+			try {
+				await git.run(["pull", "--ff-only", "--quiet"], { cwd: ref.path, timeout: UPDATE_TIMEOUT_MS });
 				updated.push(ref.path);
-			} else {
-				failures.push(`${ref.name}: ${execDetails(result)}`);
+			} catch (error) {
+				failures.push(`${ref.name}: ${errorText(error)}`);
 			}
 		}
 	} finally {
@@ -323,10 +333,6 @@ function referenceNameFromUrl(url: string): string {
 
 	if (!name || name === "." || name === "..") throw new Error("Could not derive reference folder name from Git URL.");
 	return name;
-}
-
-function execDetails(result: { stdout: string; stderr: string; code: number }): string {
-	return [result.stderr, result.stdout].filter(Boolean).join("\n").trim() || `exit code ${result.code}`;
 }
 
 function errorText(error: unknown): string {
