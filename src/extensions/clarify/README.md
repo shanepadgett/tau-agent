@@ -2,9 +2,13 @@
 
 Structured user clarification for blocked agent decisions.
 
+## Command
+
+`/qna` temporarily enables `clarify` and sends a hidden instruction asking the agent to re-ask its last question with structured UI.
+
 ## Tool
 
-Registers `clarify`.
+Registers `clarify`, inactive by default. It is enabled for `/qna`, then disabled after `clarify` returns or the agent turn ends.
 
 Use only when missing user intent, preference, or constraint would materially change the next action. Supports:
 
@@ -35,4 +39,4 @@ Selectable questions require real options, recommendation values, and an honest 
 
 ## Skipped
 
-No settings, replay, persistence, notifications, commands, or preview panes. Add when usage proves need.
+No settings, replay, persistence, notifications, or preview panes. Add when usage proves need.

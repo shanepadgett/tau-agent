@@ -33,6 +33,15 @@ const clarifyParamsSchema = Type.Object({
 	),
 });
 
+const QNA_PROMPT = `Use clarify to re-ask the question you just asked the user.
+
+Convert your latest user-facing question into structured clarify UI:
+- use select for one choice, multi for combinable choices, confirm for yes/no, input when choices would be fake
+- keep options real and non-filler
+- include recommendation only when you have a real one
+- do not answer the question yourself
+- if there is no question to re-ask, say so without using tools`;
+
 const clarifyTool = defineTool<typeof clarifyParamsSchema, ClarifyResult>({
 	name: "clarify",
 	label: "Clarify",
@@ -104,6 +113,34 @@ const clarifyTool = defineTool<typeof clarifyParamsSchema, ClarifyResult>({
 
 export default function clarifyExtension(pi: ExtensionAPI): void {
 	pi.registerTool(clarifyTool);
+
+	pi.on("session_start", () => disableClarify(pi));
+	pi.on("tool_result", (event) => {
+		if (event.toolName !== "clarify") return;
+		disableClarify(pi);
+	});
+	pi.on("agent_end", () => disableClarify(pi));
+
+	pi.registerCommand("qna", {
+		description: "Ask the agent to re-ask its last question with structured choices",
+		handler: async (_args, ctx) => {
+			if (!ctx.isIdle()) {
+				ctx.ui.notify("Agent is busy", "warning");
+				return;
+			}
+
+			enableClarify(pi);
+			pi.sendMessage({ customType: "tau.qna", content: QNA_PROMPT, display: false }, { triggerTurn: true });
+		},
+	});
+}
+
+function enableClarify(pi: ExtensionAPI): void {
+	pi.setActiveTools([...new Set([...pi.getActiveTools(), "clarify"])]);
+}
+
+function disableClarify(pi: ExtensionAPI): void {
+	pi.setActiveTools(pi.getActiveTools().filter((name) => name !== "clarify"));
 }
 
 function formatResult(result: ClarifyResult, formatPrompt: (prompt: string) => string = (prompt) => prompt): string {

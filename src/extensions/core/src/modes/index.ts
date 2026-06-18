@@ -10,8 +10,8 @@ import { type AutocompleteItem, Key } from "@earendil-works/pi-tui";
 const MODE_STATE_TYPE = "tau.mode";
 const DEFAULT_MODE = "act";
 const MODE_ORDER = ["plan", "act", "review", "debug"] as const;
-const PLAN_TOOLS = ["read", "grep", "find", "ls", "websearch", "webfetch", "codesearch", "clarify", "questionnaire"];
-const DEFAULT_TOOLS = ["read", "bash", "edit", "write"];
+const PLAN_TOOLS = ["read", "grep", "find", "ls", "webresearch"];
+const DEFAULT_TOOLS = ["read", "grep", "ls", "webresearch", "bash", "apply_patch"];
 
 type ModeName = (typeof MODE_ORDER)[number];
 
