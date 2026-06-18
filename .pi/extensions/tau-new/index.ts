@@ -45,12 +45,14 @@ async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext, args: string)
 	if (!subject) return;
 
 	const name = await getName(pi, ctx, subject);
-	if (!name) return;
+	if (name === undefined) return;
 
-	const collisions = getCollisions(pi, ctx, subject, name);
-	if (collisions.length > 0) {
-		ctx.ui.notify(`Target/name already exists: ${collisions.join(", ")}`, "error");
-		return;
+	if (name) {
+		const collisions = getCollisions(pi, ctx, subject, name);
+		if (collisions.length > 0) {
+			ctx.ui.notify(`Target/name already exists: ${collisions.join(", ")}`, "error");
+			return;
+		}
 	}
 
 	const description = await getDescription(ctx, subject, name);
@@ -85,13 +87,14 @@ async function getSubject(ctx: ExtensionCommandContext, kind: Kind): Promise<Sub
 	return placement && isPlacement(placement) ? { kind, placement } : null;
 }
 
-async function getName(pi: ExtensionAPI, ctx: ExtensionCommandContext, subject: Subject): Promise<string | null> {
-	let title = `Name for ${label(subject)}`;
+async function getName(pi: ExtensionAPI, ctx: ExtensionCommandContext, subject: Subject): Promise<string | undefined> {
+	let title = `Name for ${label(subject)} (blank = agent proposes names)`;
 	while (true) {
 		const value = await ctx.ui.input(title, "kebab-case-name");
-		if (value === undefined) return null;
+		if (value === undefined) return undefined;
 
 		const name = value.trim();
+		if (!name) return "";
 		const check = checkName(pi, ctx, subject, name);
 		if (check.state === "ok") return name;
 
@@ -101,13 +104,15 @@ async function getName(pi: ExtensionAPI, ctx: ExtensionCommandContext, subject: 
 }
 
 async function getDescription(ctx: ExtensionCommandContext, subject: Subject, name: string): Promise<string | null> {
-	let title = `Describe ${label(subject)} ${name}`;
+	let title = name ? `Describe ${label(subject)} ${name}` : `Describe ${label(subject)}`;
 	while (true) {
 		const value = await ctx.ui.editor(title, "");
 		if (value === undefined) return null;
 		const trimmed = value.trim();
 		if (trimmed) return trimmed;
-		title = `Description required: describe ${label(subject)} ${name}`;
+		title = name
+			? `Description required: describe ${label(subject)} ${name}`
+			: `Description required: describe ${label(subject)}`;
 	}
 }
 
@@ -160,10 +165,9 @@ function buildMessage(subject: Subject, name: string, description: string): stri
 		"Follow already loaded project instructions.",
 		"",
 		`Kind: ${label(subject)}`,
-		`Name: ${name}`,
+		`Name: ${name || "not provided"}`,
 		"",
-		"Target path(s):",
-		...targets(subject, name).map((target) => `- ${target}`),
+		...(name ? ["Target path(s):", ...targets(subject, name).map((target) => `- ${target}`)] : ["Target path(s): work out after naming"]),
 		"",
 		"Description:",
 		"<description>",
@@ -176,7 +180,13 @@ function buildMessage(subject: Subject, name: string, description: string): stri
 		"Scaffold rules:",
 		...rules(subject, name).map((rule) => `- ${rule}`),
 		"- Inspect current Tau package patterns before editing.",
-		"- If ambiguity remains, ask concise clarifying questions before editing.",
+		"- Work with the user to resolve scope, behavior, and constraints before editing; assume the description may be ambiguous.",
+		...(name
+			? []
+			: [
+					"- No name was provided. Propose a few kebab-case names from the description, help the user choose one, then use that name consistently.",
+				]),
+		"- Ask concise clarifying questions before editing when scope, naming, files, UX, or acceptance criteria are unclear.",
 	].join("\n");
 }
 
@@ -188,6 +198,7 @@ function docs(subject: Subject): string[] {
 }
 
 function rules(subject: Subject, name: string): string[] {
+	if (!name) return ["Do not create files until the user confirms a name."];
 	if (subject.kind === "extension") {
 		const path = targets(subject, name)[0]!;
 		return [
