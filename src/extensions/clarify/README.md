@@ -2,13 +2,19 @@
 
 Structured user clarification for blocked agent decisions.
 
-## Command
+## Commands
 
 `/qna` temporarily enables `clarify` and sends a hidden instruction asking the agent to re-ask its last question with structured UI.
 
-## Tool
+`/interview [topic]` creates `.working/interviews/<timestamp>-<slug>/decisions.md`, enables interview tools, and sends a hidden instruction to run a structured interview.
+
+Interview sessions keep `clarify` active across turns. The agent updates the decisions file after each answer, confirms the exit condition with the user, then calls `interview_end`.
+
+## Tools
 
 Registers `clarify`, inactive by default. It is enabled for `/qna`, then disabled after `clarify` returns or the agent turn ends.
+
+During `/interview`, `clarify` stays active and `interview_end` is also exposed. `interview_end` only ends the active interview; it does not write the decisions file.
 
 Use only when missing user intent, preference, or constraint would materially change the next action. Supports:
 

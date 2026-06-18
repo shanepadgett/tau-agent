@@ -56,7 +56,7 @@ export interface ClarifyAnswerResult {
 	custom?: string;
 	input?: string;
 	optionNotes?: Record<string, string>;
-	recommendation?: ClarifyRecommendation & { accepted: boolean };
+	recommendation?: ClarifyRecommendation & { accepted: boolean; labels: string[] };
 }
 
 export interface ClarifyResult {
@@ -203,6 +203,10 @@ function buildAnswer(state: ClarifyState, question: NormalizedQuestion): Clarify
 		values.push(answer.custom);
 		labels.push(answer.custom);
 	}
+	if (question.kind === "input" && answer.input) {
+		values.push(answer.input);
+		labels.push(answer.input);
+	}
 
 	return dropUndefined({
 		kind: question.kind,
@@ -213,7 +217,11 @@ function buildAnswer(state: ClarifyState, question: NormalizedQuestion): Clarify
 		input: question.kind === "input" ? answer.input : undefined,
 		optionNotes: Object.keys(optionNotes).length ? optionNotes : undefined,
 		recommendation: question.recommendation
-			? { ...question.recommendation, accepted: sameValues(values, question.recommendation.values) }
+			? {
+					...question.recommendation,
+					accepted: sameValues(values, question.recommendation.values),
+					labels: question.recommendation.values.map((value) => optionByValue(question, value)?.label ?? value),
+				}
 			: undefined,
 	});
 }
@@ -251,18 +259,18 @@ function normalizeRecommendation(
 	options: ClarifyOption[],
 	recommendation: ClarifyRecommendation | undefined,
 ): ClarifyRecommendation | undefined {
-	if (kind === "input") {
-		if (recommendation) throw new Error(`clarify input question ${id} cannot provide recommendation`);
-		return undefined;
+	if (!recommendation) {
+		if (kind === "input") return undefined;
+		throw new Error(`clarify ${kind} question ${id} needs recommendation`);
 	}
-	if (!recommendation) throw new Error(`clarify ${kind} question ${id} needs recommendation`);
 	const reason = clean(recommendation.reason);
 	if (!reason) throw new Error(`clarify question ${id} recommendation needs reason`);
 	const values = recommendation.values.map(clean).filter(Boolean);
 	if (values.length === 0) throw new Error(`clarify question ${id} recommendation needs values`);
-	if ((kind === "select" || kind === "confirm") && values.length !== 1) {
+	if ((kind === "select" || kind === "confirm" || kind === "input") && values.length !== 1) {
 		throw new Error(`clarify ${kind} question ${id} recommendation needs exactly one value`);
 	}
+	if (kind === "input") return { values, reason };
 	const valid = new Set(options.map((option) => option.value));
 	const unique = new Set<string>();
 	for (const value of values) {

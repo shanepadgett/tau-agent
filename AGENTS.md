@@ -39,6 +39,6 @@
 
 ## Commands
 
-- After code changes, run `mise run check` and fix errors, warnings, and infos.
+- After code changes, run `mise run check` and fix errors, warnings, and infos. If it reports auto-fixed files and no errors, do not rerun just to confirm formatting.
 - Do not run builds or tests unless requested.
 - Never commit unless explicitly asked.

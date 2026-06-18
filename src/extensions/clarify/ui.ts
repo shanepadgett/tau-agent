@@ -216,6 +216,8 @@ class ClarifyComponent implements Component, Focusable {
 		lines.push(...wrapTextWithAnsi(question.prompt, width));
 		lines.push("");
 		if (question.kind === "input") {
+			lines.push(...this.renderRecommendation(question, width));
+			if (question.recommendation) lines.push("");
 			lines.push(...this.renderInputQuestion(question, width));
 			return lines;
 		}
