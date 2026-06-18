@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 const KINDS = ["extension", "prompt", "theme", "skill"] as const;
-const PLACEMENTS = ["core", "standalone"] as const;
+const PLACEMENTS = ["core", "standalone", "local"] as const;
 const NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const PI_ROOT = "/Users/shanepadgett/.bun/install/global/node_modules/@earendil-works/pi-coding-agent";
 
@@ -137,7 +137,9 @@ function nameCollisions(pi: ExtensionAPI, ctx: ExtensionCommandContext, subject:
 
 function targets(subject: Subject, name: string): string[] {
 	if (subject.kind === "extension") {
-		return subject.placement === "core" ? [`src/extensions/core/src/${name}`] : [`src/extensions/${name}`];
+		if (subject.placement === "core") return [`src/extensions/core/src/${name}`];
+		if (subject.placement === "local") return [`.pi/extensions/${name}`];
+		return [`src/extensions/${name}`];
 	}
 	if (subject.kind === "prompt") return [`prompts/${name}.md`];
 	if (subject.kind === "theme") return [`themes/${name}.json`];
@@ -187,12 +189,10 @@ function docs(subject: Subject): string[] {
 
 function rules(subject: Subject, name: string): string[] {
 	if (subject.kind === "extension") {
-		const path = subject.placement === "core" ? `src/extensions/core/src/${name}` : `src/extensions/${name}`;
+		const path = targets(subject, name)[0]!;
 		return [
 			`Create ${path}/index.ts.`,
-			subject.placement === "core"
-				? "Wire it from src/extensions/core/index.ts and update src/extensions/core/README.md."
-				: `Create ${path}/README.md.`,
+			placementRule(subject, path),
 			"Use native Pi TUI components when UI is needed.",
 			"Put Tau custom extension events in src/shared/events.ts.",
 			"Add extra extension files only when they clearly improve readability.",
@@ -201,6 +201,12 @@ function rules(subject: Subject, name: string): string[] {
 	if (subject.kind === "prompt") return [`Create prompts/${name}.md.`, "Use frontmatter with a useful description."];
 	if (subject.kind === "theme") return [`Create themes/${name}.json.`, "Define every required theme color token."];
 	return [`Create skills/${name}/SKILL.md.`, "Use required Agent Skills frontmatter with name and description."];
+}
+
+function placementRule(subject: { kind: "extension"; placement: Placement }, path: string): string {
+	if (subject.placement === "core") return "Wire it from src/extensions/core/index.ts and update src/extensions/core/README.md.";
+	if (subject.placement === "local") return "Keep it local to this repo; do not add it to package.json.";
+	return `Create ${path}/README.md.`;
 }
 
 function label(subject: Subject): string {
