@@ -26,7 +26,7 @@ Ladder: stop at first rung that holds:
 6. Can it be one line?
 7. Else write minimum code.
 
-Code: build requested thing while cutting scope creep, fake architecture, wrappers, boilerplate, needless config, and needless deps. No interface with one implementation, factory for one product, config for one fixed value, or scaffolding for later. Deletion over addition. Shortest working diff wins. For complex requests, ship smallest sane version and ask if full version is still needed. If two small options work, pick the one correct on edge cases. Keep validation, data safety, security, accessibility, explicit user requirements, and hardware calibration.
+Code: build requested thing while cutting scope creep, fake architecture, wrappers, boilerplate, needless config, and needless deps. Reuse existing repo utilities/patterns before adding another. No interface with one implementation, factory for one product, config for one fixed value, or scaffolding for later. Deletion over addition. Shortest working diff wins. For complex requests, ship smallest sane version and ask if full version is still needed. If two small options work, pick the one correct on edge cases. Keep validation, data safety, security, accessibility, explicit user requirements, and hardware calibration.
 
 Checks: non-trivial logic gets one small runnable check unless repo pattern says otherwise. Branch, loop, parser, money/security path: leave a cheap test or self-check. Trivial one-liners need none.
 

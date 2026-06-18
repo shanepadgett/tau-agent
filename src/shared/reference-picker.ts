@@ -66,7 +66,7 @@ export async function addReference(pi: ExtensionAPI, ctx: ExtensionCommandContex
 export function referenceLines(references: readonly ReferenceItem[]): string[] {
 	if (references.length === 0) return [];
 
-	// ponytail: paths-only; dump repo contents only if targeted reads prove insufficient.
+	// lean: paths-only; dump repo contents only if targeted reads prove insufficient.
 	return [
 		"Reference repositories:",
 		...references.map((ref) => `- ${ref.name}: ${ref.path}${ref.dirty ? " (dirty)" : ""}`),

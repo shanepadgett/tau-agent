@@ -463,7 +463,7 @@ function numberOrZero(value: unknown): number {
 	return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-// ponytail: one file plus self-checks is enough; split when footer gains real feature mass.
+// lean: one file plus self-checks is enough; split when footer gains real feature mass.
 function demo(): void {
 	const git = parseGitStatus("## main...origin/main\n M a\nA  b\n?? c\nUU d\n");
 	if (git?.branch !== "main" || git.text !== "+1 ~1 ?1 !1") throw new Error("git parse failed");

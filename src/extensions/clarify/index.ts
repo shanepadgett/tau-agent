@@ -353,7 +353,7 @@ function timestamp(): string {
 	return new Date().toISOString().replace(/[:.]/g, "-");
 }
 
-// ponytail: validates/result-builds without TUI harness; real UI needs Pi runtime.
+// lean: validates/result-builds without TUI harness; real UI needs Pi runtime.
 function demo(): void {
 	const questions = normalizeParams({
 		questions: [

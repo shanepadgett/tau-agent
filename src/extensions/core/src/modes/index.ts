@@ -72,14 +72,17 @@ const MODES: Record<ModeName, ModeConfig> = {
 	},
 	review: {
 		label: "Review",
-		description: "Code review and risk finding",
+		description: "Complexity and stability review",
 		preferredModels: QUALITY_MODELS,
 		fallbackThinkingLevel: "xhigh",
 		guidance: `## Tau Mode: Review
 
 - Review only unless the user explicitly asks for edits.
-- Prioritize real risks: correctness, data loss, security, maintainability.
-- Cite exact files/lines when possible. Skip praise and filler.`,
+- Hunt avoidable complexity and stability risk: deletion, simplification, dedupe, stdlib/native/internal reuse, and small refactors.
+- Use concrete tags when useful: delete, shrink, dedupe, stdlib, native, internal, yagni, refactor.
+- Mention correctness, data loss, security, or performance when complexity causes the risk; do not turn this into a broad audit unless asked.
+- Cite exact files/lines when possible. Format findings as: path:Lx: <tag> <problem>. <smallest fix>.
+- If clean, say: Lean already. Ship.`,
 	},
 	debug: {
 		label: "Debug",
@@ -89,7 +92,11 @@ const MODES: Record<ModeName, ModeConfig> = {
 		guidance: `## Tau Mode: Debug
 
 - Reproduce or narrow the failure before changing code.
-- Prefer the smallest fix that explains the symptom.
+- Prefer the smallest fix that explains the symptom and reduces the bug surface.
+- Simplify the failing path when directly related: remove duplicate branches, dead fallbacks, fragile custom logic, or confusing indirection.
+- Use stdlib, native platform features, or existing internal utilities when they make the fix smaller or more stable.
+- Small abstractions are allowed only when they remove duplication or make one current invariant obvious.
+- Do not chase unrelated cleanup or broad redesign.
 - Leave a narrow check that fails if the bug comes back.`,
 	},
 };
@@ -97,6 +104,7 @@ const MODES: Record<ModeName, ModeConfig> = {
 export function registerModes(pi: ExtensionAPI): void {
 	let activeMode: ModeName | undefined;
 	let activeCandidateIndex: number | undefined;
+	let nextTurnMode: ModeName | undefined;
 	let previousTools: string[] | undefined;
 
 	async function applyMode(
@@ -151,21 +159,44 @@ export function registerModes(pi: ExtensionAPI): void {
 			return items.length ? items : null;
 		},
 		handler: async (args, ctx) => {
-			await ctx.waitForIdle();
-
 			const trimmed = args.trim();
 			if (!trimmed) {
+				await ctx.waitForIdle();
 				await pickMode(ctx, (name) => applyMode(name, ctx));
 				return;
 			}
 
-			const name = parseMode(trimmed);
-			if (!name) {
+			const command = parseModeCommand(args);
+			if (!command) {
 				ctx.ui.notify(`Unknown mode "${trimmed}". Use: ${MODE_ORDER.join(", ")}`, "error");
 				return;
 			}
 
-			await applyMode(name, ctx);
+			await runModeCommand(command.name, command.prompt, ctx);
+		},
+	});
+
+	for (const name of MODE_ORDER) {
+		const commandName = name === "debug" ? "debug-issue" : name;
+		pi.registerCommand(commandName, {
+			description: `Switch to ${name} mode; with text, submit it in that mode`,
+			handler: async (args, ctx) => {
+				await runModeCommand(name, commandPrompt(args), ctx);
+			},
+		});
+	}
+
+	pi.registerCommand("audit", {
+		description: "Run a repo-wide complexity/stability audit",
+		handler: async (args, ctx) => {
+			runOneShotCommand(ctx, "audit", buildAuditPrompt(commandPrompt(args)));
+		},
+	});
+
+	pi.registerCommand("debt", {
+		description: "Harvest lean shortcut markers into a debt ledger",
+		handler: async (args, ctx) => {
+			runOneShotCommand(ctx, "debt", buildDebtPrompt(commandPrompt(args)));
 		},
 	});
 
@@ -177,8 +208,10 @@ export function registerModes(pi: ExtensionAPI): void {
 	});
 
 	pi.on("before_agent_start", (event) => {
-		if (!activeMode) return;
-		return { systemPrompt: `${event.systemPrompt}\n\n${MODES[activeMode].guidance}` };
+		const mode = nextTurnMode ?? activeMode;
+		nextTurnMode = undefined;
+		if (!mode) return;
+		return { systemPrompt: `${event.systemPrompt}\n\n${MODES[mode].guidance}` };
 	});
 
 	pi.on("after_provider_response", async (event, ctx) => {
@@ -214,6 +247,31 @@ export function registerModes(pi: ExtensionAPI): void {
 		activeCandidateIndex = restored.candidateIndex;
 		await applyMode(restored.name, ctx, { persist: false, quiet: true, fromRestore: true });
 	});
+
+	async function runModeCommand(
+		name: ModeName,
+		prompt: string | undefined,
+		ctx: ExtensionCommandContext,
+	): Promise<void> {
+		if (prompt && !ctx.isIdle()) {
+			ctx.ui.notify("Agent is busy", "warning");
+			return;
+		}
+
+		await ctx.waitForIdle();
+		await applyMode(name, ctx);
+		if (prompt) pi.sendUserMessage(prompt);
+	}
+
+	function runOneShotCommand(ctx: ExtensionCommandContext, type: string, prompt: string): void {
+		if (!ctx.isIdle()) {
+			ctx.ui.notify("Agent is busy", "warning");
+			return;
+		}
+
+		nextTurnMode = "review";
+		pi.sendMessage({ customType: `tau.${type}`, content: prompt, display: false }, { triggerTurn: true });
+	}
 }
 
 async function pickMode(ctx: ExtensionCommandContext, apply: (name: ModeName) => Promise<void>): Promise<void> {
@@ -322,13 +380,61 @@ function parseMode(value: string): ModeName | undefined {
 	return isModeName(name) ? name : undefined;
 }
 
+function parseModeCommand(value: string): { name: ModeName; prompt: string | undefined } | undefined {
+	const match = value.trimStart().match(/^(\S+)(?:\s+([\s\S]*))?$/);
+	if (!match) return undefined;
+
+	const name = parseMode(match[1] ?? "");
+	if (!name) return undefined;
+
+	return { name, prompt: commandPrompt(match[2] ?? "") };
+}
+
+function commandPrompt(args: string): string | undefined {
+	const prompt = args.trim();
+	return prompt ? prompt : undefined;
+}
+
+function buildAuditPrompt(focus: string | undefined): string {
+	return [
+		"Run a repo-wide complexity/stability audit. Report only unless user explicitly asks for edits.",
+		...(focus ? [`Focus/scope: ${focus}`] : []),
+		"Scan the repo tree, not just the diff. Skip .git, node_modules, dist, build, coverage, generated output, references, and agent cache/session/temp dirs. Rank biggest simplification/stability wins first.",
+		"Tags: delete, shrink, dedupe, stdlib, native, internal, yagni, refactor.",
+		"Hunt: dead code, stale config, speculative features, unused flexibility, duplicated logic, single-implementation interfaces, factories with one product, delegate-only wrappers, files/layers that do not earn their keep, hand-rolled stdlib, dependencies/platform code replacing native behavior, internal utilities not reused.",
+		"Format: <tag> <problem>. <smallest fix>. [path]",
+		"Mention correctness/security/perf only when complexity causes the risk.",
+		"End with net removable lines/deps/duplicated paths only if you can estimate honestly. If clean: Lean already. Ship.",
+	].join("\n\n");
+}
+
+function buildDebtPrompt(focus: string | undefined): string {
+	return [
+		"Harvest lean shortcut markers into a debt ledger. Report only unless user asks to persist.",
+		...(focus ? [`Focus/scope: ${focus}`] : []),
+		"Scan for comment markers: lean: and legacy ponytail:. Include line-comment prefixes (#, //) and block/doc comment prefixes if present in this stack.",
+		"Skip .git, node_modules, dist, build, coverage, generated output, and agent cache/session/temp dirs.",
+		"One row per marker, grouped by file: <file>:<line> — <marker> <what was simplified>. ceiling: <limit>. upgrade: <trigger/path>.",
+		"Tag no-trigger when the marker lacks a concrete revisit trigger or upgrade path. Tag legacy for ponytail: markers. Tag weak when the marker is vague.",
+		"End with: <N> markers, <M> no-trigger, <L> legacy.",
+		"If none: No lean debt. Clean ledger.",
+	].join("\n\n");
+}
+
 function isModeName(value: string): value is ModeName {
 	return (MODE_ORDER as readonly string[]).includes(value);
 }
 
-// ponytail: self-check covers pure mode logic; Pi runtime behavior is exercised by /mode.
+// lean: self-check covers pure mode logic; Pi runtime behavior needs the host command dispatcher.
 function demo(): void {
 	if (parseMode(" PLAN ") !== "plan") throw new Error("mode parse failed");
+	const command = parseModeCommand(" review   current diff ");
+	if (command?.name !== "review" || command.prompt !== "current diff") throw new Error("mode command parse failed");
+	if (parseModeCommand("nope") !== undefined) throw new Error("bad mode command parsed");
+	if (commandPrompt("  failing test ") !== "failing test") throw new Error("command prompt parse failed");
+	if (!buildAuditPrompt("src").includes("Focus/scope: src")) throw new Error("audit focus missing");
+	if (!buildAuditPrompt(undefined).includes("dedupe")) throw new Error("audit tags missing");
+	if (!buildDebtPrompt(undefined).includes("legacy ponytail:")) throw new Error("debt legacy marker missing");
 	if (nextMode("debug") !== "plan") throw new Error("mode cycle failed");
 	const filtered = filterKnownToolNames(["read", "missing", "ls"], new Set(["read", "ls"]));
 	if (filtered.join(",") !== "read,ls") throw new Error("tool filter failed");
