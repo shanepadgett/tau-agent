@@ -27,6 +27,7 @@
 - Prefer compact, high-signal output over raw dumps; avoid commands that can flood the window.
 - Batch independent reads/searches/checks when it saves turns and keeps output readable.
 - Spend turns deliberately: complete the work within available turns without sacrificing verification.
+- Following any plan implementation, ask the user if the plan should be deleted.
 
 ## Tau Customization Workflow
 
