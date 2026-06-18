@@ -245,7 +245,7 @@ async function cloneReference(pi: ExtensionAPI, ctx: ExtensionCommandContext, ra
 	const target = join(root, name);
 	await mkdir(root, { recursive: true });
 
-	ctx.ui.setStatus("reference", `adding ${name}`);
+	ctx.ui.setStatus("reference", `cloning ${name}`);
 	try {
 		const result = await pi.exec("git", ["clone", url, target], {
 			cwd: root,
