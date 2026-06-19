@@ -7,8 +7,8 @@ semantics: popping removes the item from the list.
 ## Usage
 
 ```text
-ctrl+shift+s   Stash whatever is in the prompt editor (TUI only)
-/pop           Browse stashed prompts and pop one into the editor (TUI)
+stash shortcut  Stash whatever is in the prompt editor (TUI only; check Pi keybindings)
+/pop            Browse stashed prompts and pop one into the editor (TUI)
 ```
 
 ## Behavior
@@ -16,8 +16,8 @@ ctrl+shift+s   Stash whatever is in the prompt editor (TUI only)
 - Stashed prompts are stored per repo at `.pi/tau/stash.jsonl`, resolved from
   the project root (via git toplevel or `.pi/tau/`), so the file is stable
   regardless of the cwd pi was launched from.
-- `ctrl+shift+s` reads the current editor text, trims it, and appends a record
-  `{ id, text, createdAt }`. It then clears the editor so you can type a
+- The stash shortcut reads the current editor text, trims it, and appends a
+  record `{ id, text, createdAt }`. It then clears the editor so you can type a
   different prompt. Nothing happens if the editor is empty.
 - Identical text already in the stash is skipped (no duplicate entries) and the
   stash key reports "Already stashed."
@@ -31,7 +31,7 @@ ctrl+shift+s   Stash whatever is in the prompt editor (TUI only)
   - `ctrl+d` discard the selected stash without restoring it (confirms first)
   - `esc` / `ctrl+c` cancel
 - Pops are not auto-submitted; you stay in control of the prompt. To return a
-  popped prompt to the list, stash it again with `ctrl+shift+s`.
+  popped prompt to the list, stash it again.
 
 ## Why this exists
 

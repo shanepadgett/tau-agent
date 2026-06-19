@@ -7,7 +7,7 @@ import { addStash, removeStash } from "./store.ts";
 export default function stashExtension(pi: ExtensionAPI): void {
 	// Stash = keybinding only. You hit it mid-type to park whatever's in the
 	// editor without leaving the keyboard to run a slash command.
-	pi.registerShortcut(Key.ctrlShift("s"), {
+	pi.registerShortcut(Key.alt("s"), {
 		description: "Stash the current prompt draft",
 		handler: async (_ctx) => {
 			if (_ctx.mode !== "tui" || !_ctx.hasUI) {

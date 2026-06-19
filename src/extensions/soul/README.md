@@ -36,7 +36,7 @@ Commands:
 /debt [focus]
 ```
 
-Shortcut: `Ctrl+Shift+M` cycles postures.
+A TUI shortcut can cycle postures. Check Pi keybindings for the current key.
 
 In plan posture, implementation writes/edits outside `docs/plans/` require switching to act first. The agent should briefly state the plan, wait for explicit go-ahead unless already given, then call `switch_posture` with `posture=act` before using write/edit tools.
 

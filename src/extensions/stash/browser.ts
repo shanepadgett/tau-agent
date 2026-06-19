@@ -5,7 +5,7 @@ import { loadStashes, removeStash, type Stash, stashFilePath } from "./store.ts"
 
 const CONFIG: Omit<SearchListConfig, "path"> = {
 	title: "Stash",
-	emptyMessage: "No stashed prompts. Use ctrl+shift+s while typing to stash.",
+	emptyMessage: "No stashed prompts. Use the stash shortcut while typing to stash.",
 	primaryLabel: "pop",
 	actions: [{ id: "discard", key: Key.ctrl("d"), label: "ctrl+d discard" }],
 };

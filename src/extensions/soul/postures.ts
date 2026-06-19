@@ -317,7 +317,7 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 		},
 	});
 
-	pi.registerShortcut(Key.ctrlShift("m"), {
+	pi.registerShortcut(Key.alt("m"), {
 		description: "Cycle Lyle posture",
 		handler: async (ctx) => {
 			await applyPosture(nextPosture(activePosture), ctx);

@@ -37,7 +37,7 @@ Every panel includes a final user-owned `Additional Context` tab. It is not part
 - Custom answers edit inline: move to "Type your own answer..." and type.
 - Notes render under option descriptions with `└─`.
 - `tab`/`←→` moves between questions and additional context.
-- `enter` advances through questions and submits from additional context. `ctrl+s` submits anytime; unanswered questions are skipped.
+- `enter` advances through questions and submits from additional context. `alt+enter` submits anytime; unanswered questions are skipped.
 - Results render as a Markdown-style numbered question/answer list, plus an additional context section when supplied.
 
 ## Layout

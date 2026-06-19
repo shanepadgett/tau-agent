@@ -102,7 +102,7 @@ class QnaComponent implements Component, Focusable {
 			return;
 		}
 
-		if (matchesKey(data, Key.ctrl("s"))) {
+		if (matchesKey(data, Key.alt("enter"))) {
 			this.done(buildResult(this.state));
 			return;
 		}
@@ -366,12 +366,12 @@ class QnaComponent implements Component, Focusable {
 				: this.mode === "note"
 					? "Enter save • esc cancel note"
 					: this.isAdditionalContextActive()
-						? "type context • enter submit • tab/←→ question • ctrl+s submit • ctrl+c abort"
+						? "type context • enter submit • tab/←→ question • alt+enter submit • ctrl+c abort"
 						: question?.kind === "input"
-							? "type answer • enter next/submit • tab/←→ question • ctrl+s submit • ctrl+c abort"
+							? "type answer • enter next/submit • tab/←→ question • alt+enter submit • ctrl+c abort"
 							: question?.kind === "multi"
-								? "↑↓ move • space toggle • enter next/submit • n note • tab/←→ question • ctrl+s submit • ctrl+c abort"
-								: "↑↓ move • enter choose/submit • n note • tab/←→ question • ctrl+s submit • ctrl+c abort";
+								? "↑↓ move • space toggle • enter next/submit • n note • tab/←→ question • alt+enter submit • ctrl+c abort"
+								: "↑↓ move • enter choose/submit • n note • tab/←→ question • alt+enter submit • ctrl+c abort";
 		return wrapTextWithAnsi(this.theme.fg("dim", text), width);
 	}
 
