@@ -51,7 +51,7 @@ No `/mode` command.
 - Builds posture guidance into soul's prompt; no second prompt appender.
 - Shows current posture as plain muted text in the footer when enabled.
 - Persists selected posture as `tau.posture`.
-- `plan` snapshots current tools and switches to read-only tools. Leaving `plan` restores the snapshot.
+- `plan` snapshots current tools and switches to read/search tools plus `write`/`edit` for `docs/plans/` only. Leaving `plan` restores the snapshot.
 - Keeps `switch_posture` available in every posture so the agent can request the right posture before doing mismatched work.
 
 ## Model preference
@@ -70,7 +70,7 @@ No `/mode` command.
 
 ## Posture meanings
 
-- `plan`: read-only exploration and numbered plans.
+- `plan`: read-only exploration and numbered plans; may write/edit plan files under `docs/plans/` only.
 - `act`: focused implementation.
 - `review`: complexity/stability findings unless edits are requested.
 - `debug`: reproduce, isolate, smallest causal fix; simplify the failing path when directly related.
@@ -86,3 +86,4 @@ No `/mode` command.
 - No CLI flag.
 - No shared event.
 - No bash allowlist in plan posture; plan excludes `bash` instead.
+- Plan posture write/edit access is hard-blocked outside `docs/plans/`.

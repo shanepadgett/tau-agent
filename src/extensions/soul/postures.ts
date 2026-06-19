@@ -1,3 +1,4 @@
+import { resolve, sep } from "node:path";
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type {
@@ -6,6 +7,7 @@ import type {
 	ExtensionContext,
 	SessionEntry,
 } from "@earendil-works/pi-coding-agent";
+import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import { type AutocompleteItem, Key } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { setTauFooterItem } from "../../shared/events.ts";
@@ -14,8 +16,9 @@ const POSTURE_STATE_TYPE = "tau.posture";
 const DEFAULT_POSTURE = "act";
 const POSTURE_ORDER = ["plan", "act", "review", "debug"] as const;
 const SWITCH_POSTURE_TOOL = "switch_posture";
-const PLAN_TOOLS = ["read", "grep", "find", "ls", SWITCH_POSTURE_TOOL];
-const NON_PLAN_TOOLS = ["read", "grep", "find", "ls", "bash", SWITCH_POSTURE_TOOL];
+const PLAN_WRITE_DIR = "docs/plans";
+const PLAN_TOOLS = ["read", "grep", "find", "ls", "write", "edit", SWITCH_POSTURE_TOOL];
+const NON_PLAN_TOOLS = ["read", "grep", "find", "ls", "bash", "edit", "write", SWITCH_POSTURE_TOOL];
 
 type PostureName = (typeof POSTURE_ORDER)[number];
 
@@ -50,12 +53,13 @@ const POSTURE_MODELS: readonly ModelCandidate[] = [
 const POSTURES: Record<PostureName, PostureConfig> = {
 	plan: {
 		label: "Plan",
-		description: "Read-only exploration and plan writing",
+		description: "Read-only exploration and plan file writing",
 		preferredModels: POSTURE_MODELS,
 		thinkingLevel: "xhigh",
 		guidance: `## Lyle Posture: Plan
 
-- Read-only exploration. No edits or mutating commands.
+- Read-only exploration, except write/edit may modify plan files under \`${PLAN_WRITE_DIR}/\`.
+- No code edits, config edits, docs edits outside \`${PLAN_WRITE_DIR}/\`, or mutating commands.
 - Start rough by default: 1–2 sentences naming the approach's bulk shape/silhouette, then pause for alignment.
 - Skip the rough pass only when the user explicitly wants a detailed plan and the task has no meaningful ambiguity.
 - After alignment or when detail is requested, produce a numbered plan with files, risks, and checks.
@@ -182,6 +186,17 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 				terminate: true,
 			};
 		},
+	});
+
+	pi.on("tool_call", (event, ctx) => {
+		if (activePosture !== "plan") return undefined;
+		if (!isToolCallEventType("write", event) && !isToolCallEventType("edit", event)) return undefined;
+		if (isPlanWritePath(ctx.cwd, event.input.path)) return undefined;
+
+		return {
+			block: true,
+			reason: `Plan posture may only write or edit under ${PLAN_WRITE_DIR}/`,
+		};
 	});
 
 	async function applyPosture(
@@ -461,6 +476,12 @@ function filterKnownToolNames(names: readonly string[], known: ReadonlySet<strin
 
 function ensureTools(names: readonly string[], required: readonly string[]): string[] {
 	return [...new Set([...names, ...required])];
+}
+
+function isPlanWritePath(cwd: string, rawPath: string): boolean {
+	const target = resolve(cwd, rawPath.trim().replace(/^@/, ""));
+	const root = resolve(cwd, PLAN_WRITE_DIR);
+	return target.startsWith(`${root}${sep}`);
 }
 
 function nextPosture(current: PostureName | undefined): PostureName {
