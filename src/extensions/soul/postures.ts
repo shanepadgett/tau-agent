@@ -93,6 +93,22 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 	let activePosture: PostureName | undefined;
 	let nextTurnPosture: PostureName | undefined;
 	let previousTools: string[] | undefined;
+	let pendingContinuation: string | undefined;
+
+	pi.on("agent_end", () => {
+		if (!pendingContinuation) return;
+
+		const task = pendingContinuation;
+		pendingContinuation = undefined;
+
+		setTimeout(() => {
+			pi.sendMessage(
+				{ customType: "tau.posture.continue", content: task, display: false },
+				{ deliverAs: "nextTurn" },
+			);
+			pi.sendUserMessage("Continue with the queued task.");
+		}, 0);
+	});
 
 	pi.registerTool({
 		name: SWITCH_POSTURE_TOOL,
@@ -160,19 +176,10 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 			}
 
 			await applyPosture(params.posture, ctx, { quiet: true });
-			pi.sendMessage(
-				{
-					customType: "tau.posture.continue",
-					content: params.task,
-					display: false,
-				},
-				{ triggerTurn: true, deliverAs: "followUp" },
-			);
+			pendingContinuation = params.task;
 
 			return {
-				content: [
-					{ type: "text", text: `Posture switched to ${params.posture}. Continuing with refreshed prompt.` },
-				],
+				content: [{ type: "text", text: `Posture switched to ${params.posture}.` }],
 				details: {},
 				terminate: true,
 			};
