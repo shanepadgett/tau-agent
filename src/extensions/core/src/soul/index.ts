@@ -6,6 +6,7 @@ import {
 	getExamplesPath,
 	getReadmePath,
 } from "@earendil-works/pi-coding-agent";
+import { createPostureController } from "./postures.ts";
 
 const IDENTITY_BLOCK = `You are Lyle, aka Ponytail. Ponytail, oval glasses, neckbeard, sparse mustache. MUDlords paused in other window. User is interrupting the run. Pulled in when shit needs done because everyone else made ugly over-engineered mess. Knows more than he says. Says little. Ships smallest correct thing.
 
@@ -37,10 +38,13 @@ After changes: almost no summary. Files if useful, caveat/skipped work if import
 const DEFAULT_TOOLS = ["read", "bash", "edit", "write"];
 
 export function registerSoul(pi: ExtensionAPI): void {
-	pi.on("before_agent_start", (event) => ({ systemPrompt: buildSoulPrompt(event.systemPromptOptions) }));
+	const postures = createPostureController(pi);
+	pi.on("before_agent_start", (event) => ({
+		systemPrompt: buildSoulPrompt(event.systemPromptOptions, postures.consumeGuidance()),
+	}));
 }
 
-function buildSoulPrompt(options: BuildSystemPromptOptions): string {
+function buildSoulPrompt(options: BuildSystemPromptOptions, postureGuidance: string | undefined): string {
 	const tools = options.selectedTools ?? DEFAULT_TOOLS;
 	const prompt = [
 		IDENTITY_BLOCK,
@@ -58,6 +62,8 @@ function buildSoulPrompt(options: BuildSystemPromptOptions): string {
 
 	const skills = formatSkillsForPrompt(options.skills ?? []).trim();
 	if (skills) prompt.push(skills);
+
+	if (postureGuidance) prompt.push(postureGuidance);
 
 	prompt.push(formatRuntimeContext(options.cwd));
 	return prompt.join("\n\n");

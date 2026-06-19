@@ -83,7 +83,7 @@ export default function footerExtension(pi: ExtensionAPI): void {
 
 					return [
 						renderSplit(width, theme.fg("dim", topLeft), topRight),
-						renderSplit(width, theme.fg("dim", bottomLeft), theme.fg("accent", bottomRight)),
+						renderSplit(width, theme.fg("dim", bottomLeft), theme.fg("dim", bottomRight)),
 					];
 				},
 			} satisfies Component & { dispose(): void; invalidate(): void };
@@ -415,7 +415,7 @@ function footerItemsText(items: ReadonlyMap<string, FooterItem>): string {
 
 function extensionStatusesText(statuses: ReadonlyMap<string, string>): string {
 	return [...statuses]
-		.filter(([key, text]) => key !== "tau-mode" && text.trim())
+		.filter(([key, text]) => key !== "tau-posture" && text.trim())
 		.sort(([left], [right]) => left.localeCompare(right))
 		.map(([, text]) => text.trim())
 		.join(" • ");

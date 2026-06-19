@@ -8,55 +8,59 @@ import type {
 import { type AutocompleteItem, Key } from "@earendil-works/pi-tui";
 import { setTauFooterItem } from "../../../../shared/events.ts";
 
-const MODE_STATE_TYPE = "tau.mode";
-const DEFAULT_MODE = "act";
-const MODE_ORDER = ["plan", "act", "review", "debug"] as const;
+const POSTURE_STATE_TYPE = "tau.posture";
+const DEFAULT_POSTURE = "act";
+const POSTURE_ORDER = ["plan", "act", "review", "debug"] as const;
 const PLAN_TOOLS = ["read", "grep", "find", "ls"];
 const NON_PLAN_TOOLS = ["read", "grep", "find", "ls", "bash"];
 
-type ModeName = (typeof MODE_ORDER)[number];
+type PostureName = (typeof POSTURE_ORDER)[number];
 
-interface ModeConfig {
+interface PostureConfig {
 	label: string;
 	description: string;
-	preferredModels: ModeModelCandidate[];
+	preferredModels: ModelCandidate[];
 	fallbackThinkingLevel: ThinkingLevel;
 	guidance: string;
 }
 
-interface ModeModelCandidate {
+interface ModelCandidate {
 	provider: string;
 	model: string;
 	thinkingLevel: ThinkingLevel;
 }
 
-interface ModeState {
-	name: ModeName;
+interface PostureState {
+	name: PostureName;
 	candidateIndex?: number;
 }
 
-const QUALITY_MODELS: ModeModelCandidate[] = [
+export interface PostureController {
+	consumeGuidance(): string | undefined;
+}
+
+const QUALITY_MODELS: ModelCandidate[] = [
 	{ provider: "openai-codex", model: "gpt-5.5", thinkingLevel: "xhigh" },
 	{ provider: "anthropic", model: "claude-opus-4-8", thinkingLevel: "xhigh" },
 	{ provider: "github-copilot", model: "gemini-3.1-pro-preview", thinkingLevel: "xhigh" },
 ];
 
-const ACT_MODELS: ModeModelCandidate[] = [
+const ACT_MODELS: ModelCandidate[] = [
 	{ provider: "openai-codex", model: "gpt-5.5", thinkingLevel: "low" },
 	{ provider: "anthropic", model: "claude-opus-4-8", thinkingLevel: "medium" },
 	{ provider: "github-copilot", model: "gemini-3.1-pro-preview", thinkingLevel: "low" },
 ];
 
-const MODES: Record<ModeName, ModeConfig> = {
+const POSTURES: Record<PostureName, PostureConfig> = {
 	plan: {
 		label: "Plan",
 		description: "Read-only exploration and plan writing",
 		preferredModels: QUALITY_MODELS,
 		fallbackThinkingLevel: "xhigh",
-		guidance: `## Tau Mode: Plan
+		guidance: `## Lyle Posture: Plan
 
-- Inspect and plan only. Do not edit files or run mutating commands.
-- Build a numbered plan with files, risks, and checks.
+- Read-only exploration. No edits or mutating commands.
+- Produce a numbered plan with files, risks, and checks.
 - Ask for go-ahead before implementation.`,
 	},
 	act: {
@@ -64,10 +68,10 @@ const MODES: Record<ModeName, ModeConfig> = {
 		description: "Focused implementation",
 		preferredModels: ACT_MODELS,
 		fallbackThinkingLevel: "low",
-		guidance: `## Tau Mode: Act
+		guidance: `## Lyle Posture: Act
 
-- Make focused changes. Follow the existing plan if there is one.
-- Keep scope tight. Stop and explain if the plan is wrong.
+- Implement the smallest correct change.
+- Follow existing plan if present; stop if it is wrong.
 - Run the cheapest relevant check after non-trivial changes.`,
 	},
 	review: {
@@ -75,46 +79,44 @@ const MODES: Record<ModeName, ModeConfig> = {
 		description: "Complexity and stability review",
 		preferredModels: QUALITY_MODELS,
 		fallbackThinkingLevel: "xhigh",
-		guidance: `## Tau Mode: Review
+		guidance: `## Lyle Posture: Review
 
-- Review only unless the user explicitly asks for edits.
-- Hunt avoidable complexity and stability risk: deletion, simplification, dedupe, stdlib/native/internal reuse, and small refactors.
-- Use concrete tags when useful: delete, shrink, dedupe, stdlib, native, internal, yagni, refactor.
-- Mention correctness, data loss, security, or performance when complexity causes the risk; do not turn this into a broad audit unless asked.
-- Cite exact files/lines when possible. Format findings as: path:Lx: <tag> <problem>. <smallest fix>.
-- If clean, say: Lean already. Ship.`,
+- Review only unless explicitly asked to edit.
+- Find avoidable complexity and stability risk in the changed/relevant code.
+- Use tags when useful: delete, shrink, dedupe, stdlib, native, internal, yagni, refactor.
+- Mention correctness, data loss, security, or performance when complexity causes the risk.
+- Format findings: path:Lx: <tag> <problem>. <smallest fix>.
+- If clean: Lean already. Ship.`,
 	},
 	debug: {
 		label: "Debug",
 		description: "Reproduce, isolate, fix",
 		preferredModels: QUALITY_MODELS,
 		fallbackThinkingLevel: "xhigh",
-		guidance: `## Tau Mode: Debug
+		guidance: `## Lyle Posture: Debug
 
-- Reproduce or narrow the failure before changing code.
-- Prefer the smallest fix that explains the symptom and reduces the bug surface.
-- Simplify the failing path when directly related: remove duplicate branches, dead fallbacks, fragile custom logic, or confusing indirection.
-- Use stdlib, native platform features, or existing internal utilities when they make the fix smaller or more stable.
-- Small abstractions are allowed only when they remove duplication or make one current invariant obvious.
-- Do not chase unrelated cleanup or broad redesign.
-- Leave a narrow check that fails if the bug comes back.`,
+- Reproduce or narrow failure before changing code.
+- Prefer the smallest causal fix.
+- Simplify directly related failing paths when it reduces bug surface.
+- Allow a small helper only when it removes duplication or makes one current invariant obvious.
+- Leave a narrow check that fails if the bug returns.`,
 	},
 };
 
-export function registerModes(pi: ExtensionAPI): void {
-	let activeMode: ModeName | undefined;
+export function createPostureController(pi: ExtensionAPI): PostureController {
+	let activePosture: PostureName | undefined;
 	let activeCandidateIndex: number | undefined;
-	let nextTurnMode: ModeName | undefined;
+	let nextTurnPosture: PostureName | undefined;
 	let previousTools: string[] | undefined;
 
-	async function applyMode(
-		name: ModeName,
+	async function applyPosture(
+		name: PostureName,
 		ctx: ExtensionContext,
 		options: { persist?: boolean; quiet?: boolean; fromRestore?: boolean } = {},
 	): Promise<void> {
-		const config = MODES[name];
-		const enteringPlan = name === "plan" && activeMode !== "plan";
-		const leavingPlan = activeMode === "plan" && name !== "plan";
+		const config = POSTURES[name];
+		const enteringPlan = name === "plan" && activePosture !== "plan";
+		const leavingPlan = activePosture === "plan" && name !== "plan";
 
 		if (enteringPlan && !options.fromRestore) previousTools = pi.getActiveTools();
 
@@ -138,23 +140,22 @@ export function registerModes(pi: ExtensionAPI): void {
 			if (leavingPlan) previousTools = undefined;
 		}
 
-		activeMode = name;
-		updateStatus(ctx, activeMode);
-		updateFooter(pi, activeMode);
+		activePosture = name;
+		updateFooter(pi, activePosture);
 
-		if (options.persist !== false) persistMode(pi, activeMode, activeCandidateIndex);
-		if (!options.quiet) ctx.ui.notify(`Mode: ${config.label}`, "info");
+		if (options.persist !== false) persistPosture(pi, activePosture, activeCandidateIndex);
+		if (!options.quiet) ctx.ui.notify(`Posture: ${config.label}`, "info");
 	}
 
-	pi.registerCommand("mode", {
-		description: "Switch Tau mode",
+	pi.registerCommand("posture", {
+		description: "Switch Lyle posture",
 		getArgumentCompletions(prefix: string): AutocompleteItem[] | null {
 			const value = prefix.trimStart().toLowerCase();
 			if (/\s/.test(value)) return null;
-			const items = MODE_ORDER.filter((name) => name.startsWith(value)).map((name) => ({
+			const items = POSTURE_ORDER.filter((name) => name.startsWith(value)).map((name) => ({
 				value: name,
 				label: name,
-				description: MODES[name].description,
+				description: POSTURES[name].description,
 			}));
 			return items.length ? items : null;
 		},
@@ -162,26 +163,25 @@ export function registerModes(pi: ExtensionAPI): void {
 			const trimmed = args.trim();
 			if (!trimmed) {
 				await ctx.waitForIdle();
-				await pickMode(ctx, (name) => applyMode(name, ctx));
+				await pickPosture(ctx, (name) => applyPosture(name, ctx));
 				return;
 			}
 
-			const command = parseModeCommand(args);
+			const command = parsePostureCommand(args);
 			if (!command) {
-				ctx.ui.notify(`Unknown mode "${trimmed}". Use: ${MODE_ORDER.join(", ")}`, "error");
+				ctx.ui.notify(`Unknown posture "${trimmed}". Use: ${POSTURE_ORDER.join(", ")}`, "error");
 				return;
 			}
 
-			await runModeCommand(command.name, command.prompt, ctx);
+			await runPostureCommand(command.name, command.prompt, ctx);
 		},
 	});
 
-	for (const name of MODE_ORDER) {
-		const commandName = name === "debug" ? "debug-issue" : name;
-		pi.registerCommand(commandName, {
-			description: `Switch to ${name} mode; with text, submit it in that mode`,
+	for (const name of POSTURE_ORDER) {
+		pi.registerCommand(name, {
+			description: `Switch to ${name} posture; with text, submit it in that posture`,
 			handler: async (args, ctx) => {
-				await runModeCommand(name, commandPrompt(args), ctx);
+				await runPostureCommand(name, commandPrompt(args), ctx);
 			},
 		});
 	}
@@ -201,55 +201,48 @@ export function registerModes(pi: ExtensionAPI): void {
 	});
 
 	pi.registerShortcut(Key.ctrlShift("m"), {
-		description: "Cycle Tau mode",
+		description: "Cycle Lyle posture",
 		handler: async (ctx) => {
-			await applyMode(nextMode(activeMode), ctx);
+			await applyPosture(nextPosture(activePosture), ctx);
 		},
 	});
 
-	pi.on("before_agent_start", (event) => {
-		const mode = nextTurnMode ?? activeMode;
-		nextTurnMode = undefined;
-		if (!mode) return;
-		return { systemPrompt: `${event.systemPrompt}\n\n${MODES[mode].guidance}` };
-	});
-
 	pi.on("after_provider_response", async (event, ctx) => {
-		if (!activeMode || activeCandidateIndex === undefined || !shouldFallback(event.status)) return;
+		if (!activePosture || activeCandidateIndex === undefined || !shouldFallback(event.status)) return;
 
-		const config = MODES[activeMode];
+		const config = POSTURES[activePosture];
 		const nextIndex = await applyPreferredModel(pi, ctx, config, activeCandidateIndex + 1, true);
 		if (nextIndex === undefined) {
 			activeCandidateIndex = undefined;
-			persistMode(pi, activeMode, activeCandidateIndex);
+			persistPosture(pi, activePosture, activeCandidateIndex);
 			return;
 		}
 		if (nextIndex === activeCandidateIndex) return;
 
 		activeCandidateIndex = nextIndex;
-		persistMode(pi, activeMode, activeCandidateIndex);
+		persistPosture(pi, activePosture, activeCandidateIndex);
 		const next = config.preferredModels[nextIndex];
 		if (next) {
 			ctx.ui.notify(
-				`Mode ${activeMode}: provider returned ${event.status}; using ${next.provider}/${next.model} next turn.`,
+				`Posture ${activePosture}: provider returned ${event.status}; using ${next.provider}/${next.model} next turn.`,
 				"warning",
 			);
 		}
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
-		const restored = latestModeState(ctx.sessionManager.getEntries());
+		const restored = latestPostureState(ctx.sessionManager.getEntries());
 		if (!restored) {
-			await applyMode(DEFAULT_MODE, ctx, { persist: false, quiet: true });
+			await applyPosture(DEFAULT_POSTURE, ctx, { persist: false, quiet: true });
 			return;
 		}
 
 		activeCandidateIndex = restored.candidateIndex;
-		await applyMode(restored.name, ctx, { persist: false, quiet: true, fromRestore: true });
+		await applyPosture(restored.name, ctx, { persist: false, quiet: true, fromRestore: true });
 	});
 
-	async function runModeCommand(
-		name: ModeName,
+	async function runPostureCommand(
+		name: PostureName,
 		prompt: string | undefined,
 		ctx: ExtensionCommandContext,
 	): Promise<void> {
@@ -259,7 +252,7 @@ export function registerModes(pi: ExtensionAPI): void {
 		}
 
 		await ctx.waitForIdle();
-		await applyMode(name, ctx);
+		await applyPosture(name, ctx);
 		if (prompt) pi.sendUserMessage(prompt);
 	}
 
@@ -269,31 +262,39 @@ export function registerModes(pi: ExtensionAPI): void {
 			return;
 		}
 
-		nextTurnMode = "review";
+		nextTurnPosture = "review";
 		pi.sendMessage({ customType: `tau.${type}`, content: prompt, display: false }, { triggerTurn: true });
 	}
+
+	return {
+		consumeGuidance(): string | undefined {
+			const posture = nextTurnPosture ?? activePosture;
+			nextTurnPosture = undefined;
+			return posture ? POSTURES[posture].guidance : undefined;
+		},
+	};
 }
 
-async function pickMode(ctx: ExtensionCommandContext, apply: (name: ModeName) => Promise<void>): Promise<void> {
+async function pickPosture(ctx: ExtensionCommandContext, apply: (name: PostureName) => Promise<void>): Promise<void> {
 	if (!ctx.hasUI) {
-		ctx.ui.notify(`Usage: /mode <${MODE_ORDER.join("|")}>`, "error");
+		ctx.ui.notify(`Usage: /posture <${POSTURE_ORDER.join("|")}>`, "error");
 		return;
 	}
 
 	const selected = await ctx.ui.select(
-		"Tau mode",
-		MODE_ORDER.map((name) => `${name} — ${MODES[name].description}`),
+		"Lyle posture",
+		POSTURE_ORDER.map((name) => `${name} — ${POSTURES[name].description}`),
 	);
 	if (!selected) return;
 
-	const name = parseMode(selected.split(" ", 1)[0] ?? "");
+	const name = parsePosture(selected.split(" ", 1)[0] ?? "");
 	if (name) await apply(name);
 }
 
 async function applyPreferredModel(
 	pi: ExtensionAPI,
 	ctx: ExtensionContext,
-	config: ModeConfig,
+	config: PostureConfig,
 	startIndex: number,
 	quiet: boolean,
 ): Promise<number | undefined> {
@@ -311,41 +312,37 @@ async function applyPreferredModel(
 	}
 
 	pi.setThinkingLevel(config.fallbackThinkingLevel);
-	if (!quiet) ctx.ui.notify("No preferred mode model available. Keeping current model.", "warning");
+	if (!quiet) ctx.ui.notify("No preferred posture model available. Keeping current model.", "warning");
 	return undefined;
 }
 
-function updateStatus(ctx: ExtensionContext, activeMode: ModeName | undefined): void {
-	ctx.ui.setStatus("tau-mode", activeMode ? ctx.ui.theme.fg("accent", `mode:${activeMode}`) : undefined);
-}
-
-function updateFooter(pi: ExtensionAPI, activeMode: ModeName | undefined): void {
+function updateFooter(pi: ExtensionAPI, activePosture: PostureName | undefined): void {
 	setTauFooterItem(pi, {
-		id: "tau-mode",
-		text: activeMode ? `mode:${activeMode}` : undefined,
+		id: "tau-posture",
+		text: activePosture,
 		priority: 100,
 	});
 }
 
-function persistMode(pi: ExtensionAPI, name: ModeName, candidateIndex: number | undefined): void {
-	pi.appendEntry<ModeState>(MODE_STATE_TYPE, { name, candidateIndex });
+function persistPosture(pi: ExtensionAPI, name: PostureName, candidateIndex: number | undefined): void {
+	pi.appendEntry<PostureState>(POSTURE_STATE_TYPE, { name, candidateIndex });
 }
 
-function latestModeState(entries: readonly SessionEntry[]): ModeState | undefined {
+function latestPostureState(entries: readonly SessionEntry[]): PostureState | undefined {
 	for (let index = entries.length - 1; index >= 0; index--) {
 		const entry = entries[index];
-		if (entry?.type !== "custom" || entry.customType !== MODE_STATE_TYPE) continue;
-		const state = readModeState(entry.data);
+		if (entry?.type !== "custom" || entry.customType !== POSTURE_STATE_TYPE) continue;
+		const state = readPostureState(entry.data);
 		if (state) return state;
 	}
 	return undefined;
 }
 
-function readModeState(data: unknown): ModeState | undefined {
+function readPostureState(data: unknown): PostureState | undefined {
 	if (!data || typeof data !== "object") return undefined;
 
 	const record = data as Record<string, unknown>;
-	const name = typeof record.name === "string" ? parseMode(record.name) : undefined;
+	const name = typeof record.name === "string" ? parsePosture(record.name) : undefined;
 	if (!name) return undefined;
 
 	return {
@@ -370,21 +367,21 @@ function ensureTools(names: readonly string[], required: readonly string[]): str
 	return [...new Set([...names, ...required])];
 }
 
-function nextMode(current: ModeName | undefined): ModeName {
-	if (!current) return MODE_ORDER[0];
-	return MODE_ORDER[(MODE_ORDER.indexOf(current) + 1) % MODE_ORDER.length] ?? MODE_ORDER[0];
+function nextPosture(current: PostureName | undefined): PostureName {
+	if (!current) return POSTURE_ORDER[0];
+	return POSTURE_ORDER[(POSTURE_ORDER.indexOf(current) + 1) % POSTURE_ORDER.length] ?? POSTURE_ORDER[0];
 }
 
-function parseMode(value: string): ModeName | undefined {
+function parsePosture(value: string): PostureName | undefined {
 	const name = value.trim().toLowerCase();
-	return isModeName(name) ? name : undefined;
+	return isPostureName(name) ? name : undefined;
 }
 
-function parseModeCommand(value: string): { name: ModeName; prompt: string | undefined } | undefined {
+function parsePostureCommand(value: string): { name: PostureName; prompt: string | undefined } | undefined {
 	const match = value.trimStart().match(/^(\S+)(?:\s+([\s\S]*))?$/);
 	if (!match) return undefined;
 
-	const name = parseMode(match[1] ?? "");
+	const name = parsePosture(match[1] ?? "");
 	if (!name) return undefined;
 
 	return { name, prompt: commandPrompt(match[2] ?? "") };
@@ -421,25 +418,25 @@ function buildDebtPrompt(focus: string | undefined): string {
 	].join("\n\n");
 }
 
-function isModeName(value: string): value is ModeName {
-	return (MODE_ORDER as readonly string[]).includes(value);
+function isPostureName(value: string): value is PostureName {
+	return (POSTURE_ORDER as readonly string[]).includes(value);
 }
 
-// lean: self-check covers pure mode logic; Pi runtime behavior needs the host command dispatcher.
+// lean: self-check covers pure posture logic; Pi runtime behavior needs the host command dispatcher.
 function demo(): void {
-	if (parseMode(" PLAN ") !== "plan") throw new Error("mode parse failed");
-	const command = parseModeCommand(" review   current diff ");
-	if (command?.name !== "review" || command.prompt !== "current diff") throw new Error("mode command parse failed");
-	if (parseModeCommand("nope") !== undefined) throw new Error("bad mode command parsed");
+	if (parsePosture(" PLAN ") !== "plan") throw new Error("posture parse failed");
+	const command = parsePostureCommand(" review   current diff ");
+	if (command?.name !== "review" || command.prompt !== "current diff") throw new Error("posture command parse failed");
+	if (parsePostureCommand("nope") !== undefined) throw new Error("bad posture command parsed");
 	if (commandPrompt("  failing test ") !== "failing test") throw new Error("command prompt parse failed");
 	if (!buildAuditPrompt("src").includes("Focus/scope: src")) throw new Error("audit focus missing");
 	if (!buildAuditPrompt(undefined).includes("dedupe")) throw new Error("audit tags missing");
 	if (!buildDebtPrompt(undefined).includes("legacy ponytail:")) throw new Error("debt legacy marker missing");
-	if (nextMode("debug") !== "plan") throw new Error("mode cycle failed");
+	if (nextPosture("debug") !== "plan") throw new Error("posture cycle failed");
 	const filtered = filterKnownToolNames(["read", "missing", "ls"], new Set(["read", "ls"]));
 	if (filtered.join(",") !== "read,ls") throw new Error("tool filter failed");
 	const ensured = ensureTools(["custom_tool", "read"], ["read", "grep", "bash"]);
 	if (ensured.join(",") !== "custom_tool,read,grep,bash") throw new Error("tool ensure failed");
 }
 
-if (process.argv[1]?.replace(/\\/g, "/").endsWith("src/extensions/core/src/modes/index.ts")) demo();
+if (process.argv[1]?.replace(/\\/g, "/").endsWith("src/extensions/core/src/soul/postures.ts")) demo();
