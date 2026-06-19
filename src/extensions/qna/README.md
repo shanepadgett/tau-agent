@@ -1,20 +1,20 @@
-# Clarify Extension
+# qna Extension
 
-Structured user clarification for blocked agent decisions.
+Structured question UI for blocked agent decisions.
 
 ## Commands
 
-`/qna` temporarily enables `clarify` and sends a hidden instruction asking the agent to re-ask its last question with structured UI.
+`/qna` temporarily enables `ask_question` and sends a hidden instruction asking the agent to re-ask its last question with structured UI.
 
 `/interview [topic]` creates `.working/interviews/<timestamp>-<slug>/decisions.md`, enables interview tools, and sends a hidden instruction to run a structured interview.
 
-Interview sessions keep `clarify` active across turns. The agent updates the decisions file after each answer, confirms the exit condition with the user, then calls `interview_end`.
+Interview sessions keep `ask_question` active across turns. The agent updates the decisions file after each answer, confirms the exit condition with the user, then calls `interview_end`.
 
 ## Tools
 
-Registers `clarify`, inactive by default. It is enabled for `/qna`, then disabled after `clarify` returns or the agent turn ends.
+Registers `ask_question`, inactive by default. It is enabled for `/qna`, then disabled after `ask_question` returns or the agent turn ends.
 
-During `/interview`, `clarify` stays active and `interview_end` is also exposed. `interview_end` only ends the active interview; it does not write the decisions file.
+During `/interview`, `ask_question` stays active and `interview_end` is also exposed. `interview_end` only ends the active interview; it does not write the decisions file.
 
 Use only when missing user intent, preference, or constraint would materially change the next action. Supports:
 

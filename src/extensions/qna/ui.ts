@@ -15,8 +15,6 @@ import {
 import {
 	activeQuestion,
 	buildResult,
-	type ClarifyResult,
-	type ClarifyState,
 	createState,
 	getAnswer,
 	hasCustom,
@@ -25,39 +23,41 @@ import {
 	moveTab,
 	type NormalizedQuestion,
 	optionCount,
+	type QnaResult,
+	type QnaState,
 	saveCustomAnswer,
 	saveInputAnswer,
 	saveOptionNote,
 	toggleOrSelectOption,
 } from "./model.ts";
 
-type ClarifyUiResult = ClarifyResult | undefined;
+type QnaUiResult = QnaResult | undefined;
 type ViewMode = "navigate" | "custom" | "note";
 
-export function runClarifyUi(
+export function runQnaUi(
 	tui: TUI,
 	theme: Theme,
 	title: string | undefined,
 	questions: NormalizedQuestion[],
-	done: (result: ClarifyUiResult) => void,
+	done: (result: QnaUiResult) => void,
 ): Component {
-	return new ClarifyComponent(tui, theme, createState(title, questions), done);
+	return new QnaComponent(tui, theme, createState(title, questions), done);
 }
 
-class ClarifyComponent implements Component, Focusable {
+class QnaComponent implements Component, Focusable {
 	private readonly tui: TUI;
 	private readonly theme: Theme;
-	private readonly done: (result: ClarifyUiResult) => void;
+	private readonly done: (result: QnaUiResult) => void;
 	private readonly editor: Editor;
 	private readonly customEditor: Editor;
 	private readonly inputs = new Map<string, Input>();
-	private state: ClarifyState;
+	private state: QnaState;
 	private mode: ViewMode = "navigate";
 	private noteTarget?: { questionId: string; value: string };
 	private customQuestionId?: string;
 	private _focused = false;
 
-	constructor(tui: TUI, theme: Theme, state: ClarifyState, done: (result: ClarifyUiResult) => void) {
+	constructor(tui: TUI, theme: Theme, state: QnaState, done: (result: QnaUiResult) => void) {
 		this.tui = tui;
 		this.theme = theme;
 		this.state = state;
@@ -162,7 +162,7 @@ class ClarifyComponent implements Component, Focusable {
 		const renderWidth = Math.max(1, width);
 		const lines: string[] = [];
 		lines.push(this.theme.fg("border", "─".repeat(renderWidth)));
-		lines.push(truncateToWidth(this.theme.bold(`Clarify: ${this.state.title || "Question"}`), renderWidth, ""));
+		lines.push(truncateToWidth(this.theme.bold(`qna: ${this.state.title || "Question"}`), renderWidth, ""));
 		lines.push("");
 		if (this.state.questions.length > 1) {
 			lines.push(this.renderTabs(renderWidth));

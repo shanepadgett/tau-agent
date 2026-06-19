@@ -1,25 +1,25 @@
 export type QuestionKind = "select" | "multi" | "input" | "confirm";
 
-export interface ClarifyParams {
+export interface QnaParams {
 	title?: string;
-	questions: ClarifyQuestionParam[];
+	questions: QnaQuestionParam[];
 }
 
-export interface ClarifyQuestionParam {
+export interface QnaQuestionParam {
 	id: string;
 	prompt: string;
 	kind: QuestionKind;
-	options?: ClarifyOption[];
-	recommendation?: ClarifyRecommendation;
+	options?: QnaOption[];
+	recommendation?: QnaRecommendation;
 }
 
-export interface ClarifyOption {
+export interface QnaOption {
 	value: string;
 	label: string;
 	description?: string;
 }
 
-export interface ClarifyRecommendation {
+export interface QnaRecommendation {
 	values: string[];
 	reason: string;
 }
@@ -29,8 +29,8 @@ export interface NormalizedQuestion {
 	label: string;
 	prompt: string;
 	kind: QuestionKind;
-	options: ClarifyOption[];
-	recommendation?: ClarifyRecommendation;
+	options: QnaOption[];
+	recommendation?: QnaRecommendation;
 }
 
 export interface AnswerState {
@@ -40,7 +40,7 @@ export interface AnswerState {
 	notes: Record<string, string>;
 }
 
-export interface ClarifyState {
+export interface QnaState {
 	title?: string;
 	questions: NormalizedQuestion[];
 	activeTab: number;
@@ -48,7 +48,7 @@ export interface ClarifyState {
 	answers: Record<string, AnswerState>;
 }
 
-export interface ClarifyAnswerResult {
+export interface QnaAnswerResult {
 	kind: QuestionKind;
 	prompt: string;
 	values: string[];
@@ -56,33 +56,34 @@ export interface ClarifyAnswerResult {
 	custom?: string;
 	input?: string;
 	optionNotes?: Record<string, string>;
-	recommendation?: ClarifyRecommendation & { accepted: boolean; labels: string[] };
+	recommendation?: QnaRecommendation & { accepted: boolean; labels: string[] };
 }
 
-export interface ClarifyResult {
-	answers: Record<string, ClarifyAnswerResult>;
+export interface QnaResult {
+	answers: Record<string, QnaAnswerResult>;
 }
 
-const confirmOptions: ClarifyOption[] = [
+const confirmOptions: QnaOption[] = [
 	{ value: "yes", label: "Yes" },
 	{ value: "no", label: "No" },
 ];
 
-export function normalizeParams(params: ClarifyParams): NormalizedQuestion[] {
-	if (!Array.isArray(params.questions) || params.questions.length === 0) throw new Error("clarify requires questions");
+export function normalizeParams(params: QnaParams): NormalizedQuestion[] {
+	if (!Array.isArray(params.questions) || params.questions.length === 0)
+		throw new Error("ask_question requires questions");
 
 	const ids = new Set<string>();
 	return params.questions.map((question, index) => {
 		const id = clean(question.id);
-		if (!id) throw new Error(`clarify question ${index + 1} needs id`);
-		if (ids.has(id)) throw new Error(`clarify duplicate question id: ${id}`);
+		if (!id) throw new Error(`ask_question question ${index + 1} needs id`);
+		if (ids.has(id)) throw new Error(`ask_question duplicate question id: ${id}`);
 		ids.add(id);
 
 		const prompt = clean(question.prompt);
-		if (!prompt) throw new Error(`clarify question ${id} needs prompt`);
+		if (!prompt) throw new Error(`ask_question question ${id} needs prompt`);
 
 		const kind = question.kind;
-		if (!isQuestionKind(kind)) throw new Error(`clarify question ${id} has invalid kind`);
+		if (!isQuestionKind(kind)) throw new Error(`ask_question question ${id} has invalid kind`);
 
 		const options = normalizeOptions(id, kind, question.options);
 		const recommendation = normalizeRecommendation(id, kind, options, question.recommendation);
@@ -98,7 +99,7 @@ export function normalizeParams(params: ClarifyParams): NormalizedQuestion[] {
 	});
 }
 
-export function createState(title: string | undefined, questions: NormalizedQuestion[]): ClarifyState {
+export function createState(title: string | undefined, questions: NormalizedQuestion[]): QnaState {
 	return {
 		title: clean(title),
 		questions,
@@ -108,7 +109,7 @@ export function createState(title: string | undefined, questions: NormalizedQues
 	};
 }
 
-export function activeQuestion(state: ClarifyState): NormalizedQuestion | undefined {
+export function activeQuestion(state: QnaState): NormalizedQuestion | undefined {
 	return state.questions[state.activeTab];
 }
 
@@ -120,12 +121,12 @@ export function hasCustom(question: NormalizedQuestion): boolean {
 	return question.kind === "select" || question.kind === "multi";
 }
 
-export function moveTab(state: ClarifyState, direction: 1 | -1): ClarifyState {
+export function moveTab(state: QnaState, direction: 1 | -1): QnaState {
 	const tabCount = state.questions.length;
 	return { ...state, activeTab: (state.activeTab + direction + tabCount) % tabCount, activeOption: 0 };
 }
 
-export function moveOption(state: ClarifyState, direction: 1 | -1): ClarifyState {
+export function moveOption(state: QnaState, direction: 1 | -1): QnaState {
 	const question = activeQuestion(state);
 	if (!question) return state;
 	const count = optionCount(question);
@@ -133,7 +134,7 @@ export function moveOption(state: ClarifyState, direction: 1 | -1): ClarifyState
 	return { ...state, activeOption: (state.activeOption + direction + count) % count };
 }
 
-export function toggleOrSelectOption(state: ClarifyState, question: NormalizedQuestion, value: string): ClarifyState {
+export function toggleOrSelectOption(state: QnaState, question: NormalizedQuestion, value: string): QnaState {
 	const answer = getAnswer(state, question.id);
 	const selected = new Set(answer.selected);
 	if (question.kind === "multi") {
@@ -144,7 +145,7 @@ export function toggleOrSelectOption(state: ClarifyState, question: NormalizedQu
 	return putAnswer(state, question.id, { ...answer, selected: [value], custom: undefined });
 }
 
-export function saveCustomAnswer(state: ClarifyState, question: NormalizedQuestion, value: string): ClarifyState {
+export function saveCustomAnswer(state: QnaState, question: NormalizedQuestion, value: string): QnaState {
 	const trimmed = clean(value);
 	const answer = getAnswer(state, question.id);
 	if (!trimmed) return putAnswer(state, question.id, { ...answer, custom: undefined });
@@ -152,16 +153,11 @@ export function saveCustomAnswer(state: ClarifyState, question: NormalizedQuesti
 	return putAnswer(state, question.id, { ...answer, selected, custom: trimmed });
 }
 
-export function saveInputAnswer(state: ClarifyState, question: NormalizedQuestion, value: string): ClarifyState {
+export function saveInputAnswer(state: QnaState, question: NormalizedQuestion, value: string): QnaState {
 	return putAnswer(state, question.id, { ...getAnswer(state, question.id), input: clean(value) });
 }
 
-export function saveOptionNote(
-	state: ClarifyState,
-	question: NormalizedQuestion,
-	value: string,
-	note: string,
-): ClarifyState {
+export function saveOptionNote(state: QnaState, question: NormalizedQuestion, value: string, note: string): QnaState {
 	const answer = getAnswer(state, question.id);
 	const notes = { ...answer.notes };
 	const trimmed = clean(note);
@@ -170,7 +166,7 @@ export function saveOptionNote(
 	return putAnswer(state, question.id, { ...answer, notes });
 }
 
-export function isAnswered(state: ClarifyState, question: NormalizedQuestion): boolean {
+export function isAnswered(state: QnaState, question: NormalizedQuestion): boolean {
 	const answer = getAnswer(state, question.id);
 	if (question.kind === "input") return Boolean(clean(answer.input));
 	if (question.kind === "select" || question.kind === "confirm")
@@ -178,17 +174,17 @@ export function isAnswered(state: ClarifyState, question: NormalizedQuestion): b
 	return answer.selected.length > 0 || Boolean(answer.custom);
 }
 
-export function buildResult(state: ClarifyState): ClarifyResult {
+export function buildResult(state: QnaState): QnaResult {
 	return {
 		answers: Object.fromEntries(state.questions.map((question) => [question.id, buildAnswer(state, question)])),
 	};
 }
 
-export function getAnswer(state: ClarifyState, questionId: string): AnswerState {
+export function getAnswer(state: QnaState, questionId: string): AnswerState {
 	return state.answers[questionId] ?? { selected: [], notes: {} };
 }
 
-function buildAnswer(state: ClarifyState, question: NormalizedQuestion): ClarifyAnswerResult {
+function buildAnswer(state: QnaState, question: NormalizedQuestion): QnaAnswerResult {
 	const answer = getAnswer(state, question.id);
 	const selectedOptions = answer.selected.map((value) => optionByValue(question, value)).filter(isOption);
 	const optionNotes = Object.fromEntries(
@@ -226,29 +222,29 @@ function buildAnswer(state: ClarifyState, question: NormalizedQuestion): Clarify
 	});
 }
 
-function putAnswer(state: ClarifyState, questionId: string, answer: AnswerState): ClarifyState {
+function putAnswer(state: QnaState, questionId: string, answer: AnswerState): QnaState {
 	return { ...state, answers: { ...state.answers, [questionId]: answer } };
 }
 
-function normalizeOptions(id: string, kind: QuestionKind, options: ClarifyOption[] | undefined): ClarifyOption[] {
+function normalizeOptions(id: string, kind: QuestionKind, options: QnaOption[] | undefined): QnaOption[] {
 	if (kind === "confirm") {
-		if (options && options.length > 0) throw new Error(`clarify confirm question ${id} cannot provide options`);
+		if (options && options.length > 0) throw new Error(`ask_question confirm question ${id} cannot provide options`);
 		return confirmOptions;
 	}
 	if (kind === "input") {
-		if (options && options.length > 0) throw new Error(`clarify input question ${id} cannot provide options`);
+		if (options && options.length > 0) throw new Error(`ask_question input question ${id} cannot provide options`);
 		return [];
 	}
-	if (!options || options.length === 0) throw new Error(`clarify ${kind} question ${id} needs options`);
+	if (!options || options.length === 0) throw new Error(`ask_question ${kind} question ${id} needs options`);
 
 	const values = new Set<string>();
 	return options.map((option, index) => {
 		const value = clean(option.value);
-		if (!value) throw new Error(`clarify question ${id} option ${index + 1} needs value`);
-		if (values.has(value)) throw new Error(`clarify question ${id} duplicate option value: ${value}`);
+		if (!value) throw new Error(`ask_question question ${id} option ${index + 1} needs value`);
+		if (values.has(value)) throw new Error(`ask_question question ${id} duplicate option value: ${value}`);
 		values.add(value);
 		const label = clean(option.label);
-		if (!label) throw new Error(`clarify question ${id} option ${value} needs label`);
+		if (!label) throw new Error(`ask_question question ${id} option ${value} needs label`);
 		return dropUndefined({ value, label, description: clean(option.description) });
 	});
 }
@@ -256,32 +252,33 @@ function normalizeOptions(id: string, kind: QuestionKind, options: ClarifyOption
 function normalizeRecommendation(
 	id: string,
 	kind: QuestionKind,
-	options: ClarifyOption[],
-	recommendation: ClarifyRecommendation | undefined,
-): ClarifyRecommendation | undefined {
+	options: QnaOption[],
+	recommendation: QnaRecommendation | undefined,
+): QnaRecommendation | undefined {
 	if (!recommendation) {
 		if (kind === "input") return undefined;
-		throw new Error(`clarify ${kind} question ${id} needs recommendation`);
+		throw new Error(`ask_question ${kind} question ${id} needs recommendation`);
 	}
 	const reason = clean(recommendation.reason);
-	if (!reason) throw new Error(`clarify question ${id} recommendation needs reason`);
+	if (!reason) throw new Error(`ask_question question ${id} recommendation needs reason`);
 	const values = recommendation.values.map(clean).filter(Boolean);
-	if (values.length === 0) throw new Error(`clarify question ${id} recommendation needs values`);
+	if (values.length === 0) throw new Error(`ask_question question ${id} recommendation needs values`);
 	if ((kind === "select" || kind === "confirm" || kind === "input") && values.length !== 1) {
-		throw new Error(`clarify ${kind} question ${id} recommendation needs exactly one value`);
+		throw new Error(`ask_question ${kind} question ${id} recommendation needs exactly one value`);
 	}
 	if (kind === "input") return { values, reason };
 	const valid = new Set(options.map((option) => option.value));
 	const unique = new Set<string>();
 	for (const value of values) {
-		if (!valid.has(value)) throw new Error(`clarify question ${id} recommendation value not in options: ${value}`);
-		if (unique.has(value)) throw new Error(`clarify question ${id} duplicate recommendation value: ${value}`);
+		if (!valid.has(value))
+			throw new Error(`ask_question question ${id} recommendation value not in options: ${value}`);
+		if (unique.has(value)) throw new Error(`ask_question question ${id} duplicate recommendation value: ${value}`);
 		unique.add(value);
 	}
 	return { values, reason };
 }
 
-function optionByValue(question: NormalizedQuestion, value: string): ClarifyOption | undefined {
+function optionByValue(question: NormalizedQuestion, value: string): QnaOption | undefined {
 	return question.options.find((option) => option.value === value);
 }
 
@@ -289,7 +286,7 @@ function isQuestionKind(value: string): value is QuestionKind {
 	return value === "select" || value === "multi" || value === "input" || value === "confirm";
 }
 
-function isOption(value: ClarifyOption | undefined): value is ClarifyOption {
+function isOption(value: QnaOption | undefined): value is QnaOption {
 	return value !== undefined;
 }
 

@@ -3,10 +3,10 @@ import { join } from "node:path";
 import { StringEnum, Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { type ClarifyParams, type ClarifyResult, normalizeParams } from "./model.ts";
-import { runClarifyUi } from "./ui.ts";
+import { normalizeParams, type QnaParams, type QnaResult } from "./model.ts";
+import { runQnaUi } from "./ui.ts";
 
-const TOOL_CLARIFY = "clarify";
+const TOOL_ASK_QUESTION = "ask_question";
 const TOOL_INTERVIEW_END = "interview_end";
 
 const optionSchema = Type.Object({
@@ -20,8 +20,8 @@ const recommendationSchema = Type.Object({
 	reason: Type.String({ description: "Honest tradeoff-based justification for recommendation" }),
 });
 
-const clarifyParamsSchema = Type.Object({
-	title: Type.Optional(Type.String({ description: "Short title for the clarification panel" })),
+const askQuestionParamsSchema = Type.Object({
+	title: Type.Optional(Type.String({ description: "Short title for the question panel" })),
 	questions: Type.Array(
 		Type.Object({
 			id: Type.String({ description: "Unique question id" }),
@@ -34,13 +34,13 @@ const clarifyParamsSchema = Type.Object({
 			),
 			recommendation: Type.Optional(recommendationSchema),
 		}),
-		{ description: "Focused clarification questions. Prefer 1-3." },
+		{ description: "Focused questions. Prefer 1-3." },
 	),
 });
 
-const QNA_PROMPT = `Use clarify to re-ask the question you just asked the user.
+const QNA_PROMPT = `Use ask_question to re-ask the question you just asked the user.
 
-Do not blindly copy your previous wording or options. Reframe the question if needed so it follows clarify quality rules:
+Do not blindly copy your previous wording or options. Reframe the question if needed so it follows ask_question quality rules:
 - options must be real, valid, defensible choices
 - do not include filler, strawmen, joke options, bad decoys, or preferred answer plus trash
 - use as many options as the real decision space needs: 2 is fine, 10 is fine, 3 is not special
@@ -53,44 +53,44 @@ Do not blindly copy your previous wording or options. Reframe the question if ne
 
 const interviewEndParamsSchema = Type.Object({});
 
-const clarifyTool = defineTool<typeof clarifyParamsSchema, ClarifyResult>({
-	name: "clarify",
-	label: "Clarify",
+const askQuestionTool = defineTool<typeof askQuestionParamsSchema, QnaResult>({
+	name: "ask_question",
+	label: "Ask Question",
 	description:
-		"Ask user structured clarification only when missing intent, preference, or constraint blocks progress. Supports select, multi-select, yes/no, and free-form input. Choices must be real, valid, non-filler. Selectable questions require recommendation values plus honest reason after options. Do not use for routine chat, obvious choices, or avoidable analysis.",
+		"Ask user structured question only when missing intent, preference, or constraint blocks progress. Supports select, multi-select, yes/no, and free-form input. Choices must be real, valid, non-filler. Selectable questions require recommendation values plus honest reason after options. Do not use for routine chat, obvious choices, or avoidable analysis.",
 	promptSnippet:
-		"Ask structured clarification only when a real user decision blocks progress; every choice must be valid, defensible, non-filler.",
+		"Ask structured questions only when a real user decision blocks progress; every choice must be valid, defensible, non-filler.",
 	promptGuidelines: [
-		"Use clarify only when missing user intent, preference, or constraint would materially change next action.",
-		"Do not use clarify for routine chat, status updates, obvious decisions, or questions answerable from files/instructions.",
-		"If one path is clearly correct, do not use clarify. Proceed and state assumption briefly.",
-		"When using clarify choices, every option must be real, valid, and defensible. No filler, strawmen, joke options, bad decoys, or preferred answer plus junk.",
-		"When using clarify choices, cover realistic decision space. Custom answer is safety valve, not excuse for weak options.",
-		"For non-trivial clarify options, include concise description explaining when option makes sense.",
-		"For clarify select, multi-select, confirm, and recommended input: write options or suggested answer first, then recommendation values, then recommendation reason.",
-		"clarify recommendation reason must explain tradeoff honestly. Do not manipulate user toward fake-obvious answer.",
-		"Use clarify multi-select only when combining options is valid. Use select for one path. Use confirm for yes/no. Use input when choices would be fake; include an input recommendation only when you have a real suggested answer.",
-		"Ask fewest clarify questions that unblock work. Prefer 1-3 focused questions. No surveys.",
+		"Use ask_question only when missing user intent, preference, or constraint would materially change next action.",
+		"Do not use ask_question for routine chat, status updates, obvious decisions, or questions answerable from files/instructions.",
+		"If one path is clearly correct, do not use ask_question. Proceed and state assumption briefly.",
+		"When using ask_question choices, every option must be real, valid, and defensible. No filler, strawmen, joke options, bad decoys, or preferred answer plus junk.",
+		"When using ask_question choices, cover realistic decision space. Custom answer is safety valve, not excuse for weak options.",
+		"For non-trivial ask_question options, include concise description explaining when option makes sense.",
+		"For ask_question select, multi-select, confirm, and recommended input: write options or suggested answer first, then recommendation values, then recommendation reason.",
+		"ask_question recommendation reason must explain tradeoff honestly. Do not manipulate user toward fake-obvious answer.",
+		"Use ask_question multi-select only when combining options is valid. Use select for one path. Use confirm for yes/no. Use input when choices would be fake; include an input recommendation only when you have a real suggested answer.",
+		"Ask fewest questions that unblock work. Prefer 1-3 focused questions. No surveys.",
 	],
-	parameters: clarifyParamsSchema,
+	parameters: askQuestionParamsSchema,
 	executionMode: "sequential",
 
 	async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-		const castParams = params as ClarifyParams;
+		const castParams = params as QnaParams;
 		const questions = normalizeParams(castParams);
 		if (ctx.mode !== "tui" || !ctx.hasUI) {
 			ctx.abort();
-			throw new Error("clarify aborted: interactive UI unavailable");
+			throw new Error("ask_question aborted: interactive UI unavailable");
 		}
 
 		ctx.ui.setWorkingVisible(false);
 		try {
-			const result = await ctx.ui.custom<ClarifyResult | undefined>((tui, theme, _keybindings, done) =>
-				runClarifyUi(tui, theme, castParams.title, questions, done),
+			const result = await ctx.ui.custom<QnaResult | undefined>((tui, theme, _keybindings, done) =>
+				runQnaUi(tui, theme, castParams.title, questions, done),
 			);
 			if (!result) {
 				ctx.abort();
-				throw new Error("clarify aborted by user");
+				throw new Error("ask_question aborted by user");
 			}
 			return {
 				content: [{ type: "text", text: formatResult(result) }],
@@ -102,10 +102,10 @@ const clarifyTool = defineTool<typeof clarifyParamsSchema, ClarifyResult>({
 	},
 
 	renderCall(args, theme) {
-		const params = args as ClarifyParams;
+		const params = args as QnaParams;
 		const count = Array.isArray(params.questions) ? params.questions.length : 0;
 		return new Text(
-			`${theme.fg("toolTitle", theme.bold("clarify"))} ${theme.fg("muted", params.title || `${count} question${count === 1 ? "" : "s"}`)}`,
+			`${theme.fg("toolTitle", theme.bold("ask_question"))} ${theme.fg("muted", params.title || `${count} question${count === 1 ? "" : "s"}`)}`,
 			0,
 			0,
 		);
@@ -113,7 +113,7 @@ const clarifyTool = defineTool<typeof clarifyParamsSchema, ClarifyResult>({
 
 	renderResult(result, _options, theme) {
 		const details = result.details;
-		if (!details) return new Text(theme.fg("warning", "clarify returned no details"), 0, 0);
+		if (!details) return new Text(theme.fg("warning", "ask_question returned no details"), 0, 0);
 		return new Text(
 			formatResult(details, (text) => theme.bold(text)),
 			0,
@@ -122,14 +122,14 @@ const clarifyTool = defineTool<typeof clarifyParamsSchema, ClarifyResult>({
 	},
 });
 
-export default function clarifyExtension(pi: ExtensionAPI): void {
+export default function qnaExtension(pi: ExtensionAPI): void {
 	let qnaActive = false;
 	let interviewPath: string | undefined;
 
-	function syncClarifyTools(): void {
+	function syncQnaTools(): void {
 		const active = new Set(pi.getActiveTools());
-		if (qnaActive || interviewPath) active.add(TOOL_CLARIFY);
-		else active.delete(TOOL_CLARIFY);
+		if (qnaActive || interviewPath) active.add(TOOL_ASK_QUESTION);
+		else active.delete(TOOL_ASK_QUESTION);
 		if (interviewPath) active.add(TOOL_INTERVIEW_END);
 		else active.delete(TOOL_INTERVIEW_END);
 		pi.setActiveTools([...active]);
@@ -153,7 +153,7 @@ export default function clarifyExtension(pi: ExtensionAPI): void {
 			const path = interviewPath;
 			interviewPath = undefined;
 			qnaActive = false;
-			syncClarifyTools();
+			syncQnaTools();
 			return {
 				content: [{ type: "text", text: `Interview ended. Decisions file: ${path}` }],
 				details: { path },
@@ -165,22 +165,22 @@ export default function clarifyExtension(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.registerTool(clarifyTool);
+	pi.registerTool(askQuestionTool);
 	pi.registerTool(interviewEndTool);
 
 	pi.on("session_start", () => {
 		qnaActive = false;
 		interviewPath = undefined;
-		syncClarifyTools();
+		syncQnaTools();
 	});
 	pi.on("tool_result", (event) => {
-		if (event.toolName !== TOOL_CLARIFY) return;
+		if (event.toolName !== TOOL_ASK_QUESTION) return;
 		qnaActive = false;
-		syncClarifyTools();
+		syncQnaTools();
 	});
 	pi.on("agent_end", () => {
 		qnaActive = false;
-		syncClarifyTools();
+		syncQnaTools();
 	});
 
 	pi.registerCommand("qna", {
@@ -192,7 +192,7 @@ export default function clarifyExtension(pi: ExtensionAPI): void {
 			}
 
 			qnaActive = true;
-			syncClarifyTools();
+			syncQnaTools();
 			pi.sendMessage({ customType: "tau.qna", content: QNA_PROMPT, display: false }, { triggerTurn: true });
 		},
 	});
@@ -209,7 +209,7 @@ export default function clarifyExtension(pi: ExtensionAPI): void {
 			const path = await createInterviewFile(ctx.cwd, topic);
 			interviewPath = path;
 			qnaActive = false;
-			syncClarifyTools();
+			syncQnaTools();
 			ctx.ui.notify(`Interview decisions: ${path}`, "info");
 			pi.sendMessage(
 				{ customType: "tau.interview", content: buildInterviewPrompt(path, topic), display: false },
@@ -219,14 +219,14 @@ export default function clarifyExtension(pi: ExtensionAPI): void {
 	});
 }
 
-function formatResult(result: ClarifyResult, formatLabel: (text: string) => string = (text) => text): string {
+function formatResult(result: QnaResult, formatLabel: (text: string) => string = (text) => text): string {
 	return `\n${Object.values(result.answers)
 		.map((answer, index) => formatAnswer(answer, index, formatLabel))
 		.join("\n\n")}`;
 }
 
 function formatAnswer(
-	answer: ClarifyResult["answers"][string],
+	answer: QnaResult["answers"][string],
 	index: number,
 	formatLabel: (text: string) => string,
 ): string {
@@ -246,10 +246,7 @@ function formatAnswer(
 	].join("\n");
 }
 
-function formatRecommendation(
-	answer: ClarifyResult["answers"][string],
-	formatLabel: (text: string) => string,
-): string[] {
+function formatRecommendation(answer: QnaResult["answers"][string], formatLabel: (text: string) => string): string[] {
 	if (!answer.recommendation) return [];
 	const recommendation = answer.recommendation.labels;
 	return [
@@ -260,20 +257,20 @@ function formatRecommendation(
 	];
 }
 
-function formatSingleAnswer(answer: ClarifyResult["answers"][string], formatLabel: (text: string) => string): string {
+function formatSingleAnswer(answer: QnaResult["answers"][string], formatLabel: (text: string) => string): string {
 	const value = answer.kind === "input" ? answer.input : answer.labels[0];
 	const answerLine = `   ${formatLabel("Answer:")} ${value || "_Skipped_"}`;
 	return [answerLine, ...formatNotes(answer, "   ", answer.values[0])].join("\n");
 }
 
-function formatMultiAnswer(answer: ClarifyResult["answers"][string]): string {
+function formatMultiAnswer(answer: QnaResult["answers"][string]): string {
 	if (answer.labels.length === 0) return "   _Skipped_";
 	return answer.labels
 		.map((label, index) => [`   - ${label}`, ...formatNotes(answer, "     ", answer.values[index])].join("\n"))
 		.join("\n");
 }
 
-function formatNotes(answer: ClarifyResult["answers"][string], indent: string, value?: string): string[] {
+function formatNotes(answer: QnaResult["answers"][string], indent: string, value?: string): string[] {
 	const notes = value
 		? answer.optionNotes?.[value]
 			? [answer.optionNotes[value]]
@@ -323,7 +320,7 @@ Decisions file: ${path}
 Rules:
 - Treat the decisions file as source of truth for this interview.
 - First confirm the shared goal and exit condition with the user.
-- Always use clarify for interview questions, including freeform and yes/no.
+- Always use ask_question for interview questions, including freeform and yes/no.
 - Default to one question at a time.
 - Batch 2-3 questions only when answers are independent and one answer would not change how you ask the others.
 - If unsure whether questions are independent, ask one.
@@ -332,8 +329,8 @@ Rules:
 - Prefer focused edits to the relevant section.
 - Do not rewrite the whole decisions file unless coherence requires it: goal shift, contradiction, duplicate cleanup, stale assumptions, or major reorganization.
 - Keep the file coherent over time: remove stale assumptions, duplicates, and contradictions when you touch related sections.
-- If the user contradicts the file and the correct update is unclear, ask a clarify question before editing.
-- When the exit condition appears satisfied, ask the user to confirm completion with clarify.
+- If the user contradicts the file and the correct update is unclear, use ask_question before editing.
+- When the exit condition appears satisfied, ask the user to confirm completion with ask_question.
 - After confirmation, update the final decisions file, then call interview_end.
 - Do not call interview_end before user confirmation.`;
 }
