@@ -265,12 +265,7 @@ If we do switch mode:
    - Existing `commandPrompt(args)` can trim trailing text.
    - No new parser framework.
 
-6. Add self-checks.
-   - Validate prompt builder includes required tags/phrases.
-   - Validate blank args handled.
-   - Keep in existing `demo()` if editing `modes/index.ts`.
-
-7. Run `mise run check`.
+6. Run `mise run check`.
 
 ## Prompt drafts
 

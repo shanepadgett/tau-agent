@@ -474,24 +474,3 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 function numberOrZero(value: unknown): number {
 	return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
-
-// lean: one file plus self-checks is enough; split when footer gains real feature mass.
-function demo(): void {
-	const git = parseGitStatus("## main...origin/main\n M a\nA  b\n?? c\nUU d\n");
-	if (git?.branch !== "main" || git.text !== "+1 ~1 ?1 !1") throw new Error("git parse failed");
-	const clean = parseGitStatus("## main\n");
-	if (clean?.text !== "clean") throw new Error("git clean failed");
-	const range = localDayRange(new Date(2026, 5, 18, 12).getTime());
-	if (new Date(range.startMs).getDate() !== 18 || new Date(range.endMs).getDate() !== 19)
-		throw new Error("day range failed");
-	const items = new Map<string, FooterItem>();
-	items.set("b", { id: "b", text: "B", priority: 1 });
-	items.set("a", { id: "a", text: "A", priority: 1 });
-	if (footerItemsText(items) !== "A • B") throw new Error("footer item sort failed");
-	const usage = normalizeUsage({ input: 1, output: 2, cost: { input: 0.1, output: 0.2 } });
-	if (usage.cost !== 0.30000000000000004) throw new Error("cost fallback failed");
-	const cached = normalizeUsage({ input: 20, cacheRead: 80 });
-	if (cached.latestCacheHitRate !== 80) throw new Error("cache hit rate failed");
-}
-
-if (process.argv[1]?.replace(/\\/g, "/").endsWith("src/extensions/footer/index.ts")) demo();

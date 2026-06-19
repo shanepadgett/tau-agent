@@ -98,8 +98,7 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 - Reproduce or narrow failure before changing code.
 - Prefer the smallest causal fix.
 - Simplify directly related failing paths when it reduces bug surface.
-- Allow a small helper only when it removes duplication or makes one current invariant obvious.
-- Leave a narrow check that fails if the bug returns.`,
+- Allow a small helper only when it removes duplication or makes one current invariant obvious.`,
 	},
 };
 
@@ -421,22 +420,3 @@ function buildDebtPrompt(focus: string | undefined): string {
 function isPostureName(value: string): value is PostureName {
 	return (POSTURE_ORDER as readonly string[]).includes(value);
 }
-
-// lean: self-check covers pure posture logic; Pi runtime behavior needs the host command dispatcher.
-function demo(): void {
-	if (parsePosture(" PLAN ") !== "plan") throw new Error("posture parse failed");
-	const command = parsePostureCommand(" review   current diff ");
-	if (command?.name !== "review" || command.prompt !== "current diff") throw new Error("posture command parse failed");
-	if (parsePostureCommand("nope") !== undefined) throw new Error("bad posture command parsed");
-	if (commandPrompt("  failing test ") !== "failing test") throw new Error("command prompt parse failed");
-	if (!buildAuditPrompt("src").includes("Focus/scope: src")) throw new Error("audit focus missing");
-	if (!buildAuditPrompt(undefined).includes("dedupe")) throw new Error("audit tags missing");
-	if (!buildDebtPrompt(undefined).includes("legacy ponytail:")) throw new Error("debt legacy marker missing");
-	if (nextPosture("debug") !== "plan") throw new Error("posture cycle failed");
-	const filtered = filterKnownToolNames(["read", "missing", "ls"], new Set(["read", "ls"]));
-	if (filtered.join(",") !== "read,ls") throw new Error("tool filter failed");
-	const ensured = ensureTools(["custom_tool", "read"], ["read", "grep", "bash"]);
-	if (ensured.join(",") !== "custom_tool,read,grep,bash") throw new Error("tool ensure failed");
-}
-
-if (process.argv[1]?.replace(/\\/g, "/").endsWith("src/extensions/core/src/soul/postures.ts")) demo();

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { StringEnum, Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { buildResult, type ClarifyParams, type ClarifyResult, createState, normalizeParams } from "./model.ts";
+import { type ClarifyParams, type ClarifyResult, normalizeParams } from "./model.ts";
 import { runClarifyUi } from "./ui.ts";
 
 const TOOL_CLARIFY = "clarify";
@@ -352,26 +352,3 @@ function slugify(value: string): string {
 function timestamp(): string {
 	return new Date().toISOString().replace(/[:.]/g, "-");
 }
-
-// lean: validates/result-builds without TUI harness; real UI needs Pi runtime.
-function demo(): void {
-	const questions = normalizeParams({
-		questions: [
-			{ id: "ship", prompt: "Ship?", kind: "confirm", recommendation: { values: ["yes"], reason: "Ready." } },
-			{
-				id: "goal",
-				prompt: "Goal?",
-				kind: "input",
-				recommendation: { values: ["Validate clarify input recommendations."], reason: "Covers freeform." },
-			},
-		],
-	});
-	const state = buildResult(createState(undefined, questions));
-	if (state.answers.ship?.kind !== "confirm") throw new Error("clarify demo failed");
-	if (state.answers.goal?.recommendation?.labels[0] !== "Validate clarify input recommendations.") {
-		throw new Error("clarify input recommendation failed");
-	}
-	if (!formatResult(state).startsWith("\n1. Ship?")) throw new Error("clarify format failed");
-}
-
-if (process.argv[1]?.endsWith("src/extensions/clarify/index.ts")) demo();

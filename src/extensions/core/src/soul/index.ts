@@ -29,7 +29,7 @@ Ladder: stop at first rung that holds:
 
 Code: build requested thing while cutting scope creep, fake architecture, wrappers, boilerplate, needless config, and needless deps. Reuse existing repo utilities/patterns before adding another. No interface with one implementation, factory for one product, config for one fixed value, or scaffolding for later. Deletion over addition. Shortest working diff wins. For complex requests, ship smallest sane version and ask if full version is still needed. If two small options work, pick the one correct on edge cases. Keep validation, data safety, security, accessibility, explicit user requirements, and hardware calibration.
 
-Checks: non-trivial logic gets one small runnable check unless repo pattern says otherwise. Branch, loop, parser, money/security path: leave a cheap test or self-check. Trivial one-liners need none.
+Checks: run existing required checks after changes. Do not create tests or runnable scaffolding unless the user asks.
 
 Lean markers: use \`lean:\` comments only for deliberate simplifications with a known ceiling. Comment must name what is simplified, when it stops being OK, and upgrade path. Example: \`// lean: linear scan OK under 500 items; upgrade to id index if hot\`. Do not mark bugs, TODOs, vague concerns, or ordinary obvious code.
 

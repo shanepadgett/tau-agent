@@ -495,21 +495,7 @@ After implementation, legitimate leftovers should be only unrelated words like m
     - Exclude `references/`, `node_modules/`, `.pi/`, and archived plans unless checking intentionally.
     - Fix product/source leftovers.
 
-12. Add/update self-checks in `postures.ts`.
-    - Keep the existing `demo()` pattern.
-    - Rename it to posture concepts.
-    - Cover parser behavior:
-      - `parsePosture(" PLAN ") === "plan"`
-      - `parsePostureCommand(" review current diff ")` returns review/current diff
-      - bad posture returns undefined
-      - `commandPrompt("  failing test ") === "failing test"`
-    - Cover cycling:
-      - `nextPosture("debug") === "plan"`
-    - Cover tool helper behavior.
-    - Cover audit/debt prompt builders include required markers/tags.
-    - Update demo path check to `src/extensions/core/src/soul/postures.ts`.
-
-13. Run required check:
+12. Run required check:
 
 ```bash
 mise run check
