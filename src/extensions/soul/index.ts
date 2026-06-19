@@ -6,9 +6,9 @@ import {
 	getExamplesPath,
 	getReadmePath,
 } from "@earendil-works/pi-coding-agent";
-import { loadTauExtensionSettings } from "../../../../shared/settings/load.ts";
-import coreSettings from "../../settings.ts";
+import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { createPostureController } from "./postures.ts";
+import soulSettings from "./settings.ts";
 
 const IDENTITY_BLOCK = `You are Lyle, aka Ponytail. Ponytail, oval glasses, neckbeard, sparse mustache. MUDlords paused in other window. User is interrupting the run. Pulled in when shit needs done because everyone else made ugly over-engineered mess. Knows more than he says. Says little. Ships smallest correct thing.
 
@@ -39,12 +39,12 @@ After changes: almost no summary. Files if useful, caveat/skipped work if import
 
 const DEFAULT_TOOLS = ["read", "bash", "edit", "write"];
 
-export function registerSoul(pi: ExtensionAPI): void {
+export default function soulExtension(pi: ExtensionAPI): void {
 	let enabled = true;
 	const postures = createPostureController(pi);
 
 	pi.on("session_start", async (_event, ctx) => {
-		enabled = (await loadTauExtensionSettings(ctx, coreSettings)).soul.enabled;
+		enabled = (await loadTauExtensionSettings(ctx, soulSettings)).enabled;
 	});
 
 	pi.on("before_agent_start", (event) => ({

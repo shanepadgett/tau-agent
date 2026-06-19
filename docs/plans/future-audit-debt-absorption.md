@@ -243,7 +243,7 @@ If we do switch mode:
 
 ## Implementation sketch
 
-1. Inspect current command registration in `src/extensions/core/src/soul/postures.ts` and existing `pi.sendMessage` examples in `src/extensions/clarify/index.ts`.
+1. Inspect current command registration in `src/extensions/soul/postures.ts` and existing `pi.sendMessage` examples in `src/extensions/qna/index.ts`.
 
 2. Decide placement.
    - Smallest likely path: keep `/audit` and `/debt` commands in `postures.ts` near review/debug shortcuts.

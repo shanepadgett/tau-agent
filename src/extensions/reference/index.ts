@@ -1,13 +1,8 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
-import {
-	addReference,
-	pickReferences,
-	type ReferenceItem,
-	referenceLines,
-} from "../../../../shared/reference-picker.ts";
+import { addReference, pickReferences, type ReferenceItem, referenceLines } from "../../shared/reference-picker.ts";
 
-export function registerReference(pi: ExtensionAPI): void {
+export default function referenceExtension(pi: ExtensionAPI): void {
 	pi.registerCommand("reference", {
 		description: "Select local code references or add a new reference repo",
 		getArgumentCompletions(prefix: string): AutocompleteItem[] | null {

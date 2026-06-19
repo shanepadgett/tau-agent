@@ -1,17 +1,12 @@
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Value } from "typebox/value";
-import { readJsonStatus, writeJsonObject } from "../../../../shared/settings/json.ts";
-import {
-	exists,
-	globalTauSettingsPath,
-	projectTauSettingsPath,
-	TAU_SCHEMA_URL,
-} from "../../../../shared/settings/paths.ts";
-import { discoverTauSettingsSpecs } from "../../../../shared/settings/specs.ts";
+import { readJsonStatus, writeJsonObject } from "../../shared/settings/json.ts";
+import { exists, globalTauSettingsPath, projectTauSettingsPath, TAU_SCHEMA_URL } from "../../shared/settings/paths.ts";
+import { discoverTauSettingsSpecs } from "../../shared/settings/specs.ts";
 
 type Finding = { level: "global" | "project"; message: string; startup: boolean };
 
-export function registerTau(pi: ExtensionAPI): void {
+export default function tauExtension(pi: ExtensionAPI): void {
 	pi.registerCommand("tau", {
 		description: "Tau utilities. Usage: /tau [init [--global|--project]|doctor]",
 		handler: async (args, ctx) => run(ctx, args),

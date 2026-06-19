@@ -1,10 +1,8 @@
 {
 	"$schema": "../../schemas/tau.schema.json",
 	"extensions": {
-		"core": {
-			"soul": {
-				"enabled": true
-			}
+		"soul": {
+			"enabled": true
 		},
 		"footer": {
 			"enabled": true

@@ -8,7 +8,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { type AutocompleteItem, Key } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { setTauFooterItem } from "../../../../shared/events.ts";
+import { setTauFooterItem } from "../../shared/events.ts";
 
 const POSTURE_STATE_TYPE = "tau.posture";
 const DEFAULT_POSTURE = "act";
