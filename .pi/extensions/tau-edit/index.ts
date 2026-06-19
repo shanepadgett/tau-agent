@@ -34,15 +34,17 @@ export default function tauEdit(pi: ExtensionAPI): void {
 		handler: async (_args, ctx) => run(pi, ctx),
 	});
 
-	pi.on("before_agent_start", (event) => {
+	pi.on("before_agent_start", () => {
 		const context = pendingContexts.shift();
 		if (!context) return;
 
-		event.systemPromptOptions.appendSystemPrompt = [event.systemPromptOptions.appendSystemPrompt, context]
-			.filter(Boolean)
-			.join("\n\n");
-
-		return { systemPrompt: `${event.systemPrompt}\n\n${context}` };
+		return {
+			message: {
+				customType: "tau-edit-context",
+				content: context,
+				display: false,
+			},
+		};
 	});
 }
 

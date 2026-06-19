@@ -270,11 +270,12 @@ function sessionCost(ctx: ExtensionContext): UsageSummary {
 }
 
 function statsText(theme: Theme, ctx: ExtensionContext, usage: UsageSummary, session: string, daily: string): string {
-	const tokens: string[] = [];
-	if (usage.input) tokens.push(`↑${formatTokens(usage.input)}`);
-	if (usage.output) tokens.push(`↓${formatTokens(usage.output)}`);
-	if (usage.cacheRead) tokens.push(`R${formatTokens(usage.cacheRead)}`);
-	if (usage.cacheWrite) tokens.push(`W${formatTokens(usage.cacheWrite)}`);
+	const tokens = [
+		`↑${formatTokens(usage.input)}`,
+		`↓${formatTokens(usage.output)}`,
+		`R${formatTokens(usage.cacheRead)}`,
+		`W${formatTokens(usage.cacheWrite)}`,
+	];
 	if ((usage.cacheRead || usage.cacheWrite) && usage.latestCacheHitRate !== undefined)
 		tokens.push(`CH${usage.latestCacheHitRate.toFixed(1)}%`);
 	return [contextText(theme, ctx), theme.fg("dim", tokens.join(" ")), theme.fg("dim", `S|${session} D|${daily}`)]
