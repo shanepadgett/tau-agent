@@ -182,9 +182,7 @@ export function isAnswered(state: QnaState, question: NormalizedQuestion): boole
 }
 
 export function buildResult(state: QnaState): QnaResult {
-	const answers = Object.fromEntries(
-		state.questions.map((question) => [question.id, buildAnswer(state, question)]),
-	);
+	const answers = Object.fromEntries(state.questions.map((question) => [question.id, buildAnswer(state, question)]));
 	const additionalContext = clean(state.additionalContext);
 	return additionalContext ? { answers, additionalContext } : { answers };
 }

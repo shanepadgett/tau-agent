@@ -1,4 +1,4 @@
-import { mkdir, readdir } from "node:fs/promises";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
@@ -19,6 +19,7 @@ type ReferencePanelAction =
 	| { action: "cancel" }
 	| { action: "new" }
 	| { action: "update" }
+	| { action: "delete"; selected: ReferenceItem[] }
 	| { action: "submit"; selected: ReferenceItem[] };
 
 export async function pickReferences(
@@ -32,9 +33,10 @@ export async function pickReferences(
 
 	const git = createGitRunner(pi, ctx);
 	let references = await loadReferences(git);
+	const selected = new Set<string>();
 
 	while (true) {
-		const result = await showReferencePanel(ctx, references);
+		const result = await showReferencePanel(ctx, references, selected);
 		if (result.action === "cancel") return undefined;
 
 		if (result.action === "new") {
@@ -45,6 +47,29 @@ export async function pickReferences(
 
 		if (result.action === "update") {
 			await updateReferences(git, ctx, references);
+			references = await loadReferences(git);
+			continue;
+		}
+
+		if (result.action === "delete") {
+			const ok = await confirmDelete(ctx, result.selected);
+			if (ok) {
+				const deleted: string[] = [];
+				const failures: string[] = [];
+				for (const item of result.selected) {
+					try {
+						await deleteReference(ctx, item.name);
+						deleted.push(item.name);
+						selected.delete(item.path);
+					} catch (error) {
+						failures.push(`${item.name}: ${errorText(error)}`);
+					}
+				}
+				if (deleted.length > 0) {
+					ctx.ui.notify(`Deleted ${deleted.length} reference${deleted.length === 1 ? "" : "s"}.`, "info");
+				}
+				if (failures.length > 0) ctx.ui.notify(`Reference delete failed:\n${failures.join("\n")}`, "error");
+			}
 			references = await loadReferences(git);
 			continue;
 		}
@@ -78,12 +103,12 @@ export function referenceLines(references: readonly ReferenceItem[]): string[] {
 async function showReferencePanel(
 	ctx: ExtensionCommandContext,
 	references: readonly ReferenceItem[],
+	selected: Set<string>,
 ): Promise<ReferencePanelAction> {
 	const root = referenceRoot();
 
 	return ctx.ui.custom<ReferencePanelAction>((tui, theme, _keybindings, done) => {
 		let cursor = 0;
-		const selected = new Set<string>();
 
 		function toggleCurrent(): void {
 			const item = references[cursor];
@@ -125,7 +150,7 @@ async function showReferencePanel(
 				lines.push("");
 				lines.push(
 					...wrapTextWithAnsi(
-						theme.fg("dim", "↑↓ move • space toggle • enter attach • n new • u update • esc cancel"),
+						theme.fg("dim", "↑↓ move • space toggle • d delete • n new • u update • enter attach • esc cancel"),
 						renderWidth,
 					),
 				);
@@ -164,6 +189,16 @@ async function showReferencePanel(
 
 				if (data === "u" || data === "U") {
 					done({ action: "update" });
+					return;
+				}
+
+				if (data === "d" || data === "D") {
+					const picked = references.filter((item) => selected.has(item.path));
+					if (picked.length === 0) {
+						ctx.ui.notify("No references selected.", "info");
+						return;
+					}
+					done({ action: "delete", selected: picked });
 					return;
 				}
 
@@ -266,6 +301,30 @@ async function updateReferences(
 
 	if (updated.length > 0) ctx.ui.notify(`Updated ${updated.length} reference(s).`, "info");
 	if (failures.length > 0) ctx.ui.notify(`Reference update failed:\n${failures.join("\n")}`, "error");
+}
+
+async function confirmDelete(ctx: ExtensionCommandContext, items: readonly ReferenceItem[]): Promise<boolean> {
+	const names = items.map((item) => item.name).join(", ");
+	return ctx.ui.confirm(
+		`Delete ${items.length} reference${items.length === 1 ? "" : "s"}?`,
+		`This deletes from disk:\n${names}`,
+	);
+}
+
+async function deleteReference(ctx: ExtensionCommandContext, name: string): Promise<void> {
+	if (!/^[A-Za-z0-9._-]+$/.test(name) || name === "." || name === "..") {
+		throw new Error(`Invalid reference name: ${name}`);
+	}
+	const target = join(REFERENCES_DIR, name);
+	if (!target.startsWith(`${REFERENCES_DIR}/`)) {
+		throw new Error(`Invalid reference path: ${name}`);
+	}
+	ctx.ui.setStatus("reference", `deleting ${name}`);
+	try {
+		await rm(target, { recursive: true, force: true });
+	} finally {
+		ctx.ui.setStatus("reference", undefined);
+	}
 }
 
 function referenceRoot(): string {
