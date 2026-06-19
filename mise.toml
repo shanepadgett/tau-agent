@@ -2,14 +2,15 @@
 node = "22.19.0"
 "npm:@biomejs/biome" = "2.3.5"
 "npm:markdownlint-cli2" = "0.22.1"
+"npm:fallow" = "2.100.0"
 
 [settings]
 jobs = 1
 task_output = "quiet"
 
 [tasks.check]
-description = "Run Biome, TypeScript, and Markdown checks"
-depends = ["check:schema", "check:biome", "check:types", "check:markdown"]
+description = "Run Biome, TypeScript, Markdown, and Fallow checks"
+depends = ["check:schema", "check:biome", "check:types", "check:markdown", "check:deadcode"]
 
 [tasks.generate-schema]
 description = "Generate Tau settings schema"
@@ -30,3 +31,7 @@ run = "markdownlint-cli2 --fix"
 [tasks."check:types"]
 description = "Run TypeScript checks"
 run = "./node_modules/.bin/tsgo --noEmit"
+
+[tasks."check:deadcode"]
+description = "Run Fallow dead-code and duplication checks"
+run = "fallow --only dead-code,dupes"

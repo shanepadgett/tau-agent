@@ -267,14 +267,21 @@ class QnaComponent implements Component, Focusable {
 		return lines;
 	}
 
-	private renderSingleOption(question: NormalizedQuestion, index: number, width: number): string[] {
-		if (this.isCustomIndex(question, index)) return this.renderCustomOption(question, false, width);
-
+	private optionContext(question: NormalizedQuestion, index: number) {
 		const option = question.options[index];
-		if (!option) return [];
+		if (!option) return null;
 		const answer = getAnswer(this.state, question.id);
 		const active = index === this.state.activeOption;
 		const selected = answer.selected.includes(option.value);
+		return { option, active, selected };
+	}
+
+	private renderSingleOption(question: NormalizedQuestion, index: number, width: number): string[] {
+		if (this.isCustomIndex(question, index)) return this.renderCustomOption(question, false, width);
+
+		const ctx = this.optionContext(question, index);
+		if (!ctx) return [];
+		const { option, active, selected } = ctx;
 		const prefix = active ? this.theme.fg("accent", "→ ") : "  ";
 		const label = `${this.theme.fg(active ? "accent" : "text", option.label)}${selected ? this.theme.fg("success", " ✓") : ""}`;
 		const lines = wrapWithPrefix(prefix, label, width);
@@ -286,11 +293,9 @@ class QnaComponent implements Component, Focusable {
 	private renderMultiOption(question: NormalizedQuestion, index: number, width: number): string[] {
 		if (this.isCustomIndex(question, index)) return this.renderCustomOption(question, true, width);
 
-		const option = question.options[index];
-		if (!option) return [];
-		const answer = getAnswer(this.state, question.id);
-		const active = index === this.state.activeOption;
-		const selected = answer.selected.includes(option.value);
+		const ctx = this.optionContext(question, index);
+		if (!ctx) return [];
+		const { option, active, selected } = ctx;
 		const pointer = active ? this.theme.fg("accent", "→ ") : "  ";
 		const box = selected ? "[x]" : this.theme.fg("dim", "[ ]");
 		const label = this.theme.fg(active ? "accent" : "text", option.label);

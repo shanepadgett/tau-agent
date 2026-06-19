@@ -1,3 +1,6 @@
+// lean: footer mixes git-status parse + usage/cost math + render; high churn
+// (fallow hotspot). Do NOT proactive-split — wait for a change that forces a
+// natural seam, then extract that concern only.
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative } from "node:path";

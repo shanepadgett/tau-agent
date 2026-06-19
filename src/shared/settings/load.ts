@@ -40,7 +40,7 @@ export async function updateTauExtensionSettings<TDefaults extends JsonObject>(
 	});
 }
 
-export async function updateTauSettings(
+async function updateTauSettings(
 	scope: TauSettingsScope,
 	ctx: Pick<ExtensionContext, "cwd">,
 	updater: (current: JsonObject) => JsonObject,
