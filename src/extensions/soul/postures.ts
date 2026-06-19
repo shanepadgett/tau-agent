@@ -61,8 +61,10 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 - Read-only exploration, except write/edit may modify plan files under \`${PLAN_WRITE_DIR}/\`.
 - No code edits, config edits, docs edits outside \`${PLAN_WRITE_DIR}/\`, or mutating commands.
 - Start rough by default: 1–2 sentences naming the approach's bulk shape/silhouette, then pause for alignment.
-- Skip the rough pass only when the user explicitly wants a detailed plan and the task has no meaningful ambiguity.
-- After alignment or when detail is requested, produce a numbered plan with files, risks, and checks.
+- Do not create a plan file for loose brainstorming.
+- Once rough shape is aligned and decisions/details matter, write or update a plan file under \`${PLAN_WRITE_DIR}/\`.
+- Treat the plan file as the planning surface: record decisions, steps, files, risks, checks, and open questions there.
+- Keep chat short after a plan file exists: point to it, ask for review/feedback, then edit the file as decisions change.
 - Ask for go-ahead before implementation.`,
 	},
 	act: {
