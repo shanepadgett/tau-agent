@@ -490,13 +490,13 @@ function commandPrompt(args: string): string | undefined {
 
 function buildAuditPrompt(focus: string | undefined): string {
 	return [
-		"Run a repo-wide complexity/stability audit. Report only unless user explicitly asks for edits.",
+		"Run a repo-wide over-engineering / avoidable-complexity audit, not a general correctness review. Report only unless user explicitly asks for edits.",
 		...(focus ? [`Focus/scope: ${focus}`] : []),
-		"Scan the repo tree, not just the diff. Skip .git, node_modules, dist, build, coverage, generated output, references, and agent cache/session/temp dirs. Rank biggest simplification/stability wins first.",
+		"Scan the repo tree, not just the diff. Skip .git, node_modules, dist, build, coverage, generated output, references, and agent cache/session/temp dirs. Rank biggest avoidable-complexity cuts first.",
 		"Tags: delete, shrink, dedupe, stdlib, native, internal, yagni, refactor.",
 		"Hunt: dead code, stale config, speculative features, unused flexibility, duplicated logic, single-implementation interfaces, factories with one product, delegate-only wrappers, files/layers that do not earn their keep, hand-rolled stdlib, dependencies/platform code replacing native behavior, internal utilities not reused.",
 		"Format: <tag> <problem>. <smallest fix>. [path]",
-		"Mention correctness/security/perf only when complexity causes the risk.",
+		"Mention correctness/security/perf/stability only when avoidable complexity causes the risk.",
 		"End with net removable lines/deps/duplicated paths only if you can estimate honestly. If clean: Lean already. Ship.",
 	].join("\n\n");
 }

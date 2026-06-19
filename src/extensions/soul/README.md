@@ -77,7 +77,7 @@ No `/mode` command.
 
 ## One-shot commands
 
-- `/audit [focus]`: repo-wide complexity/stability audit, ranked biggest simplification first.
+- `/audit [focus]`: repo-wide over-engineering/avoidable-complexity audit, ranked biggest cut first.
 - `/debt [focus]`: harvest `lean:` shortcut markers into a report.
 
 ## Limits
