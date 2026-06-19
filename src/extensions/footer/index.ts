@@ -22,6 +22,7 @@ interface UsageSummary {
 	output: number;
 	cacheRead: number;
 	cacheWrite: number;
+	latestCacheHitRate: number | undefined;
 	cost: number;
 }
 
@@ -268,7 +269,9 @@ function statsText(theme: Theme, ctx: ExtensionContext, usage: UsageSummary, ses
 	if (usage.output) tokens.push(`↓${formatTokens(usage.output)}`);
 	if (usage.cacheRead) tokens.push(`R${formatTokens(usage.cacheRead)}`);
 	if (usage.cacheWrite) tokens.push(`W${formatTokens(usage.cacheWrite)}`);
-	return [theme.fg("dim", tokens.join(" ")), contextText(theme, ctx), theme.fg("dim", `S|${session} D|${daily}`)]
+	if ((usage.cacheRead || usage.cacheWrite) && usage.latestCacheHitRate !== undefined)
+		tokens.push(`CH${usage.latestCacheHitRate.toFixed(1)}%`);
+	return [contextText(theme, ctx), theme.fg("dim", tokens.join(" ")), theme.fg("dim", `S|${session} D|${daily}`)]
 		.filter(Boolean)
 		.join(theme.fg("dim", " • "));
 }
@@ -369,13 +372,21 @@ function normalizeUsage(value: unknown): UsageSummary {
 	const output = numberOrZero(record?.output);
 	const cacheRead = numberOrZero(record?.cacheRead);
 	const cacheWrite = numberOrZero(record?.cacheWrite);
+	const promptTokens = input + cacheRead + cacheWrite;
 	const costTotal =
 		numberOrZero(cost?.total) ||
 		numberOrZero(cost?.input) +
 			numberOrZero(cost?.output) +
 			numberOrZero(cost?.cacheRead) +
 			numberOrZero(cost?.cacheWrite);
-	return { input, output, cacheRead, cacheWrite, cost: costTotal };
+	return {
+		input,
+		output,
+		cacheRead,
+		cacheWrite,
+		latestCacheHitRate: promptTokens > 0 ? (cacheRead / promptTokens) * 100 : undefined,
+		cost: costTotal,
+	};
 }
 
 function addUsage(left: UsageSummary, right: UsageSummary): UsageSummary {
@@ -384,12 +395,13 @@ function addUsage(left: UsageSummary, right: UsageSummary): UsageSummary {
 		output: left.output + right.output,
 		cacheRead: left.cacheRead + right.cacheRead,
 		cacheWrite: left.cacheWrite + right.cacheWrite,
+		latestCacheHitRate: right.latestCacheHitRate ?? left.latestCacheHitRate,
 		cost: left.cost + right.cost,
 	};
 }
 
 function zeroUsage(): UsageSummary {
-	return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+	return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, latestCacheHitRate: undefined, cost: 0 };
 }
 
 function timestampMs(messageTimestamp: unknown, entryTimestamp: unknown): number {
@@ -478,6 +490,8 @@ function demo(): void {
 	if (footerItemsText(items) !== "A • B") throw new Error("footer item sort failed");
 	const usage = normalizeUsage({ input: 1, output: 2, cost: { input: 0.1, output: 0.2 } });
 	if (usage.cost !== 0.30000000000000004) throw new Error("cost fallback failed");
+	const cached = normalizeUsage({ input: 20, cacheRead: 80 });
+	if (cached.latestCacheHitRate !== 80) throw new Error("cache hit rate failed");
 }
 
 if (process.argv[1]?.replace(/\\/g, "/").endsWith("src/extensions/footer/index.ts")) demo();
