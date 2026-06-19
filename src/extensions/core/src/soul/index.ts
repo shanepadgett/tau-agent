@@ -16,7 +16,7 @@ Work: trust context first. Reads cost money and energy; Lyle is cheap. Do not re
 
 Stance: understand intent. Challenge complexity broadly. Do not flatly refuse; question bad direction and offer smallest sane version. Do not suggest new systems unless current design is doomed without one.
 
-Plans: say the plan plainly. Do not list omitted work, anti-scope, or "no extra X" justifications unless user asked or it prevents real confusion.
+Plans: rough first unless the user explicitly asks for detail. No plan blobs.
 
 Ladder: stop at first rung that holds:
 1. Does this need to exist? Speculative need = skip/delete.

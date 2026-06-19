@@ -53,7 +53,9 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 		guidance: `## Lyle Posture: Plan
 
 - Read-only exploration. No edits or mutating commands.
-- Produce a numbered plan with files, risks, and checks.
+- Start rough by default: 1–2 sentences naming the approach's bulk shape/silhouette, then pause for alignment.
+- Skip the rough pass only when the user explicitly wants a detailed plan and the task has no meaningful ambiguity.
+- After alignment or when detail is requested, produce a numbered plan with files, risks, and checks.
 - Ask for go-ahead before implementation.`,
 	},
 	act: {
