@@ -14,7 +14,7 @@ Disable it with Tau settings:
 }
 ```
 
-Takes effect on session start. When disabled, Soul skips prompt replacement, posture switching, posture model/tool changes, and clears the posture footer item.
+Takes effect on session start. When disabled, Soul skips prompt replacement, posture switching, posture tool/thinking changes, and clears the posture footer item.
 
 ## Postures
 
@@ -45,28 +45,22 @@ No `/mode` command.
 
 ## Behavior
 
-- Uses the first available preferred model for the posture, with per-model thinking level.
-- Keeps current model if no preferred model can be selected.
-- If a provider returns `402`, `403`, `429`, or `5xx`, falls through to the next preferred model for the next turn.
+- Keeps the current model selected when switching postures.
+- Sets thinking level by posture: `act` uses `medium`; `plan`, `review`, and `debug` use `xhigh`.
 - Builds posture guidance into soul's prompt; no second prompt appender.
 - Shows current posture as plain muted text in the footer when enabled.
 - Persists selected posture as `tau.posture`.
 - `plan` snapshots current tools and switches to read/search tools plus `write`/`edit` for `docs/plans/` only. Leaving `plan` restores the snapshot.
 - Keeps `switch_posture` available in every posture so the agent can request the right posture before doing mismatched work.
 
-## Model preference
+## Thinking levels
 
-`plan`, `review`, and `debug`:
+Posture changes do not change the selected model.
 
-1. `openai-codex/gpt-5.5` at `xhigh`
-2. `anthropic/claude-opus-4-8` at `xhigh`
-3. `github-copilot/gemini-3.1-pro-preview` at `xhigh`
-
-`act`:
-
-1. `openai-codex/gpt-5.5` at `low`
-2. `anthropic/claude-opus-4-8` at `medium`
-3. `github-copilot/gemini-3.1-pro-preview` at `low`
+- `plan`: `xhigh`
+- `act`: `medium`
+- `review`: `xhigh`
+- `debug`: `xhigh`
 
 ## Posture meanings
 

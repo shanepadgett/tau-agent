@@ -25,36 +25,22 @@ type PostureName = (typeof POSTURE_ORDER)[number];
 interface PostureConfig {
 	label: string;
 	description: string;
-	preferredModels: readonly ModelCandidate[];
 	thinkingLevel: ThinkingLevel;
 	guidance: string;
 }
 
-interface ModelCandidate {
-	provider: string;
-	model: string;
-}
-
 interface PostureState {
 	name: PostureName;
-	candidateIndex?: number;
 }
 
 export interface PostureController {
 	consumeGuidance(): string | undefined;
 }
 
-const POSTURE_MODELS: readonly ModelCandidate[] = [
-	{ provider: "openai-codex", model: "gpt-5.5" },
-	{ provider: "anthropic", model: "claude-opus-4-8" },
-	{ provider: "github-copilot", model: "gemini-3.1-pro-preview" },
-];
-
 const POSTURES: Record<PostureName, PostureConfig> = {
 	plan: {
 		label: "Plan",
 		description: "Read-only exploration and plan file writing",
-		preferredModels: POSTURE_MODELS,
 		thinkingLevel: "xhigh",
 		guidance: `## Lyle Posture: Plan
 
@@ -70,7 +56,6 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 	act: {
 		label: "Act",
 		description: "Focused implementation",
-		preferredModels: POSTURE_MODELS,
 		thinkingLevel: "medium",
 		guidance: `## Lyle Posture: Act
 
@@ -81,7 +66,6 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 	review: {
 		label: "Review",
 		description: "Complexity and stability review",
-		preferredModels: POSTURE_MODELS,
 		thinkingLevel: "xhigh",
 		guidance: `## Lyle Posture: Review
 
@@ -95,7 +79,6 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 	debug: {
 		label: "Debug",
 		description: "Reproduce, isolate, fix",
-		preferredModels: POSTURE_MODELS,
 		thinkingLevel: "xhigh",
 		guidance: `## Lyle Posture: Debug
 
@@ -108,7 +91,6 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 
 export function createPostureController(pi: ExtensionAPI, isEnabled: () => boolean): PostureController {
 	let activePosture: PostureName | undefined;
-	let activeCandidateIndex: number | undefined;
 	let nextTurnPosture: PostureName | undefined;
 	let previousTools: string[] | undefined;
 
@@ -208,7 +190,6 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 	): Promise<void> {
 		if (!isEnabled()) {
 			activePosture = undefined;
-			activeCandidateIndex = undefined;
 			nextTurnPosture = undefined;
 			previousTools = undefined;
 			updateFooter(pi, undefined);
@@ -221,13 +202,7 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 
 		if (enteringPlan && !options.fromRestore) previousTools = pi.getActiveTools();
 
-		activeCandidateIndex = await applyPreferredModel(
-			pi,
-			ctx,
-			config,
-			options.fromRestore ? (activeCandidateIndex ?? 0) : 0,
-			options.quiet === true,
-		);
+		pi.setThinkingLevel(config.thinkingLevel);
 
 		if (name === "plan") {
 			pi.setActiveTools(filterKnownTools(pi, PLAN_TOOLS));
@@ -244,7 +219,7 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 		activePosture = name;
 		updateFooter(pi, activePosture);
 
-		if (options.persist !== false) persistPosture(pi, activePosture, activeCandidateIndex);
+		if (options.persist !== false) persistPosture(pi, activePosture);
 		if (!options.quiet) ctx.ui.notify(`Posture: ${config.label}`, "info");
 	}
 
@@ -318,29 +293,6 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 		},
 	});
 
-	pi.on("after_provider_response", async (event, ctx) => {
-		if (!activePosture || activeCandidateIndex === undefined || !shouldFallback(event.status)) return;
-
-		const config = POSTURES[activePosture];
-		const nextIndex = await applyPreferredModel(pi, ctx, config, activeCandidateIndex + 1, true);
-		if (nextIndex === undefined) {
-			activeCandidateIndex = undefined;
-			persistPosture(pi, activePosture, activeCandidateIndex);
-			return;
-		}
-		if (nextIndex === activeCandidateIndex) return;
-
-		activeCandidateIndex = nextIndex;
-		persistPosture(pi, activePosture, activeCandidateIndex);
-		const next = config.preferredModels[nextIndex];
-		if (next) {
-			ctx.ui.notify(
-				`Posture ${activePosture}: provider returned ${event.status}; using ${next.provider}/${next.model} next turn.`,
-				"warning",
-			);
-		}
-	});
-
 	pi.on("session_start", async (_event, ctx) => {
 		const restored = latestPostureState(ctx.sessionManager.getEntries());
 		if (!restored) {
@@ -349,7 +301,6 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 			return;
 		}
 
-		activeCandidateIndex = restored.candidateIndex;
 		await applyPosture(restored.name, ctx, { persist: false, quiet: true, fromRestore: true });
 	});
 
@@ -404,31 +355,6 @@ async function pickPosture(ctx: ExtensionContext, apply: (name: PostureName) => 
 	if (name) await apply(name);
 }
 
-async function applyPreferredModel(
-	pi: ExtensionAPI,
-	ctx: ExtensionContext,
-	config: PostureConfig,
-	startIndex: number,
-	quiet: boolean,
-): Promise<number | undefined> {
-	for (let index = startIndex; index < config.preferredModels.length; index++) {
-		const candidate = config.preferredModels[index];
-		if (!candidate) continue;
-
-		const model = ctx.modelRegistry.find(candidate.provider, candidate.model);
-		if (!model) continue;
-
-		if (await pi.setModel(model)) {
-			pi.setThinkingLevel(config.thinkingLevel);
-			return index;
-		}
-	}
-
-	pi.setThinkingLevel(config.thinkingLevel);
-	if (!quiet) ctx.ui.notify("No preferred posture model available. Keeping current model.", "warning");
-	return undefined;
-}
-
 function updateFooter(pi: ExtensionAPI, activePosture: PostureName | undefined): void {
 	setTauFooterItem(pi, {
 		id: "tau-posture",
@@ -437,8 +363,8 @@ function updateFooter(pi: ExtensionAPI, activePosture: PostureName | undefined):
 	});
 }
 
-function persistPosture(pi: ExtensionAPI, name: PostureName, candidateIndex: number | undefined): void {
-	pi.appendEntry<PostureState>(POSTURE_STATE_TYPE, { name, candidateIndex });
+function persistPosture(pi: ExtensionAPI, name: PostureName): void {
+	pi.appendEntry<PostureState>(POSTURE_STATE_TYPE, { name });
 }
 
 function latestPostureState(entries: readonly SessionEntry[]): PostureState | undefined {
@@ -458,14 +384,7 @@ function readPostureState(data: unknown): PostureState | undefined {
 	const name = typeof record.name === "string" ? parsePosture(record.name) : undefined;
 	if (!name) return undefined;
 
-	return {
-		name,
-		candidateIndex: typeof record.candidateIndex === "number" ? record.candidateIndex : undefined,
-	};
-}
-
-function shouldFallback(status: number): boolean {
-	return status === 402 || status === 403 || status === 429 || status >= 500;
+	return { name };
 }
 
 function filterKnownTools(pi: ExtensionAPI, names: readonly string[]): string[] {
