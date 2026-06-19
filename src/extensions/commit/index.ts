@@ -31,6 +31,7 @@ const CONVENTIONAL_COMMIT_TYPES = new Set([
 // always appended as the guaranteed fallback, so this list only needs to be
 // good, not exhaustive or correct forever.
 const PREFERRED_COMMIT_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
+	{ provider: "openrouter", model: "cohere/north-mini-code:free", reasoning: "high" },
 	{ provider: "github-copilot", model: "gemini-3.5-flash", reasoning: "high" },
 	{ provider: "openai-codex", model: "gpt-5.4-mini", reasoning: "high" },
 	{ provider: "anthropic", model: "claude-haiku-4-5", reasoning: "high" },
@@ -246,7 +247,8 @@ async function generateMessage(
 			return await requestMessage(ctx, candidate, prompt);
 		} catch (error) {
 			if (ctx.signal?.aborted) throw new Error("Commit cancelled.");
-			await markProviderUnavailable(ctx, candidate.model.provider);
+			if (!(error instanceof CommitMessageValidationError))
+				await markProviderUnavailable(ctx, candidate.model.provider);
 			failures.push(`- ${label}: ${errorText(error)}`);
 		}
 	}
@@ -284,26 +286,32 @@ function cleanMessage(rawMessage: string): string {
 	return message.replace(/^commit message:\s*/i, "").trim();
 }
 
+class CommitMessageValidationError extends Error {}
+
 function validateMessage(rawMessage: string): string {
 	const message = rawMessage.trim();
-	if (!message) throw new Error("Commit message is empty.");
+	if (!message) throw new CommitMessageValidationError("Commit message is empty.");
 
 	const [header = "", ...bodyLines] = message.split("\n");
 	const headerMatch = header.match(/^([a-z]+)(?:\(([a-z0-9]+(?:-[a-z0-9]+)*)\))?(!)?: (.+)$/);
-	if (!headerMatch) throw new Error("Commit message must use conventional commit format.");
+	if (!headerMatch) throw new CommitMessageValidationError("Commit message must use conventional commit format.");
 
 	const [, type, , breakingMark, subject] = headerMatch;
-	if (!type || !CONVENTIONAL_COMMIT_TYPES.has(type)) throw new Error(`Unsupported commit type: ${type || "missing"}.`);
-	if (!subject || subject.length > 100) throw new Error("Commit subject must be 1-100 characters.");
-	if (subject.endsWith(".")) throw new Error("Commit subject must not end with a period.");
+	if (!type || !CONVENTIONAL_COMMIT_TYPES.has(type)) {
+		throw new CommitMessageValidationError(`Unsupported commit type: ${type || "missing"}.`);
+	}
+	if (!subject || subject.length > 100)
+		throw new CommitMessageValidationError("Commit subject must be 1-100 characters.");
+	if (subject.endsWith(".")) throw new CommitMessageValidationError("Commit subject must not end with a period.");
 
 	const body = bodyLines.join("\n").trim();
-	if (!breakingMark && body) throw new Error("Commit body is only allowed for breaking changes.");
+	if (!breakingMark && body)
+		throw new CommitMessageValidationError("Commit body is only allowed for breaking changes.");
 	if (breakingMark && !body.startsWith("BREAKING CHANGE: ")) {
-		throw new Error("Breaking commits must include a body starting with BREAKING CHANGE:.");
+		throw new CommitMessageValidationError("Breaking commits must include a body starting with BREAKING CHANGE:.");
 	}
 	if (breakingMark && body.split("\n\n").filter((paragraph) => paragraph.trim()).length !== 1) {
-		throw new Error("Breaking commits must include exactly one BREAKING CHANGE paragraph.");
+		throw new CommitMessageValidationError("Breaking commits must include exactly one BREAKING CHANGE paragraph.");
 	}
 
 	return body ? `${header}\n\n${body}` : header;
