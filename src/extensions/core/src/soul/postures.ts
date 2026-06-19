@@ -1,4 +1,5 @@
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
+import { StringEnum } from "@earendil-works/pi-ai";
 import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
@@ -6,13 +7,15 @@ import type {
 	SessionEntry,
 } from "@earendil-works/pi-coding-agent";
 import { type AutocompleteItem, Key } from "@earendil-works/pi-tui";
+import { Type } from "typebox";
 import { setTauFooterItem } from "../../../../shared/events.ts";
 
 const POSTURE_STATE_TYPE = "tau.posture";
 const DEFAULT_POSTURE = "act";
 const POSTURE_ORDER = ["plan", "act", "review", "debug"] as const;
-const PLAN_TOOLS = ["read", "grep", "find", "ls"];
-const NON_PLAN_TOOLS = ["read", "grep", "find", "ls", "bash"];
+const SWITCH_POSTURE_TOOL = "switch_posture";
+const PLAN_TOOLS = ["read", "grep", "find", "ls", SWITCH_POSTURE_TOOL];
+const NON_PLAN_TOOLS = ["read", "grep", "find", "ls", "bash", SWITCH_POSTURE_TOOL];
 
 type PostureName = (typeof POSTURE_ORDER)[number];
 
@@ -102,6 +105,77 @@ export function createPostureController(pi: ExtensionAPI): PostureController {
 	let activeCandidateIndex: number | undefined;
 	let nextTurnPosture: PostureName | undefined;
 	let previousTools: string[] | undefined;
+
+	pi.registerTool({
+		name: SWITCH_POSTURE_TOOL,
+		label: "Switch Posture",
+		description:
+			"Ask the user to switch Lyle posture, then continue the requested work under the refreshed Soul prompt.",
+		promptSnippet: "Request a posture switch when the user's latest intent fits another posture.",
+		promptGuidelines: [
+			"Use switch_posture before doing work when the user's latest intent clearly fits another Lyle posture.",
+			"Use switch_posture with posture=act when in plan posture and the user asks to implement, edit, or change files.",
+			"Use switch_posture with posture=plan when not in plan posture and the user asks to plan, design, explore, or discuss an edit/feature before implementation.",
+			"Use switch_posture with posture=review when the user asks to review, audit, critique, or find problems.",
+			"Use switch_posture with posture=debug when the user reports a bug, failure, error, broken behavior, or asks to reproduce/isolate/fix a failure.",
+			"Do not use switch_posture when already in the matching posture or when intent is ambiguous.",
+			"If switch_posture is denied, continue under the current posture.",
+		],
+		parameters: Type.Object({
+			posture: StringEnum(POSTURE_ORDER),
+			task: Type.String({
+				description:
+					"The exact work to continue after the posture switch. Include enough context that the next turn can proceed without asking the user to repeat themselves.",
+			}),
+			reason: Type.Optional(Type.String({ description: "Short reason for the requested posture switch." })),
+		}),
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			if (!ctx.hasUI) {
+				return {
+					content: [{ type: "text", text: "Cannot switch posture without user approval UI." }],
+					details: {},
+				};
+			}
+
+			if (params.posture === activePosture) {
+				return {
+					content: [{ type: "text", text: `Already in ${params.posture} posture. Continue.` }],
+					details: {},
+				};
+			}
+
+			const reason = params.reason ? `\n\nReason: ${params.reason}` : "";
+			const approved = await ctx.ui.confirm(
+				`Switch to ${POSTURES[params.posture].label}?`,
+				`The agent wants to continue in ${params.posture} posture.${reason}`,
+			);
+
+			if (!approved) {
+				return {
+					content: [{ type: "text", text: "Posture switch denied. Continue under current posture." }],
+					details: {},
+				};
+			}
+
+			await applyPosture(params.posture, ctx, { quiet: true });
+			pi.sendMessage(
+				{
+					customType: "tau.posture.continue",
+					content: params.task,
+					display: false,
+				},
+				{ triggerTurn: true, deliverAs: "followUp" },
+			);
+
+			return {
+				content: [
+					{ type: "text", text: `Posture switched to ${params.posture}. Continuing with refreshed prompt.` },
+				],
+				details: {},
+				terminate: true,
+			};
+		},
+	});
 
 	async function applyPosture(
 		name: PostureName,
@@ -228,6 +302,7 @@ export function createPostureController(pi: ExtensionAPI): PostureController {
 		const restored = latestPostureState(ctx.sessionManager.getEntries());
 		if (!restored) {
 			await applyPosture(DEFAULT_POSTURE, ctx, { persist: false, quiet: true });
+			if (_event.reason === "new") await pickPosture(ctx, (name) => applyPosture(name, ctx));
 			return;
 		}
 
@@ -269,7 +344,7 @@ export function createPostureController(pi: ExtensionAPI): PostureController {
 	};
 }
 
-async function pickPosture(ctx: ExtensionCommandContext, apply: (name: PostureName) => Promise<void>): Promise<void> {
+async function pickPosture(ctx: ExtensionContext, apply: (name: PostureName) => Promise<void>): Promise<void> {
 	if (!ctx.hasUI) {
 		ctx.ui.notify(`Usage: /posture <${POSTURE_ORDER.join("|")}>`, "error");
 		return;

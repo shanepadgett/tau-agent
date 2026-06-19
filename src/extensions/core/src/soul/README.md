@@ -21,8 +21,11 @@ Soul rebuilds Pi's system prompt from `systemPromptOptions`: Lyle identity first
 ```
 
 Shortcut: `Ctrl+Shift+M` cycles postures. New sessions default to `act`.
+After `/new`, Tau asks for posture once when no posture has been selected in that session. Reload does not show the picker.
 
 Posture shortcut commands switch posture. With trailing text, Tau switches first and submits that text in the new posture.
+
+The `switch_posture` tool lets the agent ask to change posture when the user's latest intent clearly fits another posture. Approved switches queue a hidden continuation so Soul rebuilds the next turn with the new posture guidance.
 
 `/audit` and `/debt` are one-shot prompts. They borrow review posture for that turn but do not persist it.
 
@@ -37,6 +40,7 @@ No `/mode` command.
 - Shows current posture as plain muted text in the footer.
 - Persists selected posture as `tau.posture`.
 - `plan` snapshots current tools and switches to read-only tools. Leaving `plan` restores the snapshot.
+- Keeps `switch_posture` available in every posture so the agent can request the right posture before doing mismatched work.
 
 ## Model preference
 
