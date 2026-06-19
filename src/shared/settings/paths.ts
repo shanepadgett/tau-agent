@@ -25,7 +25,7 @@ export async function exists(path: string): Promise<boolean> {
 	}
 }
 
-async function resolveProjectRoot(cwd: string): Promise<string> {
+export async function resolveProjectRoot(cwd: string): Promise<string> {
 	const start = resolve(cwd);
 	let current = start;
 	while (true) {
