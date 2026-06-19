@@ -4,6 +4,7 @@ import { emitTauEvent, onTauEvent } from "../../shared/events.js";
 
 const DEFAULT_TITLE = "Tau";
 const DEFAULT_BODY = "Ready for input";
+const MACOS_SOUND = "/System/Library/Sounds/Submarine.aiff";
 
 function oscText(value: string): string {
 	return [...value]
@@ -13,6 +14,12 @@ function oscText(value: string): string {
 		})
 		.join("")
 		.trim();
+}
+
+function playMacOSSound(pi: ExtensionAPI): void {
+	if (process.platform !== "darwin") return;
+
+	pi.exec("afplay", [MACOS_SOUND], { timeout: 2000 }).catch(() => undefined);
 }
 
 export default function attentionExtension(pi: ExtensionAPI): void {
@@ -39,10 +46,14 @@ export default function attentionExtension(pi: ExtensionAPI): void {
 		) {
 			pi.exec("cmux", ["notify", "--title", title, "--body", body], { timeout: 2000 })
 				.then((result) => {
-					if (result.code !== 0) process.stdout.write(osc777);
+					if (result.code !== 0) {
+						process.stdout.write(osc777);
+						playMacOSSound(pi);
+					}
 				})
 				.catch(() => {
 					process.stdout.write(osc777);
+					playMacOSSound(pi);
 				});
 			return;
 		}
@@ -54,6 +65,7 @@ export default function attentionExtension(pi: ExtensionAPI): void {
 		}
 
 		process.stdout.write(osc777);
+		playMacOSSound(pi);
 	});
 
 	pi.on("agent_end", () => {

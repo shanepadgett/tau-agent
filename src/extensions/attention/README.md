@@ -7,7 +7,7 @@ Sends a terminal-driven attention notification when Tau is ready for input.
 - Emits an attention notification on `agent_end`.
 - Suppresses exactly one `agent_end` notification after `tau:posture.continuation_queued`, because a hidden continuation turn is about to start.
 - Listens for shared event `tau:attention` so extensions can request the same notification.
-- Prefers CMUX first-class notifications, then Kitty OSC 99, then OSC 777.
+- Uses the terminal or host OS notification path that best fits the current environment.
 
 Other code can call:
 
@@ -21,4 +21,4 @@ Both fields are optional. Defaults are `Tau` and `Ready for input`.
 
 - No configuration.
 - No Windows-specific support.
-- CMUX uses `cmux notify` when CMUX is detected, with OSC 777 fallback if the command fails.
+- Exact notification behavior depends on terminal and OS support.
