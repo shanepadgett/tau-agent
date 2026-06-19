@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { preview } from "../../shared/text.ts";
 import { browseIdeas } from "./browser.ts";
 import { addIdea } from "./store.ts";
 
@@ -11,7 +12,7 @@ export default function ideasExtension(pi: ExtensionAPI): void {
 			const text = args.trim();
 			if (text) {
 				const idea = await addIdea(ctx.cwd, text);
-				ctx.ui.notify(`Logged idea: ${preview(idea.text)}`, "info");
+				ctx.ui.notify(`Logged idea: ${preview(idea.text, 60)}`, "info");
 				return;
 			}
 
@@ -27,9 +28,4 @@ export default function ideasExtension(pi: ExtensionAPI): void {
 			}
 		},
 	});
-}
-
-function preview(text: string, max = 60): string {
-	const oneLine = text.replace(/\s+/g, " ").trim();
-	return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine;
 }

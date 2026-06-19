@@ -43,9 +43,6 @@ restored rather than leaving them to accumulate.
 
 - The stash keybinding and `/pop` browser are TUI-only; there is no print/JSON/
   RPC path (the whole point is interacting with the prompt editor mid-type).
-- The browser renders the full filtered list with no viewport windowing; very
-  large stores may overflow short terminals. Use search and `ctrl+d` to manage
-  size.
 - The store file lives in the repo. Gitignore `.pi/tau/stash.jsonl` (or `.pi/`)
   if you do not want stashed drafts committed or shared.
 - Mutations rewrite the whole file (atomic temp + rename); safe for single-user

@@ -38,9 +38,6 @@ work. This is the parking lot for them.
 
 ## Limits
 
-- The browser renders the full filtered list with no viewport windowing; very
-  large idea stores may overflow short terminals. Use search and `ctrl+d` to
-  manage size.
 - The store file lives in the repo. Gitignore `.pi/tau/ideas.jsonl` (or `.pi/`)
   if you do not want rough notes committed or shared.
 - Mutations rewrite the whole file (atomic temp + rename); safe for single-user

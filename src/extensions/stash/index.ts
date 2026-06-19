@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Key } from "@earendil-works/pi-tui";
+import { preview } from "../../shared/text.ts";
 import { browseStash } from "./browser.ts";
 import { addStash, removeStash } from "./store.ts";
 
@@ -27,7 +28,7 @@ export default function stashExtension(pi: ExtensionAPI): void {
 			}
 
 			_ctx.ui.setEditorText("");
-			_ctx.ui.notify(`Stashed: ${preview(stash.text)}`, "info");
+			_ctx.ui.notify(`Stashed: ${preview(stash.text, 60)}`, "info");
 		},
 	});
 
@@ -51,9 +52,4 @@ export default function stashExtension(pi: ExtensionAPI): void {
 			ctx.ui.notify("Popped into the editor — edit and submit.", "info");
 		},
 	});
-}
-
-function preview(text: string, max = 60): string {
-	const oneLine = text.replace(/\s+/g, " ").trim();
-	return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine;
 }
