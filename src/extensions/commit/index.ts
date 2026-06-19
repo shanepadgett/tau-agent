@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Api, complete, type Message, type Model, type ThinkingLevel } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext, SessionEntry } from "@earendil-works/pi-coding-agent";
-import { createGitRunner, type GitRunner } from "../../shared/git.ts";
+import { createGitRunner, type GitRunner, loadRepoStatus, STAGED_PATCH_DIFF_ARGS } from "../../shared/git.ts";
 import { loadTauExtensionSettings, updateTauExtensionSettings } from "../../shared/settings/load.ts";
 import commitSettings from "./settings.ts";
 
@@ -64,18 +64,17 @@ export default function commitExtension(pi: ExtensionAPI): void {
 
 			try {
 				const git = createGitRunner(pi, ctx);
-				const root = await git.run(["rev-parse", "--show-toplevel"], { optional: true });
-				if (!root) {
+				const repo = await loadRepoStatus(git);
+				if (!repo) {
 					ctx.ui.notify("No git repository found.", "info");
 					return;
 				}
-
-				const status = await git.run(["status", "--porcelain=v1", "--untracked-files=all"], { cwd: root });
-				if (!status) {
+				if (repo.fileCount === 0) {
 					ctx.ui.notify("No uncommitted changes detected.", "info");
 					return;
 				}
-				const changedFiles = status.split("\n").filter(Boolean).length;
+				const root = repo.root;
+				const changedFiles = repo.fileCount;
 
 				// Stage everything up front so a single `git diff --cached` is the
 				// complete, uniform picture: tracked edits and new files alike, with
@@ -134,7 +133,7 @@ export default function commitExtension(pi: ExtensionAPI): void {
 async function collectEvidence(git: GitRunner, cwd: string, entries: readonly SessionEntry[]): Promise<CommitEvidence> {
 	const [recentSubjects, diff] = await Promise.all([
 		git.run(["log", "-12", "--pretty=format:%s"], { cwd, optional: true }),
-		git.run(["diff", "--cached", "--stat", "--patch", "--no-color", "--no-ext-diff"], { cwd, optional: true }),
+		git.run([...STAGED_PATCH_DIFF_ARGS], { cwd, optional: true }),
 	]);
 	return { recentSubjects, diff, intent: collectIntent(entries) };
 }
@@ -198,7 +197,7 @@ function buildPrompt(evidence: CommitEvidence): string {
 		intent,
 		"",
 		"Staged changes:",
-		(evidence.diff || "(none)").slice(0, MAX_DIFF_CHARS),
+		truncAt(evidence.diff || "(none)", MAX_DIFF_CHARS),
 	].join("\n");
 }
 
@@ -272,6 +271,10 @@ async function requestMessage(
 
 	const text = response.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
 	return validateMessage(cleanMessage(text));
+}
+
+function truncAt(text: string, cap: number): string {
+	return text.length > cap ? `${text.slice(0, cap)}\n(truncated)` : text;
 }
 
 function cleanMessage(rawMessage: string): string {

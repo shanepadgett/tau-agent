@@ -1,4 +1,4 @@
-import { resolve, sep } from "node:path";
+import { basename, resolve, sep } from "node:path";
 import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type {
@@ -11,8 +11,11 @@ import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import { type AutocompleteItem, Key } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { setTauFooterItem } from "../../shared/events.ts";
+import { createGitRunner, loadRepoStatus, STAGED_PATCH_DIFF_ARGS } from "../../shared/git.ts";
 
 const POSTURE_STATE_TYPE = "tau.posture";
+const REVIEW_EVIDENCE_TYPE = "tau.review.evidence";
+const MAX_REVIEW_DIFF_CHARS = 80_000;
 const DEFAULT_POSTURE = "act";
 const POSTURE_ORDER = ["plan", "act", "review", "debug"] as const;
 const SWITCH_POSTURE_TOOL = "switch_posture";
@@ -281,6 +284,11 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 					return;
 				}
 
+				if (name === "review") {
+					await runReviewCommand(args, ctx);
+					return;
+				}
+
 				await runPostureCommand(name, commandPrompt(args), ctx);
 			},
 		});
@@ -331,6 +339,16 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 		await ctx.waitForIdle();
 		await applyPosture(name, ctx);
 		if (prompt) pi.sendUserMessage(prompt);
+	}
+
+	async function runReviewCommand(args: string, ctx: ExtensionCommandContext): Promise<void> {
+		const focus = commandPrompt(args);
+		const wantNewChat = ctx.hasUI && (await ctx.ui.confirm("Review", "Review in a new chat?"));
+		if (!wantNewChat) {
+			await runPostureCommand("review", focus, ctx);
+			return;
+		}
+		await startReviewInNewChat(pi, ctx, focus);
 	}
 
 	function runOneShotCommand(ctx: ExtensionCommandContext, type: string, prompt: string): void {
@@ -468,6 +486,89 @@ function buildDebtPrompt(focus: string | undefined): string {
 		"End with: <N> markers, <M> no-trigger, <W> weak.",
 		"If none: No lean debt. Clean ledger.",
 	].join("\n\n");
+}
+
+interface ReviewEvidenceParts {
+	root: string;
+	branch: string;
+	fileCount: number;
+	statPatch: string;
+}
+
+async function startReviewInNewChat(
+	pi: ExtensionAPI,
+	ctx: ExtensionCommandContext,
+	focus: string | undefined,
+): Promise<void> {
+	ctx.ui.setStatus("review", "gathering review evidence");
+
+	let evidence: string | undefined;
+	try {
+		evidence = await gatherReviewEvidence(pi, ctx);
+	} catch (error) {
+		ctx.ui.notify(`Review cancelled: ${errorText(error)}`, "error");
+		return;
+	} finally {
+		ctx.ui.setStatus("review", undefined);
+	}
+	if (!evidence) return;
+
+	const kickoff = focus ? `Review the injected diff. Focus: ${focus}` : "Review the injected diff.";
+
+	await ctx.newSession({
+		setup: async (sm) => {
+			sm.appendCustomEntry(POSTURE_STATE_TYPE, { name: "review" });
+			sm.appendCustomMessageEntry(REVIEW_EVIDENCE_TYPE, evidence, false);
+		},
+		withSession: async (newCtx) => {
+			await newCtx.sendUserMessage(kickoff);
+		},
+	});
+}
+
+async function gatherReviewEvidence(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<string | undefined> {
+	const git = createGitRunner(pi, ctx);
+	const repo = await loadRepoStatus(git);
+	if (!repo) {
+		ctx.ui.notify("No git repository found.", "info");
+		return undefined;
+	}
+	if (repo.fileCount === 0) {
+		ctx.ui.notify("No uncommitted changes detected.", "info");
+		return undefined;
+	}
+	const root = repo.root;
+
+	// Staging up front makes `git diff --cached` the complete picture: tracked
+	// edits and untracked files alike. This leaves changes staged in the repo;
+	// see README. No working-tree mutation.
+	await git.run(["add", "-A"], { cwd: root });
+
+	const [statPatch, branch] = await Promise.all([
+		git.run([...STAGED_PATCH_DIFF_ARGS], { cwd: root, optional: true }),
+		git.run(["branch", "--show-current"], { cwd: root, optional: true }),
+	]);
+
+	return formatReviewEvidence({ root, branch, fileCount: repo.fileCount, statPatch });
+}
+
+function formatReviewEvidence(parts: ReviewEvidenceParts): string {
+	const raw = parts.statPatch || "(none)";
+	const patch = raw.length > MAX_REVIEW_DIFF_CHARS ? `${raw.slice(0, MAX_REVIEW_DIFF_CHARS)}\n(truncated)` : raw;
+	return [
+		"<tau_review_evidence>",
+		`Repo: ${basename(parts.root)}`,
+		`Branch: ${parts.branch || "(detached)"}`,
+		`Changes: ${parts.fileCount} file(s)`,
+		"",
+		"Staged diff vs HEAD (all changes including untracked):",
+		patch,
+		"</tau_review_evidence>",
+	].join("\n");
+}
+
+function errorText(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
 }
 
 function isPostureName(value: string): value is PostureName {
