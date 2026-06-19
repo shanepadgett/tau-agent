@@ -12,6 +12,21 @@
 		"extensions": {
 			"type": "object",
 			"properties": {
+				"commit": {
+					"type": "object",
+					"properties": {
+						"cooldowns": {
+							"type": "object",
+							"patternProperties": {
+								"^.*$": {
+									"type": "number",
+									"description": "Unix epoch milliseconds when the provider becomes available again."
+								}
+							}
+						}
+					},
+					"additionalProperties": false
+				},
 				"footer": {
 					"type": "object",
 					"properties": {

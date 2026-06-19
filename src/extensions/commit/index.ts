@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { type Api, complete, type Message, type Model, type ThinkingLevel } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { createGitRunner, type GitRunner } from "../../shared/git.ts";
+import { loadTauExtensionSettings, updateTauExtensionSettings } from "../../shared/settings/load.ts";
+import commitSettings from "./settings.ts";
 
 const COMMIT_TIMEOUT_MS = 120_000;
 const PUSH_TIMEOUT_MS = 120_000;
@@ -82,7 +84,8 @@ export default function commitExtension(pi: ExtensionAPI): void {
 				await git.run(["add", "-A"], { cwd: root });
 
 				const evidence = await collectEvidence(git, root, ctx.sessionManager.getBranch());
-				const candidates = await resolveCandidates(ctx);
+				const settings = await loadTauExtensionSettings(ctx, commitSettings);
+				const candidates = await resolveCandidates(ctx, settings);
 				const generated = await generateMessage(ctx, candidates, buildPrompt(evidence));
 
 				const edited = ctx.hasUI ? await ctx.ui.editor("Edit commit message", generated) : generated;
@@ -199,11 +202,16 @@ function buildPrompt(evidence: CommitEvidence): string {
 	].join("\n");
 }
 
-async function resolveCandidates(ctx: ExtensionCommandContext): Promise<CommitCandidate[]> {
+async function resolveCandidates(
+	ctx: ExtensionCommandContext,
+	settings: typeof commitSettings.defaults,
+): Promise<CommitCandidate[]> {
 	const candidates: CommitCandidate[] = [];
 	const seen = new Set<string>();
+	const blocked = currentBlockedProviders(settings.cooldowns ?? {});
 
 	const add = async (model: Model<Api>, reasoning: ThinkingLevel | undefined): Promise<void> => {
+		if (blocked.has(model.provider)) return;
 		const key = `${model.provider}/${model.id}`;
 		if (seen.has(key)) return;
 
@@ -239,6 +247,7 @@ async function generateMessage(
 			return await requestMessage(ctx, candidate, prompt);
 		} catch (error) {
 			if (ctx.signal?.aborted) throw new Error("Commit cancelled.");
+			await markProviderUnavailable(ctx, candidate.model.provider);
 			failures.push(`- ${label}: ${errorText(error)}`);
 		}
 	}
@@ -309,4 +318,37 @@ async function commitStaged(git: GitRunner, cwd: string, message: string): Promi
 
 function errorText(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
+}
+
+const SEVEN_DAYS_MS = 604_800_000;
+
+// Providers whose cooldown is still in the future. Failure mode is typically
+// quota exhaustion, which is keyed on the provider rather than the specific
+// model, so every model under a downed provider is skipped.
+function currentBlockedProviders(cooldowns: Record<string, number>): Set<string> {
+	const now = Date.now();
+	const blocked = new Set<string>();
+	for (const [provider, availableAt] of Object.entries(cooldowns)) {
+		if (availableAt > now) blocked.add(provider);
+	}
+	return blocked;
+}
+
+// GitHub Copilot's premium quota refreshes on the first calendar day of the
+// next month (local time); the cooldown rides that boundary instead of a fixed
+// offset. Other providers get a one-week window.
+async function markProviderUnavailable(ctx: ExtensionCommandContext, provider: string): Promise<void> {
+	const until = provider === "github-copilot" ? nextMonthStartMs() : Date.now() + SEVEN_DAYS_MS;
+	await updateTauExtensionSettings("global", ctx, commitSettings, (current) => {
+		const cooldowns: Record<string, number> = { ...(current.cooldowns ?? {}) };
+		cooldowns[provider] = until;
+		return { ...current, cooldowns };
+	});
+}
+
+function nextMonthStartMs(): number {
+	const next = new Date();
+	next.setMonth(next.getMonth() + 1, 1);
+	next.setHours(0, 0, 0, 0);
+	return next.getTime();
 }
