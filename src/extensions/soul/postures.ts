@@ -61,7 +61,8 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 - Treat the plan file as the planning surface: record decisions, steps, files, risks, checks, and open questions there.
 - Keep chat short after a plan file exists: point to it, ask for review/feedback, then edit the file as decisions change.
 - Ask for go-ahead before implementation.
-- When switching from plan to act for implementation, state the brief plan and wait for explicit go-ahead before using switch_posture unless the user already gave it.`,
+- Plan posture cannot implement. Before any code/config/doc edit outside ${PLAN_WRITE_DIR}/, briefly state the plan, get explicit go-ahead unless already given, then call switch_posture with posture=act.
+- Do not try write or edit for implementation while still in plan posture. Switch first; failed write/edit calls waste the turn.`,
 	},
 	act: {
 		label: "Act",
@@ -128,7 +129,7 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 		promptSnippet: "Request a posture switch when the user's latest intent fits another posture.",
 		promptGuidelines: [
 			"Use switch_posture before doing work when the user's latest intent clearly fits another Lyle posture.",
-			"Use switch_posture with posture=act when in plan posture and the user asks to implement, edit, or change files only after briefly stating the plan and getting explicit go-ahead, unless go-ahead was already given.",
+			"Use switch_posture with posture=act when in plan posture and the user asks to implement, edit, or change files. Briefly state the plan and get explicit go-ahead first unless go-ahead was already given. Do not call write/edit for implementation before switching.",
 			"Use switch_posture with posture=plan when not in plan posture and the user asks to plan, design, explore, or discuss an edit/feature before implementation.",
 			"Use switch_posture with posture=review when the user asks to review, audit, critique, or find problems.",
 			"Use switch_posture with posture=debug when the user reports a bug, failure, error, broken behavior, or asks to reproduce/isolate/fix a failure.",

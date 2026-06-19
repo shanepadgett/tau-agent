@@ -1,10 +1,8 @@
 # Soul
 
-Always-on prompt replacement for Tau. This is Lyle: base identity plus current posture.
+Soul is Tau's always-on Lyle prompt extension. It replaces Pi's default system prompt with Lyle's identity, project guidance, available tools, skill metadata, runtime context, and the current posture.
 
-Soul rebuilds Pi's system prompt from `systemPromptOptions`: Lyle identity first, then Pi tool/guideline/docs sections, user prompt additions, project context, skill metadata, current posture, and runtime date/cwd last.
-
-Disable it with Tau settings:
+Disable it in Tau settings:
 
 ```json
 {
@@ -14,16 +12,22 @@ Disable it with Tau settings:
 }
 ```
 
-Takes effect on session start. When disabled, Soul skips prompt replacement, posture switching, posture tool/thinking changes, and clears the posture footer item.
+Takes effect on session start.
 
 ## Postures
 
+Soul has four postures:
+
+- `act`: focused implementation. Default for new sessions.
+- `plan`: read-only exploration and planning. May write/edit plan files under `docs/plans/` only.
+- `review`: complexity/stability review unless edits are requested.
+- `debug`: reproduce, isolate, and fix failures.
+
+Commands:
+
 ```text
 /posture
-/posture plan
-/posture act
-/posture review
-/posture debug
+/posture <plan|act|review|debug>
 /plan [prompt]
 /act [prompt]
 /review [prompt]
@@ -32,56 +36,21 @@ Takes effect on session start. When disabled, Soul skips prompt replacement, pos
 /debt [focus]
 ```
 
-Shortcut: `Ctrl+Shift+M` cycles postures. New sessions default to `act`.
-After `/new`, Tau asks for posture once when no posture has been selected in that session. Reload does not show the picker.
+Shortcut: `Ctrl+Shift+M` cycles postures.
 
-Posture shortcut commands switch posture. With trailing text, Tau switches first and submits that text in the new posture.
+In plan posture, implementation writes/edits outside `docs/plans/` require switching to act first. The agent should briefly state the plan, wait for explicit go-ahead unless already given, then call `switch_posture` with `posture=act` before using write/edit tools.
 
-`/review` asks whether to review in a new chat. Choose yes and Tau next asks which model to use, listing all authenticated models (`modelRegistry.getAvailable()`). The current model is listed first; type to filter. Pick a model and it becomes the default for the new chat (and the global default going forward); Escape or Enter on the current model keeps it. With one or no authenticated models, or without a TUI, the picker is skipped. Tau then stages all changes (`git add -A`), gathers the cached diff plus branch and file count, opens a fresh session with review posture restored and the diff injected as a hidden context message, and kicks off the review. `/review <prompt>` folds the prompt in as a `Focus:` line. Choose no, or run without a TUI, and `/review` keeps its current behavior: switch to review posture and optionally submit trailing text.
+## Review helpers
 
-Staging caveat: the new-chat path runs `git add -A`, so it leaves all changes staged in the original repo. It does not modify the working tree, but it clobbers any intentional partial staging (`git reset` to undo). It does not auto-restore the prior index state.
+`/review` can run in the current chat or a new chat. The new-chat path gathers the current diff and opens review posture with that evidence injected. It may stage changes to build the diff, so avoid it if you need to preserve partial staging.
 
-The `switch_posture` tool lets the agent ask to change posture when the user's latest intent clearly fits another posture. In plan posture, the agent should briefly state the implementation plan and wait for explicit go-ahead before switching to act, unless go-ahead was already given. Approved switches emit `tau:posture.continuation_queued`, queue a hidden continuation, and trigger a small follow-up turn so Soul rebuilds with the new posture guidance and tool set. Denied switches prompt for an optional reason that is returned to the agent in the tool result.
+`/audit` runs a repo-wide avoidable-complexity audit for one turn.
 
-`/audit` and `/debt` are one-shot prompts. They borrow review posture for that turn but do not persist it.
+`/debt` harvests `lean:` shortcut markers for one turn.
 
-No `/mode` command.
+## Notes
 
-## Behavior
-
-- Keeps the current model selected when switching postures.
-- Sets thinking level by posture: `act` uses `medium`; `plan`, `review`, and `debug` use `xhigh`.
-- Builds posture guidance into soul's prompt; no second prompt appender.
-- Shows current posture as plain muted text in the footer when enabled.
+- Keeps the selected model when switching postures.
+- Shows current posture in the footer.
 - Persists selected posture as `tau.posture`.
-- `plan` snapshots current tools and switches to read/search tools plus `write`/`edit` for `docs/plans/` only. Leaving `plan` restores the snapshot.
-- Keeps `switch_posture` available in every posture so the agent can request the right posture before doing mismatched work.
-
-## Thinking levels
-
-Posture changes do not change the selected model.
-
-- `plan`: `xhigh`
-- `act`: `medium`
-- `review`: `xhigh`
-- `debug`: `xhigh`
-
-## Posture meanings
-
-- `plan`: read-only exploration and numbered plans; may write/edit plan files under `docs/plans/` only.
-- `act`: focused implementation.
-- `review`: complexity/stability findings unless edits are requested.
-- `debug`: reproduce, isolate, smallest causal fix; simplify the failing path when directly related.
-
-## One-shot commands
-
-- `/audit [focus]`: repo-wide over-engineering/avoidable-complexity audit, ranked biggest cut first.
-- `/debt [focus]`: harvest `lean:` shortcut markers into a report.
-
-## Limits
-
-- No config-driven postures.
-- No CLI flag.
-- No shared event.
-- No bash allowlist in plan posture; plan excludes `bash` instead.
-- Plan posture write/edit access is hard-blocked outside `docs/plans/`.
+- When disabled, Soul skips prompt replacement and posture behavior.
