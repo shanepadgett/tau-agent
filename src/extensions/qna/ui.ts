@@ -25,6 +25,7 @@ import {
 	optionCount,
 	type QnaResult,
 	type QnaState,
+	saveAdditionalContext,
 	saveCustomAnswer,
 	saveInputAnswer,
 	saveOptionNote,
@@ -51,6 +52,7 @@ class QnaComponent implements Component, Focusable {
 	private readonly editor: Editor;
 	private readonly customEditor: Editor;
 	private readonly inputs = new Map<string, Input>();
+	private readonly additionalContextInput = new Input();
 	private state: QnaState;
 	private mode: ViewMode = "navigate";
 	private noteTarget?: { questionId: string; value: string };
@@ -75,6 +77,7 @@ class QnaComponent implements Component, Focusable {
 		this._focused = value;
 		this.editor.focused = value;
 		this.customEditor.focused = value;
+		this.additionalContextInput.focused = value;
 		for (const input of this.inputs.values()) input.focused = value;
 	}
 
@@ -113,6 +116,11 @@ class QnaComponent implements Component, Focusable {
 		if (matchesKey(data, Key.shift("tab")) || matchesKey(data, Key.left)) {
 			this.state = moveTab(this.state, -1);
 			this.refresh();
+			return;
+		}
+
+		if (this.isAdditionalContextActive()) {
+			this.handleAdditionalContextInput(data);
 			return;
 		}
 
@@ -164,10 +172,8 @@ class QnaComponent implements Component, Focusable {
 		lines.push(this.theme.fg("border", "─".repeat(renderWidth)));
 		lines.push(truncateToWidth(this.theme.bold(`qna: ${this.state.title || "Question"}`), renderWidth, ""));
 		lines.push("");
-		if (this.state.questions.length > 1) {
-			lines.push(this.renderTabs(renderWidth));
-			lines.push("");
-		}
+		lines.push(this.renderTabs(renderWidth));
+		lines.push("");
 		lines.push(...this.renderQuestion(renderWidth));
 		lines.push("");
 		lines.push(...this.footer(renderWidth));
@@ -178,17 +184,26 @@ class QnaComponent implements Component, Focusable {
 	invalidate(): void {}
 
 	private renderTabs(width: number): string {
-		const tabs = this.state.questions.map((question, index) => {
-			const label = `${question.label}${isAnswered(this.state, question) ? "•" : ""}`;
-			const text = `[${label}]`;
-			return {
-				width: visibleWidth(text),
-				render:
-					index === this.state.activeTab
-						? this.theme.fg("accent", this.theme.bold(text))
-						: this.theme.fg("muted", text),
-			};
-		});
+		const contextText = `[Additional Context${this.state.additionalContext ? "•" : ""}]`;
+		const tabs = [
+			...this.state.questions.map((question, index) => {
+				const label = `${question.label}${isAnswered(this.state, question) ? "•" : ""}`;
+				const text = `[${label}]`;
+				return {
+					width: visibleWidth(text),
+					render:
+						index === this.state.activeTab
+							? this.theme.fg("accent", this.theme.bold(text))
+							: this.theme.fg("muted", text),
+				};
+			}),
+			{
+				width: visibleWidth(contextText),
+				render: this.isAdditionalContextActive()
+					? this.theme.fg("accent", this.theme.bold(contextText))
+					: this.theme.fg("muted", contextText),
+			},
+		];
 
 		const totalWidth = tabs.reduce((sum, tab) => sum + tab.width, 0) + Math.max(0, tabs.length - 1);
 		if (totalWidth <= width) return truncateToWidth(tabs.map((tab) => tab.render).join(" "), width, "");
@@ -210,6 +225,8 @@ class QnaComponent implements Component, Focusable {
 	}
 
 	private renderQuestion(width: number): string[] {
+		if (this.isAdditionalContextActive()) return this.renderAdditionalContext(width);
+
 		const question = activeQuestion(this.state);
 		if (!question) return [];
 		const lines: string[] = [];
@@ -231,6 +248,14 @@ class QnaComponent implements Component, Focusable {
 		return this.getQuestionInput(question)
 			.render(width)
 			.map((line) => truncateToWidth(line, width, ""));
+	}
+
+	private renderAdditionalContext(width: number): string[] {
+		return [
+			...wrapTextWithAnsi("Any additional context for the agent? Optional.", width),
+			"",
+			...this.additionalContextInput.render(width).map((line) => truncateToWidth(line, width, "")),
+		];
 	}
 
 	private renderOptions(question: NormalizedQuestion, width: number): string[] {
@@ -335,12 +360,25 @@ class QnaComponent implements Component, Focusable {
 				? "Enter save • esc cancel edit"
 				: this.mode === "note"
 					? "Enter save • esc cancel note"
-					: question?.kind === "input"
-						? "type answer • enter next/submit • tab/←→ question • ctrl+s submit • ctrl+c abort"
-						: question?.kind === "multi"
-							? "↑↓ move • space toggle • enter next/submit • n note • tab/←→ question • ctrl+s submit • ctrl+c abort"
-							: "↑↓ move • enter choose/submit • n note • tab/←→ question • ctrl+s submit • ctrl+c abort";
+					: this.isAdditionalContextActive()
+						? "type context • enter submit • tab/←→ question • ctrl+s submit • ctrl+c abort"
+						: question?.kind === "input"
+							? "type answer • enter next/submit • tab/←→ question • ctrl+s submit • ctrl+c abort"
+							: question?.kind === "multi"
+								? "↑↓ move • space toggle • enter next/submit • n note • tab/←→ question • ctrl+s submit • ctrl+c abort"
+								: "↑↓ move • enter choose/submit • n note • tab/←→ question • ctrl+s submit • ctrl+c abort";
 		return wrapTextWithAnsi(this.theme.fg("dim", text), width);
+	}
+
+	private handleAdditionalContextInput(data: string): void {
+		if (matchesKey(data, Key.enter)) {
+			this.state = saveAdditionalContext(this.state, this.additionalContextInput.getValue());
+			this.done(buildResult(this.state));
+			return;
+		}
+		this.additionalContextInput.handleInput(data);
+		this.state = saveAdditionalContext(this.state, this.additionalContextInput.getValue());
+		this.refresh();
 	}
 
 	private handleQuestionInput(data: string, question: NormalizedQuestion): void {
@@ -438,7 +476,7 @@ class QnaComponent implements Component, Focusable {
 	}
 
 	private advance(): void {
-		if (this.state.activeTab < this.state.questions.length - 1) {
+		if (this.state.activeTab < this.state.questions.length) {
 			this.state = moveTab(this.state, 1);
 			this.refresh();
 			return;
@@ -457,6 +495,10 @@ class QnaComponent implements Component, Focusable {
 		input.focused = this._focused;
 		this.inputs.set(question.id, input);
 		return input;
+	}
+
+	private isAdditionalContextActive(): boolean {
+		return this.state.activeTab === this.state.questions.length;
 	}
 
 	private isCustomActive(question: NormalizedQuestion): boolean {

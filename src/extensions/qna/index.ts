@@ -48,6 +48,7 @@ Do not blindly copy your previous wording or options. Reframe the question if ne
 - ground the reframed question in existing context; inspect repo or docs first only when current context is not enough
 - use select for one choice, multi for combinable choices, confirm for yes/no, input when choices would be fake
 - include recommendation only when you have a real one, with honest tradeoff reason
+- do not include a catch-all additional-context question; the UI always provides a final optional Additional Context tab
 - do not answer the question yourself
 - if there is no question to re-ask, say so without using tools`;
 
@@ -80,6 +81,7 @@ const askQuestionTool = defineTool<typeof askQuestionParamsSchema, QnaResult>({
 		"ask_question recommendation reason must explain tradeoff honestly. Do not manipulate user toward fake-obvious answer.",
 		"Use ask_question multi-select only when combining options is valid. Use select for one path. Use confirm for yes/no. Use input when choices would be fake; include an input recommendation only when you have a real suggested answer.",
 		"Ask fewest questions that unblock work. Prefer 1-3 focused questions. No surveys.",
+		"Do not add catch-all or additional-context questions; the UI always provides a final optional Additional Context tab.",
 	],
 	parameters: askQuestionParamsSchema,
 	executionMode: "sequential",
@@ -233,9 +235,14 @@ export default function qnaExtension(pi: ExtensionAPI): void {
 }
 
 function formatResult(result: QnaResult, formatLabel: (text: string) => string = (text) => text): string {
-	return `\n${Object.values(result.answers)
-		.map((answer, index) => formatAnswer(answer, index, formatLabel))
-		.join("\n\n")}`;
+	const sections = [
+		Object.values(result.answers)
+			.map((answer, index) => formatAnswer(answer, index, formatLabel))
+			.join("\n\n"),
+	];
+	const additionalContext = result.additionalContext?.trim();
+	if (additionalContext) sections.push(`${formatLabel("Additional context:")}\n${additionalContext}`);
+	return `\n${sections.join("\n\n")}`;
 }
 
 function formatAnswer(

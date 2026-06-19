@@ -25,17 +25,20 @@ Use only when missing user intent, preference, or constraint would materially ch
 
 Selectable questions require real options, recommendation values, and an honest recommendation reason. User can add notes to real options.
 
+Every panel includes a final user-owned `Additional Context` tab. It is not part of the tool schema. Non-empty text returns as top-level `additionalContext`.
+
 ## UI
 
-- Answered question tabs get a `•` suffix. Tabs are hidden for single-question panels.
+- Question tabs get a `•` suffix when answered. The final `Additional Context` tab gets `•` when it has text.
+- The final `Additional Context` tab is always present and uses Pi's native single-line input.
 - `select` and `confirm` render as pointer lists, with `✓` on the selected answer.
 - `multi` renders checkboxes.
 - `input` uses Pi's native single-line input.
 - Custom answers edit inline: move to "Type your own answer..." and type.
 - Notes render under option descriptions with `└─`.
-- `tab`/`←→` moves between questions.
-- `enter` advances and submits from the last question. `ctrl+s` submits anytime; unanswered questions are skipped.
-- Results render as a Markdown-style numbered question/answer list.
+- `tab`/`←→` moves between questions and additional context.
+- `enter` advances through questions and submits from additional context. `ctrl+s` submits anytime; unanswered questions are skipped.
+- Results render as a Markdown-style numbered question/answer list, plus an additional context section when supplied.
 
 ## Layout
 

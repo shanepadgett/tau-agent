@@ -46,6 +46,7 @@ export interface QnaState {
 	activeTab: number;
 	activeOption: number;
 	answers: Record<string, AnswerState>;
+	additionalContext: string;
 }
 
 export interface QnaAnswerResult {
@@ -61,6 +62,7 @@ export interface QnaAnswerResult {
 
 export interface QnaResult {
 	answers: Record<string, QnaAnswerResult>;
+	additionalContext?: string;
 }
 
 const confirmOptions: QnaOption[] = [
@@ -106,6 +108,7 @@ export function createState(title: string | undefined, questions: NormalizedQues
 		activeTab: 0,
 		activeOption: 0,
 		answers: Object.fromEntries(questions.map((question) => [question.id, { selected: [], notes: {} }])),
+		additionalContext: "",
 	};
 }
 
@@ -122,7 +125,7 @@ export function hasCustom(question: NormalizedQuestion): boolean {
 }
 
 export function moveTab(state: QnaState, direction: 1 | -1): QnaState {
-	const tabCount = state.questions.length;
+	const tabCount = state.questions.length + 1;
 	return { ...state, activeTab: (state.activeTab + direction + tabCount) % tabCount, activeOption: 0 };
 }
 
@@ -157,6 +160,10 @@ export function saveInputAnswer(state: QnaState, question: NormalizedQuestion, v
 	return putAnswer(state, question.id, { ...getAnswer(state, question.id), input: clean(value) });
 }
 
+export function saveAdditionalContext(state: QnaState, value: string): QnaState {
+	return { ...state, additionalContext: clean(value) };
+}
+
 export function saveOptionNote(state: QnaState, question: NormalizedQuestion, value: string, note: string): QnaState {
 	const answer = getAnswer(state, question.id);
 	const notes = { ...answer.notes };
@@ -175,9 +182,11 @@ export function isAnswered(state: QnaState, question: NormalizedQuestion): boole
 }
 
 export function buildResult(state: QnaState): QnaResult {
-	return {
-		answers: Object.fromEntries(state.questions.map((question) => [question.id, buildAnswer(state, question)])),
-	};
+	const answers = Object.fromEntries(
+		state.questions.map((question) => [question.id, buildAnswer(state, question)]),
+	);
+	const additionalContext = clean(state.additionalContext);
+	return additionalContext ? { answers, additionalContext } : { answers };
 }
 
 export function getAnswer(state: QnaState, questionId: string): AnswerState {
