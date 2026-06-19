@@ -49,8 +49,12 @@ export async function browseIdeas(ctx: ExtensionCommandContext): Promise<Idea | 
 	}
 }
 
-async function show(ctx: ExtensionCommandContext, ideas: readonly Idea[], path: string): Promise<SearchListResult> {
-	return ctx.ui.custom<SearchListResult>(
+async function show(
+	ctx: ExtensionCommandContext,
+	ideas: readonly Idea[],
+	path: string,
+): Promise<SearchListResult<Idea>> {
+	return ctx.ui.custom<SearchListResult<Idea>>(
 		(tui, theme, _keybindings, done) => new SearchList(tui, theme, ideas, { ...CONFIG, path }, done),
 	);
 }

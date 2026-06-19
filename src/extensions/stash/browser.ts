@@ -34,8 +34,12 @@ export async function browseStash(ctx: ExtensionCommandContext): Promise<Stash |
 	}
 }
 
-async function show(ctx: ExtensionCommandContext, stashes: readonly Stash[], path: string): Promise<SearchListResult> {
-	return ctx.ui.custom<SearchListResult>(
+async function show(
+	ctx: ExtensionCommandContext,
+	stashes: readonly Stash[],
+	path: string,
+): Promise<SearchListResult<Stash>> {
+	return ctx.ui.custom<SearchListResult<Stash>>(
 		(tui, theme, _keybindings, done) => new SearchList(tui, theme, stashes, { ...CONFIG, path }, done),
 	);
 }

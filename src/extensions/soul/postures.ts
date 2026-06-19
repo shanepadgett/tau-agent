@@ -1,5 +1,5 @@
 import { basename, resolve, sep } from "node:path";
-import type { ThinkingLevel } from "@earendil-works/pi-ai";
+import type { Api, Model, ThinkingLevel } from "@earendil-works/pi-ai";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type {
 	ExtensionAPI,
@@ -12,6 +12,12 @@ import { type AutocompleteItem, Key } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { emitTauEvent, setTauFooterItem } from "../../shared/events.ts";
 import { createGitRunner, loadRepoStatus, STAGED_PATCH_DIFF_ARGS } from "../../shared/git.ts";
+import {
+	SearchList,
+	type SearchListConfig,
+	type SearchListItem,
+	type SearchListResult,
+} from "../../shared/tui/search-list.ts";
 
 const POSTURE_STATE_TYPE = "tau.posture";
 const REVIEW_EVIDENCE_TYPE = "tau.review.evidence";
@@ -350,7 +356,8 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 			await runPostureCommand("review", focus, ctx);
 			return;
 		}
-		await startReviewInNewChat(pi, ctx, focus);
+		const chosen = await pickReviewModel(ctx);
+		await startReviewInNewChat(pi, ctx, focus, chosen);
 	}
 
 	function runOneShotCommand(ctx: ExtensionCommandContext, type: string, prompt: string): void {
@@ -497,10 +504,56 @@ interface ReviewEvidenceParts {
 	statPatch: string;
 }
 
+const REVIEW_MODEL_PICKER_CONFIG: Omit<SearchListConfig, "path"> = {
+	title: "Model for review chat",
+	emptyMessage: "No models match. Esc to keep the current model.",
+	primaryLabel: "use",
+	actions: [],
+};
+
+async function pickReviewModel(ctx: ExtensionCommandContext): Promise<Model<Api> | undefined> {
+	// Only the TUI supports custom components; elsewhere skip the picker.
+	if (ctx.mode !== "tui" || !ctx.hasUI) return undefined;
+
+	const available = ctx.modelRegistry.getAvailable();
+	if (available.length <= 1) return undefined;
+
+	const current = ctx.model;
+
+	const currentId = current ? modelKey(current) : undefined;
+	const ordered = current ? [current, ...available.filter((model) => modelKey(model) !== currentId)] : available;
+
+	const items: SearchListItem[] = ordered.map((model) => ({
+		id: modelKey(model),
+		text: formatModelLabel(model),
+	}));
+
+	const result = await ctx.ui.custom<SearchListResult>(
+		(tui, theme, _keybindings, done) => new SearchList(tui, theme, items, REVIEW_MODEL_PICKER_CONFIG, done),
+	);
+
+	if (result.kind !== "primary") return undefined;
+
+	const chosenId = result.item.id;
+	if (chosenId === currentId) return undefined;
+	return ordered.find((model) => modelKey(model) === chosenId);
+}
+
+function modelKey(model: Model<Api>): string {
+	return `${model.provider}/${model.id}`;
+}
+
+function formatModelLabel(model: Model<Api>): string {
+	return model.name && model.name !== model.id
+		? `${model.provider}/${model.name} (${model.id})`
+		: `${model.provider}/${model.id}`;
+}
+
 async function startReviewInNewChat(
 	pi: ExtensionAPI,
 	ctx: ExtensionCommandContext,
 	focus: string | undefined,
+	model: Model<Api> | undefined,
 ): Promise<void> {
 	ctx.ui.setStatus("review", "gathering review evidence");
 
@@ -514,6 +567,11 @@ async function startReviewInNewChat(
 		ctx.ui.setStatus("review", undefined);
 	}
 	if (!evidence) return;
+
+	if (model && !(await pi.setModel(model))) {
+		ctx.ui.notify(`Review cancelled: no auth for ${modelKey(model)}`, "error");
+		return;
+	}
 
 	const kickoff = focus ? `Review the injected diff. Focus: ${focus}` : "Review the injected diff.";
 

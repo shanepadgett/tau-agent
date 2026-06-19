@@ -22,7 +22,7 @@ import { formatAge, preview } from "../text.ts";
 export interface SearchListItem {
 	id: string;
 	text: string;
-	createdAt: number;
+	createdAt?: number;
 }
 
 export interface SearchListAction {
@@ -31,14 +31,14 @@ export interface SearchListAction {
 	label: string;
 }
 
-export type SearchListResult =
+export type SearchListResult<T extends SearchListItem = SearchListItem> =
 	| { kind: "cancel" }
-	| { kind: "primary"; item: SearchListItem }
-	| { kind: "action"; actionId: string; item: SearchListItem };
+	| { kind: "primary"; item: T }
+	| { kind: "action"; actionId: string; item: T };
 
 export interface SearchListConfig {
 	title: string;
-	path: string;
+	path?: string;
 	emptyMessage: string;
 	primaryLabel: string;
 	actions: readonly SearchListAction[];
@@ -46,12 +46,12 @@ export interface SearchListConfig {
 
 const MAX_VISIBLE = 12;
 
-export class SearchList implements Component, Focusable {
+export class SearchList<T extends SearchListItem = SearchListItem> implements Component, Focusable {
 	private readonly tui: TUI;
 	private readonly theme: Theme;
-	private readonly items: readonly SearchListItem[];
+	private readonly items: readonly T[];
 	private readonly config: SearchListConfig;
-	private readonly done: (result: SearchListResult) => void;
+	private readonly done: (result: SearchListResult<T>) => void;
 	private readonly search: Input;
 	private cursor = 0;
 	private _focused = false;
@@ -59,9 +59,9 @@ export class SearchList implements Component, Focusable {
 	constructor(
 		tui: TUI,
 		theme: Theme,
-		items: readonly SearchListItem[],
+		items: readonly T[],
 		config: SearchListConfig,
-		done: (result: SearchListResult) => void,
+		done: (result: SearchListResult<T>) => void,
 	) {
 		this.tui = tui;
 		this.theme = theme;
@@ -129,7 +129,9 @@ export class SearchList implements Component, Focusable {
 		const title = this.theme.fg("accent", this.theme.bold(this.config.title));
 		const count = this.theme.fg("muted", `${this.items.length} total`);
 		lines.push(truncateToWidth(`${title}  ${count}`, renderWidth, ""));
-		lines.push(truncateToWidth(this.theme.fg("dim", this.config.path), renderWidth, ""));
+		if (this.config.path) {
+			lines.push(truncateToWidth(this.theme.fg("dim", this.config.path), renderWidth, ""));
+		}
 		lines.push(...this.renderSearch(renderWidth));
 		lines.push("");
 
@@ -154,7 +156,7 @@ export class SearchList implements Component, Focusable {
 
 	invalidate(): void {}
 
-	private get filtered(): SearchListItem[] {
+	private get filtered(): T[] {
 		const query = this.search.getValue().trim().toLowerCase();
 		if (!query) return [...this.items];
 		return this.items.filter((item) => item.text.toLowerCase().includes(query));
@@ -170,7 +172,7 @@ export class SearchList implements Component, Focusable {
 	private renderItem(item: SearchListItem, active: boolean, width: number): string[] {
 		const pointer = active ? this.theme.fg("accent", "▶ ") : "  ";
 		const label = this.theme.fg(active ? "accent" : "text", preview(item.text));
-		const age = this.theme.fg("dim", `  ${formatAge(item.createdAt)}`);
+		const age = item.createdAt !== undefined ? this.theme.fg("dim", `  ${formatAge(item.createdAt)}`) : "";
 		return [truncateToWidth(`${pointer}${label}${age}`, width, "")];
 	}
 
