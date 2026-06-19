@@ -12,6 +12,25 @@
 		"extensions": {
 			"type": "object",
 			"properties": {
+				"core": {
+					"type": "object",
+					"properties": {
+						"soul": {
+							"type": "object",
+							"properties": {
+								"enabled": {
+									"type": "boolean",
+									"default": true,
+									"description": "Enable Tau's Lyle system prompt replacement."
+								}
+							},
+							"additionalProperties": false,
+							"description": "Soul prompt settings."
+						}
+					},
+					"additionalProperties": false,
+					"description": "Tau core settings."
+				},
 				"footer": {
 					"type": "object",
 					"properties": {
