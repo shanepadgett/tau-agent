@@ -123,8 +123,14 @@ export default function footerExtension(pi: ExtensionAPI): void {
 		return dailyRefresh;
 	}
 
-	function refresh(ctx: ExtensionContext): void {
-		void Promise.all([refreshGit(ctx), refreshDailyCost()]).then(render);
+	function refresh(ctx: ExtensionContext, includeDaily = true): void {
+		const tasks = includeDaily ? [refreshGit(ctx), refreshDailyCost()] : [refreshGit(ctx)];
+		void Promise.all(tasks).then(render);
+	}
+
+	function rerender(ctx: ExtensionContext): void {
+		setActiveCtx(ctx);
+		render();
 	}
 
 	function setEnabled(ctx: ExtensionContext, next: boolean): void {
@@ -185,10 +191,10 @@ export default function footerExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_start", (_event, ctx) => onStateChange(ctx));
-	pi.on("session_tree", (_event, ctx) => onStateChange(ctx));
-	pi.on("model_select", (_event, ctx) => onStateChange(ctx));
-	pi.on("thinking_level_select", (_event, ctx) => onStateChange(ctx));
-	pi.on("agent_start", (_event, ctx) => onStateChange(ctx));
+	pi.on("session_tree", (_event, ctx) => onStateChange(ctx, false));
+	pi.on("model_select", (_event, ctx) => rerender(ctx));
+	pi.on("thinking_level_select", (_event, ctx) => rerender(ctx));
+	pi.on("agent_start", (_event, ctx) => onStateChange(ctx, false));
 	pi.on("turn_end", (_event, ctx) => onStateChange(ctx));
 	pi.on("agent_end", (_event, ctx) => onStateChange(ctx));
 
@@ -201,9 +207,9 @@ export default function footerExtension(pi: ExtensionAPI): void {
 		ctx.ui.setFooter(undefined);
 	});
 
-	function onStateChange(ctx: ExtensionContext): void {
+	function onStateChange(ctx: ExtensionContext, includeDaily = true): void {
 		setActiveCtx(ctx);
-		refresh(ctx);
+		refresh(ctx, includeDaily);
 	}
 }
 

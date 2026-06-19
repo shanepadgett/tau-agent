@@ -6,7 +6,7 @@ Tau is a custom agentic harness built with pi extensions
 
 ```bash
 npm install --ignore-scripts
-npm run check
+mise run check
 ```
 
 ## Try locally

@@ -41,7 +41,3 @@ export function onTauEvent<Name extends keyof TauAgentEvents>(
 export function setTauFooterItem(pi: EventAPI, item: TauFooterItem): void {
 	emitTauEvent(pi, "tau:footer-item", item);
 }
-
-export function clearTauFooterItem(pi: EventAPI, id: string): void {
-	emitTauEvent(pi, "tau:footer-item", { id });
-}

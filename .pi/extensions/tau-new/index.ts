@@ -1,20 +1,15 @@
-import type { ExtensionAPI, ExtensionCommandContext, SlashCommandSource } from "@earendil-works/pi-coding-agent";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { pickReferences, referenceLines, type ReferenceItem } from "../../../src/shared/reference-picker.ts";
+import type { ExtensionAPI, ExtensionCommandContext, SlashCommandSource } from "@earendil-works/pi-coding-agent";
+import { pickReferences, type ReferenceItem, referenceLines } from "../../../src/shared/reference-picker.ts";
 
 const KINDS = ["extension", "prompt", "theme", "skill"] as const;
 const PLACEMENTS = ["core", "standalone", "local"] as const;
 const NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const PI_ROOT = "/Users/shanepadgett/.bun/install/global/node_modules/@earendil-works/pi-coding-agent";
 
 type Kind = (typeof KINDS)[number];
 type Placement = (typeof PLACEMENTS)[number];
-type Subject =
-	| { kind: "extension"; placement: Placement }
-	| { kind: "prompt" }
-	| { kind: "theme" }
-	| { kind: "skill" };
+type Subject = { kind: "extension"; placement: Placement } | { kind: "prompt" } | { kind: "theme" } | { kind: "skill" };
 
 interface Check {
 	state: "empty" | "invalid" | "collision" | "ok";
@@ -128,7 +123,8 @@ async function getReferences(pi: ExtensionAPI, ctx: ExtensionCommandContext): Pr
 
 function checkName(pi: ExtensionAPI, ctx: ExtensionCommandContext, subject: Subject, name: string): Check {
 	if (!name) return { state: "empty", message: "Enter a kebab-case name." };
-	if (!NAME_PATTERN.test(name)) return { state: "invalid", message: "Use lowercase letters, numbers, and single hyphens only." };
+	if (!NAME_PATTERN.test(name))
+		return { state: "invalid", message: "Use lowercase letters, numbers, and single hyphens only." };
 
 	const collisions = getCollisions(pi, ctx, subject, name);
 	if (collisions.length > 0) return { state: "collision", message: `Already exists: ${collisions.join(", ")}` };
@@ -144,9 +140,11 @@ function getCollisions(pi: ExtensionAPI, ctx: ExtensionCommandContext, subject: 
 }
 
 function nameCollisions(pi: ExtensionAPI, ctx: ExtensionCommandContext, subject: Subject, name: string): string[] {
-	if (subject.kind === "theme") return ctx.ui.getAllThemes().some((theme) => theme.name === name) ? [`theme ${name}`] : [];
+	if (subject.kind === "theme")
+		return ctx.ui.getAllThemes().some((theme) => theme.name === name) ? [`theme ${name}`] : [];
 	if (subject.kind === "prompt") return hasCommand(pi, [name]) ? [`command /${name}`] : [];
-	if (subject.kind === "skill") return hasCommand(pi, [name, `skill:${name}`], "skill") ? [`command /skill:${name}`] : [];
+	if (subject.kind === "skill")
+		return hasCommand(pi, [name, `skill:${name}`], "skill") ? [`command /skill:${name}`] : [];
 	return [];
 }
 
@@ -167,7 +165,12 @@ function collisionPaths(subject: Subject, name: string): string[] {
 	return subject.kind === "extension" ? [target, `${target}.ts`] : [target];
 }
 
-function buildMessage(subject: Subject, name: string, description: string, references: readonly ReferenceItem[]): string {
+function buildMessage(
+	subject: Subject,
+	name: string,
+	description: string,
+	references: readonly ReferenceItem[],
+): string {
 	const refs = referenceLines(references);
 
 	return [
@@ -179,14 +182,16 @@ function buildMessage(subject: Subject, name: string, description: string, refer
 		`Kind: ${label(subject)}`,
 		`Name: ${name || "not provided"}`,
 		"",
-		...(name ? ["Target path(s):", ...targets(subject, name).map((target) => `- ${target}`)] : ["Target path(s): work out after naming"]),
+		...(name
+			? ["Target path(s):", ...targets(subject, name).map((target) => `- ${target}`)]
+			: ["Target path(s): work out after naming"]),
 		"",
 		"Description:",
 		description,
 		...(refs.length > 0 ? ["", ...refs] : []),
 		"",
 		"Read relevant Pi docs first:",
-		...docs(subject).map((doc) => `- ${doc}`),
+		`- ${docs(subject)}`,
 		"",
 		"Scaffold rules:",
 		...rules(subject, name).map((rule) => `- ${rule}`),
@@ -201,11 +206,11 @@ function buildMessage(subject: Subject, name: string, description: string, refer
 	].join("\n");
 }
 
-function docs(subject: Subject): string[] {
-	if (subject.kind === "extension") return [`${PI_ROOT}/docs/extensions.md`, `${PI_ROOT}/docs/tui.md`, `${PI_ROOT}/examples/extensions`];
-	if (subject.kind === "prompt") return [`${PI_ROOT}/docs/prompt-templates.md`];
-	if (subject.kind === "theme") return [`${PI_ROOT}/docs/themes.md`];
-	return [`${PI_ROOT}/docs/skills.md`];
+function docs(subject: Subject): string {
+	if (subject.kind === "extension") return "extension docs, TUI docs, and extension examples";
+	if (subject.kind === "prompt") return "prompt template docs";
+	if (subject.kind === "theme") return "theme docs";
+	return "skill docs";
 }
 
 function rules(subject: Subject, name: string): string[] {
@@ -226,7 +231,8 @@ function rules(subject: Subject, name: string): string[] {
 }
 
 function placementRule(subject: { kind: "extension"; placement: Placement }, path: string): string {
-	if (subject.placement === "core") return "Wire it from src/extensions/core/index.ts and update src/extensions/core/README.md.";
+	if (subject.placement === "core")
+		return "Wire it from src/extensions/core/index.ts and update src/extensions/core/README.md.";
 	if (subject.placement === "local") return "Keep it local to this repo; do not add it to package.json.";
 	return `Create ${path}/README.md.`;
 }

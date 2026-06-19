@@ -51,9 +51,7 @@ Do not blindly copy your previous wording or options. Reframe the question if ne
 - do not answer the question yourself
 - if there is no question to re-ask, say so without using tools`;
 
-const interviewEndParamsSchema = Type.Object({
-	finalNote: Type.Optional(Type.String({ description: "Optional short note about why the interview is complete" })),
-});
+const interviewEndParamsSchema = Type.Object({});
 
 const clarifyTool = defineTool<typeof clarifyParamsSchema, ClarifyResult>({
 	name: "clarify",

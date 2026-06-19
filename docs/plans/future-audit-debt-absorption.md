@@ -243,10 +243,10 @@ If we do switch mode:
 
 ## Implementation sketch
 
-1. Inspect current command registration in `src/extensions/core/src/modes/index.ts` and existing `pi.sendMessage` examples in `src/extensions/clarify/index.ts`.
+1. Inspect current command registration in `src/extensions/core/src/soul/postures.ts` and existing `pi.sendMessage` examples in `src/extensions/clarify/index.ts`.
 
 2. Decide placement.
-   - Smallest likely path: add `/audit` and `/debt` commands in `modes/index.ts` near review/debug shortcuts.
+   - Smallest likely path: keep `/audit` and `/debt` commands in `postures.ts` near review/debug shortcuts.
    - If file gets crowded, extract later. Do not pre-split.
 
 3. Implement `/audit` as hidden prompt text.

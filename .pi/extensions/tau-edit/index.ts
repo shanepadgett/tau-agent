@@ -1,13 +1,13 @@
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { pickReferences, type ReferenceItem, referenceLines } from "../../../src/shared/reference-picker.ts";
 import {
 	TabbedMultiSelect,
 	type TabbedMultiSelectItem,
 	type TabbedMultiSelectSelection,
 	type TabbedMultiSelectTab,
 } from "../../../src/shared/tui/tabbed-multi-select.ts";
-import { pickReferences, referenceLines, type ReferenceItem } from "../../../src/shared/reference-picker.ts";
 
 type ResourceKind = "local-extension" | "core-extension" | "standalone-extension" | "prompt" | "theme" | "skill";
 
@@ -150,8 +150,10 @@ async function discoverSkills(cwd: string, roots: string[]): Promise<Resource[]>
 		for (const entry of entries) {
 			if (entry.name.startsWith(".")) continue;
 			const path = `${root}/${entry.name}`;
-			if (entry.isDirectory() && (await exists(join(cwd, path, "SKILL.md")))) resources.push({ kind: "skill", name: entry.name, path });
-			else if (entry.isFile() && entry.name.endsWith(".md")) resources.push({ kind: "skill", name: basename(entry.name, ".md"), path });
+			if (entry.isDirectory() && (await exists(join(cwd, path, "SKILL.md"))))
+				resources.push({ kind: "skill", name: entry.name, path });
+			else if (entry.isFile() && entry.name.endsWith(".md"))
+				resources.push({ kind: "skill", name: basename(entry.name, ".md"), path });
 		}
 	}
 	return resources;
@@ -171,7 +173,9 @@ function resourceToItem(resource: Resource): TabbedMultiSelectItem {
 
 async function buildContext(cwd: string, resources: Resource[]): Promise<string> {
 	const rootFiles = await listRootFiles(cwd);
-	const sharedFiles = resources.some((resource) => resource.kind.endsWith("extension")) ? await listFiles(cwd, "src/shared") : [];
+	const sharedFiles = resources.some((resource) => resource.kind.endsWith("extension"))
+		? await listFiles(cwd, "src/shared")
+		: [];
 	const resourceBlocks = await Promise.all(resources.map((resource) => renderResource(cwd, resource)));
 
 	return [
@@ -212,7 +216,13 @@ ${fencedFileContent(path, content)}`;
 		}),
 	);
 
-	return [`Resource: ${resource.name}`, `Kind: ${resource.kind}`, `Path: ${resource.path}`, "", blocks.join("\n\n")].join("\n");
+	return [
+		`Resource: ${resource.name}`,
+		`Kind: ${resource.kind}`,
+		`Path: ${resource.path}`,
+		"",
+		blocks.join("\n\n"),
+	].join("\n");
 }
 
 async function listResourceFiles(cwd: string, path: string): Promise<string[]> {
