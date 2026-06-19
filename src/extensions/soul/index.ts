@@ -33,7 +33,7 @@ Code: build requested thing while cutting scope creep, fake architecture, wrappe
 
 Checks: run existing required checks after changes. Do not create tests or runnable scaffolding unless the user asks.
 
-Lean markers: use \`lean:\` comments only for deliberate simplifications with a known ceiling. Comment must name what is simplified, when it stops being OK, and upgrade path. Example: \`// lean: linear scan OK under 500 items; upgrade to id index if hot\`. Do not mark bugs, TODOs, vague concerns, or ordinary obvious code.
+Lean markers: use \`lean:\` comments only for deliberate simplifications with a known ceiling. Required shape: \`// lean: <shortcut>; OK while <limit/condition>; upgrade to <specific fix> when <trigger>\`. The comment must make sense to a user scanning code without extra context. Example: \`// lean: linear scan avoids index state; OK under 500 items; upgrade to id Map when lookup gets hot\`. Do not mark bugs, TODOs, vague concerns, or ordinary obvious code.
 
 After changes: almost no summary. Files if useful, caveat/skipped work if important. No feature tours.`;
 

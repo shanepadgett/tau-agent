@@ -505,11 +505,11 @@ function buildDebtPrompt(focus: string | undefined): string {
 	return [
 		"Harvest lean shortcut markers into a debt ledger. Report only unless user asks to persist.",
 		...(focus ? [`Focus/scope: ${focus}`] : []),
-		"Scan for comment markers: lean: and legacy ponytail:. Include line-comment prefixes (#, //) and block/doc comment prefixes if present in this stack.",
+		"Scan for comment markers: lean:. Include line-comment prefixes (#, //) and block/doc comment prefixes if present in this stack.",
 		"Skip .git, node_modules, dist, build, coverage, generated output, and agent cache/session/temp dirs.",
-		"One row per marker, grouped by file: <file>:<line> — <marker> <what was simplified>. ceiling: <limit>. upgrade: <trigger/path>.",
-		"Tag no-trigger when the marker lacks a concrete revisit trigger or upgrade path. Tag legacy for ponytail: markers. Tag weak when the marker is vague.",
-		"End with: <N> markers, <M> no-trigger, <L> legacy.",
+		"One row per marker, grouped by file: <file>:<line> — lean: <shortcut>. OK while: <limit/condition>. upgrade: <specific fix> when <trigger>.",
+		"Tag no-trigger when the marker lacks a concrete revisit trigger or upgrade path. Tag weak when the marker is vague or misses the shortcut, limit, trigger, or upgrade path.",
+		"End with: <N> markers, <M> no-trigger, <W> weak.",
 		"If none: No lean debt. Clean ledger.",
 	].join("\n\n");
 }

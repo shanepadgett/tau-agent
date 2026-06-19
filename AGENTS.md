@@ -9,7 +9,6 @@
 
 ## Code Quality
 
-- Exclude `references/` from code-based searches unless explicitly told otherwise.
 - New Tau extensions must include a `README.md` in the extension directory.
 - Use strict TypeScript and erasable syntax only.
 - No `any` unless necessary.

@@ -78,7 +78,7 @@ No `/mode` command.
 ## One-shot commands
 
 - `/audit [focus]`: repo-wide complexity/stability audit, ranked biggest simplification first.
-- `/debt [focus]`: harvest `lean:` and legacy `ponytail:` shortcut markers into a report.
+- `/debt [focus]`: harvest `lean:` shortcut markers into a report.
 
 ## Limits
 
