@@ -51,6 +51,15 @@ Do not blindly copy your previous wording or options. Reframe the question if ne
 - do not answer the question yourself
 - if there is no question to re-ask, say so without using tools`;
 
+function buildQnaPrompt(context: string): string {
+	const trimmed = context.trim();
+	if (!trimmed) return QNA_PROMPT;
+	return `${QNA_PROMPT}
+
+Additional user context for framing the question:
+${trimmed}`;
+}
+
 const interviewEndParamsSchema = Type.Object({});
 
 const askQuestionTool = defineTool<typeof askQuestionParamsSchema, QnaResult>({
@@ -184,8 +193,9 @@ export default function qnaExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.registerCommand("qna", {
-		description: "Ask the agent to re-ask its last question with structured choices",
-		handler: async (_args, ctx) => {
+		description:
+			"Ask the agent to re-ask its last question with structured choices. Optional text is framing context.",
+		handler: async (args, ctx) => {
 			if (!ctx.isIdle()) {
 				ctx.ui.notify("Agent is busy", "warning");
 				return;
@@ -193,7 +203,10 @@ export default function qnaExtension(pi: ExtensionAPI): void {
 
 			qnaActive = true;
 			syncQnaTools();
-			pi.sendMessage({ customType: "tau.qna", content: QNA_PROMPT, display: false }, { triggerTurn: true });
+			pi.sendMessage(
+				{ customType: "tau.qna", content: buildQnaPrompt(args), display: false },
+				{ triggerTurn: true },
+			);
 		},
 	});
 
