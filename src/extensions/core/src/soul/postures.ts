@@ -19,15 +19,14 @@ type PostureName = (typeof POSTURE_ORDER)[number];
 interface PostureConfig {
 	label: string;
 	description: string;
-	preferredModels: ModelCandidate[];
-	fallbackThinkingLevel: ThinkingLevel;
+	preferredModels: readonly ModelCandidate[];
+	thinkingLevel: ThinkingLevel;
 	guidance: string;
 }
 
 interface ModelCandidate {
 	provider: string;
 	model: string;
-	thinkingLevel: ThinkingLevel;
 }
 
 interface PostureState {
@@ -39,24 +38,18 @@ export interface PostureController {
 	consumeGuidance(): string | undefined;
 }
 
-const QUALITY_MODELS: ModelCandidate[] = [
-	{ provider: "openai-codex", model: "gpt-5.5", thinkingLevel: "xhigh" },
-	{ provider: "anthropic", model: "claude-opus-4-8", thinkingLevel: "xhigh" },
-	{ provider: "github-copilot", model: "gemini-3.1-pro-preview", thinkingLevel: "xhigh" },
-];
-
-const ACT_MODELS: ModelCandidate[] = [
-	{ provider: "openai-codex", model: "gpt-5.5", thinkingLevel: "low" },
-	{ provider: "anthropic", model: "claude-opus-4-8", thinkingLevel: "medium" },
-	{ provider: "github-copilot", model: "gemini-3.1-pro-preview", thinkingLevel: "low" },
+const POSTURE_MODELS: readonly ModelCandidate[] = [
+	{ provider: "openai-codex", model: "gpt-5.5" },
+	{ provider: "anthropic", model: "claude-opus-4-8" },
+	{ provider: "github-copilot", model: "gemini-3.1-pro-preview" },
 ];
 
 const POSTURES: Record<PostureName, PostureConfig> = {
 	plan: {
 		label: "Plan",
 		description: "Read-only exploration and plan writing",
-		preferredModels: QUALITY_MODELS,
-		fallbackThinkingLevel: "xhigh",
+		preferredModels: POSTURE_MODELS,
+		thinkingLevel: "xhigh",
 		guidance: `## Lyle Posture: Plan
 
 - Read-only exploration. No edits or mutating commands.
@@ -66,8 +59,8 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 	act: {
 		label: "Act",
 		description: "Focused implementation",
-		preferredModels: ACT_MODELS,
-		fallbackThinkingLevel: "low",
+		preferredModels: POSTURE_MODELS,
+		thinkingLevel: "medium",
 		guidance: `## Lyle Posture: Act
 
 - Implement the smallest correct change.
@@ -77,8 +70,8 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 	review: {
 		label: "Review",
 		description: "Complexity and stability review",
-		preferredModels: QUALITY_MODELS,
-		fallbackThinkingLevel: "xhigh",
+		preferredModels: POSTURE_MODELS,
+		thinkingLevel: "xhigh",
 		guidance: `## Lyle Posture: Review
 
 - Review only unless explicitly asked to edit.
@@ -91,8 +84,8 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 	debug: {
 		label: "Debug",
 		description: "Reproduce, isolate, fix",
-		preferredModels: QUALITY_MODELS,
-		fallbackThinkingLevel: "xhigh",
+		preferredModels: POSTURE_MODELS,
+		thinkingLevel: "xhigh",
 		guidance: `## Lyle Posture: Debug
 
 - Reproduce or narrow failure before changing code.
@@ -305,12 +298,12 @@ async function applyPreferredModel(
 		if (!model) continue;
 
 		if (await pi.setModel(model)) {
-			pi.setThinkingLevel(candidate.thinkingLevel);
+			pi.setThinkingLevel(config.thinkingLevel);
 			return index;
 		}
 	}
 
-	pi.setThinkingLevel(config.fallbackThinkingLevel);
+	pi.setThinkingLevel(config.thinkingLevel);
 	if (!quiet) ctx.ui.notify("No preferred posture model available. Keeping current model.", "warning");
 	return undefined;
 }
