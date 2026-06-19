@@ -22,11 +22,11 @@
 
 ## Tool Use
 
-- Always read and apply the `ponytail` skill first; if no ponytail level is already active, treat it as lite mode for all work.
-- Keep context small: every command should return only data needed for the current decision.
+- When using `read` tool, always read entire file, never ranges.
+- Keep context small: every bash command should return only data needed for the current decision.
 - Filter bash output at the source with targeted paths, globs, `rg`, `find` constraints, `head`, counts, or structured summaries.
 - Prefer compact, high-signal output over raw dumps; avoid commands that can flood the window.
-- Batch independent reads/searches/checks when it saves turns and keeps output readable.
+- Batch as many independent reads/searches/checks as possible when it saves turns and keeps output readable.
 - Spend turns deliberately: complete the work within available turns without sacrificing verification.
 - After implementing from a persisted/written plan, ask whether to delete that specific plan and name its path/title. Do not ask when there was no actual plan artifact.
 

@@ -5,6 +5,8 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext, Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { onTauEvent } from "../../shared/events.ts";
+import { loadTauExtensionSettings, updateTauExtensionSettings } from "../../shared/settings/load.ts";
+import footerSettings from "./settings.ts";
 
 interface FooterItem {
 	id: string;
@@ -169,13 +171,17 @@ export default function footerExtension(pi: ExtensionAPI): void {
 
 			const arg = args.trim().toLowerCase();
 			if (!arg) {
-				setEnabled(ctx, !enabled);
+				const next = !enabled;
+				setEnabled(ctx, next);
+				await saveEnabled(ctx, next);
 				ctx.ui.notify(enabled ? "Footer enabled" : "Footer disabled", "info");
 				return;
 			}
 
 			if (arg === "on" || arg === "off") {
-				setEnabled(ctx, arg === "on");
+				const next = arg === "on";
+				setEnabled(ctx, next);
+				await saveEnabled(ctx, next);
 				ctx.ui.notify(enabled ? "Footer enabled" : "Footer disabled", "info");
 				return;
 			}
@@ -190,7 +196,11 @@ export default function footerExtension(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.on("session_start", (_event, ctx) => onStateChange(ctx));
+	pi.on("session_start", async (_event, ctx) => {
+		const settings = await loadTauExtensionSettings(ctx, footerSettings);
+		setEnabled(ctx, settings.enabled);
+		onStateChange(ctx);
+	});
 	pi.on("session_tree", (_event, ctx) => onStateChange(ctx, false));
 	pi.on("model_select", (_event, ctx) => rerender(ctx));
 	pi.on("thinking_level_select", (_event, ctx) => rerender(ctx));
@@ -211,6 +221,10 @@ export default function footerExtension(pi: ExtensionAPI): void {
 		setActiveCtx(ctx);
 		refresh(ctx, includeDaily);
 	}
+}
+
+async function saveEnabled(ctx: ExtensionContext, enabled: boolean): Promise<void> {
+	await updateTauExtensionSettings("global", ctx, footerSettings, (current) => ({ ...current, enabled }));
 }
 
 function parseGitStatus(stdout: string): GitSummary | undefined {

@@ -1,0 +1,32 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://raw.githubusercontent.com/shanepadgett/tau-agent/refs/heads/main/schemas/tau.schema.json",
+	"title": "Tau Configuration",
+	"description": "Configuration for Tau and Tau extensions.",
+	"type": "object",
+	"properties": {
+		"$schema": {
+			"type": "string",
+			"description": "Optional schema reference used by editors for validation and autocomplete."
+		},
+		"extensions": {
+			"type": "object",
+			"properties": {
+				"footer": {
+					"type": "object",
+					"properties": {
+						"enabled": {
+							"type": "boolean",
+							"default": true,
+							"description": "Enable Tau's compact footer."
+						}
+					},
+					"additionalProperties": false
+				}
+			},
+			"additionalProperties": true,
+			"default": {}
+		}
+	},
+	"additionalProperties": false
+}
