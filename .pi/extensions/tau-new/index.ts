@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, SlashCommandSource } from "@earendil-works/pi-coding-agent";
+import { promptForDescription } from "../../../src/shared/description.ts";
 import { pickReferences, type ReferenceItem, referenceLines } from "../../../src/shared/reference-picker.ts";
 
 const KINDS = ["extension", "prompt", "theme", "skill"] as const;
@@ -51,7 +52,11 @@ async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext, args: string)
 		}
 	}
 
-	const description = await getDescription(ctx, subject, name);
+	const descriptionTitle = name ? `Describe ${label(subject)} ${name}` : `Describe ${label(subject)}`;
+	const descriptionRequired = name
+		? `Description required: describe ${label(subject)} ${name}`
+		: `Description required: describe ${label(subject)}`;
+	const description = await promptForDescription(ctx, descriptionTitle, descriptionRequired);
 	if (!description) return;
 
 	const references = await getReferences(pi, ctx);
@@ -98,19 +103,6 @@ async function getName(pi: ExtensionAPI, ctx: ExtensionCommandContext, subject: 
 
 		ctx.ui.notify(check.message, check.state === "collision" ? "error" : "warning");
 		title = `Name for ${label(subject)} (${check.message})`;
-	}
-}
-
-async function getDescription(ctx: ExtensionCommandContext, subject: Subject, name: string): Promise<string | null> {
-	let title = name ? `Describe ${label(subject)} ${name}` : `Describe ${label(subject)}`;
-	while (true) {
-		const value = await ctx.ui.editor(title, "");
-		if (value === undefined) return null;
-		const trimmed = value.trim();
-		if (trimmed) return trimmed;
-		title = name
-			? `Description required: describe ${label(subject)} ${name}`
-			: `Description required: describe ${label(subject)}`;
 	}
 }
 

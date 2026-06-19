@@ -1,6 +1,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { promptForDescription } from "../../../src/shared/description.ts";
 import { pickReferences, type ReferenceItem, referenceLines } from "../../../src/shared/reference-picker.ts";
 import {
 	TabbedMultiSelect,
@@ -75,7 +76,11 @@ async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void
 		return resource ? [resource] : [];
 	});
 
-	const prompt = await readPrompt(ctx);
+	const prompt = await promptForDescription(
+		ctx,
+		"Describe what you want to work on",
+		"Description required: describe what you want to work on",
+	);
 	if (!prompt) return;
 	const references = await getReferences(pi, ctx);
 	if (references === null) return;
@@ -84,17 +89,6 @@ async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void
 	const message = buildMessage(prompt, references);
 	if (ctx.isIdle()) pi.sendUserMessage(message);
 	else pi.sendUserMessage(message, { deliverAs: "followUp" });
-}
-
-async function readPrompt(ctx: ExtensionCommandContext): Promise<string | null> {
-	let title = "Describe what you want to work on";
-	while (true) {
-		const value = await ctx.ui.editor(title, "");
-		if (value === undefined) return null;
-		const trimmed = value.trim();
-		if (trimmed) return trimmed;
-		title = "Description required: describe what you want to work on";
-	}
 }
 
 async function getReferences(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<ReferenceItem[] | null> {
