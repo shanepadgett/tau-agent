@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Api, complete, type Message, type Model, type ThinkingLevel } from "@earendil-works/pi-ai";
+import { type Api, completeSimple, type Message, type Model, type ThinkingLevel } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { createGitRunner, type GitRunner, loadRepoStatus, STAGED_PATCH_DIFF_ARGS } from "../../shared/git.ts";
 import { loadTauExtensionSettings, updateTauExtensionSettings } from "../../shared/settings/load.ts";
@@ -11,6 +11,7 @@ import commitSettings from "./settings.ts";
 const COMMIT_TIMEOUT_MS = 120_000;
 const PUSH_TIMEOUT_MS = 120_000;
 const MAX_DIFF_CHARS = 80_000;
+const COMMIT_MODEL_MAX_ATTEMPTS = 5;
 const COMMIT_MARKER_TYPE = "tau.commit";
 
 const CONVENTIONAL_COMMIT_TYPES = new Set([
@@ -239,7 +240,7 @@ async function generateMessage(
 ): Promise<string> {
 	const failures: string[] = [];
 
-	for (const candidate of candidates) {
+	for (const [index, candidate] of candidates.entries()) {
 		const label = `${candidate.model.provider}/${candidate.model.id}`;
 		ctx.ui.setStatus("commit", `generating commit message (${label})`);
 
@@ -247,9 +248,12 @@ async function generateMessage(
 			return await requestMessage(ctx, candidate, prompt);
 		} catch (error) {
 			if (ctx.signal?.aborted) throw new Error("Commit cancelled.");
-			if (!(error instanceof CommitMessageValidationError))
-				await markProviderUnavailable(ctx, candidate.model.provider);
-			failures.push(`- ${label}: ${errorText(error)}`);
+			if (shouldCooldownProvider(error)) await markProviderUnavailable(ctx, candidate.model.provider);
+			const message = errorText(error);
+			failures.push(`- ${label}: ${message}`);
+			if (index < candidates.length - 1) {
+				ctx.ui.notify(`Commit model failed (${label}): ${message}\nTrying next model.`, "info");
+			}
 		}
 	}
 
@@ -262,17 +266,51 @@ async function requestMessage(
 	prompt: string,
 ): Promise<string> {
 	const userMessage: Message = { role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() };
-	const response = await complete(
-		candidate.model,
-		{ messages: [userMessage] },
-		{ apiKey: candidate.apiKey, headers: candidate.headers, signal: ctx.signal, reasoning: candidate.reasoning },
-	);
+	const messages: Message[] = [userMessage];
 
-	if (response.stopReason === "aborted") throw new Error("Commit cancelled.");
-	if (response.stopReason === "error") throw new Error(response.errorMessage || "model returned an error");
+	for (let attempt = 1; attempt <= COMMIT_MODEL_MAX_ATTEMPTS; attempt++) {
+		const response = await completeSimple(
+			candidate.model,
+			{ messages },
+			{ apiKey: candidate.apiKey, headers: candidate.headers, signal: ctx.signal, reasoning: candidate.reasoning },
+		);
 
-	const text = response.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
-	return validateMessage(cleanMessage(text));
+		if (response.stopReason === "aborted") throw new Error("Commit cancelled.");
+
+		const text = response.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
+		if (response.stopReason === "error") {
+			const error = new Error(response.errorMessage || "model returned an error");
+			if (attempt < COMMIT_MODEL_MAX_ATTEMPTS && !shouldCooldownProvider(error)) continue;
+			throw error;
+		}
+
+		try {
+			return validateMessage(cleanMessage(text));
+		} catch (error) {
+			if (!(error instanceof CommitMessageValidationError) || attempt >= COMMIT_MODEL_MAX_ATTEMPTS) throw error;
+
+			if (text) messages.push({ ...response, content: [{ type: "text", text }] });
+			messages.push({
+				role: "user",
+				content: [
+					{
+						type: "text",
+						text: [
+							`That commit message failed validation: ${error.message}`,
+							"Return one corrected commit message only.",
+							"If this is not a breaking change, return exactly one line with no body.",
+							"Do not include explanations, markdown, or code fences.",
+							"Previous response:",
+							truncAt(text, 1_000),
+						].join("\n"),
+					},
+				],
+				timestamp: Date.now(),
+			});
+		}
+	}
+
+	throw new Error("Commit message generation failed.");
 }
 
 function truncAt(text: string, cap: number): string {
@@ -329,6 +367,29 @@ async function commitStaged(git: GitRunner, cwd: string, message: string): Promi
 
 function errorText(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
+}
+
+function shouldCooldownProvider(error: unknown): boolean {
+	if (error instanceof CommitMessageValidationError) return false;
+	const message = errorText(error).toLowerCase();
+	return [
+		"401",
+		"402",
+		"403",
+		"429",
+		"api key",
+		"authentication",
+		"balance",
+		"billing",
+		"credit",
+		"forbidden",
+		"insufficient",
+		"payment",
+		"quota",
+		"rate limit",
+		"rate_limit",
+		"unauthorized",
+	].some((marker) => message.includes(marker));
 }
 
 const SEVEN_DAYS_MS = 604_800_000;

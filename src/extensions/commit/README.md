@@ -15,6 +15,7 @@ Generate a git commit message from the current repository changes, then commit e
 - Includes user intent from the active conversation branch since the last successful `/commit`.
 - Calls a model directly so the prompt and response stay out of the active chat context.
 - Generates the message with a preferred off-context model, then falls back if needed.
+- Retries malformed or transient candidate failures before trying the next model.
 - If one candidate fails, tries the next candidate. If all fail, reports each error.
 - Generates and validates a strict conventional commit message.
 - Opens the message in the editor for review, then validates the reviewed message.
