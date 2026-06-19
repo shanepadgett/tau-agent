@@ -146,8 +146,15 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 			);
 
 			if (!approved) {
+				const placeholder = params.reason
+					? `Agent asked: ${params.reason}. Optional reply to send back.`
+					: "Optional. Tell the agent why, or hit Enter to skip.";
+				const userReason = (await ctx.ui.input("Why not?", placeholder))?.trim();
+				const text = userReason
+					? `Posture switch denied. User reason: ${userReason}\n\nContinue under current posture.`
+					: "Posture switch denied. Continue under current posture.";
 				return {
-					content: [{ type: "text", text: "Posture switch denied. Continue under current posture." }],
+					content: [{ type: "text", text }],
 					details: {},
 				};
 			}

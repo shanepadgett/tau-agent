@@ -37,7 +37,7 @@ After `/new`, Tau asks for posture once when no posture has been selected in tha
 
 Posture shortcut commands switch posture. With trailing text, Tau switches first and submits that text in the new posture.
 
-The `switch_posture` tool lets the agent ask to change posture when the user's latest intent clearly fits another posture. Approved switches queue a hidden continuation so Soul rebuilds the next turn with the new posture guidance.
+The `switch_posture` tool lets the agent ask to change posture when the user's latest intent clearly fits another posture. Approved switches queue a hidden continuation so Soul rebuilds the next turn with the new posture guidance. Denied switches prompt for an optional reason that is returned to the agent in the tool result.
 
 `/audit` and `/debt` are one-shot prompts. They borrow review posture for that turn but do not persist it.
 
