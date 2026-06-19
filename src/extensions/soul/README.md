@@ -41,7 +41,7 @@ Posture shortcut commands switch posture. With trailing text, Tau switches first
 
 Staging caveat: the new-chat path runs `git add -A`, so it leaves all changes staged in the original repo. It does not modify the working tree, but it clobbers any intentional partial staging (`git reset` to undo). It does not auto-restore the prior index state.
 
-The `switch_posture` tool lets the agent ask to change posture when the user's latest intent clearly fits another posture. Approved switches queue a hidden continuation and trigger a small follow-up turn so Soul rebuilds with the new posture guidance and tool set. Denied switches prompt for an optional reason that is returned to the agent in the tool result.
+The `switch_posture` tool lets the agent ask to change posture when the user's latest intent clearly fits another posture. In plan posture, the agent should briefly state the implementation plan and wait for explicit go-ahead before switching to act, unless go-ahead was already given. Approved switches emit `tau:posture.continuation_queued`, queue a hidden continuation, and trigger a small follow-up turn so Soul rebuilds with the new posture guidance and tool set. Denied switches prompt for an optional reason that is returned to the agent in the tool result.
 
 `/audit` and `/debt` are one-shot prompts. They borrow review posture for that turn but do not persist it.
 

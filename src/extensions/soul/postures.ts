@@ -10,7 +10,7 @@ import type {
 import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import { type AutocompleteItem, Key } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { setTauFooterItem } from "../../shared/events.ts";
+import { emitTauEvent, setTauFooterItem } from "../../shared/events.ts";
 import { createGitRunner, loadRepoStatus, STAGED_PATCH_DIFF_ARGS } from "../../shared/git.ts";
 
 const POSTURE_STATE_TYPE = "tau.posture";
@@ -54,7 +54,8 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 - Once rough shape is aligned and decisions/details matter, write or update a plan file under \`${PLAN_WRITE_DIR}/\`.
 - Treat the plan file as the planning surface: record decisions, steps, files, risks, checks, and open questions there.
 - Keep chat short after a plan file exists: point to it, ask for review/feedback, then edit the file as decisions change.
-- Ask for go-ahead before implementation.`,
+- Ask for go-ahead before implementation.
+- When switching from plan to act for implementation, state the brief plan and wait for explicit go-ahead before using switch_posture unless the user already gave it.`,
 	},
 	act: {
 		label: "Act",
@@ -121,7 +122,7 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 		promptSnippet: "Request a posture switch when the user's latest intent fits another posture.",
 		promptGuidelines: [
 			"Use switch_posture before doing work when the user's latest intent clearly fits another Lyle posture.",
-			"Use switch_posture with posture=act when in plan posture and the user asks to implement, edit, or change files.",
+			"Use switch_posture with posture=act when in plan posture and the user asks to implement, edit, or change files only after briefly stating the plan and getting explicit go-ahead, unless go-ahead was already given.",
 			"Use switch_posture with posture=plan when not in plan posture and the user asks to plan, design, explore, or discuss an edit/feature before implementation.",
 			"Use switch_posture with posture=review when the user asks to review, audit, critique, or find problems.",
 			"Use switch_posture with posture=debug when the user reports a bug, failure, error, broken behavior, or asks to reproduce/isolate/fix a failure.",
@@ -180,6 +181,7 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 
 			await applyPosture(params.posture, ctx, { quiet: true });
 			pendingContinuation = params.task;
+			emitTauEvent(pi, "tau:posture.continuation_queued", { posture: params.posture });
 
 			return {
 				content: [{ type: "text", text: `Posture switched to ${params.posture}.` }],

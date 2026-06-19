@@ -5,6 +5,7 @@ Sends a terminal-driven attention notification when Tau is ready for input.
 ## Behavior
 
 - Emits an attention notification on `agent_end`.
+- Suppresses exactly one `agent_end` notification after `tau:posture.continuation_queued`, because a hidden continuation turn is about to start.
 - Listens for shared event `tau:attention` so extensions can request the same notification.
 - Prefers CMUX first-class notifications, then Kitty OSC 99, then OSC 777.
 

@@ -16,6 +16,12 @@ function oscText(value: string): string {
 }
 
 export default function attentionExtension(pi: ExtensionAPI): void {
+	let suppressNextAgentEnd = false;
+
+	onTauEvent(pi, "tau:posture.continuation_queued", () => {
+		suppressNextAgentEnd = true;
+	});
+
 	onTauEvent(pi, "tau:attention", (data) => {
 		const raw: unknown = data;
 		const record = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
@@ -51,6 +57,11 @@ export default function attentionExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("agent_end", () => {
+		if (suppressNextAgentEnd) {
+			suppressNextAgentEnd = false;
+			return;
+		}
+
 		emitTauEvent(pi, "tau:attention", { title: DEFAULT_TITLE, body: DEFAULT_BODY });
 	});
 }
