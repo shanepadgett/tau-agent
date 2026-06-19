@@ -4,6 +4,18 @@ Always-on prompt replacement for Tau. This is Lyle: base identity plus current p
 
 Soul rebuilds Pi's system prompt from `systemPromptOptions`: Lyle identity first, then Pi tool/guideline/docs sections, user prompt additions, project context, skill metadata, current posture, and runtime date/cwd last.
 
+Disable it with Tau settings:
+
+```json
+{
+  "extensions": {
+    "soul": { "enabled": false }
+  }
+}
+```
+
+Takes effect on session start. When disabled, Soul skips prompt replacement, posture switching, posture model/tool changes, and clears the posture footer item.
+
 ## Postures
 
 ```text
@@ -37,7 +49,7 @@ No `/mode` command.
 - Keeps current model if no preferred model can be selected.
 - If a provider returns `402`, `403`, `429`, or `5xx`, falls through to the next preferred model for the next turn.
 - Builds posture guidance into soul's prompt; no second prompt appender.
-- Shows current posture as plain muted text in the footer.
+- Shows current posture as plain muted text in the footer when enabled.
 - Persists selected posture as `tau.posture`.
 - `plan` snapshots current tools and switches to read-only tools. Leaving `plan` restores the snapshot.
 - Keeps `switch_posture` available in every posture so the agent can request the right posture before doing mismatched work.

@@ -9,7 +9,7 @@ import {
 	type TabbedMultiSelectTab,
 } from "../../../src/shared/tui/tabbed-multi-select.ts";
 
-type ResourceKind = "local-extension" | "core-extension" | "standalone-extension" | "prompt" | "theme" | "skill";
+type ResourceKind = "local-extension" | "tau-extension" | "prompt" | "theme" | "skill";
 
 interface Resource {
 	kind: ResourceKind;
@@ -19,8 +19,7 @@ interface Resource {
 
 const TAB_LABELS: Record<ResourceKind, string> = {
 	"local-extension": "Local extensions",
-	"core-extension": "Core extensions",
-	"standalone-extension": "Standalone extensions",
+	"tau-extension": "Tau extensions",
 	prompt: "Prompts",
 	theme: "Themes",
 	skill: "Skills",
@@ -108,8 +107,7 @@ async function getReferences(pi: ExtensionAPI, ctx: ExtensionCommandContext): Pr
 async function discoverResources(cwd: string): Promise<Resource[]> {
 	return [
 		...(await discoverExtensionEntries(cwd, ".pi/extensions", "local-extension")),
-		...(await discoverExtensionEntries(cwd, "src/extensions/core/src", "core-extension")),
-		...(await discoverStandaloneExtensions(cwd)),
+		...(await discoverExtensionEntries(cwd, "src/extensions", "tau-extension")),
 		...(await discoverFiles(cwd, ["prompts", ".pi/prompts"], ".md", "prompt")),
 		...(await discoverFiles(cwd, ["themes", ".pi/themes"], ".json", "theme")),
 		...(await discoverSkills(cwd, ["skills", ".pi/skills"])),
@@ -125,13 +123,6 @@ async function discoverExtensionEntries(cwd: string, root: string, kind: Resourc
 			name: entry.isDirectory() ? entry.name : entry.name.slice(0, -extname(entry.name).length),
 			path: `${root}/${entry.name}`,
 		}));
-}
-
-async function discoverStandaloneExtensions(cwd: string): Promise<Resource[]> {
-	const entries = await safeReaddir(join(cwd, "src/extensions"));
-	return entries
-		.filter((entry) => entry.isDirectory() && entry.name !== "core" && !entry.name.startsWith("."))
-		.map((entry) => ({ kind: "standalone-extension", name: entry.name, path: `src/extensions/${entry.name}` }));
 }
 
 async function discoverFiles(cwd: string, roots: string[], suffix: string, kind: ResourceKind): Promise<Resource[]> {

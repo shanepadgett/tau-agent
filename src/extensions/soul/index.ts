@@ -41,11 +41,12 @@ const DEFAULT_TOOLS = ["read", "bash", "edit", "write"];
 
 export default function soulExtension(pi: ExtensionAPI): void {
 	let enabled = true;
-	const postures = createPostureController(pi);
 
 	pi.on("session_start", async (_event, ctx) => {
 		enabled = (await loadTauExtensionSettings(ctx, soulSettings)).enabled;
 	});
+
+	const postures = createPostureController(pi, () => enabled);
 
 	pi.on("before_agent_start", (event) => ({
 		...(enabled ? { systemPrompt: buildSoulPrompt(event.systemPromptOptions, postures.consumeGuidance()) } : {}),

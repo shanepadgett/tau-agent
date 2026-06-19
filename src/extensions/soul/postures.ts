@@ -100,7 +100,7 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 	},
 };
 
-export function createPostureController(pi: ExtensionAPI): PostureController {
+export function createPostureController(pi: ExtensionAPI, isEnabled: () => boolean): PostureController {
 	let activePosture: PostureName | undefined;
 	let activeCandidateIndex: number | undefined;
 	let nextTurnPosture: PostureName | undefined;
@@ -130,6 +130,13 @@ export function createPostureController(pi: ExtensionAPI): PostureController {
 			reason: Type.Optional(Type.String({ description: "Short reason for the requested posture switch." })),
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			if (!isEnabled()) {
+				return {
+					content: [{ type: "text", text: "Soul is disabled. Continue without posture switch." }],
+					details: {},
+				};
+			}
+
 			if (!ctx.hasUI) {
 				return {
 					content: [{ type: "text", text: "Cannot switch posture without user approval UI." }],
@@ -182,6 +189,15 @@ export function createPostureController(pi: ExtensionAPI): PostureController {
 		ctx: ExtensionContext,
 		options: { persist?: boolean; quiet?: boolean; fromRestore?: boolean } = {},
 	): Promise<void> {
+		if (!isEnabled()) {
+			activePosture = undefined;
+			activeCandidateIndex = undefined;
+			nextTurnPosture = undefined;
+			previousTools = undefined;
+			updateFooter(pi, undefined);
+			return;
+		}
+
 		const config = POSTURES[name];
 		const enteringPlan = name === "plan" && activePosture !== "plan";
 		const leavingPlan = activePosture === "plan" && name !== "plan";
@@ -228,6 +244,11 @@ export function createPostureController(pi: ExtensionAPI): PostureController {
 			return items.length ? items : null;
 		},
 		handler: async (args, ctx) => {
+			if (!isEnabled()) {
+				ctx.ui.notify("Soul is disabled", "warning");
+				return;
+			}
+
 			const trimmed = args.trim();
 			if (!trimmed) {
 				await ctx.waitForIdle();
@@ -249,6 +270,11 @@ export function createPostureController(pi: ExtensionAPI): PostureController {
 		pi.registerCommand(name, {
 			description: `Switch to ${name} posture; with text, submit it in that posture`,
 			handler: async (args, ctx) => {
+				if (!isEnabled()) {
+					ctx.ui.notify("Soul is disabled", "warning");
+					return;
+				}
+
 				await runPostureCommand(name, commandPrompt(args), ctx);
 			},
 		});
@@ -337,6 +363,7 @@ export function createPostureController(pi: ExtensionAPI): PostureController {
 
 	return {
 		consumeGuidance(): string | undefined {
+			if (!isEnabled()) return undefined;
 			const posture = nextTurnPosture ?? activePosture;
 			nextTurnPosture = undefined;
 			return posture ? POSTURES[posture].guidance : undefined;

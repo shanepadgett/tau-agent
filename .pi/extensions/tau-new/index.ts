@@ -4,7 +4,7 @@ import type { ExtensionAPI, ExtensionCommandContext, SlashCommandSource } from "
 import { pickReferences, type ReferenceItem, referenceLines } from "../../../src/shared/reference-picker.ts";
 
 const KINDS = ["extension", "prompt", "theme", "skill"] as const;
-const PLACEMENTS = ["core", "standalone", "local"] as const;
+const PLACEMENTS = ["tau", "local"] as const;
 const NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 type Kind = (typeof KINDS)[number];
@@ -150,7 +150,6 @@ function nameCollisions(pi: ExtensionAPI, ctx: ExtensionCommandContext, subject:
 
 function targets(subject: Subject, name: string): string[] {
 	if (subject.kind === "extension") {
-		if (subject.placement === "core") return [`src/extensions/core/src/${name}`];
 		if (subject.placement === "local") return [`.pi/extensions/${name}`];
 		return [`src/extensions/${name}`];
 	}
@@ -231,8 +230,6 @@ function rules(subject: Subject, name: string): string[] {
 }
 
 function placementRule(subject: { kind: "extension"; placement: Placement }, path: string): string {
-	if (subject.placement === "core")
-		return "Wire it from src/extensions/core/index.ts and update src/extensions/core/README.md.";
 	if (subject.placement === "local") return "Keep it local to this repo; do not add it to package.json.";
 	return `Create ${path}/README.md.`;
 }
