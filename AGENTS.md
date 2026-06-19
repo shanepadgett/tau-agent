@@ -30,6 +30,7 @@
 - Spend turns deliberately: complete the work within available turns without sacrificing verification.
 - Local extensions under `.pi/extensions/` import from `src/shared/` and are first-party consumers. Treat them as in-scope for dead-code, import-graph, and refactor-safety checks (grep, find, references), not just `src/`.
 - After implementing from a persisted/written plan, ask whether to delete that specific plan and name its path/title. Do not ask when there was no actual plan artifact.
+- After implementing or fixing something from `.pi/tau/ideas.jsonl`, ask whether to remove the completed idea from that file.
 
 ## Tau Customization Workflow
 
