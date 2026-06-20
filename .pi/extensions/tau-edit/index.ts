@@ -90,7 +90,7 @@ async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void
 	if (references === null) return;
 
 	queueInjectedContext(await buildContext(ctx.cwd, selected), { source: "tau-edit", title: "Tau edit context" });
-	const message = buildMessage(prompt, references);
+	const message = buildMessage(prompt.text, prompt.source === "idea", references);
 	if (ctx.isIdle()) pi.sendUserMessage(message);
 	else pi.sendUserMessage(message, { deliverAs: "followUp" });
 }
@@ -181,7 +181,7 @@ async function buildContext(cwd: string, resources: Resource[]): Promise<string>
 	].join("\n");
 }
 
-function buildMessage(request: string, references: readonly ReferenceItem[]): string {
+function buildMessage(request: string, fromIdea: boolean, references: readonly ReferenceItem[]): string {
 	const refs = referenceLines(references);
 
 	return [
@@ -191,6 +191,12 @@ function buildMessage(request: string, references: readonly ReferenceItem[]): st
 		"",
 		"Root/shared files are injected as file names only. Read them only when this request directly requires their contents; do not read them for discovery.",
 		"",
+		...(fromIdea
+			? [
+					"This request is from an idea. After completing it, ask whether to remove the completed idea from .pi/tau/ideas.jsonl.",
+					"",
+				]
+			: []),
 		...(refs.length > 0 ? [...refs, ""] : []),
 		"Request:",
 		request,

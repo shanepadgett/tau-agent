@@ -13,28 +13,38 @@ import { browseStash } from "../extensions/stash/browser.ts";
  *
  * Returns the trimmed description, or null if the user cancelled at any step.
  */
+export interface DescriptionPromptResult {
+	text: string;
+	source: "manual" | "idea" | "stash";
+}
+
 export async function promptForDescription(
 	ctx: ExtensionCommandContext,
 	title: string,
 	requiredTitle: string,
-): Promise<string | null> {
+): Promise<DescriptionPromptResult | null> {
 	const prefill = await choosePrefill(ctx);
 	if (prefill === null) return null;
 
 	let currentTitle = title;
-	let current = prefill;
+	let current = prefill.text;
 	while (true) {
 		const value = await ctx.ui.editor(currentTitle, current);
 		if (value === undefined) return null;
 		const trimmed = value.trim();
-		if (trimmed) return trimmed;
+		if (trimmed) return { text: trimmed, source: prefill.source };
 		current = value;
 		currentTitle = requiredTitle;
 	}
 }
 
-// null = cancelled entirely; "" = write fresh; non-empty = selected text to prefill.
-async function choosePrefill(ctx: ExtensionCommandContext): Promise<string | null> {
+interface DescriptionPrefill {
+	text: string;
+	source: DescriptionPromptResult["source"];
+}
+
+// null = cancelled entirely; empty text = write fresh; non-empty text = selected text to prefill.
+async function choosePrefill(ctx: ExtensionCommandContext): Promise<DescriptionPrefill | null> {
 	while (true) {
 		const choice = await ctx.ui.select("Description source", [
 			"Write description",
@@ -42,13 +52,13 @@ async function choosePrefill(ctx: ExtensionCommandContext): Promise<string | nul
 			"Pull from stash",
 		]);
 		if (choice === undefined) return null;
-		if (choice === "Write description") return "";
+		if (choice === "Write description") return { text: "", source: "manual" };
 		if (choice === "Pull from ideas") {
 			const idea = await browseIdeas(ctx);
-			if (idea) return idea.text;
+			if (idea) return { text: idea.text, source: "idea" };
 		} else {
 			const stash = await browseStash(ctx);
-			if (stash) return stash.text;
+			if (stash) return { text: stash.text, source: "stash" };
 		}
 		// Browser cancelled without a pick; loop back to source select.
 	}
