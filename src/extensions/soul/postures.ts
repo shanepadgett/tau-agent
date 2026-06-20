@@ -14,6 +14,7 @@ import { Type } from "typebox";
 import { emitAgentBlocked } from "../../shared/agent-blocked.ts";
 import { emitTauEvent, setTauFooterItem } from "../../shared/events.ts";
 import { createGitRunner, loadRepoStatus, STAGED_PATCH_DIFF_ARGS } from "../../shared/git.ts";
+import { createInjectedContext } from "../../shared/injected-context.ts";
 import {
 	SearchList,
 	type SearchListConfig,
@@ -22,7 +23,6 @@ import {
 } from "../../shared/tui/search-list.ts";
 
 const POSTURE_STATE_TYPE = "tau.posture";
-const REVIEW_EVIDENCE_TYPE = "tau.review.evidence";
 const MAX_REVIEW_DIFF_CHARS = 80_000;
 const MAX_REVIEW_UNTRACKED_PREVIEW_BYTES = 12_000;
 const DEFAULT_POSTURE = "act";
@@ -633,7 +633,8 @@ async function startReviewInNewChat(
 	await ctx.newSession({
 		setup: async (sm) => {
 			sm.appendCustomEntry(POSTURE_STATE_TYPE, { name: "review" });
-			sm.appendCustomMessageEntry(REVIEW_EVIDENCE_TYPE, evidence, false);
+			const injected = createInjectedContext(evidence, { source: "review", title: "Review evidence" });
+			sm.appendCustomMessageEntry(injected.customType, injected.content, injected.display, injected.details);
 		},
 		withSession: async (newCtx) => {
 			await newCtx.sendUserMessage(kickoff);

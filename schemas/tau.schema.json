@@ -12,7 +12,18 @@
 		"extensions": {
 			"type": "object",
 			"properties": {
-				"commit": {
+				"footer": {
+					"type": "object",
+					"properties": {
+						"enabled": {
+							"type": "boolean",
+							"default": true,
+							"description": "Enable Tau's compact footer."
+						}
+					},
+					"additionalProperties": false
+				},
+				"modelFallback": {
 					"type": "object",
 					"properties": {
 						"cooldowns": {
@@ -23,17 +34,6 @@
 									"description": "Unix epoch milliseconds when the provider becomes available again."
 								}
 							}
-						}
-					},
-					"additionalProperties": false
-				},
-				"footer": {
-					"type": "object",
-					"properties": {
-						"enabled": {
-							"type": "boolean",
-							"default": true,
-							"description": "Enable Tau's compact footer."
 						}
 					},
 					"additionalProperties": false

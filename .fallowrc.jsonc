@@ -1,7 +1,7 @@
 // lean: .pi/extensions/ are first-party consumers (per AGENTS.md) but fallow
 // hard-excludes dot-directories from discovery, so files only imported from
-// .pi/extensions/ (description.ts, tabbed-multi-select.ts) surface as false
-// dead-code. Suppressed via ignorePatterns; upgrade when fallow scans dot-dirs.
+// .pi/extensions/ (description.ts, injected-context.ts, tabbed-multi-select.ts)
+// surface as false dead-code. Suppressed via ignorePatterns; upgrade when fallow scans dot-dirs.
 {
   "entry": [
     "src/extensions/*/index.ts",
@@ -10,6 +10,7 @@
   "includeEntryExports": true,
   "ignorePatterns": [
     "src/shared/description.ts",
+    "src/shared/injected-context.ts",
     "src/shared/tui/tabbed-multi-select.ts"
   ],
   "ignoreExports": [

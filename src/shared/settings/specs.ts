@@ -5,7 +5,8 @@ import { pathToFileURL } from "node:url";
 import type { TauExtensionSettingsSpec } from "./define.ts";
 
 export async function discoverTauSettingsSpecs(cwd: string): Promise<TauExtensionSettingsSpec[]> {
-	const files = await listSettingsFiles(join(cwd, "src", "extensions"));
+	const roots = [join(cwd, "src", "extensions"), join(cwd, "src", "shared")];
+	const files = (await Promise.all(roots.map(listSettingsFiles))).flat();
 	const specs: TauExtensionSettingsSpec[] = [];
 
 	for (const file of files) {

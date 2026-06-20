@@ -2,6 +2,12 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { promptForDescription } from "../../../src/shared/description.ts";
+import {
+	clearEmittedInjectedContexts,
+	clearPendingInjectedContexts,
+	queueInjectedContext,
+	shiftPendingInjectedContext,
+} from "../../../src/shared/injected-context.ts";
 import { pickReferences, type ReferenceItem, referenceLines } from "../../../src/shared/reference-picker.ts";
 import {
 	TabbedMultiSelect,
@@ -26,8 +32,6 @@ const TAB_LABELS: Record<ResourceKind, string> = {
 	skill: "Skills",
 };
 
-const pendingContexts: string[] = [];
-
 export default function tauEdit(pi: ExtensionAPI): void {
 	pi.registerCommand("tau-edit", {
 		description: "Pick Tau resources and inject their files as hidden context",
@@ -35,16 +39,16 @@ export default function tauEdit(pi: ExtensionAPI): void {
 	});
 
 	pi.on("before_agent_start", () => {
-		const context = pendingContexts.shift();
-		if (!context) return;
+		const message = shiftPendingInjectedContext();
+		return message ? { message } : undefined;
+	});
 
-		return {
-			message: {
-				customType: "tau-edit-context",
-				content: context,
-				display: false,
-			},
-		};
+	pi.on("agent_end", () => {
+		clearEmittedInjectedContexts();
+	});
+
+	pi.on("session_shutdown", () => {
+		clearPendingInjectedContexts();
 	});
 }
 
@@ -85,7 +89,7 @@ async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void
 	const references = await getReferences(pi, ctx);
 	if (references === null) return;
 
-	pendingContexts.push(await buildContext(ctx.cwd, selected));
+	queueInjectedContext(await buildContext(ctx.cwd, selected), { source: "tau-edit", title: "Tau edit context" });
 	const message = buildMessage(prompt, references);
 	if (ctx.isIdle()) pi.sendUserMessage(message);
 	else pi.sendUserMessage(message, { deliverAs: "followUp" });

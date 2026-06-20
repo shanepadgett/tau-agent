@@ -1,16 +1,7 @@
-import type { Api, Model, ThinkingLevel } from "@earendil-works/pi-ai";
-
 export interface CommitMarker {
 	hash: string;
 	subject: string;
 	timestamp: number;
-}
-
-export interface CommitCandidate {
-	model: Model<Api>;
-	apiKey: string;
-	headers: Record<string, string> | undefined;
-	reasoning: ThinkingLevel | undefined;
 }
 
 export interface CommitEvidence {

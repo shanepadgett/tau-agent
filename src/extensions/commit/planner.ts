@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { cleanMessage, errorText, stripCodeFence, truncAt, validateMessage } from "./message.ts";
-import { generateValidated } from "./model.ts";
-import type { CommitCandidate, CommitEvidence, CommitPlanGroup, DirtyFile } from "./types.ts";
+import { generateValidated } from "../../shared/model-fallback/index.ts";
+import type { ModelCandidate } from "../../shared/model-fallback/types.ts";
+import { errorText, truncAt } from "../../shared/text.ts";
+import { cleanMessage, stripCodeFence, validateMessage } from "./message.ts";
+import type { CommitEvidence, CommitPlanGroup, DirtyFile } from "./types.ts";
 
 const MAX_PLAN_EVIDENCE_CHARS = 70_000;
 
@@ -18,7 +20,7 @@ interface RawGroup {
 
 export async function generateInitialPlan(
 	ctx: ExtensionCommandContext,
-	candidates: readonly CommitCandidate[],
+	candidates: readonly ModelCandidate[],
 	evidence: CommitEvidence,
 ): Promise<CommitPlanGroup[]> {
 	return generateValidated(
@@ -35,12 +37,13 @@ export async function generateInitialPlan(
 				"Previous response:",
 				text,
 			].join("\n"),
+		{ statusKey: "commit", notifyOnFallback: true },
 	);
 }
 
 export async function regenerateGroupMessage(
 	ctx: ExtensionCommandContext,
-	candidates: readonly CommitCandidate[],
+	candidates: readonly ModelCandidate[],
 	evidence: CommitEvidence,
 	files: readonly string[],
 ): Promise<string> {
@@ -59,6 +62,7 @@ export async function regenerateGroupMessage(
 				"Previous response:",
 				text,
 			].join("\n"),
+		{ statusKey: "commit", notifyOnFallback: true },
 	);
 }
 

@@ -1,8 +1,8 @@
 import { Type } from "typebox";
-import { defineTauExtensionSettings } from "../../shared/settings/define.ts";
+import { defineTauExtensionSettings } from "../settings/define.ts";
 
 export default defineTauExtensionSettings({
-	key: "commit",
+	key: "modelFallback",
 	defaults: { cooldowns: {} },
 	schema: Type.Object(
 		{

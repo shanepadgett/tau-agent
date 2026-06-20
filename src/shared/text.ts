@@ -5,6 +5,14 @@ export function preview(text: string, max = 80): string {
 	return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine;
 }
 
+export function errorText(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+export function truncAt(text: string, cap: number): string {
+	return text.length > cap ? `${text.slice(0, cap)}\n(truncated)` : text;
+}
+
 export function formatAge(createdAt: number): string {
 	const seconds = Math.max(0, Math.round((Date.now() - createdAt) / 1000));
 	if (seconds < 60) return "just now";

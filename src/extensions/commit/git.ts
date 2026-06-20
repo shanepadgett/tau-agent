@@ -3,7 +3,7 @@ import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { GitRunner } from "../../shared/git.ts";
-import { truncAt } from "./message.ts";
+import { truncAt } from "../../shared/text.ts";
 import type { DirtyFile } from "./types.ts";
 
 const COMMIT_TIMEOUT_MS = 120_000;

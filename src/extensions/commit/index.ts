@@ -2,10 +2,10 @@ import type { Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { emitAgentBlocked } from "../../shared/agent-blocked.ts";
 import { createGitRunner, type GitRunner, loadRepoStatus } from "../../shared/git.ts";
-import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
+import { resolveCandidates } from "../../shared/model-fallback/index.ts";
+import type { ModelCandidate } from "../../shared/model-fallback/types.ts";
+import { errorText } from "../../shared/text.ts";
 import { collectFileEvidence, commitStaged, computeWorktreeSignature, loadDirtyFiles, stageFilesOnly } from "./git.ts";
-import { errorText } from "./message.ts";
-import { resolveCandidates } from "./model.ts";
 import {
 	appendGroup,
 	assignFilesToGroup,
@@ -16,9 +16,7 @@ import {
 	regenerateGroupMessage,
 	updateGroupMessage,
 } from "./planner.ts";
-import commitSettings from "./settings.ts";
 import type {
-	CommitCandidate,
 	CommitEvidence,
 	CommitFilePickerResult,
 	CommitMarker,
@@ -52,8 +50,7 @@ export default function commitExtension(pi: ExtensionAPI): void {
 					return;
 				}
 
-				const settings = await loadTauExtensionSettings(ctx, commitSettings);
-				const candidates = await resolveCandidates(ctx, settings);
+				const candidates = await resolveCandidates(ctx);
 				let evidence = await loadEvidence(git, repo.root, ctx.sessionManager.getBranch());
 				assertCommittableState(evidence.files);
 				let state: CommitPlanState = {
@@ -110,7 +107,7 @@ async function reviewPlan(
 	ctx: ExtensionCommandContext,
 	git: GitRunner,
 	root: string,
-	candidates: readonly CommitCandidate[],
+	candidates: readonly ModelCandidate[],
 	evidence: CommitEvidence,
 	initialState: CommitPlanState,
 	initialSelectedGroupId: string | undefined,

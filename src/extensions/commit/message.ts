@@ -13,10 +13,6 @@ const CONVENTIONAL_COMMIT_TYPES = new Set([
 
 class CommitMessageValidationError extends Error {}
 
-export function truncAt(text: string, cap: number): string {
-	return text.length > cap ? `${text.slice(0, cap)}\n(truncated)` : text;
-}
-
 export function stripCodeFence(raw: string): string {
 	const text = raw.trim();
 	const fenced = text.match(/^```(?:gitcommit|json|text)?\s*\n([\s\S]*?)\n```$/i);
@@ -56,8 +52,4 @@ export function validateMessage(rawMessage: string): string {
 	}
 
 	return body ? `${header}\n\n${body}` : header;
-}
-
-export function errorText(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }
