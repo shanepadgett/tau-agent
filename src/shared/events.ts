@@ -1,9 +1,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export type TauAgentEvents = {
-	"tau:attention": {
+	"tau:agent.blocked": {
 		title?: string;
 		body?: string;
+		source?: string;
 	};
 	"tau:footer-item": {
 		id: string;

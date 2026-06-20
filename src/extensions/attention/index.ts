@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { emitTauEvent, onTauEvent } from "../../shared/events.js";
+import { onTauEvent } from "../../shared/events.js";
 
 const DEFAULT_TITLE = "Tau";
 const DEFAULT_BODY = "Ready for input";
@@ -29,7 +29,7 @@ export default function attentionExtension(pi: ExtensionAPI): void {
 		suppressNextAgentEnd = true;
 	});
 
-	onTauEvent(pi, "tau:attention", (data) => {
+	function notify(data: { title?: string; body?: string }): void {
 		const raw: unknown = data;
 		const record = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
 		const title = typeof record.title === "string" && record.title.trim() ? record.title.trim() : DEFAULT_TITLE;
@@ -66,7 +66,9 @@ export default function attentionExtension(pi: ExtensionAPI): void {
 
 		process.stdout.write(osc777);
 		playMacOSSound(pi);
-	});
+	}
+
+	onTauEvent(pi, "tau:agent.blocked", notify);
 
 	pi.on("agent_end", () => {
 		if (suppressNextAgentEnd) {
@@ -74,6 +76,6 @@ export default function attentionExtension(pi: ExtensionAPI): void {
 			return;
 		}
 
-		emitTauEvent(pi, "tau:attention", { title: DEFAULT_TITLE, body: DEFAULT_BODY });
+		notify({ title: DEFAULT_TITLE, body: DEFAULT_BODY });
 	});
 }

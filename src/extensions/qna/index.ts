@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { StringEnum, Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+import { emitAgentBlocked } from "../../shared/agent-blocked.ts";
 import { normalizeParams, type QnaParams, type QnaResult } from "./model.ts";
 import { runQnaUi } from "./ui.ts";
 
@@ -63,75 +64,82 @@ ${trimmed}`;
 
 const interviewEndParamsSchema = Type.Object({});
 
-const askQuestionTool = defineTool<typeof askQuestionParamsSchema, QnaResult>({
-	name: "ask_question",
-	label: "Ask Question",
-	description:
-		"Ask user structured question only when missing intent, preference, or constraint blocks progress. Supports select, multi-select, yes/no, and free-form input. Choices must be real, valid, non-filler. Selectable questions require recommendation values plus honest reason after options. Do not use for routine chat, obvious choices, or avoidable analysis.",
-	promptSnippet:
-		"Ask structured questions only when a real user decision blocks progress; every choice must be valid, defensible, non-filler.",
-	promptGuidelines: [
-		"Use ask_question only when missing user intent, preference, or constraint would materially change next action.",
-		"Do not use ask_question for routine chat, status updates, obvious decisions, or questions answerable from files/instructions.",
-		"If one path is clearly correct, do not use ask_question. Proceed and state assumption briefly.",
-		"When using ask_question choices, every option must be real, valid, and defensible. No filler, strawmen, joke options, bad decoys, or preferred answer plus junk.",
-		"When using ask_question choices, cover realistic decision space. Custom answer is safety valve, not excuse for weak options.",
-		"For non-trivial ask_question options, include concise description explaining when option makes sense.",
-		"For ask_question select, multi-select, confirm, and recommended input: write options or suggested answer first, then recommendation values, then recommendation reason.",
-		"ask_question recommendation reason must explain tradeoff honestly. Do not manipulate user toward fake-obvious answer.",
-		"Use ask_question multi-select only when combining options is valid. Use select for one path. Use confirm for yes/no. Use input when choices would be fake; include an input recommendation only when you have a real suggested answer.",
-		"Ask fewest questions that unblock work. Prefer 1-3 focused questions. No surveys.",
-		"Do not add catch-all or additional-context questions; the UI always provides a final optional Additional Context tab.",
-	],
-	parameters: askQuestionParamsSchema,
-	executionMode: "sequential",
+function createAskQuestionTool(pi: ExtensionAPI) {
+	return defineTool<typeof askQuestionParamsSchema, QnaResult>({
+		name: "ask_question",
+		label: "Ask Question",
+		description:
+			"Ask user structured question only when missing intent, preference, or constraint blocks progress. Supports select, multi-select, yes/no, and free-form input. Choices must be real, valid, non-filler. Selectable questions require recommendation values plus honest reason after options. Do not use for routine chat, obvious choices, or avoidable analysis.",
+		promptSnippet:
+			"Ask structured questions only when a real user decision blocks progress; every choice must be valid, defensible, non-filler.",
+		promptGuidelines: [
+			"Use ask_question only when missing user intent, preference, or constraint would materially change next action.",
+			"Do not use ask_question for routine chat, status updates, obvious decisions, or questions answerable from files/instructions.",
+			"If one path is clearly correct, do not use ask_question. Proceed and state assumption briefly.",
+			"When using ask_question choices, every option must be real, valid, and defensible. No filler, strawmen, joke options, bad decoys, or preferred answer plus junk.",
+			"When using ask_question choices, cover realistic decision space. Custom answer is safety valve, not excuse for weak options.",
+			"For non-trivial ask_question options, include concise description explaining when option makes sense.",
+			"For ask_question select, multi-select, confirm, and recommended input: write options or suggested answer first, then recommendation values, then recommendation reason.",
+			"ask_question recommendation reason must explain tradeoff honestly. Do not manipulate user toward fake-obvious answer.",
+			"Use ask_question multi-select only when combining options is valid. Use select for one path. Use confirm for yes/no. Use input when choices would be fake; include an input recommendation only when you have a real suggested answer.",
+			"Ask fewest questions that unblock work. Prefer 1-3 focused questions. No surveys.",
+			"Do not add catch-all or additional-context questions; the UI always provides a final optional Additional Context tab.",
+		],
+		parameters: askQuestionParamsSchema,
+		executionMode: "sequential",
 
-	async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-		const castParams = params as QnaParams;
-		const questions = normalizeParams(castParams);
-		if (ctx.mode !== "tui" || !ctx.hasUI) {
-			ctx.abort();
-			throw new Error("ask_question aborted: interactive UI unavailable");
-		}
-
-		ctx.ui.setWorkingVisible(false);
-		try {
-			const result = await ctx.ui.custom<QnaResult | undefined>((tui, theme, _keybindings, done) =>
-				runQnaUi(tui, theme, castParams.title, questions, done),
-			);
-			if (!result) {
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			const castParams = params as QnaParams;
+			const questions = normalizeParams(castParams);
+			if (ctx.mode !== "tui" || !ctx.hasUI) {
 				ctx.abort();
-				throw new Error("ask_question aborted by user");
+				throw new Error("ask_question aborted: interactive UI unavailable");
 			}
-			return {
-				content: [{ type: "text", text: formatResult(result) }],
-				details: result,
-			};
-		} finally {
-			ctx.ui.setWorkingVisible(true);
-		}
-	},
 
-	renderCall(args, theme) {
-		const params = args as QnaParams;
-		const count = Array.isArray(params.questions) ? params.questions.length : 0;
-		return new Text(
-			`${theme.fg("toolTitle", theme.bold("ask_question"))} ${theme.fg("muted", params.title || `${count} question${count === 1 ? "" : "s"}`)}`,
-			0,
-			0,
-		);
-	},
+			ctx.ui.setWorkingVisible(false);
+			try {
+				emitAgentBlocked(pi, {
+					title: castParams.title || "Tau",
+					body: "Waiting for your answer",
+					source: "qna.ask_question",
+				});
+				const result = await ctx.ui.custom<QnaResult | undefined>((tui, theme, _keybindings, done) =>
+					runQnaUi(tui, theme, castParams.title, questions, done),
+				);
+				if (!result) {
+					ctx.abort();
+					throw new Error("ask_question aborted by user");
+				}
+				return {
+					content: [{ type: "text", text: formatResult(result) }],
+					details: result,
+				};
+			} finally {
+				ctx.ui.setWorkingVisible(true);
+			}
+		},
 
-	renderResult(result, _options, theme) {
-		const details = result.details;
-		if (!details) return new Text(theme.fg("warning", "ask_question returned no details"), 0, 0);
-		return new Text(
-			formatResult(details, (text) => theme.bold(text)),
-			0,
-			0,
-		);
-	},
-});
+		renderCall(args, theme) {
+			const params = args as QnaParams;
+			const count = Array.isArray(params.questions) ? params.questions.length : 0;
+			return new Text(
+				`${theme.fg("toolTitle", theme.bold("ask_question"))} ${theme.fg("muted", params.title || `${count} question${count === 1 ? "" : "s"}`)}`,
+				0,
+				0,
+			);
+		},
+
+		renderResult(result, _options, theme) {
+			const details = result.details;
+			if (!details) return new Text(theme.fg("warning", "ask_question returned no details"), 0, 0);
+			return new Text(
+				formatResult(details, (text) => theme.bold(text)),
+				0,
+				0,
+			);
+		},
+	});
+}
 
 export default function qnaExtension(pi: ExtensionAPI): void {
 	let qnaActive = false;
@@ -176,7 +184,7 @@ export default function qnaExtension(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.registerTool(askQuestionTool);
+	pi.registerTool(createAskQuestionTool(pi));
 	pi.registerTool(interviewEndTool);
 
 	pi.on("session_start", () => {

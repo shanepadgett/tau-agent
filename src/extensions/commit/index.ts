@@ -1,5 +1,6 @@
 import type { Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext, SessionEntry } from "@earendil-works/pi-coding-agent";
+import { emitAgentBlocked } from "../../shared/agent-blocked.ts";
 import { createGitRunner, type GitRunner, loadRepoStatus } from "../../shared/git.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { collectFileEvidence, commitStaged, computeWorktreeSignature, loadDirtyFiles, stageFilesOnly } from "./git.ts";
@@ -63,6 +64,7 @@ export default function commitExtension(pi: ExtensionAPI): void {
 				let selectedGroupId: string | undefined = state.groups[0]?.id;
 
 				if (ctx.hasUI) {
+					emitAgentBlocked(pi, { body: "Waiting for commit plan review", source: "commit.review" });
 					const result = await reviewPlan(ctx, git, repo.root, candidates, evidence, state, selectedGroupId);
 					if (!result) return;
 					state = result.state;

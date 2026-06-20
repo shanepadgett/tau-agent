@@ -11,6 +11,7 @@ import type {
 import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import { type AutocompleteItem, Key } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { emitAgentBlocked } from "../../shared/agent-blocked.ts";
 import { emitTauEvent, setTauFooterItem } from "../../shared/events.ts";
 import { createGitRunner, loadRepoStatus, STAGED_PATCH_DIFF_ARGS } from "../../shared/git.ts";
 import {
@@ -169,6 +170,10 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 			}
 
 			const reason = params.reason ? `\n\nReason: ${params.reason}` : "";
+			emitAgentBlocked(pi, {
+				body: `Waiting for approval to switch to ${params.posture} posture`,
+				source: "soul.switch_posture",
+			});
 			const approved = await ctx.ui.confirm(
 				`Switch to ${POSTURES[params.posture].label}?`,
 				`The agent wants to continue in ${params.posture} posture.${reason}`,
@@ -213,6 +218,10 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 			};
 		}
 
+		emitAgentBlocked(pi, {
+			body: `Waiting for approval to ${event.toolName} ${event.input.path}`,
+			source: "soul.plan_gate",
+		});
 		const approved = await ctx.ui.confirm(
 			"Switch to Act?",
 			`Plan posture cannot ${event.toolName} ${event.input.path}. Switch to act and run this tool call?`,
