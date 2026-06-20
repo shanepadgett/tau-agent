@@ -64,7 +64,7 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 - Keep chat short after a plan file exists: point to it, ask for review/feedback, then edit the file as decisions change.
 - Ask for go-ahead before implementation.
 - Plan posture cannot implement. Before any code/config/doc edit outside ${PLAN_WRITE_DIR}/, briefly state the plan, get explicit go-ahead unless already given, then call switch_posture with posture=act.
-- Do not try write or edit for implementation while still in plan posture. Switch first; failed write/edit calls waste the turn.`,
+- If a write/edit outside ${PLAN_WRITE_DIR}/ is attempted in plan posture anyway, Tau may ask the user to switch to act and run that same tool call.`,
 	},
 	act: {
 		label: "Act",
@@ -200,14 +200,37 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 		},
 	});
 
-	pi.on("tool_call", (event, ctx) => {
+	pi.on("tool_call", async (event, ctx) => {
 		if (activePosture !== "plan") return undefined;
 		if (!isToolCallEventType("write", event) && !isToolCallEventType("edit", event)) return undefined;
 		if (isPlanWritePath(ctx.cwd, event.input.path)) return undefined;
 
+		if (!isEnabled()) return undefined;
+		if (!ctx.hasUI) {
+			return {
+				block: true,
+				reason: `Plan posture may only write or edit under ${PLAN_WRITE_DIR}/`,
+			};
+		}
+
+		const approved = await ctx.ui.confirm(
+			"Switch to Act?",
+			`Plan posture cannot ${event.toolName} ${event.input.path}. Switch to act and run this tool call?`,
+		);
+
+		if (approved) {
+			await applyPosture("act", ctx, { quiet: true });
+			return undefined;
+		}
+
+		const userReason = (
+			await ctx.ui.input("Why not?", "Optional. Tell the agent why, or hit Enter to skip.")
+		)?.trim();
 		return {
 			block: true,
-			reason: `Plan posture may only write or edit under ${PLAN_WRITE_DIR}/`,
+			reason: userReason
+				? `Posture switch denied. User reason: ${userReason}\n\nContinue under current posture.`
+				: "Posture switch denied. Continue under current posture.",
 		};
 	});
 

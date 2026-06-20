@@ -38,7 +38,7 @@ Commands:
 
 A TUI shortcut can cycle postures. Check Pi keybindings for the current key.
 
-In plan posture, implementation writes/edits outside `docs/plans/` require switching to act first. The agent should briefly state the plan, wait for explicit go-ahead unless already given, then call `switch_posture` with `posture=act` before using write/edit tools.
+In plan posture, implementation writes/edits outside `docs/plans/` require act posture. The agent should briefly state the plan, wait for explicit go-ahead unless already given, then call `switch_posture` with `posture=act` before using write/edit tools. If it tries anyway, Soul can ask the user to switch to act and run the same pending tool call.
 
 ## Review helpers
 
