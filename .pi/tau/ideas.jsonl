@@ -1,0 +1,1 @@
+{"id":"e0c7c8bb-d7b5-461b-9941-f62568e0eede","text":"When injecting an idea into a tau edit or tau new, part of the user prompt that gets generated should say something like from idea so that the agent gets the hint that it was from an idea and hopefully they delete the idea because we have that in the agent's MD file when they're done working.","createdAt":1781947253641}
