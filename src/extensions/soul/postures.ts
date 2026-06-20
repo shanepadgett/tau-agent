@@ -29,8 +29,9 @@ const DEFAULT_POSTURE = "act";
 const POSTURE_ORDER = ["plan", "act", "review", "debug"] as const;
 const SWITCH_POSTURE_TOOL = "switch_posture";
 const PLAN_WRITE_DIR = "docs/plans";
-const PLAN_TOOLS = ["read", "grep", "find", "ls", "write", "edit", SWITCH_POSTURE_TOOL];
-const NON_PLAN_TOOLS = ["read", "grep", "find", "ls", "bash", "edit", "write", SWITCH_POSTURE_TOOL];
+const RESTRICTED_POSTURES = new Set<PostureName>(["plan", "review", "debug"]);
+const RESTRICTED_TOOLS = ["read", "grep", "find", "ls", "write", "edit", SWITCH_POSTURE_TOOL];
+const ACT_TOOLS = ["read", "grep", "find", "ls", "bash", "edit", "write", SWITCH_POSTURE_TOOL];
 
 type PostureName = (typeof POSTURE_ORDER)[number];
 
@@ -56,7 +57,8 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 		thinkingLevel: "xhigh",
 		guidance: `## Lyle Posture: Plan
 
-- Read-only exploration, except write/edit may modify plan files under \`${PLAN_WRITE_DIR}/\`.
+- Read-only exploration, except write/edit may modify planning notes under \`${PLAN_WRITE_DIR}/\`.
+- Use \`${PLAN_WRITE_DIR}/<slug>.md\` for normal plans.
 - No code edits, config edits, docs edits outside \`${PLAN_WRITE_DIR}/\`, or mutating commands.
 - Start rough by default: 1–2 sentences naming the approach's bulk shape/silhouette, then pause for alignment.
 - Do not create a plan file for loose brainstorming.
@@ -83,11 +85,14 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 		thinkingLevel: "xhigh",
 		guidance: `## Lyle Posture: Review
 
-- Review only unless explicitly asked to edit.
+- Read-only review, except write/edit may modify review notes under \`${PLAN_WRITE_DIR}/\`.
+- Use \`${PLAN_WRITE_DIR}/<slug>.review.md\` for persisted review notes.
+- No code edits, config edits, docs edits outside \`${PLAN_WRITE_DIR}/\`, or mutating commands.
 - Find avoidable complexity and stability risk in the changed/relevant code.
 - Use tags when useful: delete, shrink, dedupe, stdlib, native, internal, yagni, refactor.
 - Mention correctness, data loss, security, or performance when complexity causes the risk.
 - Format findings: path:Lx: <tag> <problem>. <smallest fix>.
+- If asked to edit outside ${PLAN_WRITE_DIR}/, briefly state the fix, get explicit go-ahead unless already given, then call switch_posture with posture=act.
 - If clean: Lean already. Ship.`,
 	},
 	debug: {
@@ -96,9 +101,13 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 		thinkingLevel: "xhigh",
 		guidance: `## Lyle Posture: Debug
 
-- Reproduce or narrow failure before changing code.
+- Read-only debugging, except write/edit may modify debug notes under \`${PLAN_WRITE_DIR}/\`.
+- Use \`${PLAN_WRITE_DIR}/<slug>.debug.md\` for persisted debug notes.
+- No code edits, config edits, docs edits outside \`${PLAN_WRITE_DIR}/\`, or mutating commands.
+- Reproduce or narrow failure from existing context and repository inspection before changing code.
 - Prefer the smallest causal fix.
 - Simplify directly related failing paths when it reduces bug surface.
+- If asked to edit outside ${PLAN_WRITE_DIR}/ or run mutating commands, briefly state the fix/check, get explicit go-ahead unless already given, then call switch_posture with posture=act.
 - Allow a small helper only when it removes duplication or makes one current invariant obvious.`,
 	},
 };
@@ -206,7 +215,7 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 	});
 
 	pi.on("tool_call", async (event, ctx) => {
-		if (activePosture !== "plan") return undefined;
+		if (!activePosture || !RESTRICTED_POSTURES.has(activePosture)) return undefined;
 		if (!isToolCallEventType("write", event) && !isToolCallEventType("edit", event)) return undefined;
 		if (isPlanWritePath(ctx.cwd, event.input.path)) return undefined;
 
@@ -214,17 +223,17 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 		if (!ctx.hasUI) {
 			return {
 				block: true,
-				reason: `Plan posture may only write or edit under ${PLAN_WRITE_DIR}/`,
+				reason: `${POSTURES[activePosture].label} posture may only write or edit under ${PLAN_WRITE_DIR}/`,
 			};
 		}
 
 		emitAgentBlocked(pi, {
 			body: `Waiting for approval to ${event.toolName} ${event.input.path}`,
-			source: "soul.plan_gate",
+			source: "soul.restricted_posture_gate",
 		});
 		const approved = await ctx.ui.confirm(
 			"Switch to Act?",
-			`Plan posture cannot ${event.toolName} ${event.input.path}. Switch to act and run this tool call?`,
+			`${POSTURES[activePosture].label} posture cannot ${event.toolName} ${event.input.path}. Switch to act and run this tool call?`,
 		);
 
 		if (approved) {
@@ -257,23 +266,23 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 		}
 
 		const config = POSTURES[name];
-		const enteringPlan = name === "plan" && activePosture !== "plan";
-		const leavingPlan = activePosture === "plan" && name !== "plan";
+		const enteringRestricted = RESTRICTED_POSTURES.has(name) && !isRestrictedPosture(activePosture);
+		const leavingRestricted = isRestrictedPosture(activePosture) && name === "act";
 
-		if (enteringPlan && !options.fromRestore) previousTools = pi.getActiveTools();
+		if (enteringRestricted && !options.fromRestore) previousTools = pi.getActiveTools();
 
 		pi.setThinkingLevel(config.thinkingLevel);
 
-		if (name === "plan") {
-			pi.setActiveTools(filterKnownTools(pi, PLAN_TOOLS));
+		if (RESTRICTED_POSTURES.has(name)) {
+			pi.setActiveTools(filterKnownTools(pi, RESTRICTED_TOOLS));
 		} else {
 			pi.setActiveTools(
 				filterKnownTools(
 					pi,
-					ensureTools(leavingPlan ? (previousTools ?? []) : pi.getActiveTools(), NON_PLAN_TOOLS),
+					ensureTools(leavingRestricted ? (previousTools ?? []) : pi.getActiveTools(), ACT_TOOLS),
 				),
 			);
-			if (leavingPlan) previousTools = undefined;
+			if (leavingRestricted) previousTools = undefined;
 		}
 
 		activePosture = name;
@@ -484,6 +493,10 @@ function isPlanWritePath(cwd: string, rawPath: string): boolean {
 function nextPosture(current: PostureName | undefined): PostureName {
 	if (!current) return POSTURE_ORDER[0];
 	return POSTURE_ORDER[(POSTURE_ORDER.indexOf(current) + 1) % POSTURE_ORDER.length] ?? POSTURE_ORDER[0];
+}
+
+function isRestrictedPosture(name: PostureName | undefined): boolean {
+	return name ? RESTRICTED_POSTURES.has(name) : false;
 }
 
 function parsePosture(value: string): PostureName | undefined {

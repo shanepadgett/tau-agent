@@ -18,10 +18,10 @@ Takes effect on session start.
 
 Soul has four postures:
 
-- `act`: focused implementation. Default for new sessions.
-- `plan`: read-only exploration and planning. May write/edit plan files under `docs/plans/` only.
-- `review`: complexity/stability review unless edits are requested.
-- `debug`: reproduce, isolate, and fix failures.
+- `act`: focused implementation. Default for new sessions. Can edit the codebase.
+- `plan`: read-only exploration and planning. May write/edit planning notes under `docs/plans/` only.
+- `review`: read-only complexity/stability review. May write/edit review notes under `docs/plans/` only.
+- `debug`: read-only failure isolation. May write/edit debug notes under `docs/plans/` only.
 
 Commands:
 
@@ -38,7 +38,13 @@ Commands:
 
 A TUI shortcut can cycle postures. Check Pi keybindings for the current key.
 
-In plan posture, implementation writes/edits outside `docs/plans/` require act posture. The agent should briefly state the plan, wait for explicit go-ahead unless already given, then call `switch_posture` with `posture=act` before using write/edit tools. If it tries anyway, Soul can ask the user to switch to act and run the same pending tool call.
+In plan, review, and debug postures, writes/edits outside `docs/plans/` require act posture. The agent should briefly state the plan/fix/check, wait for explicit go-ahead unless already given, then call `switch_posture` with `posture=act` before using write/edit tools. If it tries anyway, Soul can ask the user to switch to act and run the same pending tool call.
+
+Planning note naming convention:
+
+- `docs/plans/<slug>.md` for normal plans.
+- `docs/plans/<slug>.review.md` for review notes.
+- `docs/plans/<slug>.debug.md` for debug notes.
 
 ## Review helpers
 
