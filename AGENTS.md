@@ -19,6 +19,7 @@
 - Do not preserve backward compatibility unless explicitly asked.
 - Do not remove intentional behavior without asking.
 - When deleting or replacing code/resources, clean up obsolete files, empty folders, stale docs, and dead references in the same change.
+- Never hardcode keybinding hints in TUI components. Use `keyText`/`keyHint` from `@earendil-works/pi-coding-agent` so remaps are respected.
 
 ## Tool Use
 
