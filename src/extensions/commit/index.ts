@@ -1,68 +1,43 @@
-import { randomUUID } from "node:crypto";
-import { rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { type Api, completeSimple, type Message, type Model, type ThinkingLevel } from "@earendil-works/pi-ai";
+import type { Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext, SessionEntry } from "@earendil-works/pi-coding-agent";
-import { createGitRunner, type GitRunner, loadRepoStatus, STAGED_PATCH_DIFF_ARGS } from "../../shared/git.ts";
-import { loadTauExtensionSettings, updateTauExtensionSettings } from "../../shared/settings/load.ts";
+import { createGitRunner, type GitRunner, loadRepoStatus } from "../../shared/git.ts";
+import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
+import { collectFileEvidence, commitStaged, computeWorktreeSignature, loadDirtyFiles, stageFilesOnly } from "./git.ts";
+import { errorText } from "./message.ts";
+import { resolveCandidates } from "./model.ts";
+import {
+	appendGroup,
+	assignFilesToGroup,
+	deleteGroup,
+	generateInitialPlan,
+	moveGroup,
+	normalizePlan,
+	regenerateGroupMessage,
+	updateGroupMessage,
+} from "./planner.ts";
 import commitSettings from "./settings.ts";
+import type {
+	CommitCandidate,
+	CommitEvidence,
+	CommitFilePickerResult,
+	CommitMarker,
+	CommitPlanGroup,
+	CommitPlanReviewAction,
+	CommitPlanState,
+	DirtyFile,
+} from "./types.ts";
+import { CommitFilePicker } from "./ui/commit-file-picker.ts";
+import { CommitPlanReview } from "./ui/commit-plan-review.ts";
 
-const COMMIT_TIMEOUT_MS = 120_000;
 const PUSH_TIMEOUT_MS = 120_000;
-const MAX_DIFF_CHARS = 80_000;
-const COMMIT_MODEL_MAX_ATTEMPTS = 5;
 const COMMIT_MARKER_TYPE = "tau.commit";
-
-const CONVENTIONAL_COMMIT_TYPES = new Set([
-	"feat",
-	"fix",
-	"docs",
-	"refactor",
-	"test",
-	"chore",
-	"perf",
-	"ci",
-	"build",
-	"revert",
-]);
-
-// Preferred cheap, fast models for off-context generation. Missing or
-// unauthenticated entries are skipped silently; the active session model is
-// always appended as the guaranteed fallback, so this list only needs to be
-// good, not exhaustive or correct forever.
-const PREFERRED_COMMIT_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
-	{ provider: "openrouter", model: "cohere/north-mini-code:free", reasoning: "high" },
-	{ provider: "github-copilot", model: "gemini-3.5-flash", reasoning: "high" },
-	{ provider: "openai-codex", model: "gpt-5.4-mini", reasoning: "high" },
-	{ provider: "anthropic", model: "claude-haiku-4-5", reasoning: "high" },
-];
-
-interface CommitMarker {
-	hash: string;
-	subject: string;
-	timestamp: number;
-}
-
-interface CommitCandidate {
-	model: Model<Api>;
-	apiKey: string;
-	headers: Record<string, string> | undefined;
-	reasoning: ThinkingLevel | undefined;
-}
-
-interface CommitEvidence {
-	recentSubjects: string;
-	diff: string;
-	intent: string[];
-}
 
 export default function commitExtension(pi: ExtensionAPI): void {
 	pi.registerCommand("commit", {
-		description: "Generate a commit message and commit all changes",
+		description: "Generate semantic commit groups and commit selected repository changes",
 		handler: async (_args, ctx) => {
 			await ctx.waitForIdle();
-			ctx.ui.setStatus("commit", "preparing commit");
+			ctx.ui.setStatus("commit", "preparing commit plan");
 
 			try {
 				const git = createGitRunner(pi, ctx);
@@ -75,53 +50,44 @@ export default function commitExtension(pi: ExtensionAPI): void {
 					ctx.ui.notify("No uncommitted changes detected.", "info");
 					return;
 				}
-				const root = repo.root;
-				const changedFiles = repo.fileCount;
 
-				// Stage everything up front so a single `git diff --cached` is the
-				// complete, uniform picture: tracked edits and new files alike, with
-				// binary handling free. This command always commits all changes, so
-				// staging early matches its contract.
-				await git.run(["add", "-A"], { cwd: root });
-
-				const evidence = await collectEvidence(git, root, ctx.sessionManager.getBranch());
 				const settings = await loadTauExtensionSettings(ctx, commitSettings);
 				const candidates = await resolveCandidates(ctx, settings);
-				const generated = await generateMessage(ctx, candidates, buildPrompt(evidence));
+				let evidence = await loadEvidence(git, repo.root, ctx.sessionManager.getBranch());
+				assertCommittableState(evidence.files);
+				let state: CommitPlanState = {
+					files: evidence.files,
+					groups: await generateInitialPlan(ctx, candidates, evidence),
+					worktreeSignature: await computeWorktreeSignature(git, repo.root, evidence.files),
+				};
+				let selectedGroupId: string | undefined = state.groups[0]?.id;
 
-				const edited = ctx.hasUI ? await ctx.ui.editor("Edit commit message", generated) : generated;
-				if (!edited?.trim()) {
-					ctx.ui.notify("Commit cancelled.", "info");
-					return;
-				}
-				const message = validateMessage(edited);
-				const subject = message.split("\n")[0] ?? message;
-
-				let shouldPush = false;
 				if (ctx.hasUI) {
-					const confirmed = await ctx.ui.confirm(
-						"Commit all changes?",
-						`${changedFiles} changed file(s) will be committed.\n\n${message}`,
-					);
-					if (!confirmed) {
-						ctx.ui.notify("Commit cancelled.", "info");
-						return;
-					}
-					shouldPush = await ctx.ui.confirm("Push after commit?", "Run `git push` after the commit succeeds?");
+					const result = await reviewPlan(ctx, git, repo.root, candidates, evidence, state, selectedGroupId);
+					if (!result) return;
+					state = result.state;
+					evidence = result.evidence;
+					selectedGroupId = result.selectedGroupId;
 				}
 
-				ctx.ui.setStatus("commit", "committing");
-				await commitStaged(git, root, message);
+				const completed = await executePlan(pi, ctx, git, repo.root, state, selectedGroupId);
+				if (completed.length === 0) return;
 
-				const hash = await git.run(["rev-parse", "--short", "HEAD"], { cwd: root });
-				pi.appendEntry<CommitMarker>(COMMIT_MARKER_TYPE, { hash, subject, timestamp: Date.now() });
-
-				if (shouldPush) {
+				if (
+					ctx.hasUI &&
+					(await ctx.ui.confirm("Push after commits?", "Run `git push` after all commits succeeded?"))
+				) {
 					ctx.ui.setStatus("commit", "pushing");
-					await git.run(["push"], { cwd: root, timeout: PUSH_TIMEOUT_MS });
-					ctx.ui.notify(`Committed and pushed ${hash}: ${subject}`, "info");
+					await git.run(["push"], { cwd: repo.root, timeout: PUSH_TIMEOUT_MS });
+					ctx.ui.notify(
+						`Committed and pushed ${completed.length} commit(s): ${completed.map((item) => item.hash).join(", ")}`,
+						"info",
+					);
 				} else {
-					ctx.ui.notify(`Committed ${hash}: ${subject}`, "info");
+					ctx.ui.notify(
+						`Committed ${completed.length} commit(s): ${completed.map((item) => item.hash).join(", ")}`,
+						"info",
+					);
 				}
 			} catch (error) {
 				ctx.ui.notify(`Commit failed: ${errorText(error)}`, "error");
@@ -132,16 +98,201 @@ export default function commitExtension(pi: ExtensionAPI): void {
 	});
 }
 
-async function collectEvidence(git: GitRunner, cwd: string, entries: readonly SessionEntry[]): Promise<CommitEvidence> {
-	const [recentSubjects, diff] = await Promise.all([
-		git.run(["log", "-12", "--pretty=format:%s"], { cwd, optional: true }),
-		git.run([...STAGED_PATCH_DIFF_ARGS], { cwd, optional: true }),
-	]);
-	return { recentSubjects, diff, intent: collectIntent(entries) };
+async function loadEvidence(git: GitRunner, root: string, entries: readonly SessionEntry[]): Promise<CommitEvidence> {
+	const dirtyFiles = await collectFileEvidence(git, root, await loadDirtyFiles(git, root));
+	const recentSubjects = await git.run(["log", "-12", "--pretty=format:%s"], { cwd: root, optional: true });
+	return { recentSubjects, intent: collectIntent(entries), files: dirtyFiles };
 }
 
-// User intent since the last successful commit: text user messages on the
-// active branch, reset whenever a commit marker is crossed.
+async function reviewPlan(
+	ctx: ExtensionCommandContext,
+	git: GitRunner,
+	root: string,
+	candidates: readonly CommitCandidate[],
+	evidence: CommitEvidence,
+	initialState: CommitPlanState,
+	initialSelectedGroupId: string | undefined,
+): Promise<{ state: CommitPlanState; evidence: CommitEvidence; selectedGroupId: string | undefined } | undefined> {
+	let state = initialState;
+	let currentEvidence = evidence;
+	let selectedGroupId = initialSelectedGroupId;
+
+	while (true) {
+		const action = await ctx.ui.custom<CommitPlanReviewAction>(
+			(_tui, theme, _keybindings, done) => new CommitPlanReview(theme, state, selectedGroupId, done),
+		);
+		switch (action.kind) {
+			case "cancel":
+				ctx.ui.notify("Commit cancelled.", "info");
+				return undefined;
+			case "execute":
+				return { state, evidence: currentEvidence, selectedGroupId };
+			case "editMessage": {
+				const group = state.groups.find((item) => item.id === action.groupId);
+				if (!group) break;
+				const edited = await ctx.ui.editor("Edit commit message", group.message);
+				if (!edited?.trim()) break;
+				try {
+					state = { ...state, groups: updateGroupMessage(state.groups, action.groupId, edited) };
+					selectedGroupId = action.groupId;
+				} catch (error) {
+					ctx.ui.notify(`Invalid commit message: ${errorText(error)}`, "error");
+				}
+				break;
+			}
+			case "assignFiles": {
+				const group = state.groups.find((item) => item.id === action.groupId);
+				if (!group) break;
+				const result = await pickFiles(
+					ctx,
+					`Assign files to: ${group.message.split("\n")[0] ?? group.message}`,
+					state,
+					group.id,
+					group.files,
+					false,
+				);
+				if (result) {
+					state = { ...state, groups: assignFilesToGroup(state.groups, group.id, result) };
+					selectedGroupId = group.id;
+				}
+				break;
+			}
+			case "newGroup": {
+				const result = await pickFiles(ctx, "New commit: select files", state, undefined, [], true);
+				if (!result) break;
+				if (result.length === 0) {
+					ctx.ui.notify("No files selected.", "info");
+					break;
+				}
+				// Editor first: an empty submit means "auto-generate". Avoids
+				// burning a model call when the user cancels.
+				const edited = await ctx.ui.editor("New commit message (empty = auto-generate)", "");
+				if (edited === undefined) break;
+				const message = edited.trim() || (await regenerateGroupMessage(ctx, candidates, currentEvidence, result));
+				try {
+					const groups = appendGroup(state.groups, message, result);
+					state = { ...state, groups };
+					selectedGroupId = groups.at(-1)?.id;
+				} catch (error) {
+					ctx.ui.notify(`Invalid commit message: ${errorText(error)}`, "error");
+				}
+				break;
+			}
+			case "deleteGroup":
+				state = { ...state, groups: deleteGroup(state.groups, action.groupId) };
+				selectedGroupId = state.groups[0]?.id;
+				break;
+			case "moveGroup":
+				state = { ...state, groups: moveGroup(state.groups, action.groupId, action.direction) };
+				selectedGroupId = action.groupId;
+				break;
+			case "regenerateMessage": {
+				const group = state.groups.find((item) => item.id === action.groupId);
+				if (!group) break;
+				const message = await regenerateGroupMessage(ctx, candidates, currentEvidence, group.files);
+				state = { ...state, groups: updateGroupMessage(state.groups, action.groupId, message) };
+				selectedGroupId = action.groupId;
+				break;
+			}
+			case "regeneratePlan":
+				currentEvidence = await loadEvidence(git, root, ctx.sessionManager.getBranch());
+				assertCommittableState(currentEvidence.files);
+				state = {
+					files: currentEvidence.files,
+					groups: await generateInitialPlan(ctx, candidates, currentEvidence),
+					worktreeSignature: await computeWorktreeSignature(git, root, currentEvidence.files),
+				};
+				selectedGroupId = state.groups[0]?.id;
+				break;
+		}
+	}
+}
+
+async function pickFiles(
+	ctx: ExtensionCommandContext,
+	title: string,
+	state: CommitPlanState,
+	targetGroupId: string | undefined,
+	initialFiles: readonly string[],
+	preferUnassigned: boolean,
+): Promise<string[] | undefined> {
+	const result = await ctx.ui.custom<CommitFilePickerResult>(
+		(tui, theme, _keybindings, done) =>
+			new CommitFilePicker(
+				tui,
+				theme,
+				title,
+				state.files,
+				state.groups,
+				targetGroupId,
+				initialFiles,
+				preferUnassigned,
+				done,
+			),
+	);
+	return result.kind === "save" ? result.files : undefined;
+}
+
+async function executePlan(
+	pi: ExtensionAPI,
+	ctx: ExtensionCommandContext,
+	git: GitRunner,
+	root: string,
+	state: CommitPlanState,
+	_selectedGroupId: string | undefined,
+): Promise<CommitMarker[]> {
+	const groups = normalizePlan(state.groups, state.files);
+	if (groups.length === 0) {
+		ctx.ui.notify("No commit groups to execute.", "info");
+		return [];
+	}
+
+	const currentSignature = await computeWorktreeSignature(git, root, state.files);
+	if (currentSignature !== state.worktreeSignature) {
+		throw new Error("Working tree changed during commit review. Regenerate the commit plan and try again.");
+	}
+
+	const completed: CommitMarker[] = [];
+	try {
+		for (const group of groups) {
+			ctx.ui.setStatus("commit", `committing ${group.message.split("\n")[0] ?? group.message}`);
+			const files = filesForGroup(state.files, group);
+			await stageFilesOnly(git, root, files);
+			const hash = await commitStaged(git, root, group.message);
+			const subject = group.message.split("\n")[0] ?? group.message;
+			const marker = { hash, subject, timestamp: Date.now() };
+			completed.push(marker);
+			pi.appendEntry<CommitMarker>(COMMIT_MARKER_TYPE, marker);
+		}
+	} catch (error) {
+		if (completed.length > 0) {
+			ctx.ui.notify(
+				`Partially committed ${completed.length}: ${completed.map((item) => item.hash).join(", ")}; then failed: ${errorText(error)}`,
+				"warning",
+			);
+		}
+		throw error;
+	}
+	return completed;
+}
+
+function filesForGroup(files: readonly DirtyFile[], group: CommitPlanGroup): DirtyFile[] {
+	const byPath = new Map(files.map((file) => [file.path, file]));
+	return group.files.map((path) => byPath.get(path)).filter((file): file is DirtyFile => Boolean(file));
+}
+
+function assertCommittableState(files: readonly DirtyFile[]): void {
+	const deletedStagedAdds = files.filter((file) => file.status === "AD").map((file) => file.path);
+	if (deletedStagedAdds.length === 0) return;
+	throw new Error(
+		[
+			"Staged additions were deleted from the working tree.",
+			"Unstage or restore them before /commit:",
+			...deletedStagedAdds.map((path) => `- ${path}`),
+		].join("\n"),
+	);
+}
+
 function collectIntent(entries: readonly SessionEntry[]): string[] {
 	let intent: string[] = [];
 
@@ -170,257 +321,4 @@ function extractUserText(content: string | Message["content"]): string {
 			return [];
 		})
 		.join("\n");
-}
-
-function buildPrompt(evidence: CommitEvidence): string {
-	const intent =
-		evidence.intent.length > 0
-			? evidence.intent.map((message, index) => `[${index + 1}]\n${message}`).join("\n\n")
-			: "(none)";
-
-	return [
-		"Write a git commit message for all staged repository changes.",
-		"Use this strict conventional commit format:",
-		"<type>[optional scope][!]: <description>",
-		"Allowed types: feat, fix, docs, refactor, test, chore, perf, ci, build, revert.",
-		"Optional scope must be lowercase kebab-case, singular, and useful; omit it for broad or unrelated changes.",
-		"Subject must be one concise imperative line, no trailing period, max 100 characters.",
-		"For non-breaking changes, return exactly one line and no body.",
-		"For breaking changes, add ! to the header and include exactly one body paragraph starting with BREAKING CHANGE:.",
-		"Do not include a body unless the header has !.",
-		"Do not wrap the message in markdown or code fences.",
-		"Recent commit subjects are secondary style guidance; these rules take priority.",
-		"User intent is secondary context for why; the diff is authoritative for what changed.",
-		"",
-		"Recent commit subjects:",
-		evidence.recentSubjects || "(none)",
-		"",
-		"User intent since last commit:",
-		intent,
-		"",
-		"Staged changes:",
-		truncAt(evidence.diff || "(none)", MAX_DIFF_CHARS),
-	].join("\n");
-}
-
-async function resolveCandidates(
-	ctx: ExtensionCommandContext,
-	settings: typeof commitSettings.defaults,
-): Promise<CommitCandidate[]> {
-	const candidates: CommitCandidate[] = [];
-	const seen = new Set<string>();
-	const blocked = currentBlockedProviders(settings.cooldowns ?? {});
-
-	const add = async (model: Model<Api>, reasoning: ThinkingLevel | undefined): Promise<void> => {
-		if (blocked.has(model.provider)) return;
-		const key = `${model.provider}/${model.id}`;
-		if (seen.has(key)) return;
-
-		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
-		if (!auth.ok || !auth.apiKey) return;
-
-		seen.add(key);
-		candidates.push({ model, apiKey: auth.apiKey, headers: auth.headers, reasoning });
-	};
-
-	for (const preferred of PREFERRED_COMMIT_MODELS) {
-		const model = ctx.modelRegistry.find(preferred.provider, preferred.model);
-		if (model) await add(model, preferred.reasoning);
-	}
-	if (ctx.model) await add(ctx.model, undefined);
-
-	if (candidates.length === 0) throw new Error("No authenticated model available for commit message generation.");
-	return candidates;
-}
-
-async function generateMessage(
-	ctx: ExtensionCommandContext,
-	candidates: readonly CommitCandidate[],
-	prompt: string,
-): Promise<string> {
-	const failures: string[] = [];
-
-	for (const [index, candidate] of candidates.entries()) {
-		const label = `${candidate.model.provider}/${candidate.model.id}`;
-		ctx.ui.setStatus("commit", `generating commit message (${label})`);
-
-		try {
-			return await requestMessage(ctx, candidate, prompt);
-		} catch (error) {
-			if (ctx.signal?.aborted) throw new Error("Commit cancelled.");
-			if (shouldCooldownProvider(error)) await markProviderUnavailable(ctx, candidate.model.provider);
-			const message = errorText(error);
-			failures.push(`- ${label}: ${message}`);
-			if (index < candidates.length - 1) {
-				ctx.ui.notify(`Commit model failed (${label}): ${message}\nTrying next model.`, "info");
-			}
-		}
-	}
-
-	throw new Error(["Commit message generation failed for all models:", ...failures].join("\n"));
-}
-
-async function requestMessage(
-	ctx: ExtensionCommandContext,
-	candidate: CommitCandidate,
-	prompt: string,
-): Promise<string> {
-	const userMessage: Message = { role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() };
-	const messages: Message[] = [userMessage];
-
-	for (let attempt = 1; attempt <= COMMIT_MODEL_MAX_ATTEMPTS; attempt++) {
-		const response = await completeSimple(
-			candidate.model,
-			{ messages },
-			{ apiKey: candidate.apiKey, headers: candidate.headers, signal: ctx.signal, reasoning: candidate.reasoning },
-		);
-
-		if (response.stopReason === "aborted") throw new Error("Commit cancelled.");
-
-		const text = response.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
-		if (response.stopReason === "error") {
-			const error = new Error(response.errorMessage || "model returned an error");
-			if (attempt < COMMIT_MODEL_MAX_ATTEMPTS && !shouldCooldownProvider(error)) continue;
-			throw error;
-		}
-
-		try {
-			return validateMessage(cleanMessage(text));
-		} catch (error) {
-			if (!(error instanceof CommitMessageValidationError) || attempt >= COMMIT_MODEL_MAX_ATTEMPTS) throw error;
-
-			if (text) messages.push({ ...response, content: [{ type: "text", text }] });
-			messages.push({
-				role: "user",
-				content: [
-					{
-						type: "text",
-						text: [
-							`That commit message failed validation: ${error.message}`,
-							"Return one corrected commit message only.",
-							"If this is not a breaking change, return exactly one line with no body.",
-							"Do not include explanations, markdown, or code fences.",
-							"Previous response:",
-							truncAt(text, 1_000),
-						].join("\n"),
-					},
-				],
-				timestamp: Date.now(),
-			});
-		}
-	}
-
-	throw new Error("Commit message generation failed.");
-}
-
-function truncAt(text: string, cap: number): string {
-	return text.length > cap ? `${text.slice(0, cap)}\n(truncated)` : text;
-}
-
-function cleanMessage(rawMessage: string): string {
-	let message = rawMessage.trim();
-	const fenced = message.match(/^```(?:gitcommit|text)?\s*\n([\s\S]*?)\n```$/i);
-	if (fenced?.[1]) message = fenced[1].trim();
-	return message.replace(/^commit message:\s*/i, "").trim();
-}
-
-class CommitMessageValidationError extends Error {}
-
-function validateMessage(rawMessage: string): string {
-	const message = rawMessage.trim();
-	if (!message) throw new CommitMessageValidationError("Commit message is empty.");
-
-	const [header = "", ...bodyLines] = message.split("\n");
-	const headerMatch = header.match(/^([a-z]+)(?:\(([a-z0-9]+(?:-[a-z0-9]+)*)\))?(!)?: (.+)$/);
-	if (!headerMatch) throw new CommitMessageValidationError("Commit message must use conventional commit format.");
-
-	const [, type, , breakingMark, subject] = headerMatch;
-	if (!type || !CONVENTIONAL_COMMIT_TYPES.has(type)) {
-		throw new CommitMessageValidationError(`Unsupported commit type: ${type || "missing"}.`);
-	}
-	if (!subject || subject.length > 100)
-		throw new CommitMessageValidationError("Commit subject must be 1-100 characters.");
-	if (subject.endsWith(".")) throw new CommitMessageValidationError("Commit subject must not end with a period.");
-
-	const body = bodyLines.join("\n").trim();
-	if (!breakingMark && body)
-		throw new CommitMessageValidationError("Commit body is only allowed for breaking changes.");
-	if (breakingMark && !body.startsWith("BREAKING CHANGE: ")) {
-		throw new CommitMessageValidationError("Breaking commits must include a body starting with BREAKING CHANGE:.");
-	}
-	if (breakingMark && body.split("\n\n").filter((paragraph) => paragraph.trim()).length !== 1) {
-		throw new CommitMessageValidationError("Breaking commits must include exactly one BREAKING CHANGE paragraph.");
-	}
-
-	return body ? `${header}\n\n${body}` : header;
-}
-
-async function commitStaged(git: GitRunner, cwd: string, message: string): Promise<void> {
-	const messageFile = join(tmpdir(), `pi-commit-${randomUUID()}.txt`);
-	try {
-		await writeFile(messageFile, `${message}\n`, "utf8");
-		await git.run(["commit", "-F", messageFile], { cwd, timeout: COMMIT_TIMEOUT_MS });
-	} finally {
-		await rm(messageFile, { force: true });
-	}
-}
-
-function errorText(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
-
-function shouldCooldownProvider(error: unknown): boolean {
-	if (error instanceof CommitMessageValidationError) return false;
-	const message = errorText(error).toLowerCase();
-	return [
-		"401",
-		"402",
-		"403",
-		"429",
-		"api key",
-		"authentication",
-		"balance",
-		"billing",
-		"credit",
-		"forbidden",
-		"insufficient",
-		"payment",
-		"quota",
-		"rate limit",
-		"rate_limit",
-		"unauthorized",
-	].some((marker) => message.includes(marker));
-}
-
-const SEVEN_DAYS_MS = 604_800_000;
-
-// Providers whose cooldown is still in the future. Failure mode is typically
-// quota exhaustion, which is keyed on the provider rather than the specific
-// model, so every model under a downed provider is skipped.
-function currentBlockedProviders(cooldowns: Record<string, number>): Set<string> {
-	const now = Date.now();
-	const blocked = new Set<string>();
-	for (const [provider, availableAt] of Object.entries(cooldowns)) {
-		if (availableAt > now) blocked.add(provider);
-	}
-	return blocked;
-}
-
-// GitHub Copilot's premium quota refreshes on the first calendar day of the
-// next month (local time); the cooldown rides that boundary instead of a fixed
-// offset. Other providers get a one-week window.
-async function markProviderUnavailable(ctx: ExtensionCommandContext, provider: string): Promise<void> {
-	const until = provider === "github-copilot" ? nextMonthStartMs() : Date.now() + SEVEN_DAYS_MS;
-	await updateTauExtensionSettings("global", ctx, commitSettings, (current) => {
-		const cooldowns: Record<string, number> = { ...(current.cooldowns ?? {}) };
-		cooldowns[provider] = until;
-		return { ...current, cooldowns };
-	});
-}
-
-function nextMonthStartMs(): number {
-	const next = new Date();
-	next.setMonth(next.getMonth() + 1, 1);
-	next.setHours(0, 0, 0, 0);
-	return next.getTime();
 }

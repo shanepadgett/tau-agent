@@ -1,6 +1,6 @@
 # Commit
 
-Generate a git commit message from the current repository changes, then commit everything.
+Generate a semantic commit plan from current repository changes, review it, then create one or more commits.
 
 ## Usage
 
@@ -11,18 +11,29 @@ Generate a git commit message from the current repository changes, then commit e
 ## Behavior
 
 - Waits for the active agent turn to finish.
-- Stages all changes with `git add -A`, then reads recent commit subjects and a single `git diff --cached` (tracked edits and new files alike) as evidence.
+- Reads dirty files from the working tree: staged, unstaged, and untracked.
+- Collects bounded file-level evidence and recent commit subjects.
 - Includes user intent from the active conversation branch since the last successful `/commit`.
-- Calls a model directly so the prompt and response stay out of the active chat context.
-- Generates the message with a preferred off-context model, then falls back if needed.
-- Retries malformed or transient candidate failures before trying the next model.
-- If one candidate fails, tries the next candidate. If all fail, reports each error.
-- Generates and validates a strict conventional commit message.
-- Opens the message in the editor for review, then validates the reviewed message.
-- Asks for commit confirmation, then asks whether to push.
-- Commits the staged changes with the reviewed message.
-- Records a hidden session marker after a successful commit so later runs ignore older user intent.
-- Runs `git push` if requested.
+- Calls a model directly so prompts and responses stay out of active chat context.
+- Generates an ordered semantic commit plan with conventional commit messages.
+- Shows a review UI where you can edit messages, assign files, create groups, delete groups, reorder groups, and regenerate messages or the full plan.
+- Commits each reviewed group separately by staging only that group’s files.
+- Leaves unassigned files uncommitted.
+- Records a hidden session marker after each successful commit so later runs ignore older user intent.
+- Asks whether to push once after all commits succeed.
+
+## Review controls
+
+- `↑` / `↓`: move through commit groups.
+- `e`: edit selected commit message.
+- `a`: assign files to selected commit.
+- `n`: create a new commit group from selected files.
+- `r`: regenerate selected commit message.
+- `R`: regenerate the whole plan.
+- `[` / `]`: reorder selected commit.
+- `delete`: delete selected commit group and leave its files unassigned.
+- `enter`: execute the reviewed plan immediately.
+- `esc`: cancel.
 
 ## Commit message rules
 
@@ -34,7 +45,9 @@ Generate a git commit message from the current repository changes, then commit e
 
 ## Limits
 
-- Always commits all changes; does not create multiple commits.
-- Stages all changes before generating the message. On cancel, changes remain staged (revert with `git reset`).
+- Splitting is file-level only. Mixed unrelated changes inside one file cannot be split.
+- The workflow owns the git index while executing commits and resets staging before each commit group.
+- If the working tree changes during review, execution aborts and the plan must be regenerated.
+- Unassigned files stay uncommitted and may become unstaged.
 - Push uses plain `git push` and requires the branch/upstream to be configured.
-- Diff evidence is size-limited before sending to the model.
+- File evidence is size-limited before sending to the model.
