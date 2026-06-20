@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { basename, join, resolve, sep } from "node:path";
-import type { Api, Model, ThinkingLevel } from "@earendil-works/pi-ai";
-import { StringEnum } from "@earendil-works/pi-ai";
+import type { Api, Message, Model, ThinkingLevel } from "@earendil-works/pi-ai";
+import { completeSimple, StringEnum } from "@earendil-works/pi-ai";
 import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
@@ -24,6 +24,8 @@ import {
 
 const POSTURE_STATE_TYPE = "tau.posture";
 const MAX_REVIEW_DIFF_CHARS = 80_000;
+const MAX_REVIEW_PROMPT_EVIDENCE_CHARS = 50_000;
+const MAX_REVIEW_TRANSCRIPT_CHARS = 30_000;
 const MAX_REVIEW_UNTRACKED_PREVIEW_BYTES = 12_000;
 const DEFAULT_POSTURE = "act";
 const POSTURE_ORDER = ["plan", "act", "review", "debug"] as const;
@@ -628,7 +630,10 @@ async function startReviewInNewChat(
 		return;
 	}
 
-	const kickoff = focus ? `Review the injected diff. Focus: ${focus}` : "Review the injected diff.";
+	ctx.ui.setStatus("review", "drafting review prompt");
+	const kickoff = await draftReviewKickoffPrompt(ctx, evidence, focus, model ?? ctx.model).finally(() => {
+		ctx.ui.setStatus("review", undefined);
+	});
 
 	await ctx.newSession({
 		setup: async (sm) => {
@@ -637,9 +642,124 @@ async function startReviewInNewChat(
 			sm.appendCustomMessageEntry(injected.customType, injected.content, injected.display, injected.details);
 		},
 		withSession: async (newCtx) => {
-			await newCtx.sendUserMessage(kickoff);
+			newCtx.ui.setEditorText(kickoff);
+			newCtx.ui.notify("Review prompt drafted. Edit or press Enter.", "info");
 		},
 	});
+}
+
+async function draftReviewKickoffPrompt(
+	ctx: ExtensionCommandContext,
+	evidence: string,
+	focus: string | undefined,
+	model: Model<Api> | undefined,
+): Promise<string> {
+	if (!model) return fallbackReviewKickoff(focus);
+
+	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+	if (!auth.ok) {
+		ctx.ui.notify(`Review prompt draft skipped: ${auth.error}`, "warning");
+		return fallbackReviewKickoff(focus);
+	}
+
+	try {
+		const response = await completeSimple(
+			model,
+			{
+				systemPrompt: [
+					"Write a user prompt for a code review command.",
+					"Only describe what was built or changed.",
+					"Do not include review instructions, focus areas, risks, checklists, or phrases like 'watch for'.",
+					"One concise sentence or short paragraph. Return only the prompt text.",
+				].join("\n"),
+				messages: [
+					{
+						role: "user",
+						content: buildReviewKickoffDraftInput(evidence, ctx.sessionManager.getBranch(), focus),
+						timestamp: Date.now(),
+					},
+				],
+			},
+			{
+				reasoning: "minimal",
+				maxTokens: 220,
+				temperature: 0,
+				apiKey: auth.apiKey,
+				headers: auth.headers,
+				env: auth.env,
+			},
+		);
+		if (response.stopReason === "error" || response.stopReason === "aborted") {
+			ctx.ui.notify(`Review prompt draft skipped: ${response.errorMessage ?? response.stopReason}`, "warning");
+			return fallbackReviewKickoff(focus);
+		}
+		return cleanDraftPrompt(messageText(response) || fallbackReviewKickoff(focus));
+	} catch (error) {
+		ctx.ui.notify(`Review prompt draft skipped: ${errorText(error)}`, "warning");
+		return fallbackReviewKickoff(focus);
+	}
+}
+
+function buildReviewKickoffDraftInput(
+	evidence: string,
+	entries: readonly SessionEntry[],
+	focus: string | undefined,
+): string {
+	const transcript = formatReviewTranscript(entries);
+	return [
+		...(focus ? [`User-supplied description hint:\n${focus}`, ""] : []),
+		"Prior chat transcript, chronological:",
+		transcript || "(empty)",
+		"",
+		"Current diff/evidence:",
+		truncReviewPrompt(evidence),
+	].join("\n");
+}
+
+function formatReviewTranscript(entries: readonly SessionEntry[]): string {
+	const lines: string[] = [];
+	for (const entry of entries) {
+		if (entry.type !== "message") continue;
+		const { role } = entry.message;
+		if (role !== "user" && role !== "assistant") continue;
+		const text = messageText(entry.message).trim();
+		if (!text) continue;
+		lines.push(`${role === "user" ? "User" : "Assistant"}: ${text}`);
+	}
+	return truncTranscript(lines.join("\n\n"));
+}
+
+function messageText(message: Message): string {
+	if (typeof message.content === "string") return message.content;
+	return message.content
+		.filter((part) => part.type === "text")
+		.map((part) => part.text)
+		.join("\n");
+}
+
+function cleanDraftPrompt(text: string): string {
+	return text
+		.trim()
+		.replace(/^```(?:text)?\s*/i, "")
+		.replace(/```$/u, "")
+		.replace(/^(["'])([\s\S]*)\1$/u, "$2")
+		.trim();
+}
+
+function fallbackReviewKickoff(focus: string | undefined): string {
+	return focus ? `Review the changes that ${focus}` : "Review the changes in the injected diff.";
+}
+
+function truncReviewPrompt(text: string): string {
+	return text.length > MAX_REVIEW_PROMPT_EVIDENCE_CHARS
+		? `${text.slice(0, MAX_REVIEW_PROMPT_EVIDENCE_CHARS)}\n(truncated)`
+		: text;
+}
+
+function truncTranscript(text: string): string {
+	return text.length > MAX_REVIEW_TRANSCRIPT_CHARS
+		? `${text.slice(0, MAX_REVIEW_TRANSCRIPT_CHARS)}\n(transcript truncated)`
+		: text;
 }
 
 async function gatherReviewEvidence(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<string | undefined> {

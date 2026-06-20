@@ -48,7 +48,7 @@ Planning note naming convention:
 
 ## Review helpers
 
-`/review` can run in the current chat or a new chat. The new-chat path gathers the current diff and opens review posture with that evidence injected. It may stage changes to build the diff, so avoid it if you need to preserve partial staging.
+`/review` can run in the current chat or a new chat. The new-chat path gathers the current diff, drafts a concise review prompt from the diff and prior chat, injects the evidence, and leaves the prompt in the input for you to edit or submit.
 
 `/audit` runs a repo-wide avoidable-complexity audit for one turn.
 
