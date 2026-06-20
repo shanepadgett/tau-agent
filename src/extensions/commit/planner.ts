@@ -22,11 +22,13 @@ export async function generateInitialPlan(
 	ctx: ExtensionCommandContext,
 	candidates: readonly ModelCandidate[],
 	evidence: CommitEvidence,
+	previousPlan: readonly CommitPlanGroup[] = [],
+	regenerationNote = "",
 ): Promise<CommitPlanGroup[]> {
 	return generateValidated(
 		ctx,
 		candidates,
-		buildPlanPrompt(evidence),
+		buildPlanPrompt(evidence, previousPlan, regenerationNote),
 		(text) => validatePlanResponse(text, evidence.files),
 		(error, text) =>
 			[
@@ -46,12 +48,15 @@ export async function regenerateGroupMessage(
 	candidates: readonly ModelCandidate[],
 	evidence: CommitEvidence,
 	files: readonly string[],
+	previousPlan: readonly CommitPlanGroup[] = [],
+	selectedGroupId: string | undefined = undefined,
+	regenerationNote = "",
 ): Promise<string> {
 	const selected = evidence.files.filter((file) => files.includes(file.path));
 	return generateValidated(
 		ctx,
 		candidates,
-		buildMessagePrompt(evidence, selected),
+		buildMessagePrompt(evidence, selected, previousPlan, selectedGroupId, regenerationNote),
 		(text) => validateMessage(cleanMessage(text)),
 		(error, text) =>
 			[
@@ -182,7 +187,11 @@ export function updateGroupMessage(
 	return groups.map((group) => (group.id === groupId ? { ...group, message: validateMessage(message) } : group));
 }
 
-function buildPlanPrompt(evidence: CommitEvidence): string {
+function buildPlanPrompt(
+	evidence: CommitEvidence,
+	previousPlan: readonly CommitPlanGroup[],
+	regenerationNote: string,
+): string {
 	return [
 		"Create the fewest useful commits for the dirty repository files.",
 		"Return strict JSON only, no markdown, in one of these shapes:",
@@ -207,6 +216,7 @@ function buildPlanPrompt(evidence: CommitEvidence): string {
 		"- For non-breaking changes, message must be exactly one line.",
 		"- For breaking changes, add ! and include one body paragraph starting with BREAKING CHANGE:.",
 		"Recent commit subjects are style guidance. User intent explains why. File evidence is authoritative.",
+		"When regenerating, use the previous plan and user note to understand what to change; do not copy mistakes.",
 		"",
 		"Recent commit subjects:",
 		evidence.recentSubjects || "(none)",
@@ -214,12 +224,19 @@ function buildPlanPrompt(evidence: CommitEvidence): string {
 		"User intent since last commit:",
 		formatIntent(evidence.intent),
 		"",
+		...formatRegenerationContext(previousPlan, undefined, regenerationNote),
 		"Dirty files:",
 		truncAt(evidence.files.map(formatFileEvidence).join("\n\n"), MAX_PLAN_EVIDENCE_CHARS),
 	].join("\n");
 }
 
-function buildMessagePrompt(evidence: CommitEvidence, files: readonly DirtyFile[]): string {
+function buildMessagePrompt(
+	evidence: CommitEvidence,
+	files: readonly DirtyFile[],
+	previousPlan: readonly CommitPlanGroup[],
+	selectedGroupId: string | undefined,
+	regenerationNote: string,
+): string {
 	return [
 		"Write one git commit message for the selected dirty files.",
 		"Use this strict conventional commit format:",
@@ -230,6 +247,7 @@ function buildMessagePrompt(evidence: CommitEvidence, files: readonly DirtyFile[
 		"For non-breaking changes, return exactly one line and no body.",
 		"For breaking changes, add ! to the header and include exactly one body paragraph starting with BREAKING CHANGE:.",
 		"Do not wrap the message in markdown or code fences.",
+		"When regenerating, use the previous plan, selected previous commit, and user note to understand what to change; do not copy mistakes.",
 		"",
 		"Recent commit subjects:",
 		evidence.recentSubjects || "(none)",
@@ -237,6 +255,7 @@ function buildMessagePrompt(evidence: CommitEvidence, files: readonly DirtyFile[
 		"User intent since last commit:",
 		formatIntent(evidence.intent),
 		"",
+		...formatRegenerationContext(previousPlan, selectedGroupId, regenerationNote),
 		"Selected files:",
 		truncAt(files.map(formatFileEvidence).join("\n\n"), MAX_PLAN_EVIDENCE_CHARS),
 	].join("\n");
@@ -244,6 +263,29 @@ function buildMessagePrompt(evidence: CommitEvidence, files: readonly DirtyFile[
 
 function formatIntent(intent: readonly string[]): string {
 	return intent.length > 0 ? intent.map((message, index) => `[${index + 1}]\n${message}`).join("\n\n") : "(none)";
+}
+
+function formatRegenerationContext(
+	previousPlan: readonly CommitPlanGroup[],
+	selectedGroupId: string | undefined,
+	regenerationNote: string,
+): string[] {
+	if (previousPlan.length === 0 && !regenerationNote.trim()) return [];
+	return [
+		"Previous commit plan:",
+		previousPlan.length > 0
+			? previousPlan
+					.map(
+						(group, index) =>
+							`[${index + 1}]${group.id === selectedGroupId ? " (selected)" : ""}\nMessage: ${group.message}\nFiles:\n${group.files.map((file) => `- ${file}`).join("\n")}`,
+					)
+					.join("\n\n")
+			: "(none)",
+		"",
+		"User regeneration note:",
+		regenerationNote.trim() || "(none)",
+		"",
+	];
 }
 
 function formatFileEvidence(file: DirtyFile): string {

@@ -16,7 +16,7 @@ Generate a semantic commit plan from current repository changes, review it, then
 - Includes user intent from the active conversation branch since the last successful `/commit`.
 - Calls a model directly so prompts and responses stay out of active chat context.
 - Generates an ordered semantic commit plan with conventional commit messages.
-- Shows a review UI where you can edit messages, assign files, create groups, delete groups, reorder groups, and regenerate messages or the full plan.
+- Shows a review UI where you can edit messages, assign files, create groups, delete groups, reorder groups, and regenerate messages or the full plan with an optional note.
 - Commits each reviewed group separately by staging only that group’s files.
 - Leaves unassigned files uncommitted.
 - Records a hidden session marker after each successful commit so later runs ignore older user intent.
@@ -28,8 +28,8 @@ Generate a semantic commit plan from current repository changes, review it, then
 - `e`: edit selected commit message.
 - `a`: assign files to selected commit.
 - `n`: create a new commit group from selected files.
-- `r`: regenerate selected commit message.
-- `R`: regenerate the whole plan.
+- `r`: regenerate selected commit message, with an optional note.
+- `R`: regenerate the whole plan, with an optional note.
 - `[` / `]`: reorder selected commit.
 - `delete`: delete selected commit group and leave its files unassigned.
 - `enter`: execute the reviewed plan immediately.

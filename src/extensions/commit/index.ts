@@ -188,21 +188,35 @@ async function reviewPlan(
 			case "regenerateMessage": {
 				const group = state.groups.find((item) => item.id === action.groupId);
 				if (!group) break;
-				const message = await regenerateGroupMessage(ctx, candidates, currentEvidence, group.files);
+				const note = await ctx.ui.editor("Regeneration note (optional)", "");
+				if (note === undefined) break;
+				const message = await regenerateGroupMessage(
+					ctx,
+					candidates,
+					currentEvidence,
+					group.files,
+					state.groups,
+					group.id,
+					note,
+				);
 				state = { ...state, groups: updateGroupMessage(state.groups, action.groupId, message) };
 				selectedGroupId = action.groupId;
 				break;
 			}
-			case "regeneratePlan":
+			case "regeneratePlan": {
+				const note = await ctx.ui.editor("Regeneration note (optional)", "");
+				if (note === undefined) break;
+				const previousPlan = state.groups;
 				currentEvidence = await loadEvidence(git, root, ctx.sessionManager.getBranch());
 				assertCommittableState(currentEvidence.files);
 				state = {
 					files: currentEvidence.files,
-					groups: await generateInitialPlan(ctx, candidates, currentEvidence),
+					groups: await generateInitialPlan(ctx, candidates, currentEvidence, previousPlan, note),
 					worktreeSignature: await computeWorktreeSignature(git, root, currentEvidence.files),
 				};
 				selectedGroupId = state.groups[0]?.id;
 				break;
+			}
 		}
 	}
 }
