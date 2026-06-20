@@ -10,7 +10,7 @@
 ## Code Quality
 
 - New Tau extensions must include a `README.md` in the extension directory.
-- Keep Tau extension README files product-level. Skip implementation details unless asked.
+- Keep Tau extension README files product-level: what it is, why it exists, and how users invoke it. Do not update READMEs for minor/internal changes unless the user-facing feature description materially changes. No implementation details unless explicitly asked.
 - Use strict TypeScript and erasable syntax only.
 - No `any` unless necessary.
 - Use top-level imports only; avoid dynamic inline imports.
