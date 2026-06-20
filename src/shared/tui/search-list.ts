@@ -42,6 +42,7 @@ export interface SearchListConfig {
 	emptyMessage: string;
 	primaryLabel: string;
 	actions: readonly SearchListAction[];
+	expandActiveItem?: boolean;
 }
 
 const MAX_VISIBLE = 12;
@@ -171,9 +172,21 @@ export class SearchList<T extends SearchListItem = SearchListItem> implements Co
 
 	private renderItem(item: SearchListItem, active: boolean, width: number): string[] {
 		const pointer = active ? this.theme.fg("accent", "▶ ") : "  ";
-		const label = this.theme.fg(active ? "accent" : "text", preview(item.text));
 		const age = item.createdAt !== undefined ? this.theme.fg("dim", `  ${formatAge(item.createdAt)}`) : "";
-		return [truncateToWidth(`${pointer}${label}${age}`, width, "")];
+		if (!active || !this.config.expandActiveItem) {
+			const label = this.theme.fg(active ? "accent" : "text", preview(item.text));
+			return [truncateToWidth(`${pointer}${label}${age}`, width, "")];
+		}
+
+		const indent = "  ";
+		const bodyWidth = Math.max(1, width - visibleWidth(indent));
+		const body = wrapTextWithAnsi(this.theme.fg("accent", item.text), bodyWidth);
+		const lines = body.map((line, index) => truncateToWidth(`${index === 0 ? pointer : indent}${line}`, width, ""));
+		const lastIndex = lines.length - 1;
+		if (age && lastIndex >= 0 && visibleWidth(lines[lastIndex]!) + visibleWidth(age) <= width) {
+			lines[lastIndex] = `${lines[lastIndex]}${age}`;
+		}
+		return lines;
 	}
 
 	private renderHelp(width: number): string[] {

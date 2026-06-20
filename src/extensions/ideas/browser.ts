@@ -7,6 +7,7 @@ const CONFIG: Omit<SearchListConfig, "path"> = {
 	title: "Ideas",
 	emptyMessage: "No ideas yet. Use /ideas <text> to log one.",
 	primaryLabel: "insert",
+	expandActiveItem: true,
 	actions: [
 		{ id: "edit", key: Key.ctrl("e"), label: "ctrl+e edit" },
 		{ id: "delete", key: Key.ctrl("d"), label: "ctrl+d delete" },
