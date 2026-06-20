@@ -14,7 +14,7 @@ Select local reference repositories, add new ones, and send a prompt that points
 - Stores references in `~/.local/share/tau-agent/references/`.
 - `/reference` opens a TUI picker.
 - `/tau-new` and `/tau-edit` can reuse the picker to attach reference paths.
-- `n` adds a new reference from a git URL.
+- `n` adds a new reference from a git URL, then lets you choose the branch before cloning.
 - `u` runs `git pull --ff-only --quiet` in each reference without closing the picker, showing `…`, `✓`, or `!` next to each name.
 - `d` deletes the selected references from disk (with confirm). Disabled with nothing selected.
 - Space selects references; Enter opens an editor for the request.
@@ -23,6 +23,6 @@ Select local reference repositories, add new ones, and send a prompt that points
 ## Limits
 
 - Requires TUI mode for the picker.
-- `/reference new <git-url>` works without the picker.
+- `/reference new <git-url>` works without the reference picker. In TUI mode it still asks which branch to clone.
 - Uses the git URL basename as the folder name.
 - References are treated as read-only examples by the generated prompt.

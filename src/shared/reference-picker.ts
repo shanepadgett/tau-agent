@@ -1,18 +1,22 @@
-import { mkdir, readdir, rm } from "node:fs/promises";
-import { homedir } from "node:os";
+import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
 import { Key, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { createGitRunner, type GitRunner } from "./git.ts";
+import { formatAge } from "./text.ts";
 
 const REFERENCES_DIR = join(homedir(), ".local", "share", "tau-agent", "references");
 const CLONE_TIMEOUT_MS = 300_000;
 const UPDATE_TIMEOUT_MS = 120_000;
+const BRANCH_PROBE_TIMEOUT_MS = 120_000;
+const MAX_BRANCH_CHOICES = 50;
 
 export interface ReferenceItem {
 	name: string;
 	path: string;
 	dirty: boolean;
+	branch: string;
 }
 
 type ReferencePanelAction =
@@ -22,6 +26,12 @@ type ReferencePanelAction =
 	| { action: "submit"; selected: ReferenceItem[] };
 
 type ReferenceUpdateState = "updating" | "updated" | "failed";
+
+interface ReferenceBranch {
+	name: string;
+	updatedAt: number;
+	isDefault: boolean;
+}
 
 export async function pickReferences(
 	pi: ExtensionAPI,
@@ -162,13 +172,12 @@ async function showReferencePanel(
 
 		return {
 			render(width: number): string[] {
-				const renderWidth = Math.max(1, width);
-				const border = theme.fg("accent", "─".repeat(renderWidth));
-				const lines = [border];
-
-				lines.push(truncateToWidth(theme.fg("accent", theme.bold("References")), renderWidth));
-				lines.push(truncateToWidth(theme.fg("dim", `${items.length} folder(s) in ${root}`), renderWidth));
-				lines.push("");
+				const { border, lines, renderWidth } = panelHeader(
+					theme,
+					width,
+					"References",
+					`${items.length} folder(s) in ${root}`,
+				);
 
 				if (items.length === 0) {
 					lines.push(truncateToWidth(theme.fg("muted", "No reference folders. Press n for new."), renderWidth));
@@ -187,11 +196,9 @@ async function showReferencePanel(
 						const name = item.dirty ? `${item.name} *` : item.name;
 						const state = updateStates.get(item.path);
 						const suffix = state ? ` ${updateIndicator(state)}` : "";
-						const labelText = `${name}${suffix}`;
-						const label = active
-							? theme.fg("accent", labelText)
-							: theme.fg(item.dirty ? "warning" : "text", labelText);
-						lines.push(truncateToWidth(`${pointer}${box} ${label}`, renderWidth));
+						const label = active ? theme.fg("accent", name) : theme.fg(item.dirty ? "warning" : "text", name);
+						const branch = item.branch ? theme.fg("muted", ` (${item.branch})`) : "";
+						lines.push(truncateToWidth(`${pointer}${box} ${label}${branch}${suffix}`, renderWidth));
 					}
 				}
 
@@ -207,14 +214,9 @@ async function showReferencePanel(
 			},
 			invalidate() {},
 			handleInput(data: string) {
-				if (matchesKey(data, Key.up)) {
-					cursor = Math.max(0, cursor - 1);
-					tui.requestRender();
-					return;
-				}
-
-				if (matchesKey(data, Key.down)) {
-					cursor = Math.min(Math.max(0, items.length - 1), cursor + 1);
+				const nextCursor = moveCursor(data, cursor, Math.max(0, items.length - 1));
+				if (nextCursor !== undefined) {
+					cursor = nextCursor;
 					tui.requestRender();
 					return;
 				}
@@ -286,19 +288,176 @@ async function cloneReference(git: GitRunner, ctx: ExtensionCommandContext, rawU
 		return;
 	}
 
+	let branch: string | undefined;
+	if (ctx.mode === "tui") {
+		branch = await pickReferenceBranch(git, ctx, url);
+		if (!branch) return;
+	}
+
 	const root = referenceRoot();
 	const target = join(root, name);
 	await mkdir(root, { recursive: true });
 
 	ctx.ui.setStatus("reference", `cloning ${name}`);
 	try {
-		await git.run(["clone", url, target], { cwd: root, timeout: CLONE_TIMEOUT_MS });
+		await git.run(["clone", ...(branch ? ["--branch", branch] : []), url, target], {
+			cwd: root,
+			timeout: CLONE_TIMEOUT_MS,
+		});
 		ctx.ui.notify(`Added ${name} to ${target}`, "info");
 	} catch (error) {
 		ctx.ui.notify(`New reference failed: ${errorText(error)}`, "error");
 	} finally {
 		ctx.ui.setStatus("reference", undefined);
 	}
+}
+
+async function pickReferenceBranch(
+	git: GitRunner,
+	ctx: ExtensionCommandContext,
+	url: string,
+): Promise<string | undefined> {
+	ctx.ui.setStatus("reference", "loading remote branches");
+	let branches: ReferenceBranch[];
+	try {
+		branches = await loadRemoteBranches(git, url);
+	} catch (error) {
+		ctx.ui.notify(`Branch lookup failed: ${errorText(error)}`, "error");
+		return undefined;
+	} finally {
+		ctx.ui.setStatus("reference", undefined);
+	}
+
+	if (branches.length === 0) {
+		ctx.ui.notify("No remote branches found.", "error");
+		return undefined;
+	}
+
+	return showBranchPicker(ctx, branches.slice(0, MAX_BRANCH_CHOICES), branches.length);
+}
+
+async function loadRemoteBranches(git: GitRunner, url: string): Promise<ReferenceBranch[]> {
+	const defaultBranch = await loadDefaultBranch(git, url);
+	const tempRoot = await mkdtemp(join(tmpdir(), "tau-reference-"));
+	try {
+		await git.run(["init", "--quiet"], { cwd: tempRoot, timeout: BRANCH_PROBE_TIMEOUT_MS });
+		await git.run(["remote", "add", "origin", url], { cwd: tempRoot, timeout: BRANCH_PROBE_TIMEOUT_MS });
+		await git.run(["fetch", "--quiet", "--depth=1", "origin", "+refs/heads/*:refs/remotes/origin/*"], {
+			cwd: tempRoot,
+			timeout: BRANCH_PROBE_TIMEOUT_MS,
+		});
+		const output = await git.run(
+			[
+				"for-each-ref",
+				"refs/remotes/origin",
+				"--sort=-committerdate",
+				"--format=%(refname:strip=3)%00%(committerdate:unix)",
+			],
+			{ cwd: tempRoot, timeout: BRANCH_PROBE_TIMEOUT_MS },
+		);
+		const branches = output
+			.split("\n")
+			.filter(Boolean)
+			.map((line): ReferenceBranch => {
+				const [branchName = "", seconds = "0"] = line.split("\0");
+				return {
+					name: branchName,
+					updatedAt: Number(seconds) * 1000,
+					isDefault: branchName === defaultBranch,
+				};
+			})
+			.filter((branch) => branch.name);
+
+		return branches.sort((left, right) => {
+			if (left.isDefault !== right.isDefault) return left.isDefault ? -1 : 1;
+			return right.updatedAt - left.updatedAt || left.name.localeCompare(right.name);
+		});
+	} finally {
+		await rm(tempRoot, { recursive: true, force: true });
+	}
+}
+
+async function loadDefaultBranch(git: GitRunner, url: string): Promise<string | undefined> {
+	const output = await git.run(["ls-remote", "--symref", url, "HEAD"], {
+		optional: true,
+		timeout: BRANCH_PROBE_TIMEOUT_MS,
+	});
+	const match = /^ref: refs\/heads\/(.+)\s+HEAD$/m.exec(output);
+	return match?.[1];
+}
+
+async function showBranchPicker(
+	ctx: ExtensionCommandContext,
+	branches: readonly ReferenceBranch[],
+	totalCount: number,
+): Promise<string | undefined> {
+	return ctx.ui.custom<string | undefined>((tui, theme, _keybindings, done) => {
+		let cursor = 0;
+
+		return {
+			render(width: number): string[] {
+				const { border, lines, renderWidth } = panelHeader(
+					theme,
+					width,
+					"Choose branch",
+					`${branches.length}/${totalCount} branch(es) shown`,
+				);
+
+				for (const [index, branch] of branches.entries()) {
+					const active = index === cursor;
+					const pointer = active ? theme.fg("accent", "> ") : "  ";
+					const suffix = branch.isDefault ? " default" : formatAge(branch.updatedAt);
+					const labelText = `${branch.name}  ${suffix}`;
+					const label = active
+						? theme.fg("accent", labelText)
+						: theme.fg(branch.isDefault ? "accent" : "text", labelText);
+					lines.push(truncateToWidth(`${pointer}${label}`, renderWidth));
+				}
+
+				lines.push("");
+				lines.push(...wrapTextWithAnsi(theme.fg("dim", "↑↓ move • enter clone branch • esc cancel"), renderWidth));
+				lines.push(border);
+				return lines;
+			},
+			invalidate() {},
+			handleInput(data: string) {
+				const nextCursor = moveCursor(data, cursor, branches.length - 1);
+				if (nextCursor !== undefined) {
+					cursor = nextCursor;
+					tui.requestRender();
+					return;
+				}
+
+				if (matchesKey(data, Key.enter)) {
+					done(branches[cursor]?.name);
+					return;
+				}
+
+				if (matchesKey(data, Key.escape)) done(undefined);
+			},
+		};
+	});
+}
+
+function panelHeader(
+	theme: Theme,
+	width: number,
+	titleText: string,
+	subtitleText: string,
+): { border: string; lines: string[]; renderWidth: number } {
+	const renderWidth = Math.max(1, width);
+	const border = theme.fg("accent", "─".repeat(renderWidth));
+	const lines = [border];
+	lines.push(truncateToWidth(theme.fg("accent", theme.bold(titleText)), renderWidth));
+	lines.push(truncateToWidth(theme.fg("dim", subtitleText), renderWidth));
+	lines.push("");
+	return { border, lines, renderWidth };
+}
+
+function moveCursor(data: string, cursor: number, max: number): number | undefined {
+	if (matchesKey(data, Key.up)) return Math.max(0, cursor - 1);
+	if (matchesKey(data, Key.down)) return Math.min(max, cursor + 1);
+	return undefined;
 }
 
 async function loadReferences(git: GitRunner): Promise<ReferenceItem[]> {
@@ -315,9 +474,17 @@ async function loadReferences(git: GitRunner): Promise<ReferenceItem[]> {
 		references.push({
 			...ref,
 			dirty: (await git.run(["status", "--porcelain=v1"], { cwd: ref.path, optional: true })).length > 0,
+			branch: await loadCurrentBranch(git, ref.path),
 		});
 	}
 	return references;
+}
+
+async function loadCurrentBranch(git: GitRunner, path: string): Promise<string> {
+	const branch = await git.run(["branch", "--show-current"], { cwd: path, optional: true });
+	if (branch) return branch;
+	const commit = await git.run(["rev-parse", "--short", "HEAD"], { cwd: path, optional: true });
+	return commit ? `detached ${commit}` : "";
 }
 
 function updateIndicator(state: ReferenceUpdateState): string {
