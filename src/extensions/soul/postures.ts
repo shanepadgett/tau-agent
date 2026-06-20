@@ -1,4 +1,5 @@
-import { basename, resolve, sep } from "node:path";
+import { readFile, stat } from "node:fs/promises";
+import { basename, join, resolve, sep } from "node:path";
 import type { Api, Model, ThinkingLevel } from "@earendil-works/pi-ai";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type {
@@ -22,6 +23,7 @@ import {
 const POSTURE_STATE_TYPE = "tau.posture";
 const REVIEW_EVIDENCE_TYPE = "tau.review.evidence";
 const MAX_REVIEW_DIFF_CHARS = 80_000;
+const MAX_REVIEW_UNTRACKED_PREVIEW_BYTES = 12_000;
 const DEFAULT_POSTURE = "act";
 const POSTURE_ORDER = ["plan", "act", "review", "debug"] as const;
 const SWITCH_POSTURE_TOOL = "switch_posture";
@@ -502,7 +504,10 @@ interface ReviewEvidenceParts {
 	root: string;
 	branch: string;
 	fileCount: number;
-	statPatch: string;
+	status: string;
+	stagedPatch: string;
+	unstagedPatch: string;
+	untrackedPreview: string;
 }
 
 const REVIEW_MODEL_PICKER_CONFIG: Omit<SearchListConfig, "path"> = {
@@ -600,32 +605,107 @@ async function gatherReviewEvidence(pi: ExtensionAPI, ctx: ExtensionCommandConte
 	}
 	const root = repo.root;
 
-	// Staging up front makes `git diff --cached` the complete picture: tracked
-	// edits and untracked files alike. This leaves changes staged in the repo;
-	// see README. No working-tree mutation.
-	await git.run(["add", "-A"], { cwd: root });
-
-	const [statPatch, branch] = await Promise.all([
+	const [status, stagedPatch, unstagedPatch, branch] = await Promise.all([
+		git.run(["status", "--porcelain=v2", "-z", "--untracked-files=all"], { cwd: root }),
 		git.run([...STAGED_PATCH_DIFF_ARGS], { cwd: root, optional: true }),
+		git.run(["diff", "--stat", "--patch", "--no-color", "--no-ext-diff"], { cwd: root, optional: true }),
 		git.run(["branch", "--show-current"], { cwd: root, optional: true }),
 	]);
 
-	return formatReviewEvidence({ root, branch, fileCount: repo.fileCount, statPatch });
+	return formatReviewEvidence({
+		root,
+		branch,
+		fileCount: repo.fileCount,
+		status: formatPorcelainStatus(status),
+		stagedPatch,
+		unstagedPatch,
+		untrackedPreview: await formatUntrackedPreviews(root, status),
+	});
 }
 
 function formatReviewEvidence(parts: ReviewEvidenceParts): string {
-	const raw = parts.statPatch || "(none)";
-	const patch = raw.length > MAX_REVIEW_DIFF_CHARS ? `${raw.slice(0, MAX_REVIEW_DIFF_CHARS)}\n(truncated)` : raw;
 	return [
 		"<tau_review_evidence>",
 		`Repo: ${basename(parts.root)}`,
 		`Branch: ${parts.branch || "(detached)"}`,
 		`Changes: ${parts.fileCount} file(s)`,
 		"",
-		"Staged diff vs HEAD (all changes including untracked):",
-		patch,
+		"Status:",
+		parts.status || "(none)",
+		"",
+		"Staged diff vs HEAD:",
+		truncReview(parts.stagedPatch || "(none)"),
+		"",
+		"Unstaged diff vs index:",
+		truncReview(parts.unstagedPatch || "(none)"),
+		"",
+		"Untracked file previews:",
+		parts.untrackedPreview || "(none)",
 		"</tau_review_evidence>",
 	].join("\n");
+}
+
+function truncReview(text: string): string {
+	return text.length > MAX_REVIEW_DIFF_CHARS ? `${text.slice(0, MAX_REVIEW_DIFF_CHARS)}\n(truncated)` : text;
+}
+
+function formatPorcelainStatus(raw: string): string {
+	return parsePorcelainV2Z(raw)
+		.map((file) => `${file.status} ${file.path}`)
+		.join("\n");
+}
+
+async function formatUntrackedPreviews(root: string, status: string): Promise<string> {
+	const paths = parsePorcelainV2Z(status)
+		.filter((file) => file.status === "??")
+		.map((file) => file.path);
+	const previews: string[] = [];
+	for (const path of paths) previews.push(await formatUntrackedPreview(root, path));
+	return truncReview(previews.join("\n\n"));
+}
+
+async function formatUntrackedPreview(root: string, path: string): Promise<string> {
+	try {
+		const fullPath = join(root, path);
+		const info = await stat(fullPath);
+		if (!info.isFile()) return `File: ${path}\nuntracked ${info.isDirectory() ? "directory" : "non-file"}`;
+		if (info.size > MAX_REVIEW_UNTRACKED_PREVIEW_BYTES) return `File: ${path}\nuntracked file, ${info.size} bytes`;
+		const bytes = await readFile(fullPath);
+		if (bytes.includes(0)) return `File: ${path}\nuntracked binary file, ${info.size} bytes`;
+		return `File: ${path}\nuntracked file preview:\n${bytes.toString("utf8")}`;
+	} catch (error) {
+		return `File: ${path}\nuntracked file preview unavailable: ${errorText(error)}`;
+	}
+}
+
+function parsePorcelainV2Z(raw: string): { path: string; status: string }[] {
+	const files: { path: string; status: string }[] = [];
+	const entries = raw ? raw.split("\0").filter(Boolean) : [];
+
+	for (let index = 0; index < entries.length; index++) {
+		const entry = entries[index]!;
+		if (entry.startsWith("? ")) {
+			files.push({ path: entry.slice(2), status: "??" });
+			continue;
+		}
+		if (entry.startsWith("1 ")) {
+			const [status, path] = parsePorcelainTracked(entry, 8);
+			files.push({ path, status });
+			continue;
+		}
+		if (entry.startsWith("2 ")) {
+			const [status, path] = parsePorcelainTracked(entry, 9);
+			files.push({ path, status });
+			index++;
+		}
+	}
+
+	return files;
+}
+
+function parsePorcelainTracked(entry: string, pathField: number): [string, string] {
+	const fields = entry.split(" ");
+	return [(fields[1] ?? "  ").replace(/\./g, " "), fields.slice(pathField).join(" ")];
 }
 
 function errorText(error: unknown): string {
