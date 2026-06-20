@@ -18,9 +18,10 @@ export interface ReferenceItem {
 type ReferencePanelAction =
 	| { action: "cancel" }
 	| { action: "new" }
-	| { action: "update" }
 	| { action: "delete"; selected: ReferenceItem[] }
 	| { action: "submit"; selected: ReferenceItem[] };
+
+type ReferenceUpdateState = "updating" | "updated" | "failed";
 
 export async function pickReferences(
 	pi: ExtensionAPI,
@@ -36,17 +37,11 @@ export async function pickReferences(
 	const selected = new Set<string>();
 
 	while (true) {
-		const result = await showReferencePanel(ctx, references, selected);
+		const result = await showReferencePanel(git, ctx, references, selected);
 		if (result.action === "cancel") return undefined;
 
 		if (result.action === "new") {
 			await addReference(pi, ctx);
-			references = await loadReferences(git);
-			continue;
-		}
-
-		if (result.action === "update") {
-			await updateReferences(git, ctx, references);
 			references = await loadReferences(git);
 			continue;
 		}
@@ -101,6 +96,7 @@ export function referenceLines(references: readonly ReferenceItem[]): string[] {
 }
 
 async function showReferencePanel(
+	git: GitRunner,
 	ctx: ExtensionCommandContext,
 	references: readonly ReferenceItem[],
 	selected: Set<string>,
@@ -109,12 +105,59 @@ async function showReferencePanel(
 
 	return ctx.ui.custom<ReferencePanelAction>((tui, theme, _keybindings, done) => {
 		let cursor = 0;
+		let items = [...references];
+		let updating = false;
+		const updateStates = new Map<string, ReferenceUpdateState>();
 
 		function toggleCurrent(): void {
-			const item = references[cursor];
+			const item = items[cursor];
 			if (!item) return;
 			if (!selected.delete(item.path)) selected.add(item.path);
 			tui.requestRender();
+		}
+
+		async function updateVisibleReferences(): Promise<void> {
+			if (updating) return;
+			if (items.length === 0) {
+				ctx.ui.notify("No references.", "info");
+				return;
+			}
+
+			updating = true;
+			updateStates.clear();
+			ctx.ui.setStatus("reference", `updating ${items.length} reference(s)`);
+			tui.requestRender();
+
+			let updated = 0;
+			const failures: string[] = [];
+			try {
+				for (const ref of items) updateStates.set(ref.path, "updating");
+				tui.requestRender();
+
+				await Promise.all(
+					items.map(async (ref) => {
+						try {
+							await git.run(["pull", "--ff-only", "--quiet"], { cwd: ref.path, timeout: UPDATE_TIMEOUT_MS });
+							updated += 1;
+							updateStates.set(ref.path, "updated");
+						} catch (error) {
+							updateStates.set(ref.path, "failed");
+							failures.push(`${ref.name}: ${errorText(error)}`);
+						}
+						tui.requestRender();
+					}),
+				);
+
+				items = await loadReferences(git);
+				cursor = Math.min(cursor, Math.max(0, items.length - 1));
+			} finally {
+				updating = false;
+				ctx.ui.setStatus("reference", undefined);
+				tui.requestRender();
+			}
+
+			if (updated > 0) ctx.ui.notify(`Updated ${updated} reference(s).`, "info");
+			if (failures.length > 0) ctx.ui.notify(`Reference update failed:\n${failures.join("\n")}`, "error");
 		}
 
 		return {
@@ -124,25 +167,30 @@ async function showReferencePanel(
 				const lines = [border];
 
 				lines.push(truncateToWidth(theme.fg("accent", theme.bold("References")), renderWidth));
-				lines.push(truncateToWidth(theme.fg("dim", `${references.length} folder(s) in ${root}`), renderWidth));
+				lines.push(truncateToWidth(theme.fg("dim", `${items.length} folder(s) in ${root}`), renderWidth));
 				lines.push("");
 
-				if (references.length === 0) {
+				if (items.length === 0) {
 					lines.push(truncateToWidth(theme.fg("muted", "No reference folders. Press n for new."), renderWidth));
 				} else {
-					if (references.some((item) => item.dirty)) {
+					if (items.some((item) => item.dirty)) {
 						lines.push(
 							truncateToWidth(theme.fg("warning", "Warning: dirty reference repos are read-only."), renderWidth),
 						);
 						lines.push("");
 					}
 
-					for (const [index, item] of references.entries()) {
+					for (const [index, item] of items.entries()) {
 						const active = index === cursor;
 						const pointer = active ? theme.fg("accent", "> ") : "  ";
 						const box = selected.has(item.path) ? "[x]" : "[ ]";
 						const name = item.dirty ? `${item.name} *` : item.name;
-						const label = active ? theme.fg("accent", name) : theme.fg(item.dirty ? "warning" : "text", name);
+						const state = updateStates.get(item.path);
+						const suffix = state ? ` ${updateIndicator(state)}` : "";
+						const labelText = `${name}${suffix}`;
+						const label = active
+							? theme.fg("accent", labelText)
+							: theme.fg(item.dirty ? "warning" : "text", labelText);
 						lines.push(truncateToWidth(`${pointer}${box} ${label}`, renderWidth));
 					}
 				}
@@ -166,7 +214,7 @@ async function showReferencePanel(
 				}
 
 				if (matchesKey(data, Key.down)) {
-					cursor = Math.min(Math.max(0, references.length - 1), cursor + 1);
+					cursor = Math.min(Math.max(0, items.length - 1), cursor + 1);
 					tui.requestRender();
 					return;
 				}
@@ -177,7 +225,7 @@ async function showReferencePanel(
 				}
 
 				if (matchesKey(data, Key.enter)) {
-					const picked = references.filter((item) => selected.has(item.path));
+					const picked = items.filter((item) => selected.has(item.path));
 					if (picked.length > 0) done({ action: "submit", selected: picked });
 					return;
 				}
@@ -188,12 +236,12 @@ async function showReferencePanel(
 				}
 
 				if (data === "u" || data === "U") {
-					done({ action: "update" });
+					void updateVisibleReferences();
 					return;
 				}
 
 				if (data === "d" || data === "D") {
-					const picked = references.filter((item) => selected.has(item.path));
+					const picked = items.filter((item) => selected.has(item.path));
 					if (picked.length === 0) {
 						ctx.ui.notify("No references selected.", "info");
 						return;
@@ -272,35 +320,10 @@ async function loadReferences(git: GitRunner): Promise<ReferenceItem[]> {
 	return references;
 }
 
-async function updateReferences(
-	git: GitRunner,
-	ctx: ExtensionCommandContext,
-	references: readonly ReferenceItem[],
-): Promise<void> {
-	if (references.length === 0) {
-		ctx.ui.notify("No references.", "info");
-		return;
-	}
-
-	ctx.ui.setStatus("reference", `updating ${references.length} reference(s)`);
-	const updated: string[] = [];
-	const failures: string[] = [];
-
-	try {
-		for (const ref of references) {
-			try {
-				await git.run(["pull", "--ff-only", "--quiet"], { cwd: ref.path, timeout: UPDATE_TIMEOUT_MS });
-				updated.push(ref.path);
-			} catch (error) {
-				failures.push(`${ref.name}: ${errorText(error)}`);
-			}
-		}
-	} finally {
-		ctx.ui.setStatus("reference", undefined);
-	}
-
-	if (updated.length > 0) ctx.ui.notify(`Updated ${updated.length} reference(s).`, "info");
-	if (failures.length > 0) ctx.ui.notify(`Reference update failed:\n${failures.join("\n")}`, "error");
+function updateIndicator(state: ReferenceUpdateState): string {
+	if (state === "updating") return "…";
+	if (state === "updated") return "✓";
+	return "!";
 }
 
 async function confirmDelete(ctx: ExtensionCommandContext, items: readonly ReferenceItem[]): Promise<boolean> {

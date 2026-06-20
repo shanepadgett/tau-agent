@@ -15,7 +15,7 @@ Select local reference repositories, add new ones, and send a prompt that points
 - `/reference` opens a TUI picker.
 - `/tau-new` and `/tau-edit` can reuse the picker to attach reference paths.
 - `n` adds a new reference from a git URL.
-- `u` runs `git pull --ff-only --quiet` in each reference.
+- `u` runs `git pull --ff-only --quiet` in each reference without closing the picker, showing `…`, `✓`, or `!` next to each name.
 - `d` deletes the selected references from disk (with confirm). Disabled with nothing selected.
 - Space selects references; Enter opens an editor for the request.
 - Sends the request with selected reference paths in the chat.
