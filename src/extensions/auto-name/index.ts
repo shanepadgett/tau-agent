@@ -14,12 +14,25 @@ const MAX_NAMING_INPUT_CHARS = 120_000;
 
 const NAMING_PROMPT = [
 	"You are naming a chat session based on the user's first message and any injected hidden context.",
-	"Return a single short, descriptive session name that captures what the work is about.",
+	"Answer the question: what is this chat about?",
+	"",
 	"If injected context is present, treat it as primary; the user message may be generic command text.",
+	"",
 	"Rules:",
-	"- Plain text, no quotes, no punctuation at the end, no markdown, no code fences.",
-	'- 3-8 words. Lowercase unless a proper noun. No filler like "task:" or "chat about".',
-	'- Focus on the concrete subject, not the action ("auth token refresh" not "fix the bug").',
+	"- A brief natural phrase that says what the work is about. Not a URL slug, not a keyword list.",
+	"- If the work targets a specific named feature, component, or file in the repository, call it out by name.",
+	"- A person scanning a session list a week later should know what this chat was about.",
+	"- No quotes, no trailing punctuation, no markdown, no code fences.",
+	'- No filler like "task:", "chat about", "working on".',
+	"",
+	'Good: "Improving auto-name model selection and prompt"',
+	'Bad:  "automatic naming function and prompt improvement"',
+	"",
+	'Good: "Cleaning up old plan notes before commit"',
+	'Bad:  "commit plan note and previous plan"',
+	"",
+	"The bad examples are keyword slugs — compressed word salads that tell you nothing about the actual work.",
+	"",
 	`- If the message is too short, ambiguous, a bare command, or has no clear topic, respond with exactly: ${SENTINEL}`,
 	"- Respond with the name only, nothing else.",
 ].join("\n");
@@ -61,7 +74,7 @@ async function runAutoName(
 	try {
 		const candidates = (await resolveCandidates(ctx)).map((candidate) => ({
 			...candidate,
-			reasoning: "low" as const,
+			reasoning: "xhigh" as const,
 		}));
 		const result = await generateValidated(
 			{ ui: ctx.ui, signal: controller.signal },
