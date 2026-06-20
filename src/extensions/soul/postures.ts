@@ -30,8 +30,17 @@ const POSTURE_ORDER = ["plan", "act", "review", "debug"] as const;
 const SWITCH_POSTURE_TOOL = "switch_posture";
 const PLAN_WRITE_DIR = "docs/plans";
 const RESTRICTED_POSTURES = new Set<PostureName>(["plan", "review", "debug"]);
-const RESTRICTED_TOOLS = ["read", "grep", "find", "ls", "write", "edit", SWITCH_POSTURE_TOOL];
-const ACT_TOOLS = ["read", "grep", "find", "ls", "bash", "edit", "write", SWITCH_POSTURE_TOOL];
+const MUTATING_BASH_PATTERNS = [
+	/(^|[;&|]\s*)(rm|mv|cp|touch|mkdir|rmdir|chmod|chown|ln)\b/i,
+	/(^|[;&|]\s*)git\s+(add|commit|reset|clean|checkout|switch|stash|merge|rebase|pull|push|restore)\b/i,
+	/(^|[;&|]\s*)(npm|pnpm|yarn|bun)\s+(install|add|remove|update|upgrade|dedupe)\b/i,
+	/(^|[;&|]\s*)(pip|pip3|uv|poetry)\s+(install|add|remove|update)\b/i,
+	/(^|[;&|]\s*)(npx\s+)?(prettier|biome|eslint)\b.*\s(--write|--fix)\b/i,
+	/(?<![0-9&>])>\s*(?![&12])/,
+	/(^|[;&|]\s*)(sed|perl)\b[^\n]*\s-i\b/i,
+	/(^|[;&|]\s*)awk\b.*-i\s+inplace\b/i,
+	/(^|[;&|]\s*)tee\b/i,
+] as const;
 
 type PostureName = (typeof POSTURE_ORDER)[number];
 
@@ -59,7 +68,9 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 
 - Read-only exploration, except write/edit may modify planning notes under \`${PLAN_WRITE_DIR}/\`.
 - Use \`${PLAN_WRITE_DIR}/<slug>.md\` for normal plans.
-- No code edits, config edits, docs edits outside \`${PLAN_WRITE_DIR}/\`, or mutating commands.
+- Prefer built-in read/grep/find/ls. Use bash only when they don't cover the job: tests, type probes, one-off node/python scripts, command help/version output, config inspection, and programmatic assumption checks.
+- Prefer inline scripts/stdin or temp dirs for scratch work.
+- No code edits, config edits, docs edits outside \`${PLAN_WRITE_DIR}/\`, installs, formatters in write mode, migrations, git state changes, or other mutating commands.
 - Start rough by default: 1–2 sentences naming the approach's bulk shape/silhouette, then pause for alignment.
 - Do not create a plan file for loose brainstorming.
 - Once rough shape is aligned and decisions/details matter, write or update a plan file under \`${PLAN_WRITE_DIR}/\`.
@@ -87,7 +98,9 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 
 - Read-only review, except write/edit may modify review notes under \`${PLAN_WRITE_DIR}/\`.
 - Use \`${PLAN_WRITE_DIR}/<slug>.review.md\` for persisted review notes.
-- No code edits, config edits, docs edits outside \`${PLAN_WRITE_DIR}/\`, or mutating commands.
+- Prefer built-in read/grep/find/ls. Use bash only when they don't cover the job: git/status/diff-ish checks, dependency queries, and targeted validation.
+- Do not run big suites unless needed.
+- No code edits, config edits, docs edits outside \`${PLAN_WRITE_DIR}/\`, installs, formatters in write mode, migrations, git state changes, or other mutating commands.
 - Find avoidable complexity and stability risk in the changed/relevant code.
 - Use tags when useful: delete, shrink, dedupe, stdlib, native, internal, yagni, refactor.
 - Mention correctness, data loss, security, or performance when complexity causes the risk.
@@ -103,7 +116,9 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 
 - Read-only debugging, except write/edit may modify debug notes under \`${PLAN_WRITE_DIR}/\`.
 - Use \`${PLAN_WRITE_DIR}/<slug>.debug.md\` for persisted debug notes.
-- No code edits, config edits, docs edits outside \`${PLAN_WRITE_DIR}/\`, or mutating commands.
+- Prefer built-in read/grep/find/ls for reading files and searching. Use bash when they don't cover the job: failing commands, targeted tests, minimal scripts, env checks, and logs.
+- Scratch/temp repros are OK.
+- No code edits, config edits, docs edits outside \`${PLAN_WRITE_DIR}/\`, installs, fix edits, state-changing cleanup, or other mutating commands.
 - Reproduce or narrow failure from existing context and repository inspection before changing code.
 - Prefer the smallest causal fix.
 - Simplify directly related failing paths when it reduces bug surface.
@@ -115,7 +130,6 @@ const POSTURES: Record<PostureName, PostureConfig> = {
 export function createPostureController(pi: ExtensionAPI, isEnabled: () => boolean): PostureController {
 	let activePosture: PostureName | undefined;
 	let nextTurnPosture: PostureName | undefined;
-	let previousTools: string[] | undefined;
 	let pendingContinuation: string | undefined;
 
 	pi.on("agent_end", () => {
@@ -215,26 +229,46 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 	});
 
 	pi.on("tool_call", async (event, ctx) => {
+		if (!isEnabled()) return undefined;
 		if (!activePosture || !RESTRICTED_POSTURES.has(activePosture)) return undefined;
+
+		if (isToolCallEventType("bash", event)) {
+			if (!isMutatingBashCommand(event.input.command)) return undefined;
+			return confirmActSwitchForRestrictedTool(
+				ctx,
+				`run mutating bash command: ${event.input.command}`,
+				`${POSTURES[activePosture].label} posture cannot run mutating bash commands. Switch to act and run this command?`,
+			);
+		}
+
 		if (!isToolCallEventType("write", event) && !isToolCallEventType("edit", event)) return undefined;
 		if (isPlanWritePath(ctx.cwd, event.input.path)) return undefined;
 
-		if (!isEnabled()) return undefined;
+		return confirmActSwitchForRestrictedTool(
+			ctx,
+			`${event.toolName} ${event.input.path}`,
+			`${POSTURES[activePosture].label} posture cannot ${event.toolName} ${event.input.path}. Switch to act and run this tool call?`,
+		);
+	});
+
+	async function confirmActSwitchForRestrictedTool(
+		ctx: ExtensionContext,
+		action: string,
+		message: string,
+	): Promise<{ block: true; reason: string } | undefined> {
+		if (!activePosture) return undefined;
 		if (!ctx.hasUI) {
 			return {
 				block: true,
-				reason: `${POSTURES[activePosture].label} posture may only write or edit under ${PLAN_WRITE_DIR}/`,
+				reason: `${POSTURES[activePosture].label} posture cannot ${action}`,
 			};
 		}
 
 		emitAgentBlocked(pi, {
-			body: `Waiting for approval to ${event.toolName} ${event.input.path}`,
+			body: `Waiting for approval to ${action}`,
 			source: "soul.restricted_posture_gate",
 		});
-		const approved = await ctx.ui.confirm(
-			"Switch to Act?",
-			`${POSTURES[activePosture].label} posture cannot ${event.toolName} ${event.input.path}. Switch to act and run this tool call?`,
-		);
+		const approved = await ctx.ui.confirm("Switch to Act?", message);
 
 		if (approved) {
 			await applyPosture("act", ctx, { quiet: true });
@@ -250,40 +284,22 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 				? `Posture switch denied. User reason: ${userReason}\n\nContinue under current posture.`
 				: "Posture switch denied. Continue under current posture.",
 		};
-	});
+	}
 
 	async function applyPosture(
 		name: PostureName,
 		ctx: ExtensionContext,
-		options: { persist?: boolean; quiet?: boolean; fromRestore?: boolean } = {},
+		options: { persist?: boolean; quiet?: boolean } = {},
 	): Promise<void> {
 		if (!isEnabled()) {
 			activePosture = undefined;
 			nextTurnPosture = undefined;
-			previousTools = undefined;
 			updateFooter(pi, undefined);
 			return;
 		}
 
 		const config = POSTURES[name];
-		const enteringRestricted = RESTRICTED_POSTURES.has(name) && !isRestrictedPosture(activePosture);
-		const leavingRestricted = isRestrictedPosture(activePosture) && name === "act";
-
-		if (enteringRestricted && !options.fromRestore) previousTools = pi.getActiveTools();
-
 		pi.setThinkingLevel(config.thinkingLevel);
-
-		if (RESTRICTED_POSTURES.has(name)) {
-			pi.setActiveTools(filterKnownTools(pi, RESTRICTED_TOOLS));
-		} else {
-			pi.setActiveTools(
-				filterKnownTools(
-					pi,
-					ensureTools(leavingRestricted ? (previousTools ?? []) : pi.getActiveTools(), ACT_TOOLS),
-				),
-			);
-			if (leavingRestricted) previousTools = undefined;
-		}
 
 		activePosture = name;
 		updateFooter(pi, activePosture);
@@ -375,7 +391,7 @@ export function createPostureController(pi: ExtensionAPI, isEnabled: () => boole
 			return;
 		}
 
-		await applyPosture(restored.name, ctx, { persist: false, quiet: true, fromRestore: true });
+		await applyPosture(restored.name, ctx, { persist: false, quiet: true });
 	});
 
 	async function runPostureCommand(
@@ -472,16 +488,8 @@ function readPostureState(data: unknown): PostureState | undefined {
 	return { name };
 }
 
-function filterKnownTools(pi: ExtensionAPI, names: readonly string[]): string[] {
-	return filterKnownToolNames(names, new Set(pi.getAllTools().map((tool) => tool.name)));
-}
-
-function filterKnownToolNames(names: readonly string[], known: ReadonlySet<string>): string[] {
-	return names.filter((name) => known.has(name));
-}
-
-function ensureTools(names: readonly string[], required: readonly string[]): string[] {
-	return [...new Set([...names, ...required])];
+function isMutatingBashCommand(command: string): boolean {
+	return MUTATING_BASH_PATTERNS.some((pattern) => pattern.test(command));
 }
 
 function isPlanWritePath(cwd: string, rawPath: string): boolean {
@@ -493,10 +501,6 @@ function isPlanWritePath(cwd: string, rawPath: string): boolean {
 function nextPosture(current: PostureName | undefined): PostureName {
 	if (!current) return POSTURE_ORDER[0];
 	return POSTURE_ORDER[(POSTURE_ORDER.indexOf(current) + 1) % POSTURE_ORDER.length] ?? POSTURE_ORDER[0];
-}
-
-function isRestrictedPosture(name: PostureName | undefined): boolean {
-	return name ? RESTRICTED_POSTURES.has(name) : false;
 }
 
 function parsePosture(value: string): PostureName | undefined {
