@@ -1,0 +1,1348 @@
+{
+  "repos": [
+    {
+      "repo": "pi",
+      "totals": {
+        "files": 864,
+        "text_files": 844,
+        "bytes": 15108521,
+        "tokens_4": 2116481,
+        "lines": 244080,
+        "p50_tokens": 916,
+        "p75_tokens": 2342,
+        "p90_tokens": 5212,
+        "p95_tokens": 8846,
+        "max_tokens": 114032
+      },
+      "buckets": {
+        "asset": {
+          "files": 5,
+          "text_files": 0,
+          "bytes": 2832942,
+          "tokens_4": 0,
+          "lines": 0,
+          "p50_tokens": 0,
+          "p75_tokens": 0,
+          "p90_tokens": 0,
+          "p95_tokens": 0,
+          "max_tokens": 0
+        },
+        "binary-other": {
+          "files": 7,
+          "text_files": 0,
+          "bytes": 72312,
+          "tokens_4": 0,
+          "lines": 0,
+          "p50_tokens": 0,
+          "p75_tokens": 0,
+          "p90_tokens": 0,
+          "p95_tokens": 0,
+          "max_tokens": 0
+        },
+        "config": {
+          "files": 61,
+          "text_files": 59,
+          "bytes": 361995,
+          "tokens_4": 89584,
+          "lines": 11190,
+          "p50_tokens": 261,
+          "p75_tokens": 774,
+          "p90_tokens": 1224,
+          "p95_tokens": 1892,
+          "max_tokens": 48381
+        },
+        "docs": {
+          "files": 59,
+          "text_files": 59,
+          "bytes": 1232364,
+          "tokens_4": 307379,
+          "lines": 25124,
+          "p50_tokens": 1501,
+          "p75_tokens": 3913,
+          "p90_tokens": 8452,
+          "p95_tokens": 14432,
+          "max_tokens": 107157
+        },
+        "generated": {
+          "files": 4,
+          "text_files": 3,
+          "bytes": 914952,
+          "tokens_4": 133696,
+          "lines": 17753,
+          "p50_tokens": 16152,
+          "p75_tokens": 114032,
+          "p90_tokens": 114032,
+          "p95_tokens": 114032,
+          "max_tokens": 114032
+        },
+        "source": {
+          "files": 399,
+          "text_files": 399,
+          "bytes": 3562470,
+          "tokens_4": 890235,
+          "lines": 110584,
+          "p50_tokens": 891,
+          "p75_tokens": 2477,
+          "p90_tokens": 5010,
+          "p95_tokens": 8846,
+          "max_tokens": 48256
+        },
+        "test": {
+          "files": 318,
+          "text_files": 313,
+          "bytes": 5923704,
+          "tokens_4": 643643,
+          "lines": 76378,
+          "p50_tokens": 984,
+          "p75_tokens": 2226,
+          "p90_tokens": 4836,
+          "p95_tokens": 6313,
+          "max_tokens": 36154
+        },
+        "text-other": {
+          "files": 9,
+          "text_files": 9,
+          "bytes": 43173,
+          "tokens_4": 10792,
+          "lines": 1760,
+          "p50_tokens": 556,
+          "p75_tokens": 842,
+          "p90_tokens": 2058,
+          "p95_tokens": 5681,
+          "max_tokens": 5681
+        },
+        "vendor": {
+          "files": 2,
+          "text_files": 2,
+          "bytes": 164609,
+          "tokens_4": 41152,
+          "lines": 1291,
+          "p50_tokens": 20576,
+          "p75_tokens": 30432,
+          "p90_tokens": 30432,
+          "p95_tokens": 30432,
+          "max_tokens": 30432
+        }
+      },
+      "whole_read_thresholds": {
+        "1000": {
+          "files": 447,
+          "share_of_owned_text_files": 0.5328
+        },
+        "2000": {
+          "files": 597,
+          "share_of_owned_text_files": 0.7116
+        },
+        "3000": {
+          "files": 675,
+          "share_of_owned_text_files": 0.8045
+        },
+        "5000": {
+          "files": 754,
+          "share_of_owned_text_files": 0.8987
+        },
+        "8000": {
+          "files": 792,
+          "share_of_owned_text_files": 0.944
+        },
+        "12000": {
+          "files": 816,
+          "share_of_owned_text_files": 0.9726
+        }
+      },
+      "pack_capacity": {
+        "15000": {
+          "smallest_first_files": 128,
+          "tokens": 14845
+        },
+        "25000": {
+          "smallest_first_files": 163,
+          "tokens": 24915
+        },
+        "40000": {
+          "smallest_first_files": 204,
+          "tokens": 39775
+        },
+        "80000": {
+          "smallest_first_files": 288,
+          "tokens": 79921
+        }
+      },
+      "largest_text_files": [
+        {
+          "repo": "pi",
+          "path": "packages/ai/src/models.generated.ts",
+          "bucket": "generated",
+          "bytes": 456127,
+          "lines": 17213,
+          "tokens_4": 114032,
+          "tokens_35": 130322
+        },
+        {
+          "repo": "pi",
+          "path": "packages/coding-agent/CHANGELOG.md",
+          "bucket": "docs",
+          "bytes": 428856,
+          "lines": 4706,
+          "tokens_4": 107157,
+          "tokens_35": 122465
+        },
+        {
+          "repo": "pi",
+          "path": "package-lock.json",
+          "bucket": "config",
+          "bytes": 193525,
+          "lines": 6154,
+          "tokens_4": 48381,
+          "tokens_35": 55293
+        },
+        {
+          "repo": "pi",
+          "path": "packages/coding-agent/src/modes/interactive/interactive-mode.ts",
+          "bucket": "source",
+          "bytes": 193036,
+          "lines": 5731,
+          "tokens_4": 48256,
+          "tokens_35": 55150
+        },
+        {
+          "repo": "pi",
+          "path": "packages/tui/test/editor.test.ts",
+          "bucket": "test",
+          "bytes": 144953,
+          "lines": 4051,
+          "tokens_4": 36154,
+          "tokens_35": 41319
+        },
+        {
+          "repo": "pi",
+          "path": "packages/coding-agent/src/core/export-html/vendor/highlight.min.js",
+          "bucket": "vendor",
+          "bytes": 121727,
+          "lines": 1213,
+          "tokens_4": 30432,
+          "tokens_35": 34779
+        },
+        {
+          "repo": "pi",
+          "path": "packages/ai/CHANGELOG.md",
+          "bucket": "docs",
+          "bytes": 107743,
+          "lines": 1485,
+          "tokens_4": 26932,
+          "tokens_35": 30780
+        },
+        {
+          "repo": "pi",
+          "path": "packages/coding-agent/src/core/agent-session.ts",
+          "bucket": "source",
+          "bytes": 105727,
+          "lines": 3148,
+          "tokens_4": 26432,
+          "tokens_35": 30208
+        },
+        {
+          "repo": "pi",
+          "path": "packages/coding-agent/docs/extensions.md",
+          "bucket": "docs",
+          "bytes": 103350,
+          "lines": 2676,
+          "tokens_4": 25685,
+          "tokens_35": 29354
+        },
+        {
+          "repo": "pi",
+          "path": "packages/coding-agent/test/package-manager.test.ts",
+          "bucket": "test",
+          "bytes": 100650,
+          "lines": 2456,
+          "tokens_4": 25162,
+          "tokens_35": 28757
+        },
+        {
+          "repo": "pi",
+          "path": "packages/coding-agent/src/core/package-manager.ts",
+          "bucket": "source",
+          "bytes": 80058,
+          "lines": 2588,
+          "tokens_4": 20014,
+          "tokens_35": 22874
+        },
+        {
+          "repo": "pi",
+          "path": "packages/tui/src/components/editor.ts",
+          "bucket": "source",
+          "bytes": 77721,
+          "lines": 2307,
+          "tokens_4": 19423,
+          "tokens_35": 22197
+        },
+        {
+          "repo": "pi",
+          "path": "packages/coding-agent/src/core/export-html/template.js",
+          "bucket": "source",
+          "bytes": 76742,
+          "lines": 1864,
+          "tokens_4": 19178,
+          "tokens_35": 21917
+        },
+        {
+          "repo": "pi",
+          "path": "packages/ai/scripts/generate-models.ts",
+          "bucket": "source",
+          "bytes": 70018,
+          "lines": 2166,
+          "tokens_4": 17502,
+          "tokens_35": 20003
+        },
+        {
+          "repo": "pi",
+          "path": "packages/coding-agent/examples/extensions/doom-overlay/doom/build/doom.js",
+          "bucket": "generated",
+          "bytes": 64607,
+          "lines": 21,
+          "tokens_4": 16152,
+          "tokens_35": 18459
+        },
+        {
+          "repo": "pi",
+          "path": "packages/coding-agent/npm-shrinkwrap.json",
+          "bucket": "config",
+          "bytes": 61679,
+          "lines": 1839,
+          "tokens_4": 15420,
+          "tokens_35": 17623
+        },
+        {
+          "repo": "pi",
+          "path": "packages/coding-agent/test/model-registry.test.ts",
+          "bucket": "test",
+          "bytes": 58354,
+          "lines": 1781,
+          "tokens_4": 14588,
+          "tokens_35": 16673
+        },
+        {
+          "repo": "pi",
+          "path": "packages/tui/src/tui.ts",
+          "bucket": "source",
+          "bytes": 57929,
+          "lines": 1714,
+          "tokens_4": 14482,
+          "tokens_35": 16551
+        },
+        {
+          "repo": "pi",
+          "path": "packages/ai/README.md",
+          "bucket": "docs",
+          "bytes": 57728,
+          "lines": 1439,
+          "tokens_4": 14432,
+          "tokens_35": 16494
+        },
+        {
+          "repo": "pi",
+          "path": "packages/coding-agent/src/core/extensions/types.ts",
+          "bucket": "source",
+          "bytes": 55552,
+          "lines": 1606,
+          "tokens_4": 13888,
+          "tokens_35": 15871
+        }
+      ]
+    },
+    {
+      "repo": "codex",
+      "totals": {
+        "files": 5141,
+        "text_files": 4338,
+        "bytes": 48231713,
+        "tokens_4": 11409760,
+        "lines": 1288887,
+        "p50_tokens": 547,
+        "p75_tokens": 2348,
+        "p90_tokens": 6203,
+        "p95_tokens": 10525,
+        "max_tokens": 360413
+      },
+      "buckets": {
+        "asset": {
+          "files": 11,
+          "text_files": 0,
+          "bytes": 853024,
+          "tokens_4": 0,
+          "lines": 0,
+          "p50_tokens": 0,
+          "p75_tokens": 0,
+          "p90_tokens": 0,
+          "p95_tokens": 0,
+          "max_tokens": 0
+        },
+        "binary-other": {
+          "files": 176,
+          "text_files": 0,
+          "bytes": 233525,
+          "tokens_4": 0,
+          "lines": 0,
+          "p50_tokens": 0,
+          "p75_tokens": 0,
+          "p90_tokens": 0,
+          "p95_tokens": 0,
+          "max_tokens": 0
+        },
+        "config": {
+          "files": 553,
+          "text_files": 544,
+          "bytes": 5006974,
+          "tokens_4": 1246595,
+          "lines": 124023,
+          "p50_tokens": 216,
+          "p75_tokens": 643,
+          "p90_tokens": 3123,
+          "p95_tokens": 8760,
+          "max_tokens": 360413
+        },
+        "docs": {
+          "files": 507,
+          "text_files": 507,
+          "bytes": 1215776,
+          "tokens_4": 280687,
+          "lines": 21987,
+          "p50_tokens": 166,
+          "p75_tokens": 166,
+          "p90_tokens": 1269,
+          "p95_tokens": 2376,
+          "max_tokens": 33346
+        },
+        "generated": {
+          "files": 547,
+          "text_files": 25,
+          "bytes": 1643312,
+          "tokens_4": 323082,
+          "lines": 48839,
+          "p50_tokens": 310,
+          "p75_tokens": 376,
+          "p90_tokens": 63904,
+          "p95_tokens": 114328,
+          "max_tokens": 136465
+        },
+        "source": {
+          "files": 2649,
+          "text_files": 2649,
+          "bytes": 30039943,
+          "tokens_4": 7508778,
+          "lines": 853622,
+          "p50_tokens": 933,
+          "p75_tokens": 2970,
+          "p90_tokens": 6914,
+          "p95_tokens": 11083,
+          "max_tokens": 108860
+        },
+        "test": {
+          "files": 538,
+          "text_files": 483,
+          "bytes": 8570712,
+          "tokens_4": 1919211,
+          "lines": 224388,
+          "p50_tokens": 1439,
+          "p75_tokens": 4627,
+          "p90_tokens": 10388,
+          "p95_tokens": 15320,
+          "max_tokens": 42033
+        },
+        "text-other": {
+          "files": 96,
+          "text_files": 96,
+          "bytes": 214999,
+          "tokens_4": 53746,
+          "lines": 6287,
+          "p50_tokens": 215,
+          "p75_tokens": 748,
+          "p90_tokens": 1702,
+          "p95_tokens": 2001,
+          "max_tokens": 5418
+        },
+        "vendor": {
+          "files": 64,
+          "text_files": 34,
+          "bytes": 453448,
+          "tokens_4": 77661,
+          "lines": 9741,
+          "p50_tokens": 721,
+          "p75_tokens": 1609,
+          "p90_tokens": 5470,
+          "p95_tokens": 7164,
+          "max_tokens": 29258
+        }
+      },
+      "whole_read_thresholds": {
+        "1000": {
+          "files": 2531,
+          "share_of_owned_text_files": 0.5915
+        },
+        "2000": {
+          "files": 3075,
+          "share_of_owned_text_files": 0.7186
+        },
+        "3000": {
+          "files": 3377,
+          "share_of_owned_text_files": 0.7892
+        },
+        "5000": {
+          "files": 3728,
+          "share_of_owned_text_files": 0.8712
+        },
+        "8000": {
+          "files": 3959,
+          "share_of_owned_text_files": 0.9252
+        },
+        "12000": {
+          "files": 4096,
+          "share_of_owned_text_files": 0.9572
+        }
+      },
+      "pack_capacity": {
+        "15000": {
+          "smallest_first_files": 405,
+          "tokens": 14972
+        },
+        "25000": {
+          "smallest_first_files": 555,
+          "tokens": 24974
+        },
+        "40000": {
+          "smallest_first_files": 733,
+          "tokens": 39931
+        },
+        "80000": {
+          "smallest_first_files": 1061,
+          "tokens": 79932
+        }
+      },
+      "largest_text_files": [
+        {
+          "repo": "codex",
+          "path": "MODULE.bazel.lock",
+          "bucket": "config",
+          "bytes": 1441651,
+          "lines": 2002,
+          "tokens_4": 360413,
+          "tokens_35": 411900
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/app-server-protocol/schema/json/codex_app_server_protocol.schemas.json",
+          "bucket": "generated",
+          "bytes": 545860,
+          "lines": 20522,
+          "tokens_4": 136465,
+          "tokens_35": 155960
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/app-server-protocol/schema/json/codex_app_server_protocol.v2.schemas.json",
+          "bucket": "generated",
+          "bytes": 457314,
+          "lines": 18300,
+          "tokens_4": 114328,
+          "tokens_35": 130661
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/tui/src/bottom_pane/chat_composer.rs",
+          "bucket": "source",
+          "bytes": 435679,
+          "lines": 11193,
+          "tokens_4": 108860,
+          "tokens_35": 124412
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/core/src/session/tests.rs",
+          "bucket": "source",
+          "bytes": 372685,
+          "lines": 10319,
+          "tokens_4": 93170,
+          "tokens_35": 106480
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/Cargo.lock",
+          "bucket": "config",
+          "bytes": 361752,
+          "lines": 15954,
+          "tokens_4": 90438,
+          "tokens_35": 103358
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/core/src/config/config_tests.rs",
+          "bucket": "source",
+          "bytes": 346257,
+          "lines": 11124,
+          "tokens_4": 86564,
+          "tokens_35": 98931
+        },
+        {
+          "repo": "codex",
+          "path": "sdk/python/src/openai_codex/generated/v2_all.py",
+          "bucket": "generated",
+          "bytes": 255617,
+          "lines": 8619,
+          "tokens_4": 63904,
+          "tokens_35": 73033
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/tui/src/app/tests.rs",
+          "bucket": "source",
+          "bytes": 223653,
+          "lines": 6251,
+          "tokens_4": 55912,
+          "tokens_35": 63899
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/tui/src/resume_picker.rs",
+          "bucket": "source",
+          "bytes": 212740,
+          "lines": 6342,
+          "tokens_4": 53158,
+          "tokens_35": 60752
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/models-manager/models.json",
+          "bucket": "config",
+          "bytes": 203322,
+          "lines": 516,
+          "tokens_4": 50726,
+          "tokens_35": 57972
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/protocol/src/protocol.rs",
+          "bucket": "source",
+          "bytes": 199938,
+          "lines": 5664,
+          "tokens_4": 49980,
+          "tokens_35": 57121
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/state/src/runtime/memories.rs",
+          "bucket": "source",
+          "bytes": 188832,
+          "lines": 5270,
+          "tokens_4": 47208,
+          "tokens_35": 53952
+        },
+        {
+          "repo": "codex",
+          "path": "pnpm-lock.yaml",
+          "bucket": "config",
+          "bytes": 172332,
+          "lines": 5249,
+          "tokens_4": 43083,
+          "tokens_35": 49238
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/core/src/config/mod.rs",
+          "bucket": "source",
+          "bytes": 171206,
+          "lines": 4236,
+          "tokens_4": 42802,
+          "tokens_35": 48916
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/core/tests/suite/compact.rs",
+          "bucket": "test",
+          "bytes": 168138,
+          "lines": 4838,
+          "tokens_4": 42033,
+          "tokens_35": 48038
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/app-server/src/request_processors/thread_processor.rs",
+          "bucket": "source",
+          "bytes": 167387,
+          "lines": 4437,
+          "tokens_4": 41847,
+          "tokens_35": 47825
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/app-server-protocol/schema/json/ServerNotification.json",
+          "bucket": "config",
+          "bytes": 165569,
+          "lines": 6954,
+          "tokens_4": 41392,
+          "tokens_35": 47305
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/app-server-protocol/schema/json/ClientRequest.json",
+          "bucket": "config",
+          "bytes": 162695,
+          "lines": 6828,
+          "tokens_4": 40674,
+          "tokens_35": 46484
+        },
+        {
+          "repo": "codex",
+          "path": "codex-rs/analytics/src/analytics_client_tests.rs",
+          "bucket": "source",
+          "bytes": 162632,
+          "lines": 4585,
+          "tokens_4": 40658,
+          "tokens_35": 46466
+        }
+      ]
+    },
+    {
+      "repo": "opencode",
+      "totals": {
+        "files": 5741,
+        "text_files": 4063,
+        "bytes": 93124522,
+        "tokens_4": 9195633,
+        "lines": 1139901,
+        "p50_tokens": 844,
+        "p75_tokens": 2106,
+        "p90_tokens": 4842,
+        "p95_tokens": 7559,
+        "max_tokens": 777392
+      },
+      "buckets": {
+        "asset": {
+          "files": 1532,
+          "text_files": 0,
+          "bytes": 44693089,
+          "tokens_4": 0,
+          "lines": 0,
+          "p50_tokens": 0,
+          "p75_tokens": 0,
+          "p90_tokens": 0,
+          "p95_tokens": 0,
+          "max_tokens": 0
+        },
+        "binary-other": {
+          "files": 131,
+          "text_files": 0,
+          "bytes": 3705913,
+          "tokens_4": 0,
+          "lines": 0,
+          "p50_tokens": 0,
+          "p75_tokens": 0,
+          "p90_tokens": 0,
+          "p95_tokens": 0,
+          "max_tokens": 0
+        },
+        "config": {
+          "files": 388,
+          "text_files": 385,
+          "bytes": 5290638,
+          "tokens_4": 1320330,
+          "lines": 188168,
+          "p50_tokens": 640,
+          "p75_tokens": 1499,
+          "p90_tokens": 11928,
+          "p95_tokens": 15039,
+          "max_tokens": 211939
+        },
+        "docs": {
+          "files": 733,
+          "text_files": 732,
+          "bytes": 7769320,
+          "tokens_4": 1704689,
+          "lines": 216516,
+          "p50_tokens": 1766,
+          "p75_tokens": 2730,
+          "p90_tokens": 4917,
+          "p95_tokens": 5358,
+          "max_tokens": 14896
+        },
+        "generated": {
+          "files": 33,
+          "text_files": 32,
+          "bytes": 2375235,
+          "tokens_4": 593636,
+          "lines": 88171,
+          "p50_tokens": 1006,
+          "p75_tokens": 1871,
+          "p90_tokens": 42285,
+          "p95_tokens": 53586,
+          "max_tokens": 223643
+        },
+        "source": {
+          "files": 1924,
+          "text_files": 1923,
+          "bytes": 12553537,
+          "tokens_4": 3065634,
+          "lines": 334980,
+          "p50_tokens": 623,
+          "p75_tokens": 1637,
+          "p90_tokens": 3860,
+          "p95_tokens": 6856,
+          "max_tokens": 65804
+        },
+        "test": {
+          "files": 730,
+          "text_files": 722,
+          "bytes": 15825207,
+          "tokens_4": 2283604,
+          "lines": 276409,
+          "p50_tokens": 976,
+          "p75_tokens": 2474,
+          "p90_tokens": 4848,
+          "p95_tokens": 7898,
+          "max_tokens": 777392
+        },
+        "text-other": {
+          "files": 270,
+          "text_files": 269,
+          "bytes": 911583,
+          "tokens_4": 227740,
+          "lines": 35657,
+          "p50_tokens": 326,
+          "p75_tokens": 893,
+          "p90_tokens": 1583,
+          "p95_tokens": 3792,
+          "max_tokens": 25832
+        }
+      },
+      "whole_read_thresholds": {
+        "1000": {
+          "files": 2217,
+          "share_of_owned_text_files": 0.55
+        },
+        "2000": {
+          "files": 2975,
+          "share_of_owned_text_files": 0.738
+        },
+        "3000": {
+          "files": 3375,
+          "share_of_owned_text_files": 0.8373
+        },
+        "5000": {
+          "files": 3655,
+          "share_of_owned_text_files": 0.9067
+        },
+        "8000": {
+          "files": 3843,
+          "share_of_owned_text_files": 0.9534
+        },
+        "12000": {
+          "files": 3932,
+          "share_of_owned_text_files": 0.9754
+        }
+      },
+      "pack_capacity": {
+        "15000": {
+          "smallest_first_files": 341,
+          "tokens": 14936
+        },
+        "25000": {
+          "smallest_first_files": 443,
+          "tokens": 24966
+        },
+        "40000": {
+          "smallest_first_files": 561,
+          "tokens": 39960
+        },
+        "80000": {
+          "smallest_first_files": 785,
+          "tokens": 79921
+        }
+      },
+      "largest_text_files": [
+        {
+          "repo": "opencode",
+          "path": "packages/opencode/test/tool/fixtures/models-api.json",
+          "bucket": "test",
+          "bytes": 3109573,
+          "lines": 117299,
+          "tokens_4": 777392,
+          "tokens_35": 888448
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/docs/openapi.json",
+          "bucket": "generated",
+          "bytes": 894573,
+          "lines": 30697,
+          "tokens_4": 223643,
+          "tokens_35": 255592
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/sdk/openapi.json",
+          "bucket": "generated",
+          "bytes": 894573,
+          "lines": 30697,
+          "tokens_4": 223643,
+          "tokens_35": 255592
+        },
+        {
+          "repo": "opencode",
+          "path": "bun.lock",
+          "bucket": "config",
+          "bytes": 847757,
+          "lines": 7291,
+          "tokens_4": 211939,
+          "tokens_35": 242216
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/web/src/components/icons/index.tsx",
+          "bucket": "source",
+          "bytes": 263215,
+          "lines": 4454,
+          "tokens_4": 65804,
+          "tokens_35": 75204
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/sdk/js/src/v2/gen/types.gen.ts",
+          "bucket": "generated",
+          "bytes": 214344,
+          "lines": 11271,
+          "tokens_4": 53586,
+          "tokens_35": 61241
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/sdk/js/src/v2/gen/sdk.gen.ts",
+          "bucket": "generated",
+          "bytes": 169140,
+          "lines": 6836,
+          "tokens_4": 42285,
+          "tokens_35": 48326
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/opencode/test/provider/transform.test.ts",
+          "bucket": "test",
+          "bytes": 136019,
+          "lines": 4408,
+          "tokens_4": 34004,
+          "tokens_35": 38861
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/core/test/session-runner.test.ts",
+          "bucket": "test",
+          "bytes": 133531,
+          "lines": 3574,
+          "tokens_4": 33383,
+          "tokens_35": 38152
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/stats/app/src/routes/index.css",
+          "bucket": "text-other",
+          "bytes": 103331,
+          "lines": 4055,
+          "tokens_4": 25832,
+          "tokens_35": 29522
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/console/app/src/routes/legal/privacy-policy/index.tsx",
+          "bucket": "source",
+          "bytes": 92876,
+          "lines": 1516,
+          "tokens_4": 23218,
+          "tokens_35": 26535
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/app/src/pages/layout.tsx",
+          "bucket": "source",
+          "bytes": 90816,
+          "lines": 2563,
+          "tokens_4": 22704,
+          "tokens_35": 25947
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/tui/src/routes/session/index.tsx",
+          "bucket": "source",
+          "bytes": 88095,
+          "lines": 2665,
+          "tokens_4": 22011,
+          "tokens_35": 25155
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/app/src/components/prompt-input.tsx",
+          "bucket": "source",
+          "bytes": 81756,
+          "lines": 2248,
+          "tokens_4": 20439,
+          "tokens_35": 23359
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/ui/src/components/message-part.tsx",
+          "bucket": "source",
+          "bytes": 80831,
+          "lines": 2436,
+          "tokens_4": 20208,
+          "tokens_35": 23095
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/opencode/test/session/prompt.test.ts",
+          "bucket": "test",
+          "bytes": 78321,
+          "lines": 2328,
+          "tokens_4": 19580,
+          "tokens_35": 22377
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/console/core/migrations/20260513173355_groovy_jane_foster/snapshot.json",
+          "bucket": "config",
+          "bytes": 75984,
+          "lines": 3229,
+          "tokens_4": 18996,
+          "tokens_35": 21710
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/opencode/src/provider/provider.ts",
+          "bucket": "source",
+          "bytes": 74956,
+          "lines": 1975,
+          "tokens_4": 18739,
+          "tokens_35": 21416
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/console/core/migrations/20260520164350_quick_red_hulk/snapshot.json",
+          "bucket": "config",
+          "bytes": 72643,
+          "lines": 3079,
+          "tokens_4": 18161,
+          "tokens_35": 20755
+        },
+        {
+          "repo": "opencode",
+          "path": "packages/console/core/migrations/20260516082200_long_spirit/snapshot.json",
+          "bucket": "config",
+          "bytes": 72124,
+          "lines": 3063,
+          "tokens_4": 18031,
+          "tokens_35": 20607
+        }
+      ]
+    },
+    {
+      "repo": "tau-agent",
+      "totals": {
+        "files": 117,
+        "text_files": 95,
+        "bytes": 15576934,
+        "tokens_4": 164872,
+        "lines": 17285,
+        "p50_tokens": 501,
+        "p75_tokens": 2379,
+        "p90_tokens": 4112,
+        "p95_tokens": 4881,
+        "max_tokens": 31102
+      },
+      "buckets": {
+        "asset": {
+          "files": 16,
+          "text_files": 0,
+          "bytes": 14915249,
+          "tokens_4": 0,
+          "lines": 0,
+          "p50_tokens": 0,
+          "p75_tokens": 0,
+          "p90_tokens": 0,
+          "p95_tokens": 0,
+          "max_tokens": 0
+        },
+        "binary-other": {
+          "files": 4,
+          "text_files": 0,
+          "bytes": 1073,
+          "tokens_4": 0,
+          "lines": 0,
+          "p50_tokens": 0,
+          "p75_tokens": 0,
+          "p90_tokens": 0,
+          "p95_tokens": 0,
+          "max_tokens": 0
+        },
+        "config": {
+          "files": 19,
+          "text_files": 17,
+          "bytes": 155034,
+          "tokens_4": 38576,
+          "lines": 4301,
+          "p50_tokens": 210,
+          "p75_tokens": 276,
+          "p90_tokens": 360,
+          "p95_tokens": 4881,
+          "max_tokens": 31102
+        },
+        "docs": {
+          "files": 27,
+          "text_files": 27,
+          "bytes": 248506,
+          "tokens_4": 62089,
+          "lines": 5525,
+          "p50_tokens": 840,
+          "p75_tokens": 4054,
+          "p90_tokens": 4654,
+          "p95_tokens": 5512,
+          "max_tokens": 8353
+        },
+        "source": {
+          "files": 51,
+          "text_files": 51,
+          "bytes": 257072,
+          "tokens_4": 64207,
+          "lines": 7459,
+          "p50_tokens": 562,
+          "p75_tokens": 1602,
+          "p90_tokens": 2893,
+          "p95_tokens": 4112,
+          "max_tokens": 8094
+        }
+      },
+      "whole_read_thresholds": {
+        "1000": {
+          "files": 60,
+          "share_of_owned_text_files": 0.6316
+        },
+        "2000": {
+          "files": 69,
+          "share_of_owned_text_files": 0.7263
+        },
+        "3000": {
+          "files": 76,
+          "share_of_owned_text_files": 0.8
+        },
+        "5000": {
+          "files": 90,
+          "share_of_owned_text_files": 0.9474
+        },
+        "8000": {
+          "files": 92,
+          "share_of_owned_text_files": 0.9684
+        },
+        "12000": {
+          "files": 94,
+          "share_of_owned_text_files": 0.9895
+        }
+      },
+      "pack_capacity": {
+        "15000": {
+          "smallest_first_files": 55,
+          "tokens": 14495
+        },
+        "25000": {
+          "smallest_first_files": 65,
+          "tokens": 24854
+        },
+        "40000": {
+          "smallest_first_files": 72,
+          "tokens": 38103
+        },
+        "80000": {
+          "smallest_first_files": 84,
+          "tokens": 79663
+        }
+      },
+      "largest_text_files": [
+        {
+          "repo": "tau-agent",
+          "path": "package-lock.json",
+          "bucket": "config",
+          "bytes": 124409,
+          "lines": 3587,
+          "tokens_4": 31102,
+          "tokens_35": 35545
+        },
+        {
+          "repo": "tau-agent",
+          "path": "docs/plans/token-efficient-agent-harness-research.md",
+          "bucket": "docs",
+          "bytes": 33425,
+          "lines": 765,
+          "tokens_4": 8353,
+          "tokens_35": 9546
+        },
+        {
+          "repo": "tau-agent",
+          "path": "src/extensions/soul/postures.ts",
+          "bucket": "source",
+          "bytes": 32381,
+          "lines": 887,
+          "tokens_4": 8094,
+          "tokens_35": 9250
+        },
+        {
+          "repo": "tau-agent",
+          "path": "docs/plans/fs-tool-research/report-design-baseline-v10.html",
+          "bucket": "docs",
+          "bytes": 22065,
+          "lines": 472,
+          "tokens_4": 5512,
+          "tokens_35": 6299
+        },
+        {
+          "repo": "tau-agent",
+          "path": "src/extensions/qna/ui.ts",
+          "bucket": "source",
+          "bytes": 20232,
+          "lines": 638,
+          "tokens_4": 5028,
+          "tokens_35": 5746
+        },
+        {
+          "repo": "tau-agent",
+          "path": ".pi/prompts/report-design-exploration.md",
+          "bucket": "config",
+          "bytes": 19660,
+          "lines": 263,
+          "tokens_4": 4881,
+          "tokens_35": 5578
+        },
+        {
+          "repo": "tau-agent",
+          "path": "docs/plans/fs-tool-research/report-design-baseline-v9.html",
+          "bucket": "docs",
+          "bytes": 19040,
+          "lines": 694,
+          "tokens_4": 4758,
+          "tokens_35": 5437
+        },
+        {
+          "repo": "tau-agent",
+          "path": "docs/plans/fs-tool-research/report-design-baseline-v7.html",
+          "bucket": "docs",
+          "bytes": 18628,
+          "lines": 381,
+          "tokens_4": 4654,
+          "tokens_35": 5319
+        },
+        {
+          "repo": "tau-agent",
+          "path": "docs/plans/fs-tool-research/report-design-baseline-v6.html",
+          "bucket": "docs",
+          "bytes": 18437,
+          "lines": 348,
+          "tokens_4": 4607,
+          "tokens_35": 5265
+        },
+        {
+          "repo": "tau-agent",
+          "path": "src/shared/reference-picker.ts",
+          "bucket": "source",
+          "bytes": 16478,
+          "lines": 540,
+          "tokens_4": 4112,
+          "tokens_35": 4699
+        },
+        {
+          "repo": "tau-agent",
+          "path": "docs/plans/fs-tool-research/report-design-baseline-v2.html",
+          "bucket": "docs",
+          "bytes": 16434,
+          "lines": 297,
+          "tokens_4": 4108,
+          "tokens_35": 4695
+        },
+        {
+          "repo": "tau-agent",
+          "path": "docs/plans/fs-tool-research/report-design-baseline-v8.html",
+          "bucket": "docs",
+          "bytes": 16229,
+          "lines": 581,
+          "tokens_4": 4054,
+          "tokens_35": 4633
+        },
+        {
+          "repo": "tau-agent",
+          "path": "src/extensions/footer/index.ts",
+          "bucket": "source",
+          "bytes": 15853,
+          "lines": 500,
+          "tokens_4": 3959,
+          "tokens_35": 4524
+        },
+        {
+          "repo": "tau-agent",
+          "path": "docs/plans/fs-tool-research/report-design-baseline-v11.html",
+          "bucket": "docs",
+          "bytes": 15626,
+          "lines": 359,
+          "tokens_4": 3904,
+          "tokens_35": 4461
+        },
+        {
+          "repo": "tau-agent",
+          "path": "docs/plans/fs-tool-research/report-design-baseline-v4-revision.html",
+          "bucket": "docs",
+          "bytes": 15532,
+          "lines": 257,
+          "tokens_4": 3882,
+          "tokens_35": 4436
+        },
+        {
+          "repo": "tau-agent",
+          "path": "src/extensions/qna/index.ts",
+          "bucket": "source",
+          "bytes": 14793,
+          "lines": 377,
+          "tokens_4": 3697,
+          "tokens_35": 4225
+        },
+        {
+          "repo": "tau-agent",
+          "path": "docs/plans/fs-tool-research/report-design-baseline.html",
+          "bucket": "docs",
+          "bytes": 14468,
+          "lines": 257,
+          "tokens_4": 3616,
+          "tokens_35": 4132
+        },
+        {
+          "repo": "tau-agent",
+          "path": "docs/plans/fs-tool-research/report-design-baseline-v4.html",
+          "bucket": "docs",
+          "bytes": 14267,
+          "lines": 238,
+          "tokens_4": 3565,
+          "tokens_35": 4075
+        },
+        {
+          "repo": "tau-agent",
+          "path": "docs/plans/fs-tool-research/report-design-baseline-v5.html",
+          "bucket": "docs",
+          "bytes": 14202,
+          "lines": 225,
+          "tokens_4": 3549,
+          "tokens_35": 4056
+        },
+        {
+          "repo": "tau-agent",
+          "path": "src/extensions/commit/planner.ts",
+          "bucket": "source",
+          "bytes": 11571,
+          "lines": 300,
+          "tokens_4": 2893,
+          "tokens_35": 3306
+        }
+      ]
+    }
+  ]
+}
