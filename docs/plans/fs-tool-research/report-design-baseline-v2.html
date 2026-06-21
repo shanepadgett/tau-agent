@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en" class="bg-[#f4efe3] text-[#11110f]">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tau Research Reports — Visual Baseline V2</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600;700;800&family=Geist+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Geist', 'ui-sans-serif', 'system-ui'],
+            mono: ['Geist Mono', 'ui-monospace', 'SFMono-Regular'],
+            serif: ['Newsreader', 'ui-serif', 'Georgia']
+          },
+          colors: {
+            paper: '#f4efe3',
+            paper2: '#ebe2d2',
+            ink: '#11110f',
+            soot: '#050505',
+            line: '#d6cbb8',
+            lineDark: '#27231d',
+            muted: '#766d5e',
+            blue: '#1737ff',
+            green: '#008f45',
+            acid: '#48ff7a',
+            orange: '#ec5b14',
+            red: '#c82828'
+          },
+          boxShadow: {
+            plate: '0 22px 80px rgba(17,17,15,.16)',
+            blue: '0 0 80px rgba(23,55,255,.20)',
+            acid: '0 0 64px rgba(72,255,122,.20)'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    ::selection { background: #1737ff; color: white; }
+    .paper-grid {
+      background-image:
+        linear-gradient(to right, rgba(17,17,15,.06) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(17,17,15,.06) 1px, transparent 1px);
+      background-size: 44px 44px;
+    }
+    .dark-grid {
+      background-image:
+        linear-gradient(to right, rgba(244,239,227,.08) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(244,239,227,.08) 1px, transparent 1px);
+      background-size: 48px 48px;
+    }
+    .rule-label::before,
+    .rule-label::after { content: ''; height: 1px; background: currentColor; opacity: .28; flex: 1; }
+  </style>
+</head>
+<body class="min-h-screen antialiased">
+  <main>
+    <section class="paper-grid relative overflow-hidden border-b border-line">
+      <div class="mx-auto grid min-h-[760px] max-w-[1500px] grid-cols-1 px-6 py-8 lg:grid-cols-[220px_1fr] lg:px-10">
+        <aside class="hidden border-r border-line pr-8 lg:block">
+          <div class="font-mono text-[11px] uppercase tracking-[0.24em] text-muted">Tau / Research</div>
+          <div class="mt-16 space-y-8 font-mono text-[11px] leading-6 text-muted">
+            <div>
+              <div class="text-ink">Format</div>
+              Single page HTML<br>Tailwind CDN<br>CSV/JSON adjacent
+            </div>
+            <div>
+              <div class="text-ink">Tone</div>
+              Lab report<br>Product page<br>Investor memo
+            </div>
+            <div>
+              <div class="text-ink">Rule</div>
+              No ornament without evidence.
+            </div>
+          </div>
+        </aside>
+
+        <div class="lg:pl-12">
+          <nav class="flex items-center justify-between border-b border-line pb-5 font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+            <span>Visual baseline V2</span>
+            <span>Pragmatic benchmarks</span>
+          </nav>
+
+          <div class="grid gap-10 pt-20 lg:grid-cols-[1.1fr_0.9fr] lg:pt-28">
+            <div>
+              <div class="mb-8 inline-flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.22em] text-green">
+                <span class="h-2 w-2 bg-green"></span>
+                Evidence-first reporting
+              </div>
+              <h1 class="max-w-5xl text-[76px] font-semibold leading-[0.88] tracking-[-0.08em] sm:text-[104px] lg:text-[124px]">
+                Spend less context.
+                <span class="font-serif font-semibold italic tracking-[-0.065em] text-blue">Prove it.</span>
+              </h1>
+              <p class="mt-10 max-w-2xl text-xl leading-8 tracking-[-0.025em] text-muted">
+                This direction is lighter, more editorial, and more hostile to dashboard sludge. It treats each benchmark like a published finding: claim, method, evidence, decision.
+              </p>
+            </div>
+
+            <div class="self-end rounded-none border border-lineDark bg-soot p-7 text-paper shadow-plate">
+              <div class="flex items-start justify-between gap-8 border-b border-[#2c2a25] pb-5">
+                <div>
+                  <div class="font-mono text-[10px] uppercase tracking-[0.22em] text-[#8f887c]">Sample verdict</div>
+                  <div class="mt-3 text-3xl font-semibold tracking-[-0.055em]">Repo terrain decides read policy.</div>
+                </div>
+                <div class="font-mono text-4xl font-semibold text-acid">01</div>
+              </div>
+              <div class="mt-8 grid grid-cols-3 gap-px bg-[#2c2a25] font-mono text-xs">
+                <div class="bg-soot p-4">
+                  <div class="text-[#8f887c]">CORPUS</div>
+                  <div class="mt-5 text-2xl text-paper">4</div>
+                </div>
+                <div class="bg-soot p-4">
+                  <div class="text-[#8f887c]">PACK</div>
+                  <div class="mt-5 text-2xl text-paper">40k</div>
+                </div>
+                <div class="bg-soot p-4">
+                  <div class="text-[#8f887c]">MODE</div>
+                  <div class="mt-5 text-2xl text-acid">cost</div>
+                </div>
+              </div>
+              <div class="mt-8 space-y-4 font-mono text-xs leading-6 text-[#b6afa4]">
+                <div class="flex justify-between border-b border-[#2c2a25] pb-3"><span>pi</span><span>primary</span></div>
+                <div class="flex justify-between border-b border-[#2c2a25] pb-3"><span>codex</span><span>primary</span></div>
+                <div class="flex justify-between border-b border-[#2c2a25] pb-3"><span>opencode</span><span>primary</span></div>
+                <div class="flex justify-between"><span>tau-agent</span><span>control</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mx-auto max-w-[1500px] px-6 py-20 lg:px-10">
+      <div class="rule-label mb-10 flex items-center gap-5 font-mono text-[11px] uppercase tracking-[0.22em] text-muted">Color system</div>
+      <div class="grid gap-px border border-line bg-line lg:grid-cols-5">
+        <div class="bg-paper p-7">
+          <div class="h-16 bg-soot"></div>
+          <div class="mt-6 font-mono text-[11px] uppercase tracking-[0.18em] text-muted">Soot</div>
+          <div class="mt-2 text-2xl font-semibold tracking-[-0.05em]">Primary ink / dark plates</div>
+          <div class="mt-4 font-mono text-xs text-muted">#050505</div>
+        </div>
+        <div class="bg-paper p-7">
+          <div class="h-16 bg-blue shadow-blue"></div>
+          <div class="mt-6 font-mono text-[11px] uppercase tracking-[0.18em] text-muted">Blue</div>
+          <div class="mt-2 text-2xl font-semibold tracking-[-0.05em]">Context machinery</div>
+          <div class="mt-4 font-mono text-xs text-muted">#1737ff</div>
+        </div>
+        <div class="bg-paper p-7">
+          <div class="h-16 bg-green"></div>
+          <div class="mt-6 font-mono text-[11px] uppercase tracking-[0.18em] text-muted">Green</div>
+          <div class="mt-2 text-2xl font-semibold tracking-[-0.05em]">Savings / pass / win</div>
+          <div class="mt-4 font-mono text-xs text-muted">#008f45</div>
+        </div>
+        <div class="bg-paper p-7">
+          <div class="h-16 bg-orange"></div>
+          <div class="mt-6 font-mono text-[11px] uppercase tracking-[0.18em] text-muted">Orange</div>
+          <div class="mt-2 text-2xl font-semibold tracking-[-0.05em]">Spend / warning</div>
+          <div class="mt-4 font-mono text-xs text-muted">#ec5b14</div>
+        </div>
+        <div class="bg-paper p-7">
+          <div class="h-16 bg-red"></div>
+          <div class="mt-6 font-mono text-[11px] uppercase tracking-[0.18em] text-muted">Red</div>
+          <div class="mt-2 text-2xl font-semibold tracking-[-0.05em]">Failure / invalid</div>
+          <div class="mt-4 font-mono text-xs text-muted">#c82828</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="bg-soot text-paper">
+      <div class="dark-grid mx-auto max-w-[1500px] px-6 py-20 lg:px-10">
+        <div class="grid gap-12 lg:grid-cols-[0.8fr_1.2fr]">
+          <div>
+            <div class="font-mono text-[11px] uppercase tracking-[0.22em] text-[#8f887c]">Report anatomy</div>
+            <h2 class="mt-6 text-6xl font-semibold leading-[0.9] tracking-[-0.075em] lg:text-7xl">Readable at a glance. Defensible under attack.</h2>
+            <p class="mt-8 max-w-md text-lg leading-8 text-[#aaa397]">Every page has one job: help someone believe or reject a concrete policy.</p>
+          </div>
+
+          <div class="grid gap-5">
+            <div class="border border-[#2c2a25] bg-[#0d0d0c] p-7">
+              <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-acid">01 / Claim</div>
+              <div class="mt-5 text-4xl font-semibold tracking-[-0.06em]">Upfront context packs become cheaper after N discovery turns.</div>
+            </div>
+            <div class="grid gap-5 sm:grid-cols-3">
+              <div class="border border-[#2c2a25] bg-[#0d0d0c] p-6">
+                <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-[#8f887c]">Method</div>
+                <div class="mt-8 text-2xl font-semibold tracking-[-0.055em]">pricing sim</div>
+              </div>
+              <div class="border border-[#2c2a25] bg-[#0d0d0c] p-6">
+                <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-[#8f887c]">Evidence</div>
+                <div class="mt-8 text-2xl font-semibold tracking-[-0.055em]">tables + chart</div>
+              </div>
+              <div class="border border-[#2c2a25] bg-[#0d0d0c] p-6">
+                <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-[#8f887c]">Decision</div>
+                <div class="mt-8 text-2xl font-semibold tracking-[-0.055em]">threshold</div>
+              </div>
+            </div>
+            <div class="border border-[#2c2a25] bg-[#0d0d0c] p-7 font-mono text-xs leading-6 text-[#b6afa4]">
+              <div class="mb-4 text-[#8f887c]">Raw artifacts stay adjacent, not buried.</div>
+              reports/context-pack-pricing.html<br>
+              reports/context-pack-pricing.csv<br>
+              reports/context-pack-pricing.json
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mx-auto max-w-[1500px] px-6 py-20 lg:px-10">
+      <div class="grid gap-12 lg:grid-cols-[360px_1fr]">
+        <div>
+          <div class="font-mono text-[11px] uppercase tracking-[0.22em] text-muted">Component direction</div>
+          <h2 class="mt-5 text-5xl font-semibold leading-none tracking-[-0.065em]">Less dashboard. More instrument panel.</h2>
+        </div>
+
+        <div class="grid gap-6">
+          <article class="border border-line bg-paper2 shadow-plate">
+            <div class="grid lg:grid-cols-[1fr_300px]">
+              <div class="p-8">
+                <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-green">Benchmark finding</div>
+                <h3 class="mt-5 max-w-2xl text-5xl font-semibold leading-[0.95] tracking-[-0.065em]">40k scoped packs beat wandering once discovery gets noisy.</h3>
+                <p class="mt-6 max-w-xl text-base leading-7 text-muted">This card is the top of a finished report. It makes the reader care before showing the machinery.</p>
+              </div>
+              <div class="grid grid-cols-2 border-t border-line lg:border-l lg:border-t-0">
+                <div class="border-b border-r border-line p-5">
+                  <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">Break-even</div>
+                  <div class="mt-8 text-4xl font-semibold tracking-[-0.06em]">4.2</div>
+                  <div class="mt-1 text-sm text-muted">turns</div>
+                </div>
+                <div class="border-b border-line p-5">
+                  <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">Waste</div>
+                  <div class="mt-8 text-4xl font-semibold tracking-[-0.06em] text-orange">1.8×</div>
+                  <div class="mt-1 text-sm text-muted">realistic</div>
+                </div>
+                <div class="border-r border-line p-5">
+                  <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">Winner</div>
+                  <div class="mt-8 text-4xl font-semibold tracking-[-0.06em] text-green">pack</div>
+                  <div class="mt-1 text-sm text-muted">scoped</div>
+                </div>
+                <div class="p-5">
+                  <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">Risk</div>
+                  <div class="mt-8 text-4xl font-semibold tracking-[-0.06em]">scope</div>
+                  <div class="mt-1 text-sm text-muted">precision</div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <div class="grid gap-6 lg:grid-cols-2">
+            <div class="border border-line bg-paper p-7">
+              <div class="flex items-center justify-between border-b border-line pb-4">
+                <h3 class="text-2xl font-semibold tracking-[-0.055em]">Policy ladder</h3>
+                <span class="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">repo-size-profile</span>
+              </div>
+              <ol class="mt-6 space-y-5 text-sm leading-6">
+                <li class="grid grid-cols-[36px_1fr] gap-4"><span class="font-mono text-green">01</span><span>Whole-read small owned source.</span></li>
+                <li class="grid grid-cols-[36px_1fr] gap-4"><span class="font-mono text-blue">02</span><span>Range-read larger owned source.</span></li>
+                <li class="grid grid-cols-[36px_1fr] gap-4"><span class="font-mono text-orange">03</span><span>Separate docs threshold from code threshold.</span></li>
+                <li class="grid grid-cols-[36px_1fr] gap-4"><span class="font-mono text-red">04</span><span>Block generated/vendor unless explicitly requested.</span></li>
+              </ol>
+            </div>
+
+            <div class="border border-line bg-paper p-7">
+              <div class="flex items-center justify-between border-b border-line pb-4">
+                <h3 class="text-2xl font-semibold tracking-[-0.055em]">Evidence table</h3>
+                <span class="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">sample</span>
+              </div>
+              <table class="mt-6 w-full font-mono text-xs">
+                <thead class="text-left text-muted">
+                  <tr class="border-b border-line"><th class="pb-3 font-medium">bucket</th><th class="pb-3 text-right font-medium">p90</th><th class="pb-3 text-right font-medium">policy</th></tr>
+                </thead>
+                <tbody>
+                  <tr class="border-b border-line"><td class="py-3">source</td><td class="py-3 text-right">2.8k</td><td class="py-3 text-right text-green">read</td></tr>
+                  <tr class="border-b border-line"><td class="py-3">docs</td><td class="py-3 text-right">7.4k</td><td class="py-3 text-right text-orange">split</td></tr>
+                  <tr class="border-b border-line"><td class="py-3">config</td><td class="py-3 text-right">0.9k</td><td class="py-3 text-right text-green">read</td></tr>
+                  <tr><td class="py-3">vendor</td><td class="py-3 text-right">huge</td><td class="py-3 text-right text-red">block</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="border-t border-line px-6 py-10 lg:px-10">
+      <div class="mx-auto flex max-w-[1500px] flex-col justify-between gap-4 font-mono text-[11px] uppercase tracking-[0.2em] text-muted sm:flex-row">
+        <span>Baseline V2</span>
+        <span>Paper + black plate + evidence color</span>
+      </div>
+    </footer>
+  </main>
+</body>
+</html>

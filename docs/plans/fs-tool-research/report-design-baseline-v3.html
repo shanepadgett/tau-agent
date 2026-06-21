@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en" class="bg-[#07131f] text-[#f3efe2]">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tau Research Reports — Visual Baseline V3</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@95,400;95,500;95,600;100,700;100,800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Archivo', 'ui-sans-serif', 'system-ui'],
+            mono: ['IBM Plex Mono', 'ui-monospace', 'SFMono-Regular']
+          },
+          colors: {
+            night: '#07131f',
+            ink: '#03070b',
+            plate: '#0c1b29',
+            plate2: '#10283c',
+            paper: '#f3efe2',
+            muted: '#8da0af',
+            dim: '#526675',
+            line: '#244055',
+            line2: '#365d78',
+            cyan: '#33d6ff',
+            mint: '#b9ffd6',
+            green: '#32d26c',
+            yellow: '#ffd45a',
+            orange: '#ff7b37',
+            red: '#ff4f64'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    ::selection { background: #33d6ff; color: #03070b; }
+    .grid-bg {
+      background-image:
+        linear-gradient(to right, rgba(51,214,255,.08) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(51,214,255,.08) 1px, transparent 1px);
+      background-size: 34px 34px;
+    }
+    .scanlines {
+      background-image: repeating-linear-gradient(to bottom, rgba(243,239,226,.06), rgba(243,239,226,.06) 1px, transparent 1px, transparent 5px);
+    }
+    .cut-left { clip-path: polygon(0 0, calc(100% - 34px) 0, 100% 34px, 100% 100%, 0 100%); }
+    .cut-right { clip-path: polygon(34px 0, 100% 0, 100% 100%, 0 100%, 0 34px); }
+    .big-number { font-feature-settings: 'tnum' 1, 'lnum' 1; }
+  </style>
+</head>
+<body class="min-h-screen overflow-x-hidden antialiased">
+  <main class="grid-bg min-h-screen border-x border-line/70">
+    <header class="mx-auto flex max-w-[1560px] items-center justify-between border-b border-line px-5 py-4 font-mono text-[11px] uppercase tracking-[0.2em] text-muted lg:px-8">
+      <div class="flex items-center gap-3 text-paper"><span class="h-3 w-3 bg-cyan"></span>Tau Research Lab</div>
+      <div class="hidden gap-9 md:flex">
+        <span>reports</span>
+        <span>metrics</span>
+        <span>decisions</span>
+      </div>
+      <div>baseline v3</div>
+    </header>
+
+    <section class="mx-auto grid max-w-[1560px] gap-8 px-5 py-10 lg:grid-cols-[1.03fr_0.97fr] lg:px-8 lg:py-16">
+      <div class="flex min-h-[610px] flex-col justify-between">
+        <div>
+          <div class="mb-9 inline-flex items-center gap-4 border border-line bg-plate px-4 py-3 font-mono text-[11px] uppercase tracking-[0.22em] text-mint">
+            <span class="h-2 w-2 bg-green"></span>
+            benchmark command deck
+          </div>
+          <h1 class="max-w-5xl text-[68px] font-extrabold uppercase leading-[0.84] tracking-[-0.075em] sm:text-[94px] lg:text-[112px] xl:text-[124px]">
+            Measure<br>
+            the drag.<br>
+            <span class="text-cyan">Cut it.</span>
+          </h1>
+          <p class="mt-8 max-w-2xl text-xl leading-8 tracking-[-0.025em] text-muted">
+            A harder visual language for the research reports: mission telemetry, annotated evidence, fewer soft gradients, no fake glow. Lines do the work.
+          </p>
+        </div>
+
+        <div class="mt-12 grid gap-px bg-line sm:grid-cols-3">
+          <div class="bg-plate p-5">
+            <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-dim">report artifact</div>
+            <div class="mt-5 text-3xl font-bold uppercase tracking-[-0.05em]">HTML</div>
+            <div class="mt-2 font-mono text-xs text-muted">single-page</div>
+          </div>
+          <div class="bg-plate p-5">
+            <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-dim">raw evidence</div>
+            <div class="mt-5 text-3xl font-bold uppercase tracking-[-0.05em]">CSV / JSON</div>
+            <div class="mt-2 font-mono text-xs text-muted">adjacent</div>
+          </div>
+          <div class="bg-plate p-5">
+            <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-dim">global doc</div>
+            <div class="mt-5 text-3xl font-bold uppercase tracking-[-0.05em]">ledger</div>
+            <div class="mt-2 font-mono text-xs text-muted">decisions only</div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="cut-left border border-line bg-ink">
+        <div class="border-b border-line bg-plate px-6 py-4 font-mono text-[11px] uppercase tracking-[0.22em] text-muted">
+          live sample / repo-size-profile
+        </div>
+        <div class="scanlines p-6 lg:p-8">
+          <div class="grid gap-4 sm:grid-cols-4">
+            <div class="border border-line bg-night/80 p-4">
+              <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-dim">corpus</div>
+              <div class="big-number mt-5 text-5xl font-bold text-paper">4</div>
+            </div>
+            <div class="border border-line bg-night/80 p-4">
+              <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-dim">pack</div>
+              <div class="big-number mt-5 text-5xl font-bold text-cyan">40k</div>
+            </div>
+            <div class="border border-line bg-night/80 p-4 sm:col-span-2">
+              <div class="font-mono text-[10px] uppercase tracking-[0.16em] text-dim">verdict slot</div>
+              <div class="mt-5 text-3xl font-bold uppercase leading-none tracking-[-0.05em] text-mint">Terrain first</div>
+            </div>
+          </div>
+
+          <div class="mt-6 border border-line bg-night/80 p-5">
+            <div class="mb-5 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.16em] text-dim">
+              <span>context mass map</span><span>estimated tokens</span>
+            </div>
+            <svg viewBox="0 0 720 320" class="h-auto w-full border border-line bg-[#07131f]" aria-hidden="true">
+              <defs>
+                <pattern id="dots" width="16" height="16" patternUnits="userSpaceOnUse">
+                  <circle cx="1" cy="1" r="1" fill="#244055"/>
+                </pattern>
+              </defs>
+              <rect width="720" height="320" fill="url(#dots)"/>
+              <path d="M40 250 C120 175 150 80 250 105 C345 130 332 230 430 205 C540 176 570 64 690 88" fill="none" stroke="#33d6ff" stroke-width="2"/>
+              <path d="M40 282 C135 200 181 118 265 142 C350 166 365 260 460 235 C545 213 604 120 692 128" fill="none" stroke="#365d78" stroke-width="1"/>
+              <path d="M40 215 C128 148 145 46 252 66 C360 86 340 195 430 170 C535 140 552 25 690 48" fill="none" stroke="#365d78" stroke-width="1"/>
+              <g font-family="IBM Plex Mono" font-size="11" fill="#8da0af">
+                <text x="42" y="36">pi</text>
+                <text x="220" y="72">codex</text>
+                <text x="420" y="62">opencode</text>
+                <text x="590" y="236">tau-agent</text>
+              </g>
+              <g>
+                <circle cx="118" cy="176" r="7" fill="#b9ffd6"/>
+                <circle cx="286" cy="112" r="7" fill="#33d6ff"/>
+                <circle cx="462" cy="198" r="7" fill="#ffd45a"/>
+                <circle cx="620" cy="88" r="7" fill="#32d26c"/>
+              </g>
+              <g font-family="IBM Plex Mono" font-size="10" fill="#526675">
+                <text x="44" y="302">small owned files</text>
+                <text x="520" y="302">vendor/generated cliffs</text>
+              </g>
+            </svg>
+          </div>
+
+          <div class="mt-6 grid gap-px bg-line font-mono text-xs text-muted">
+            <div class="grid grid-cols-[1fr_96px_96px] bg-plate px-4 py-3 text-dim"><span>repo</span><span class="text-right">role</span><span class="text-right">status</span></div>
+            <div class="grid grid-cols-[1fr_96px_96px] bg-night px-4 py-3"><span>pi</span><span class="text-right">primary</span><span class="text-right text-green">scan</span></div>
+            <div class="grid grid-cols-[1fr_96px_96px] bg-night px-4 py-3"><span>codex</span><span class="text-right">primary</span><span class="text-right text-green">scan</span></div>
+            <div class="grid grid-cols-[1fr_96px_96px] bg-night px-4 py-3"><span>opencode</span><span class="text-right">primary</span><span class="text-right text-green">scan</span></div>
+            <div class="grid grid-cols-[1fr_96px_96px] bg-night px-4 py-3"><span>tau-agent</span><span class="text-right">control</span><span class="text-right text-yellow">tiny</span></div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="mx-auto max-w-[1560px] px-5 pb-16 lg:px-8">
+      <div class="grid gap-8 lg:grid-cols-[0.7fr_1.3fr]">
+        <div class="cut-right border border-line bg-[#f3efe2] p-8 text-ink">
+          <div class="font-mono text-[11px] uppercase tracking-[0.2em] text-[#60707b]">Why this lane exists</div>
+          <h2 class="mt-6 text-5xl font-extrabold uppercase leading-[0.9] tracking-[-0.06em]">This one is more tactical.</h2>
+          <p class="mt-7 text-lg leading-8 text-[#3c4952]">
+            V1 was dark SaaS. V2 was editorial. V3 is field equipment: denser, sharper, better for benchmark pages with lots of tables.
+          </p>
+        </div>
+
+        <div class="grid gap-px bg-line lg:grid-cols-3">
+          <article class="bg-plate p-6">
+            <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-cyan">01 / terrain</div>
+            <h3 class="mt-10 text-3xl font-bold uppercase leading-none tracking-[-0.055em]">Repo profile</h3>
+            <p class="mt-5 text-sm leading-6 text-muted">File buckets, token percentiles, pack capacity, skip rules.</p>
+            <div class="mt-10 h-2 bg-line"><div class="h-2 w-[72%] bg-cyan"></div></div>
+          </article>
+          <article class="bg-plate p-6">
+            <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-green">02 / economics</div>
+            <h3 class="mt-10 text-3xl font-bold uppercase leading-none tracking-[-0.055em]">Pack pricing</h3>
+            <p class="mt-5 text-sm leading-6 text-muted">Upfront scoped context vs iterative discovery and noise.</p>
+            <div class="mt-10 h-2 bg-line"><div class="h-2 w-[54%] bg-green"></div></div>
+          </article>
+          <article class="bg-plate p-6">
+            <div class="font-mono text-[10px] uppercase tracking-[0.18em] text-orange">03 / cache</div>
+            <h3 class="mt-10 text-3xl font-bold uppercase leading-none tracking-[-0.055em]">Layout sim</h3>
+            <p class="mt-5 text-sm leading-6 text-muted">Stable prefix, late runtime capsule, tool schema churn.</p>
+            <div class="mt-10 h-2 bg-line"><div class="h-2 w-[38%] bg-orange"></div></div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

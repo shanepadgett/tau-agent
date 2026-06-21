@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tau Report Design V5 — Context Rent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: '#05050a',
+            cobalt: '#001bff',
+            cream: '#fff7df',
+            paper: '#f5efe0',
+            acid: '#d6ff4a',
+            coral: '#ff4f55',
+            mist: '#aaf4ff'
+          },
+          fontFamily: {
+            display: ['Instrument Serif', 'serif'],
+            sans: ['Space Grotesk', 'system-ui', 'sans-serif'],
+            mono: ['IBM Plex Mono', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    html { background: #001bff; }
+    body { font-feature-settings: "ss02" 1, "ss03" 1; }
+    .grain::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: .14;
+      mix-blend-mode: multiply;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+    }
+    .poster-shadow { box-shadow: 0 40px 90px rgba(0, 0, 0, .35); }
+    .media-shadow { box-shadow: inset 0 0 0 1px rgba(255, 247, 223, .18), 0 28px 80px rgba(0, 0, 0, .34); }
+    .hairline { background: linear-gradient(90deg, transparent, rgba(255,247,223,.7), transparent); }
+    .atlas-arc { stroke-dasharray: 420; animation: dash 12s linear infinite; }
+    @keyframes dash { to { stroke-dashoffset: -840; } }
+  </style>
+</head>
+<body class="min-h-screen overflow-x-hidden bg-cobalt text-cream antialiased">
+  <main class="grain relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_66%_33%,rgba(214,255,74,.18),transparent_22%),linear-gradient(135deg,#061cff_0%,#0015c9_48%,#02020a_135%)]">
+    <div class="absolute left-10 top-10 hidden h-[calc(100%-5rem)] w-px bg-cream/35 xl:block"></div>
+    <div class="absolute right-10 top-10 hidden h-[calc(100%-5rem)] w-px bg-cream/35 xl:block"></div>
+    <div class="mx-auto flex min-h-screen max-w-[1800px] flex-col px-8 py-7 sm:px-12 lg:px-16">
+      <header class="flex items-center justify-between border-y border-cream/45 py-4 font-mono text-[11px] font-semibold uppercase tracking-[0.32em] text-cream">
+        <div>Tau Research / Benchmark Artifact</div>
+        <div class="hidden gap-10 md:flex">
+          <span>Context Packs</span>
+          <span>Prompt Cache</span>
+          <span>Quiet Validators</span>
+        </div>
+        <div>Draft 05</div>
+      </header>
+
+      <section class="grid flex-1 grid-cols-1 gap-10 py-7 lg:grid-cols-[0.9fr_1.1fr] lg:items-center xl:gap-14">
+        <div class="relative z-10 flex h-full flex-col justify-between gap-10">
+          <div>
+            <div class="mb-6 inline-flex border border-cream/70 bg-cream px-5 py-3 font-mono text-[11px] font-bold uppercase tracking-[0.28em] text-cobalt">
+              scoped pack vs blind exploration
+            </div>
+            <h1 class="max-w-[780px] font-display text-[clamp(5rem,9.5vw,11.75rem)] leading-[0.8] tracking-[-0.055em] text-cream">
+              Stop paying rent on stale context.
+            </h1>
+            <p class="mt-6 max-w-[620px] font-sans text-[clamp(1.05rem,1.35vw,1.55rem)] leading-[1.25] tracking-[-0.035em] text-cream/80">
+              A report shell for measuring whether a durable agent harness can buy back turns, tokens, and validator noise before the model wanders.
+            </p>
+          </div>
+
+          <div class="grid max-w-[760px] grid-cols-3 border-y border-cream/45 text-cream">
+            <div class="border-r border-cream/35 py-5 pr-5">
+              <div class="font-display text-6xl leading-none tracking-[-0.05em]">2.1</div>
+              <div class="mt-2 font-mono text-[10px] uppercase tracking-[0.24em] text-cream/65">turns to break even</div>
+            </div>
+            <div class="border-r border-cream/35 px-5 py-5">
+              <div class="font-display text-6xl leading-none tracking-[-0.05em]">40k</div>
+              <div class="mt-2 font-mono text-[10px] uppercase tracking-[0.24em] text-cream/65">true context pack</div>
+            </div>
+            <div class="py-5 pl-5">
+              <div class="font-display text-6xl leading-none tracking-[-0.05em]">8k</div>
+              <div class="mt-2 font-mono text-[10px] uppercase tracking-[0.24em] text-cream/65">cached turn rent</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="relative min-h-[620px] lg:min-h-[690px]">
+          <article class="poster-shadow relative h-full min-h-[620px] overflow-hidden rounded-[2rem] border border-cream/65 bg-cream text-ink lg:min-h-[690px]">
+            <div class="grid h-full grid-rows-[auto_1fr_auto]">
+              <div class="flex items-center justify-between border-b border-ink/15 px-7 py-5 font-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-ink/75">
+                <span>Compiled context view</span>
+                <span>run: fs-tool-sim / alpha</span>
+              </div>
+
+              <div class="grid min-h-0 grid-cols-1 lg:grid-cols-[1fr_18rem]">
+                <div class="relative p-6 lg:p-7">
+                  <div class="media-shadow relative h-full min-h-[430px] overflow-hidden rounded-[1.4rem] bg-ink">
+                    <div class="absolute inset-0 bg-[radial-gradient(circle_at_50%_44%,rgba(170,244,255,.22),transparent_26%),radial-gradient(circle_at_58%_52%,rgba(214,255,74,.12),transparent_23%),linear-gradient(155deg,rgba(0,27,255,.28),transparent_58%)]"></div>
+                    <div class="absolute left-6 top-5 z-10 font-mono text-[10px] uppercase tracking-[0.24em] text-cream/70">artifact image / repo atlas</div>
+                    <div class="absolute right-6 top-5 z-10 font-mono text-[10px] uppercase tracking-[0.24em] text-cream/70">1920 × 1080</div>
+
+                    <svg class="absolute inset-0 h-full w-full" viewBox="0 0 900 610" fill="none" role="img" aria-label="Repository context atlas diagram">
+                      <defs>
+                        <linearGradient id="core" x1="275" y1="140" x2="625" y2="480" gradientUnits="userSpaceOnUse">
+                          <stop stop-color="#fff7df" />
+                          <stop offset="0.32" stop-color="#aaf4ff" />
+                          <stop offset="0.7" stop-color="#d6ff4a" />
+                          <stop offset="1" stop-color="#ff4f55" />
+                        </linearGradient>
+                        <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+                          <feGaussianBlur stdDeviation="12" />
+                        </filter>
+                      </defs>
+
+                      <ellipse cx="450" cy="313" rx="202" ry="202" stroke="#fff7df" stroke-opacity="0.16" stroke-width="1" />
+                      <ellipse cx="450" cy="313" rx="255" ry="115" stroke="#fff7df" stroke-opacity="0.24" stroke-width="1" />
+                      <ellipse cx="450" cy="313" rx="115" ry="255" stroke="#fff7df" stroke-opacity="0.18" stroke-width="1" transform="rotate(58 450 313)" />
+                      <path class="atlas-arc" d="M169 317C244 166 377 89 505 111C640 134 724 272 704 405C685 534 535 596 397 555C277 520 171 444 169 317Z" stroke="#fff7df" stroke-opacity="0.62" stroke-width="2" />
+                      <path d="M295 342C321 246 406 192 491 218C586 247 623 360 563 437C496 522 352 494 308 404C296 381 291 362 295 342Z" fill="url(#core)" opacity="0.18" filter="url(#soft)" />
+                      <path d="M306 334C333 243 410 198 487 218C573 240 612 342 561 415C499 503 365 486 319 401C306 377 299 354 306 334Z" stroke="url(#core)" stroke-width="2" />
+                      <path d="M357 366C380 312 430 281 484 292C531 301 563 343 560 390C557 445 499 479 439 460C387 443 338 412 357 366Z" fill="#fff7df" fill-opacity="0.08" stroke="#fff7df" stroke-opacity="0.72" />
+
+                      <path d="M194 169H331L383 257" stroke="#fff7df" stroke-opacity="0.34" />
+                      <path d="M165 455H318L386 407" stroke="#fff7df" stroke-opacity="0.34" />
+                      <path d="M715 173H584L526 246" stroke="#fff7df" stroke-opacity="0.34" />
+                      <path d="M723 464H589L527 409" stroke="#fff7df" stroke-opacity="0.34" />
+                      <path d="M451 82V211" stroke="#fff7df" stroke-opacity="0.25" />
+                      <path d="M451 535V432" stroke="#fff7df" stroke-opacity="0.25" />
+
+                      <g font-family="IBM Plex Mono, monospace" font-size="12" letter-spacing="2" fill="#fff7df" fill-opacity="0.7">
+                        <text x="187" y="162">RAW EVENT LOG</text>
+                        <text x="142" y="478">FILE CAPSULES</text>
+                        <text x="608" y="166">QUIET CHECKS</text>
+                        <text x="604" y="487">LSP OPS</text>
+                        <text x="381" y="74">STABLE PREFIX</text>
+                        <text x="364" y="559">LATE RUNTIME</text>
+                      </g>
+
+                      <g fill="#fff7df">
+                        <circle cx="331" cy="169" r="4" />
+                        <circle cx="318" cy="455" r="4" />
+                        <circle cx="584" cy="173" r="4" />
+                        <circle cx="589" cy="464" r="4" />
+                        <circle cx="451" cy="211" r="4" />
+                        <circle cx="451" cy="432" r="4" />
+                      </g>
+                    </svg>
+
+                    <div class="absolute bottom-6 left-6 right-6 grid grid-cols-3 gap-3 font-mono text-[10px] uppercase tracking-[0.18em] text-cream">
+                      <div class="border border-cream/20 bg-cream/[0.06] p-4">
+                        <div class="text-cream/55">visible</div>
+                        <div class="mt-2 text-xl font-semibold tracking-normal text-acid">42k</div>
+                      </div>
+                      <div class="border border-cream/20 bg-cream/[0.06] p-4">
+                        <div class="text-cream/55">hidden</div>
+                        <div class="mt-2 text-xl font-semibold tracking-normal text-mist">18mb</div>
+                      </div>
+                      <div class="border border-cream/20 bg-cream/[0.06] p-4">
+                        <div class="text-cream/55">stale</div>
+                        <div class="mt-2 text-xl font-semibold tracking-normal text-coral">0</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <aside class="border-l border-ink/15 px-6 py-7">
+                  <div class="font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-ink/45">winner</div>
+                  <div class="mt-5 font-display text-7xl leading-[0.85] tracking-[-0.06em] text-ink">Scope first.</div>
+                  <p class="mt-5 font-sans text-sm leading-6 text-ink/60">
+                    Upfront true context beats serial grep/read loops once blind exploration costs more than two cached turns.
+                  </p>
+
+                  <div class="mt-8 space-y-5">
+                    <div>
+                      <div class="mb-2 flex justify-between font-mono text-[10px] uppercase tracking-[0.18em] text-ink/50"><span>pack</span><span>0.62×</span></div>
+                      <div class="h-3 bg-ink/10"><div class="h-full w-[62%] bg-ink"></div></div>
+                    </div>
+                    <div>
+                      <div class="mb-2 flex justify-between font-mono text-[10px] uppercase tracking-[0.18em] text-ink/50"><span>search</span><span>1.00×</span></div>
+                      <div class="h-3 bg-ink/10"><div class="h-full w-full bg-cobalt"></div></div>
+                    </div>
+                    <div>
+                      <div class="mb-2 flex justify-between font-mono text-[10px] uppercase tracking-[0.18em] text-ink/50"><span>blind</span><span>1.84×</span></div>
+                      <div class="h-3 bg-ink/10"><div class="h-full w-[92%] bg-coral"></div></div>
+                    </div>
+                  </div>
+
+                  <div class="mt-8 border-t border-ink/15 pt-5 font-mono text-[11px] leading-6 text-ink/70">
+                    <div>raw logs kept out of prompt</div>
+                    <div>failures pinned as capsules</div>
+                    <div>passes remain invisible</div>
+                  </div>
+                </aside>
+              </div>
+
+              <div class="grid grid-cols-4 border-t border-ink/15 font-mono text-[10px] uppercase tracking-[0.18em] text-ink/60">
+                <div class="border-r border-ink/15 p-5"><span class="block text-ink">scenario</span> 40k pack vs 8-turn discovery</div>
+                <div class="border-r border-ink/15 p-5"><span class="block text-ink">unit</span> effective input + retries</div>
+                <div class="border-r border-ink/15 p-5"><span class="block text-ink">source</span> simulation draft / csv adjacent</div>
+                <div class="p-5"><span class="block text-ink">next</span> repo-size profile</div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <footer class="grid grid-cols-1 gap-5 border-t border-cream/45 py-5 font-mono text-[10px] uppercase tracking-[0.24em] text-cream/70 md:grid-cols-[1fr_auto_1fr]">
+        <div>Evidence page, not dashboard cosplay</div>
+        <div class="hairline hidden h-px w-40 self-center md:block"></div>
+        <div class="md:text-right">Tailwind report design exploration</div>
+      </footer>
+    </div>
+  </main>
+</body>
+</html>
