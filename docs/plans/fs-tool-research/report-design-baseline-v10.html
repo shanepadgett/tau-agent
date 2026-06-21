@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tau Benchmark Report — repo-size-profile</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              void: '#050606',
+              plate: '#0b1112',
+              milk: '#e7f2ef',
+              fog: '#9aaca8',
+              cyan: '#8de7ff',
+              violet: '#b9a5ff',
+              coral: '#ff7a66',
+              amber: '#f6d58b'
+            }
+          }
+        }
+      };
+    </script>
+    <style>
+      :root {
+        color-scheme: dark;
+        --void: #050606;
+        --plate: #0b1112;
+        --milk: #e7f2ef;
+        --fog: #9aaca8;
+        --line: rgba(231, 242, 239, 0.18);
+        --line-strong: rgba(231, 242, 239, 0.42);
+        --cyan: #8de7ff;
+        --violet: #b9a5ff;
+        --coral: #ff7a66;
+        --amber: #f6d58b;
+      }
+
+      html {
+        background: var(--void);
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        background:
+          radial-gradient(circle at 82% 18%, rgba(141, 231, 255, 0.07), transparent 28rem),
+          var(--void);
+        background-size: auto, auto;
+        color: var(--milk);
+        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: -0.015em;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.28;
+        mix-blend-mode: screen;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.88' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.26'/%3E%3C/svg%3E");
+      }
+
+      ::selection {
+        background: var(--cyan);
+        color: #001214;
+      }
+
+      .page-shell {
+        width: min(100%, 1920px);
+        margin-inline: auto;
+      }
+
+      .hairline {
+        border-color: var(--line);
+      }
+
+      .micro {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+      }
+
+      .figure-label {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(231, 242, 239, 0.58);
+      }
+
+      .scan-plate {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(231, 242, 239, 0.22);
+        background:
+          linear-gradient(90deg, rgba(231,242,239,0.05), transparent 15%, transparent 82%, rgba(141,231,255,0.045)),
+          #071011;
+        box-shadow:
+          inset 0 0 0 1px rgba(141, 231, 255, 0.05),
+          inset 0 0 90px rgba(141, 231, 255, 0.055),
+          0 34px 90px rgba(0, 0, 0, 0.52);
+      }
+
+      .scan-plate::before {
+        content: "";
+        position: absolute;
+        inset: -1px;
+        background:
+          repeating-linear-gradient(0deg, rgba(231,242,239,0.032) 0 1px, transparent 1px 10px),
+          linear-gradient(120deg, transparent 0 38%, rgba(255,255,255,0.08) 39%, transparent 45% 100%);
+        opacity: 0.46;
+        pointer-events: none;
+      }
+
+      .scan-plate::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border: 18px solid rgba(0, 0, 0, 0.18);
+        pointer-events: none;
+      }
+
+      .plate-corner {
+        position: absolute;
+        width: 52px;
+        height: 52px;
+        border-color: rgba(231, 242, 239, 0.52);
+        pointer-events: none;
+      }
+
+      .corner-tl { left: 26px; top: 26px; border-left-width: 1px; border-top-width: 1px; }
+      .corner-tr { right: 26px; top: 26px; border-right-width: 1px; border-top-width: 1px; }
+      .corner-bl { left: 26px; bottom: 26px; border-left-width: 1px; border-bottom-width: 1px; }
+      .corner-br { right: 26px; bottom: 26px; border-right-width: 1px; border-bottom-width: 1px; }
+
+      .threshold-rule {
+        display: grid;
+        grid-template-columns: minmax(9rem, 13rem) 1fr minmax(7rem, 10rem);
+        gap: 1.25rem;
+        align-items: baseline;
+        padding-block: 1.05rem;
+        border-top: 1px solid var(--line);
+      }
+
+      .artifact-link {
+        border-left: 1px solid rgba(231, 242, 239, 0.2);
+        padding: 1rem 1.15rem;
+        min-height: 8rem;
+        transition: background-color 160ms ease, color 160ms ease;
+      }
+
+      .artifact-link:hover {
+        background: rgba(231, 242, 239, 0.055);
+      }
+
+      .matrix-bar {
+        height: var(--h);
+        width: var(--w);
+        transform: translateY(calc((100px - var(--h)) * .5));
+      }
+
+      .section-cut {
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .evidence-strip {
+        display: grid;
+        grid-template-columns: 13rem 1fr 11rem;
+        gap: clamp(1rem, 2vw, 2.5rem);
+        padding-block: 1.25rem;
+        border-top: 1px solid var(--line);
+      }
+
+      .aperture {
+        position: absolute;
+        inset: 12% 15% 18% 15%;
+        border: 1px solid rgba(141, 231, 255, 0.46);
+        background: rgba(141, 231, 255, 0.018);
+        pointer-events: none;
+      }
+
+      .aperture::before,
+      .aperture::after {
+        content: "";
+        position: absolute;
+        left: -8%;
+        right: -8%;
+        height: 1px;
+        background: rgba(141, 231, 255, 0.38);
+      }
+
+      .aperture::before { top: 28%; }
+      .aperture::after { bottom: 25%; }
+
+      @media (max-width: 1180px) {
+        body {
+          background-size: auto, auto;
+        }
+
+        .hero-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .scan-plate {
+          min-height: 560px;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .threshold-rule,
+        .evidence-strip {
+          grid-template-columns: 1fr;
+        }
+
+        .artifact-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .artifact-link {
+          border-left: 0;
+          border-top: 1px solid var(--line);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="flex items-center justify-between border-b hairline px-5 py-4 sm:px-8 lg:px-12">
+        <div class="micro text-[11px] text-fog">Tau / public benchmark evidence</div>
+        <div class="hidden items-center gap-10 text-sm text-fog md:flex">
+          <a class="hover:text-milk" href="#verdict">Verdict</a>
+          <a class="hover:text-milk" href="#artifacts">Artifacts</a>
+          <a class="hover:text-milk" href="#method">Method</a>
+        </div>
+        <div class="micro text-[11px] text-cyan">repo-size-profile · sample</div>
+      </header>
+
+      <section id="verdict" class="hero-grid grid min-h-[calc(100vh-61px)] grid-cols-[0.92fr_1.08fr] border-b hairline">
+        <div class="flex flex-col justify-between px-5 py-8 sm:px-8 lg:px-12 lg:py-12">
+          <div>
+            <div class="micro mb-8 inline-block border-b border-cyan/60 pb-2 text-[11px] text-cyan">Benchmark report concept v10</div>
+            <h1 class="max-w-[760px] text-[clamp(3.25rem,6.8vw,8.4rem)] font-semibold leading-[0.88] tracking-[-0.055em] text-milk">
+              <span class="block">Scan first.</span><span class="block">Read second.</span>
+            </h1>
+            <p class="mt-8 max-w-2xl text-[clamp(1.1rem,1.55vw,1.7rem)] leading-[1.2] text-fog">
+              <span class="text-milk">No vibe policy.</span> Repo-size-profile maps file mass, token mass, bucket shape, and context-pack capacity before an agent reads or edits.
+            </p>
+          </div>
+
+          <div class="mt-12 grid gap-8 lg:grid-cols-[1fr_0.86fr]">
+            <div class="border-t hairline pt-5">
+              <div class="figure-label text-[11px]">Current verdict</div>
+              <p class="mt-3 max-w-xl text-2xl leading-[1.08] text-milk md:text-3xl">
+                Treat the repository as an unknown object. Scan the terrain; then decide what deserves context.
+              </p>
+            </div>
+            <div class="border-t hairline pt-5 text-sm leading-6 text-fog">
+              <div class="figure-label text-[11px]">Corpus under scan</div>
+              <p class="mt-3">Pi, Codex, OpenCode, with Tau held as sanity control. Values shown here are sample placeholders until repeatable measurements land.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="relative border-l hairline p-4 sm:p-7 lg:p-10">
+          <div class="scan-plate h-full min-h-[720px]">
+            <div class="plate-corner corner-tl"></div>
+            <div class="plate-corner corner-tr"></div>
+            <div class="plate-corner corner-bl"></div>
+            <div class="plate-corner corner-br"></div>
+            <div class="aperture"></div>
+
+            <div class="absolute left-8 top-8 z-10 sm:left-10 sm:top-10">
+              <div class="figure-label text-[11px]">Radiograph plate 01</div>
+              <div class="mt-2 text-2xl font-medium tracking-[-0.04em] text-milk">bucket shape / capacity stress</div>
+            </div>
+
+            <div class="absolute right-8 top-8 z-10 max-w-[16rem] text-right sm:right-10 sm:top-10">
+              <div class="micro text-[10px] text-violet">sample, not final</div>
+              <p class="mt-2 text-sm leading-5 text-fog">Bright mass = files likely to consume context budget. Dark gaps = safe to ignore until requested.</p>
+            </div>
+
+            <svg class="absolute inset-x-[4%] bottom-[10%] top-[18%] z-[1] h-auto w-[92%]" viewBox="0 0 980 620" role="img" aria-label="Abstract repository mass radiograph comparing Pi, Codex, OpenCode, and Tau">
+              <defs>
+                <filter id="soften">
+                  <feGaussianBlur stdDeviation="0.45" />
+                </filter>
+                <pattern id="ticks" width="18" height="18" patternUnits="userSpaceOnUse">
+                  <path d="M0 18H18" stroke="rgba(231,242,239,.10)" stroke-width="1" />
+                </pattern>
+              </defs>
+
+              <rect x="26" y="34" width="928" height="536" fill="url(#ticks)" opacity=".55" />
+              <path d="M50 420 C 160 390, 198 300, 274 284 S 408 340, 506 280 S 650 184, 788 228 S 904 350, 932 262" fill="none" stroke="rgba(141,231,255,.34)" stroke-width="1" />
+              <path d="M48 488 C 180 436, 282 442, 378 398 S 512 312, 628 350 S 774 468, 934 418" fill="none" stroke="rgba(185,165,255,.28)" stroke-width="1" />
+
+              <g transform="translate(92 92)">
+                <text x="0" y="0" fill="rgba(231,242,239,.62)" font-family="monospace" font-size="13" letter-spacing="1.2">PI</text>
+                <rect x="0" y="38" width="86" height="308" fill="rgba(141,231,255,.08)" stroke="rgba(141,231,255,.24)" />
+                <g fill="rgba(141,231,255,.68)" filter="url(#soften)">
+                  <rect x="12" y="286" width="62" height="18" />
+                  <rect x="12" y="252" width="48" height="24" />
+                  <rect x="12" y="214" width="70" height="26" />
+                  <rect x="12" y="176" width="54" height="24" />
+                  <rect x="12" y="132" width="77" height="32" />
+                  <rect x="12" y="88" width="40" height="28" />
+                  <rect x="12" y="50" width="66" height="24" />
+                </g>
+                <path d="M104 346H210" stroke="rgba(231,242,239,.42)" />
+                <text x="118" y="368" fill="rgba(231,242,239,.58)" font-family="monospace" font-size="12">34.8M token mass TBD</text>
+              </g>
+
+              <g transform="translate(318 132)">
+                <text x="0" y="0" fill="rgba(231,242,239,.62)" font-family="monospace" font-size="13" letter-spacing="1.2">CODEX</text>
+                <rect x="0" y="38" width="116" height="268" fill="rgba(185,165,255,.08)" stroke="rgba(185,165,255,.24)" />
+                <g fill="rgba(185,165,255,.68)" filter="url(#soften)">
+                  <rect x="16" y="238" width="76" height="22" />
+                  <rect x="16" y="202" width="92" height="22" />
+                  <rect x="16" y="164" width="66" height="26" />
+                  <rect x="16" y="118" width="98" height="34" />
+                  <rect x="16" y="84" width="58" height="22" />
+                  <rect x="16" y="50" width="108" height="20" />
+                </g>
+                <path d="M134 174H254" stroke="rgba(185,165,255,.44)" />
+                <text x="148" y="166" fill="rgba(231,242,239,.58)" font-family="monospace" font-size="12">manual read cliff</text>
+              </g>
+
+              <g transform="translate(566 86)">
+                <text x="0" y="0" fill="rgba(231,242,239,.62)" font-family="monospace" font-size="13" letter-spacing="1.2">OPENCODE</text>
+                <rect x="0" y="38" width="142" height="356" fill="rgba(255,122,102,.07)" stroke="rgba(255,122,102,.25)" />
+                <g fill="rgba(255,122,102,.65)" filter="url(#soften)">
+                  <rect x="18" y="320" width="92" height="18" />
+                  <rect x="18" y="286" width="118" height="22" />
+                  <rect x="18" y="244" width="74" height="28" />
+                  <rect x="18" y="198" width="132" height="32" />
+                  <rect x="18" y="154" width="86" height="30" />
+                  <rect x="18" y="110" width="126" height="30" />
+                  <rect x="18" y="62" width="102" height="34" />
+                </g>
+                <path d="M160 240H276" stroke="rgba(255,122,102,.46)" />
+                <text x="174" y="232" fill="rgba(231,242,239,.58)" font-family="monospace" font-size="12">generated/vendor quarantine</text>
+              </g>
+
+              <g transform="translate(818 206)">
+                <text x="0" y="0" fill="rgba(231,242,239,.62)" font-family="monospace" font-size="13" letter-spacing="1.2">TAU</text>
+                <rect x="0" y="38" width="62" height="172" fill="rgba(246,213,139,.08)" stroke="rgba(246,213,139,.26)" />
+                <g fill="rgba(246,213,139,.68)" filter="url(#soften)">
+                  <rect x="12" y="144" width="38" height="16" />
+                  <rect x="12" y="114" width="46" height="18" />
+                  <rect x="12" y="82" width="34" height="18" />
+                  <rect x="12" y="52" width="50" height="16" />
+                </g>
+              </g>
+
+              <g opacity=".8">
+                <line x1="74" x2="906" y1="152" y2="152" stroke="rgba(141,231,255,.24)" />
+                <text x="76" y="142" fill="rgba(141,231,255,.72)" stroke="#071011" stroke-width="4" paint-order="stroke" font-family="monospace" font-size="12">≤8K SAFE READ</text>
+                <line x1="74" x2="906" y1="318" y2="318" stroke="rgba(185,165,255,.24)" />
+                <text x="76" y="308" fill="rgba(185,165,255,.74)" stroke="#071011" stroke-width="4" paint-order="stroke" font-family="monospace" font-size="12">8–40K RANGE READ</text>
+                <line x1="74" x2="906" y1="474" y2="474" stroke="rgba(255,122,102,.26)" />
+                <text x="76" y="464" fill="rgba(255,122,102,.76)" stroke="#071011" stroke-width="4" paint-order="stroke" font-family="monospace" font-size="12">40K+ MANUAL / NEVER AUTO</text>
+              </g>
+            </svg>
+
+            <div class="absolute bottom-8 left-8 right-8 z-10 grid gap-3 sm:left-10 sm:right-10 lg:grid-cols-4">
+              <div class="border-t border-cyan/50 pt-3">
+                <div class="micro text-[10px] text-cyan">safe read</div>
+                <div class="mt-1 text-3xl font-semibold tracking-[-0.06em]">≤8k</div>
+              </div>
+              <div class="border-t border-violet/50 pt-3">
+                <div class="micro text-[10px] text-violet">range read</div>
+                <div class="mt-1 text-3xl font-semibold tracking-[-0.06em]">8–40k</div>
+              </div>
+              <div class="border-t border-coral/50 pt-3">
+                <div class="micro text-[10px] text-coral">manual</div>
+                <div class="mt-1 text-3xl font-semibold tracking-[-0.06em]">40k+</div>
+              </div>
+              <div class="border-t border-milk/40 pt-3">
+                <div class="micro text-[10px] text-fog">never auto</div>
+                <div class="mt-1 text-3xl font-semibold tracking-[-0.06em]">vendor</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid border-b hairline lg:grid-cols-[0.34fr_0.66fr]">
+        <div class="px-5 py-10 sm:px-8 lg:px-12 lg:py-14">
+          <div class="figure-label text-[11px]">How to read the plate</div>
+          <h2 class="mt-4 max-w-lg text-4xl font-semibold leading-[0.95] tracking-[-0.065em] md:text-6xl">Evidence before appetite.</h2>
+        </div>
+        <div class="px-5 py-8 sm:px-8 lg:px-12 lg:py-12">
+          <div class="threshold-rule">
+            <div class="micro text-xs text-cyan">01 · scan</div>
+            <p class="text-xl leading-tight text-milk">Walk repo files and classify size buckets before any agent reads bulk source.</p>
+            <div class="text-right text-sm text-fog">file bytes → token estimate</div>
+          </div>
+          <div class="threshold-rule">
+            <div class="micro text-xs text-violet">02 · shape</div>
+            <p class="text-xl leading-tight text-milk">Separate normal source from mass objects: snapshots, generated blobs, fixtures, vendored packages.</p>
+            <div class="text-right text-sm text-fog">bucket profile</div>
+          </div>
+          <div class="threshold-rule">
+            <div class="micro text-xs text-coral">03 · gate</div>
+            <p class="text-xl leading-tight text-milk">Allow safe reads, force range reads for medium files, and require manual intent for 40k+ token objects.</p>
+            <div class="text-right text-sm text-fog">policy draft</div>
+          </div>
+          <div class="threshold-rule">
+            <div class="micro text-xs text-amber">04 · pack</div>
+            <p class="text-xl leading-tight text-milk">Estimate context-pack capacity so the report distinguishes page evidence, raw artifacts, and global ledger entries.</p>
+            <div class="text-right text-sm text-fog">HTML · CSV · JSON</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="artifacts" class="artifact-grid grid border-b hairline md:grid-cols-4">
+        <a href="#" class="artifact-link group">
+          <div class="micro text-[10px] text-fog">public page</div>
+          <div class="mt-8 text-3xl font-semibold tracking-[-0.06em] text-milk">HTML</div>
+          <p class="mt-3 text-sm leading-5 text-fog">Shareable benchmark narrative with screenshots and verdict.</p>
+        </a>
+        <a href="#" class="artifact-link group">
+          <div class="micro text-[10px] text-fog">adjacent raw</div>
+          <div class="mt-8 text-3xl font-semibold tracking-[-0.06em] text-milk">CSV</div>
+          <p class="mt-3 text-sm leading-5 text-fog">File-level rows for audit, sorting, and spot checks.</p>
+        </a>
+        <a href="#" class="artifact-link group">
+          <div class="micro text-[10px] text-fog">machine evidence</div>
+          <div class="mt-8 text-3xl font-semibold tracking-[-0.06em] text-milk">JSON</div>
+          <p class="mt-3 text-sm leading-5 text-fog">Bucket totals, thresholds, corpus metadata, sample run hash.</p>
+        </a>
+        <a href="#" class="artifact-link group">
+          <div class="micro text-[10px] text-fog">global record</div>
+          <div class="mt-8 text-3xl font-semibold tracking-[-0.06em] text-milk">Ledger</div>
+          <p class="mt-3 text-sm leading-5 text-fog">Cross-run research notes without bloating this report page.</p>
+        </a>
+      </section>
+
+      <section id="method" class="section-cut grid lg:grid-cols-[0.31fr_0.69fr]">
+        <div class="px-5 py-10 sm:px-8 lg:px-12 lg:py-16">
+          <div class="figure-label text-[11px]">Method notes</div>
+          <p class="mt-4 max-w-sm text-lg leading-6 text-fog">Placeholder values, real thresholds. Page structure is public-facing; raw rows stay adjacent.</p>
+        </div>
+        <div class="px-5 py-6 sm:px-8 lg:px-12 lg:py-10">
+          <div class="evidence-strip">
+            <div class="micro text-xs text-cyan">source corpus</div>
+            <p class="text-lg leading-6 text-milk">Pi, Codex, OpenCode, Tau control. Each corpus reports total files, ignored files, largest files, bucket totals, and estimated token mass.</p>
+            <div class="text-right text-sm text-fog">sample/TBD</div>
+          </div>
+          <div class="evidence-strip">
+            <div class="micro text-xs text-violet">context capacity</div>
+            <p class="text-lg leading-6 text-milk">Capacity is framed as a pre-read budget: how many safe files fit, which ranges require slices, which objects must never enter automatic context.</p>
+            <div class="text-right text-sm text-fog">before editing</div>
+          </div>
+          <div class="evidence-strip">
+            <div class="micro text-xs text-coral">failure mode</div>
+            <p class="text-lg leading-6 text-milk">The report calls out repositories where one generated or vendor object can consume the same context as a whole feature area.</p>
+            <div class="text-right text-sm text-fog">manual gate</div>
+          </div>
+          <div class="evidence-strip">
+            <div class="micro text-xs text-amber">stance</div>
+            <p class="text-lg leading-6 text-milk">No vibes. Measure terrain first, then choose read strategy. The HTML report is evidence, not the source of truth.</p>
+            <div class="text-right text-sm text-fog">ledger linked</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
