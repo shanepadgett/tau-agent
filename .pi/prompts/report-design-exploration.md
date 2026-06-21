@@ -137,6 +137,9 @@ These are already explored. Use them as negative space.
 - V10 `report-design-baseline-v10.html`
   - Related bucket: F diagrams/abstract technical marks.
   - Dark radiograph/lightbox evidence page with grainy black field, cold cyan/violet/coral semantic specimen bars, two-line grotesk verdict, x-ray plate aperture, and artifact/method strips below. Avoid repeating scan-plate/x-ray film, grainy black lightbox, and cyan/violet/coral radiograph bars next.
+- V11 `report-design-baseline-v11.html`
+  - Related bucket: E terminal/code-native.
+  - Brutalist black/white context rail-yard switchboard: split black command slab and enamel signal map, condensed grotesk/mono type, hard semantic route colors for safe/range/manual/never-auto, output strip for HTML/CSV/JSON/ledger. Avoid repeating rail/switchboard transit metaphor, split black-left verdict slab, enamel plate shadow, and giant SWITCH BEFORE READ treatment next.
 
 Taste notes from prior review:
 
@@ -164,6 +167,7 @@ HTML:
 - `docs/plans/fs-tool-research/report-design-baseline-v8.html`
 - `docs/plans/fs-tool-research/report-design-baseline-v9.html`
 - `docs/plans/fs-tool-research/report-design-baseline-v10.html`
+- `docs/plans/fs-tool-research/report-design-baseline-v11.html`
 
 Captures:
 
@@ -177,6 +181,7 @@ Captures:
 - `docs/plans/fs-tool-research/design-captures/report-design-baseline-v8.png`
 - `docs/plans/fs-tool-research/design-captures/report-design-baseline-v9.png`
 - `docs/plans/fs-tool-research/design-captures/report-design-baseline-v10.png`
+- `docs/plans/fs-tool-research/design-captures/report-design-baseline-v11.png`
 
 ## Reference buckets
 

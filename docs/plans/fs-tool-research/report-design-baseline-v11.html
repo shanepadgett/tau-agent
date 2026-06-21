@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tau Benchmark Report — repo-size-profile</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        --ink: #050505;
+        --field: #f7f7f0;
+        --white: #fffef8;
+        --rail: #151515;
+        --safe: #008a4e;
+        --range: #f0b71a;
+        --manual: #e53d2f;
+        --never: #6d6b64;
+        --blue: #0048ff;
+        --metal: #d8d7cc;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        background: var(--ink);
+        color: var(--ink);
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background: var(--ink);
+        color: var(--ink);
+        font-family:
+          "Arial Narrow", "Helvetica Neue", Arial, system-ui, sans-serif;
+        font-stretch: condensed;
+      }
+
+      .mono {
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+          monospace;
+        font-stretch: normal;
+      }
+
+      .plate {
+        background: var(--field);
+        border: 3px solid var(--ink);
+        box-shadow: 10px 10px 0 var(--ink);
+      }
+
+      .black-plate {
+        background: var(--ink);
+        color: var(--white);
+        border-right: 3px solid var(--ink);
+      }
+
+      .hairline {
+        border-color: color-mix(in srgb, var(--ink) 26%, transparent);
+      }
+
+      .rail-map text {
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+          monospace;
+        font-size: 15px;
+        letter-spacing: 0.05em;
+        fill: var(--ink);
+      }
+
+      .rail-map .label {
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+      }
+
+      .rail-map .micro {
+        font-size: 12px;
+        fill: #55524b;
+      }
+
+      .rail-map .reversal {
+        fill: var(--white);
+      }
+
+      .rail-map path,
+      .rail-map line {
+        vector-effect: non-scaling-stroke;
+        stroke-linecap: square;
+        stroke-linejoin: miter;
+      }
+
+      .signal {
+        width: 0.82rem;
+        height: 0.82rem;
+        display: inline-block;
+        border: 2px solid currentColor;
+      }
+
+      .cutout {
+        background: var(--white);
+        border-block: 3px solid var(--ink);
+      }
+
+      .route-row {
+        display: grid;
+        grid-template-columns: 0.9fr 1.35fr 0.7fr 0.8fr;
+        gap: 1.25rem;
+        align-items: baseline;
+        border-top: 2px solid var(--ink);
+        padding: 1rem 0;
+      }
+
+      .route-row:last-child {
+        border-bottom: 2px solid var(--ink);
+      }
+
+      .vertical-label {
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+      }
+
+      @media (max-width: 1180px) {
+        .black-plate {
+          border-right: 0;
+          border-bottom: 3px solid var(--ink);
+        }
+
+        .route-row {
+          grid-template-columns: 1fr;
+          gap: 0.35rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="mx-auto min-h-screen max-w-[1900px] bg-[var(--field)]">
+      <section class="grid min-h-screen grid-cols-1 lg:grid-cols-[0.78fr_1.22fr]">
+        <aside class="black-plate flex min-h-[42rem] flex-col justify-between px-8 py-8 sm:px-12 lg:px-14 xl:px-16">
+          <div>
+            <div class="mono mb-14 flex items-center justify-between text-[11px] uppercase tracking-[0.22em] text-[#b9b8ae]">
+              <span>Tau / public evidence page</span>
+              <span>sample · not final</span>
+            </div>
+
+            <p class="mono mb-5 text-sm uppercase tracking-[0.28em] text-[#d4d1c5]">
+              repo-size-profile
+            </p>
+
+            <h1 class="max-w-[13ch] text-[clamp(4.25rem,8.4vw,10.8rem)] font-black uppercase leading-[0.78] tracking-[-0.08em] text-[var(--white)]">
+              Switch before read.
+            </h1>
+
+            <p class="mt-10 max-w-[34rem] text-xl leading-[1.28] tracking-[-0.02em] text-[#e4e1d4] sm:text-2xl">
+              Measure repository mass before an agent boards context. Pi, Codex,
+              OpenCode, and Tau are routed by file size, token load, and pack capacity.
+            </p>
+          </div>
+
+          <div class="mt-12 grid gap-6">
+            <div class="grid grid-cols-2 border-y-2 border-[#f8f4e6] py-5 text-[#f8f4e6] sm:grid-cols-4">
+              <div>
+                <p class="mono text-[10px] uppercase tracking-[0.2em] text-[#9f9b90]">safe</p>
+                <p class="mono mt-2 text-lg font-bold">≤8k</p>
+              </div>
+              <div>
+                <p class="mono text-[10px] uppercase tracking-[0.2em] text-[#9f9b90]">range</p>
+                <p class="mono mt-2 text-lg font-bold">8–40k</p>
+              </div>
+              <div>
+                <p class="mono text-[10px] uppercase tracking-[0.2em] text-[#9f9b90]">manual</p>
+                <p class="mono mt-2 text-lg font-bold">40k+</p>
+              </div>
+              <div>
+                <p class="mono text-[10px] uppercase tracking-[0.2em] text-[#9f9b90]">blocked</p>
+                <p class="mono mt-2 text-lg font-bold">vendor</p>
+              </div>
+            </div>
+
+            <div class="mono grid gap-3 text-xs uppercase tracking-[0.18em] text-[#e9e5d6] sm:grid-cols-2">
+              <p><span class="signal mr-3 text-[var(--safe)]"></span>read directly</p>
+              <p><span class="signal mr-3 text-[var(--range)]"></span>read by range</p>
+              <p><span class="signal mr-3 text-[var(--manual)]"></span>human route</p>
+              <p><span class="signal mr-3 text-[#a6a29a]"></span>never automatic</p>
+            </div>
+          </div>
+        </aside>
+
+        <section class="relative overflow-hidden px-6 py-7 sm:px-10 lg:px-12 xl:px-16">
+          <div class="mb-8 flex items-start justify-between gap-6 border-b-4 border-[var(--ink)] pb-5">
+            <div>
+              <p class="mono text-xs uppercase tracking-[0.22em] text-[#5f5c55]">
+                context yard control · evidence map
+              </p>
+              <h2 class="mt-2 text-4xl font-black uppercase leading-[0.9] tracking-[-0.055em] sm:text-6xl xl:text-7xl">
+                No vibe policy.
+                <br />Route the terrain.
+              </h2>
+            </div>
+            <div class="hidden min-w-[12rem] border-l-4 border-[var(--ink)] pl-5 text-right lg:block">
+              <p class="mono text-[11px] uppercase tracking-[0.2em] text-[#66625a]">verdict</p>
+              <p class="mt-2 text-3xl font-black uppercase tracking-[-0.045em]">Measure first</p>
+            </div>
+          </div>
+
+          <div class="plate relative overflow-hidden px-5 py-5 sm:px-8 sm:py-7">
+            <div class="mb-4 flex items-center justify-between gap-4 border-b-2 border-[var(--ink)] pb-3">
+              <p class="mono text-[11px] uppercase tracking-[0.22em] text-[#5b5850]">
+                file mass switchboard / sample values
+              </p>
+              <p class="mono text-[11px] uppercase tracking-[0.22em] text-[#5b5850]">
+                html + csv + json + ledger
+              </p>
+            </div>
+
+            <svg class="rail-map h-[56vh] min-h-[500px] w-full" viewBox="0 0 1040 560" role="img" aria-label="Repository routing map showing sample safe, range, manual, and blocked paths">
+              <rect x="0" y="0" width="1040" height="560" fill="#fffef8" />
+
+              <text x="22" y="34" class="label">REPOSITORY INBOUND</text>
+              <text x="742" y="34" class="label">CONTEXT DESTINATION</text>
+
+              <line x1="70" y1="104" x2="250" y2="104" stroke="var(--rail)" stroke-width="22" />
+              <line x1="70" y1="204" x2="250" y2="204" stroke="var(--rail)" stroke-width="22" />
+              <line x1="70" y1="304" x2="250" y2="304" stroke="var(--rail)" stroke-width="22" />
+              <line x1="70" y1="404" x2="250" y2="404" stroke="var(--rail)" stroke-width="22" />
+
+              <path d="M250 104 L390 104 L505 164 L725 164" fill="none" stroke="var(--safe)" stroke-width="16" />
+              <path d="M250 204 L390 204 L505 238 L725 238" fill="none" stroke="var(--range)" stroke-width="16" />
+              <path d="M250 304 L382 304 L512 318 L725 318" fill="none" stroke="var(--manual)" stroke-width="16" />
+              <path d="M250 404 L392 404 L515 392 L725 392" fill="none" stroke="var(--never)" stroke-width="16" />
+
+              <line x1="430" y1="84" x2="430" y2="432" stroke="var(--ink)" stroke-width="4" />
+              <line x1="560" y1="138" x2="560" y2="420" stroke="var(--ink)" stroke-width="4" />
+              <line x1="684" y1="146" x2="684" y2="410" stroke="var(--ink)" stroke-width="4" />
+
+              <circle cx="70" cy="104" r="21" fill="#fffef8" stroke="var(--ink)" stroke-width="7" />
+              <circle cx="70" cy="204" r="21" fill="#fffef8" stroke="var(--ink)" stroke-width="7" />
+              <circle cx="70" cy="304" r="21" fill="#fffef8" stroke="var(--ink)" stroke-width="7" />
+              <circle cx="70" cy="404" r="21" fill="#fffef8" stroke="var(--ink)" stroke-width="7" />
+
+              <circle cx="725" cy="164" r="22" fill="var(--safe)" stroke="var(--ink)" stroke-width="6" />
+              <circle cx="725" cy="238" r="22" fill="var(--range)" stroke="var(--ink)" stroke-width="6" />
+              <circle cx="725" cy="318" r="22" fill="var(--manual)" stroke="var(--ink)" stroke-width="6" />
+              <circle cx="725" cy="392" r="22" fill="var(--never)" stroke="var(--ink)" stroke-width="6" />
+
+              <text x="110" y="84" class="label">PI</text>
+              <text x="110" y="132" class="micro">sample corpus</text>
+              <text x="110" y="184" class="label">CODEX</text>
+              <text x="110" y="232" class="micro">sample corpus</text>
+              <text x="110" y="284" class="label">OPENCODE</text>
+              <text x="110" y="332" class="micro">sample corpus</text>
+              <text x="110" y="384" class="label">TAU</text>
+              <text x="110" y="432" class="micro">sanity control</text>
+
+              <text x="772" y="158" class="label">SAFE READ</text>
+              <text x="772" y="181" class="micro">small files ≤8k</text>
+              <text x="772" y="232" class="label">RANGE READ</text>
+              <text x="772" y="255" class="micro">8–40k chunks</text>
+              <text x="772" y="312" class="label">MANUAL</text>
+              <text x="772" y="335" class="micro">40k+ files</text>
+              <text x="772" y="386" class="label">NEVER AUTO</text>
+              <text x="772" y="409" class="micro">vendor / generated</text>
+
+              <rect x="23" y="490" width="994" height="46" fill="var(--ink)" />
+              <text x="44" y="519" class="label reversal">OUTPUT: SHAREABLE REPORT + ADJACENT CSV/JSON + GLOBAL RESEARCH LEDGER</text>
+            </svg>
+          </div>
+
+          <div class="mt-8 grid gap-4 sm:grid-cols-3">
+            <div class="border-t-4 border-[var(--safe)] pt-3">
+              <p class="mono text-[10px] uppercase tracking-[0.2em] text-[#5f5c55]">claim</p>
+              <p class="mt-1 text-2xl font-black uppercase leading-none tracking-[-0.045em]">Context is capacity, not confidence.</p>
+            </div>
+            <div class="border-t-4 border-[var(--range)] pt-3">
+              <p class="mono text-[10px] uppercase tracking-[0.2em] text-[#5f5c55]">method</p>
+              <p class="mt-1 text-2xl font-black uppercase leading-none tracking-[-0.045em]">Bucket files before summaries exist.</p>
+            </div>
+            <div class="border-t-4 border-[var(--manual)] pt-3">
+              <p class="mono text-[10px] uppercase tracking-[0.2em] text-[#5f5c55]">stance</p>
+              <p class="mt-1 text-2xl font-black uppercase leading-none tracking-[-0.045em]">No auto-read for unknown mass.</p>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="cutout px-6 py-14 sm:px-10 lg:px-16">
+        <div class="grid gap-12 lg:grid-cols-[0.52fr_1fr]">
+          <div>
+            <p class="mono text-xs uppercase tracking-[0.22em] text-[#67635a]">report continues</p>
+            <h2 class="mt-4 max-w-[11ch] text-6xl font-black uppercase leading-[0.83] tracking-[-0.07em] sm:text-8xl">
+              Evidence below the signal.
+            </h2>
+          </div>
+          <div class="mono text-sm uppercase tracking-[0.12em]">
+            <div class="route-row">
+              <p class="font-bold">Pi</p>
+              <p>large docs and package surface; route by range first</p>
+              <p>sample/TBD</p>
+              <p class="text-[var(--range)]">range-heavy</p>
+            </div>
+            <div class="route-row">
+              <p class="font-bold">Codex</p>
+              <p>mixed repository profile; isolate generated/vendor paths</p>
+              <p>sample/TBD</p>
+              <p class="text-[var(--manual)]">manual edge</p>
+            </div>
+            <div class="route-row">
+              <p class="font-bold">OpenCode</p>
+              <p>dense source and docs; preflight context-pack capacity</p>
+              <p>sample/TBD</p>
+              <p class="text-[var(--safe)]">safe clusters</p>
+            </div>
+            <div class="route-row">
+              <p class="font-bold">Tau</p>
+              <p>sanity control for local agent extension surface</p>
+              <p>sample/TBD</p>
+              <p>control</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid gap-0 lg:grid-cols-[6rem_1fr]">
+        <div class="hidden border-r-4 border-[var(--ink)] bg-[var(--blue)] px-5 py-12 text-[var(--white)] lg:block">
+          <p class="vertical-label mono text-xs uppercase tracking-[0.3em]">raw artifacts stay adjacent</p>
+        </div>
+        <div class="px-6 py-16 sm:px-10 lg:px-16">
+          <div class="grid gap-8 lg:grid-cols-4">
+            <div class="border-t-4 border-[var(--ink)] pt-4">
+              <p class="mono text-[11px] uppercase tracking-[0.22em] text-[#67635a]">01 html</p>
+              <p class="mt-8 text-3xl font-black uppercase leading-none tracking-[-0.05em]">Public report page</p>
+            </div>
+            <div class="border-t-4 border-[var(--ink)] pt-4">
+              <p class="mono text-[11px] uppercase tracking-[0.22em] text-[#67635a]">02 csv</p>
+              <p class="mt-8 text-3xl font-black uppercase leading-none tracking-[-0.05em]">Rows for audit</p>
+            </div>
+            <div class="border-t-4 border-[var(--ink)] pt-4">
+              <p class="mono text-[11px] uppercase tracking-[0.22em] text-[#67635a]">03 json</p>
+              <p class="mt-8 text-3xl font-black uppercase leading-none tracking-[-0.05em]">Machine evidence</p>
+            </div>
+            <div class="border-t-4 border-[var(--ink)] pt-4">
+              <p class="mono text-[11px] uppercase tracking-[0.22em] text-[#67635a]">04 ledger</p>
+              <p class="mt-8 text-3xl font-black uppercase leading-none tracking-[-0.05em]">Global research trail</p>
+            </div>
+          </div>
+
+          <div class="mt-16 border-y-4 border-[var(--ink)] py-8">
+            <p class="mono max-w-5xl text-xl uppercase leading-[1.55] tracking-[0.1em]">
+              This prototype uses plausible placeholder values only. Real reports should replace every
+              sample/TBD marker with generated measurements and keep raw CSV/JSON beside the HTML.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
