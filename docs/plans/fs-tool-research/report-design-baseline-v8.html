@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tau Benchmark Report — repo-size-profile</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        --paper: #f2e7d1;
+        --paper-deep: #e5d2ad;
+        --ink: #15110d;
+        --muted: #6d6254;
+        --hair: rgba(21, 17, 13, 0.28);
+        --rule: rgba(21, 17, 13, 0.72);
+        --black: #17120e;
+        --safe: #24563d;
+        --range: #bb7a22;
+        --manual: #9e3025;
+        --blocked: #756756;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          linear-gradient(90deg, rgba(255, 255, 255, 0.18), transparent 28%, transparent 72%, rgba(21, 17, 13, 0.035)),
+          var(--paper);
+        color: var(--ink);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .page {
+        min-height: 100vh;
+        max-width: 1840px;
+        margin: 0 auto;
+        padding: 34px 46px 38px;
+      }
+
+      .serif {
+        font-family: Georgia, "Times New Roman", Times, serif;
+      }
+
+      .mono {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      }
+
+      .masthead {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        gap: 30px;
+        border-top: 3px solid var(--ink);
+        border-bottom: 1px solid var(--ink);
+        padding: 12px 0 13px;
+      }
+
+      .masthead-center {
+        font-size: clamp(28px, 3.2vw, 57px);
+        line-height: 0.9;
+        letter-spacing: -0.06em;
+      }
+
+      .micro {
+        font-size: 11px;
+        line-height: 1.25;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.42fr) minmax(420px, 0.68fr);
+        gap: 46px;
+        padding: 36px 0 30px;
+      }
+
+      .claim {
+        max-width: 1060px;
+        font-size: clamp(76px, 7.2vw, 137px);
+        line-height: 0.82;
+        letter-spacing: -0.075em;
+        text-wrap: balance;
+      }
+
+      .lede {
+        max-width: 760px;
+        margin-top: 25px;
+        font-size: 21px;
+        line-height: 1.28;
+        letter-spacing: -0.02em;
+        color: #2c251d;
+      }
+
+      .caption-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+        margin-top: 28px;
+        border-top: 1px solid var(--hair);
+        padding-top: 13px;
+        color: var(--muted);
+      }
+
+      .verdict-card {
+        align-self: stretch;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 390px;
+        background: var(--black);
+        color: var(--paper);
+        border: 1px solid var(--ink);
+        padding: 24px 26px 23px;
+        box-shadow: 12px 12px 0 rgba(21, 17, 13, 0.1);
+      }
+
+      .verdict-rule {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 14px;
+        color: #c7b995;
+      }
+
+      .verdict-rule::before,
+      .verdict-rule::after {
+        content: "";
+        height: 1px;
+        background: rgba(242, 231, 209, 0.34);
+      }
+
+      .verdict-rule::before {
+        display: none;
+      }
+
+      .finding {
+        border-top: 1px solid rgba(242, 231, 209, 0.22);
+        padding-top: 14px;
+      }
+
+      .finding strong {
+        display: block;
+        font-size: 39px;
+        line-height: 0.9;
+        letter-spacing: -0.07em;
+      }
+
+      .ticker {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        min-height: 66px;
+        margin: 0 -46px;
+        padding: 0 46px;
+        overflow: hidden;
+        border-top: 2px solid var(--ink);
+        border-bottom: 2px solid var(--ink);
+        background: var(--ink);
+        color: var(--paper);
+      }
+
+      .ticker-label {
+        flex: 0 0 auto;
+        padding-right: 18px;
+        border-right: 1px solid rgba(242, 231, 209, 0.28);
+        color: #d4c39f;
+      }
+
+      .ticker-line {
+        min-width: 0;
+        flex: 1;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 26px;
+        white-space: nowrap;
+        overflow: hidden;
+        font-size: 16px;
+        letter-spacing: -0.02em;
+      }
+
+      .ticker-line span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .up {
+        color: #e3b25c;
+      }
+
+      .danger {
+        color: #d86a56;
+      }
+
+      .ok {
+        color: #92b89e;
+      }
+
+      .evidence {
+        display: grid;
+        grid-template-columns: 0.82fr 1.5fr 0.86fr;
+        gap: 34px;
+        padding-top: 31px;
+      }
+
+      .section-title {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 13px;
+        color: #3a3026;
+      }
+
+      .section-title::after {
+        content: "";
+        height: 1px;
+        background: var(--rule);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        border-top: 1px solid var(--hair);
+        padding: 11px 0;
+        vertical-align: top;
+        text-align: left;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 10px;
+        line-height: 1.1;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      td {
+        font-size: 15px;
+        line-height: 1.25;
+      }
+
+      .threshold td:first-child,
+      .artifact td:first-child {
+        width: 92px;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+      }
+
+      .exposure th,
+      .exposure td {
+        padding-right: 12px;
+      }
+
+      .exposure td:first-child {
+        width: 112px;
+        font-weight: 900;
+        font-size: 18px;
+        letter-spacing: -0.04em;
+      }
+
+      .num {
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+
+      .bar {
+        display: flex;
+        width: 100%;
+        min-width: 180px;
+        height: 13px;
+        margin-top: 4px;
+        border: 1px solid rgba(21, 17, 13, 0.5);
+        background: rgba(21, 17, 13, 0.12);
+      }
+
+      .bar > i {
+        display: block;
+        height: 100%;
+      }
+
+      .safe {
+        background: var(--safe);
+      }
+
+      .range {
+        background: var(--range);
+      }
+
+      .manual {
+        background: var(--manual);
+      }
+
+      .blocked {
+        background: var(--blocked);
+      }
+
+      .legend {
+        display: grid;
+        grid-template-columns: repeat(4, max-content);
+        gap: 14px;
+        margin-top: 11px;
+        color: var(--muted);
+      }
+
+      .legend b {
+        display: inline-block;
+        width: 16px;
+        height: 8px;
+        margin-right: 6px;
+        border: 1px solid rgba(21, 17, 13, 0.28);
+      }
+
+      .artifact td:last-child {
+        color: #3a3026;
+      }
+
+      .footnote {
+        margin-top: 15px;
+        border-top: 2px solid var(--ink);
+        padding-top: 10px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      @media (max-width: 1180px) {
+        .page {
+          padding: 24px;
+        }
+
+        .masthead,
+        .hero,
+        .evidence {
+          grid-template-columns: 1fr;
+        }
+
+        .masthead {
+          gap: 8px;
+          text-align: left;
+        }
+
+        .masthead > :last-child {
+          text-align: left !important;
+        }
+
+        .hero {
+          padding-top: 28px;
+        }
+
+        .claim {
+          font-size: clamp(64px, 14vw, 112px);
+        }
+
+        .verdict-card {
+          min-height: auto;
+          gap: 28px;
+          box-shadow: none;
+        }
+
+        .ticker {
+          margin: 0 -24px;
+          padding: 0 24px;
+        }
+
+        .legend {
+          grid-template-columns: repeat(2, max-content);
+        }
+      }
+
+      @media (max-width: 720px) {
+        .caption-row,
+        .ticker,
+        .legend {
+          display: none;
+        }
+
+        .claim {
+          letter-spacing: -0.06em;
+        }
+
+        .lede {
+          font-size: 18px;
+        }
+
+        .exposure {
+          font-size: 13px;
+        }
+
+        .bar {
+          min-width: 120px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="masthead">
+        <div class="micro mono">
+          Tau public evidence<br />repo-size-profile benchmark
+        </div>
+        <div class="masthead-center serif">Terrain Tape</div>
+        <div class="micro mono text-right">
+          Sample report concept<br />numbers marked TBD
+        </div>
+      </header>
+
+      <section class="hero">
+        <div>
+          <p class="micro mono mb-5 text-[color:var(--muted)]">Verdict before dashboard / evidence before policy</p>
+          <h1 class="claim serif">Read nothing blindly.</h1>
+          <p class="lede">
+            <span class="font-semibold">repo-size-profile</span> maps repository file size, token mass, bucket shape, and context-pack capacity before an agent opens a file or edits a line.
+          </p>
+          <div class="caption-row mono micro">
+            <span>Corpus: Pi / Codex / OpenCode / Tau control</span>
+            <span>Policy: ≤8k safe read · 8–40k range read · 40k+ manual</span>
+            <span>Never auto: vendor/generated</span>
+          </div>
+        </div>
+
+        <aside class="verdict-card">
+          <div>
+            <div class="verdict-rule mono micro">sample close</div>
+            <h2 class="serif mt-7 text-[74px] leading-[0.86] tracking-[-0.075em]">No vibe policy.</h2>
+            <p class="mt-5 max-w-[420px] text-[18px] leading-[1.25] text-[#d9ccb0]">
+              The page proves one thing: measure terrain first, then decide what can be read, ranged, packed, or left alone.
+            </p>
+          </div>
+          <div class="grid grid-cols-3 gap-5">
+            <div class="finding">
+              <strong class="serif">4</strong>
+              <span class="mono micro text-[#c7b995]">repos profiled</span>
+            </div>
+            <div class="finding">
+              <strong class="serif">3</strong>
+              <span class="mono micro text-[#c7b995]">read bands</span>
+            </div>
+            <div class="finding">
+              <strong class="serif">1</strong>
+              <span class="mono micro text-[#c7b995]">ledger trail</span>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="ticker mono" aria-label="sample benchmark tape">
+        <div class="ticker-label micro">Market tape / sample</div>
+        <div class="ticker-line">
+          <span>PI <b class="ok">68</b>/<b class="up">24</b>/<b class="danger">6</b> safe/range/manual</span>
+          <span>CODEX <b class="ok">61</b>/<b class="up">27</b>/<b class="danger">9</b> safe/range/manual</span>
+          <span>OPENCODE <b class="ok">58</b>/<b class="up">29</b>/<b class="danger">10</b> safe/range/manual</span>
+          <span>TAU CONTROL <b class="ok">74</b>/<b class="up">19</b>/<b class="danger">5</b> safe/range/manual</span>
+        </div>
+      </section>
+
+      <section class="evidence">
+        <div>
+          <h3 class="section-title mono micro">Threshold order book</h3>
+          <table class="threshold">
+            <tbody>
+              <tr>
+                <td class="num">≤8k</td>
+                <td>Safe read candidate. Small enough for automatic inspection with ordinary context discipline.</td>
+              </tr>
+              <tr>
+                <td class="num">8–40k</td>
+                <td>Range read. Pull slices, symbol paths, or summaries before paying full context cost.</td>
+              </tr>
+              <tr>
+                <td class="num">40k+</td>
+                <td>Manual. Treat as terrain, not text. Use targeted extraction or human decision.</td>
+              </tr>
+              <tr>
+                <td class="num">never</td>
+                <td>Vendor and generated files stay out of automatic read paths unless explicitly requested.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <h3 class="section-title mono micro">Corpus exposure sheet</h3>
+          <table class="exposure">
+            <thead>
+              <tr>
+                <th>Corpus</th>
+                <th>Files</th>
+                <th>Token mass</th>
+                <th>Bucket shape</th>
+                <th>Pack fit</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Pi</td>
+                <td class="mono num">1,482</td>
+                <td class="mono num">7.8M TBD</td>
+                <td>
+                  <div class="bar" aria-label="Pi sample bucket shape"><i class="safe" style="width: 68%"></i><i class="range" style="width: 24%"></i><i class="manual" style="width: 6%"></i><i class="blocked" style="width: 2%"></i></div>
+                </td>
+                <td class="mono num">18 packs</td>
+              </tr>
+              <tr>
+                <td>Codex</td>
+                <td class="mono num">2,914</td>
+                <td class="mono num">19.4M TBD</td>
+                <td>
+                  <div class="bar" aria-label="Codex sample bucket shape"><i class="safe" style="width: 61%"></i><i class="range" style="width: 27%"></i><i class="manual" style="width: 9%"></i><i class="blocked" style="width: 3%"></i></div>
+                </td>
+                <td class="mono num">44 packs</td>
+              </tr>
+              <tr>
+                <td>OpenCode</td>
+                <td class="mono num">3,206</td>
+                <td class="mono num">23.8M TBD</td>
+                <td>
+                  <div class="bar" aria-label="OpenCode sample bucket shape"><i class="safe" style="width: 58%"></i><i class="range" style="width: 29%"></i><i class="manual" style="width: 10%"></i><i class="blocked" style="width: 3%"></i></div>
+                </td>
+                <td class="mono num">55 packs</td>
+              </tr>
+              <tr>
+                <td>Tau</td>
+                <td class="mono num">742</td>
+                <td class="mono num">3.2M TBD</td>
+                <td>
+                  <div class="bar" aria-label="Tau control sample bucket shape"><i class="safe" style="width: 74%"></i><i class="range" style="width: 19%"></i><i class="manual" style="width: 5%"></i><i class="blocked" style="width: 2%"></i></div>
+                </td>
+                <td class="mono num">8 packs</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="legend mono micro">
+            <span><b class="safe"></b>safe</span>
+            <span><b class="range"></b>range</span>
+            <span><b class="manual"></b>manual</span>
+            <span><b class="blocked"></b>vendor/generated</span>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="section-title mono micro">Artifact trail</h3>
+          <table class="artifact">
+            <tbody>
+              <tr>
+                <td>HTML</td>
+                <td>Shareable single-page verdict and evidence summary.</td>
+              </tr>
+              <tr>
+                <td>CSV</td>
+                <td>Flat file inventory for spot checks and spreadsheet review.</td>
+              </tr>
+              <tr>
+                <td>JSON</td>
+                <td>Raw structured output for scripts, regressions, and repro.</td>
+              </tr>
+              <tr>
+                <td>Ledger</td>
+                <td>Global research record: what ran, when, and which artifact settled the claim.</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="footnote mono">
+            Prototype content only. Figures are plausible placeholders, not benchmark results. The design separates report page, adjacent raw artifacts, and the longer-lived ledger.
+          </p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

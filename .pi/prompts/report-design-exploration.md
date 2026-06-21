@@ -37,16 +37,31 @@ Elite designer behavior:
 
 - Pick a lane deliberately.
 - Make a new visual idea, not a remix of the last one.
+- Vary the whole system, not just one surface detail.
 - Iterate with screenshots until the composition is worth showing.
 - Be ruthless about deleting awkward flourishes.
 - If animation is used, keep it purposeful; static captures only prove static layout.
+
+## Variation mandate
+
+The next design must differ sharply from the prior two designs across at least 5 of these 7 axes:
+
+- theme/value: dark, light, saturated, monochrome, photographic, metallic, translucent, brutal, soft
+- palette: hue family, contrast model, accent strategy, semantic color use
+- typography: serif-led, grotesk-led, mono-led, condensed, slab, humanist, oversized, tiny/dense
+- layout: poster, atlas, dossier, instrument, editorial scroll, split-screen, object-first, table-first, narrative sequence
+- visual system: tables, charts, artifact photography, abstract diagram, physical metaphor, typographic system, map, timeline
+- spacing/density: sparse, compressed, modular, asymmetrical, full-bleed, bordered, floating, stacked
+- component language: cards, ledgers, captions, panels, strips, callouts, diagrams, raw tables, media plates
+
+Do not make two light editorial/evidence sheets in a row. Do not repeat serif headline + mono labels + off-white paper + severe tables unless the user explicitly asks to refine that lane. If the latest memory entry is light, the next default should be dark, saturated, image-led, object-led, or otherwise visibly non-paper.
 
 ## Workflow
 
 1. Read this prompt only. Optionally inspect filenames with `find` to determine next `vN`, but do not read prior HTML or captures.
 2. Pick one reference bucket below. State the chosen bucket briefly.
 3. Read only that bucket's listed images.
-4. Ideate a new lane. Avoid all prior lanes listed in Design memory.
+4. Ideate a new lane. Avoid all prior lanes listed in Design memory and obey the Variation mandate.
 5. Write `docs/plans/fs-tool-research/report-design-baseline-vN.html`.
 6. Use agent-browser only for static layout review:
    - set viewport to `1920 1080`
@@ -111,6 +126,9 @@ These are already explored. Use them as negative space.
 - V7 `report-design-baseline-v7.html`
   - Related bucket: F diagrams/abstract technical marks.
   - Off-white legal exhibit / industrial lab instrument: huge serif command, severe numbered findings, core-sample stacked mass print, capacity gauge, safety-orange accents. Strong calibrated evidence lane; do not repeat court-brief borders, safety stripe, or lab-gauge/card composition unchanged.
+- V8 `report-design-baseline-v8.html`
+  - Related bucket: C editorial/research memo.
+  - Warm financial newspaper / market tape evidence page: cream newsprint field, huge serif headline, black verdict card, ticker strip, dense tables, green/gold/red deltas. Competent but too close to V7 on light evidence-sheet severity and serif/mono/table language; next run must break hard from paper, legal, newspaper, off-white, serif-headline, and table-led systems.
 
 Taste notes from prior review:
 
@@ -132,6 +150,7 @@ HTML:
 - `docs/plans/fs-tool-research/report-design-baseline-v5.html`
 - `docs/plans/fs-tool-research/report-design-baseline-v6.html`
 - `docs/plans/fs-tool-research/report-design-baseline-v7.html`
+- `docs/plans/fs-tool-research/report-design-baseline-v8.html`
 
 Captures:
 
@@ -142,6 +161,7 @@ Captures:
 - `docs/plans/fs-tool-research/design-captures/report-design-baseline-v5-16x9.png`
 - `docs/plans/fs-tool-research/design-captures/report-design-baseline-v6.png`
 - `docs/plans/fs-tool-research/design-captures/report-design-baseline-v7.png`
+- `docs/plans/fs-tool-research/design-captures/report-design-baseline-v8.png`
 
 ## Reference buckets
 
@@ -214,10 +234,10 @@ Use when the page needs meaningful non-photo visuals without generated image ass
 
 Consider these because prior designs have not exhausted them:
 
-- Financial newspaper / market evidence page: warm newsprint, dense tables, sharp black type, restrained deltas.
-- Museum placard / evidence exhibit: stone/white field, huge artifact, severe captions, minimal color.
-- Legal exhibit / court brief: monochrome plus one accent, numbered findings, exhibit tags.
-- Industrial lab instrument: off-white + graphite + safety orange, calibrated physical-panel feel.
+- Saturated non-paper benchmark poster: bold hue field, grotesk type, one severe evidence object, no tables-first composition.
+- Dark physical artifact page: photographed/generated object or CSS-built object, edge-blended, evidence as captions not dashboard cards.
+- Liquid/glass technical specimen: translucent layers, hard measurement overlays, restrained motion, no generic glow.
+- Brutalist monochrome web broadsheet: compressed sans, stark contrast, oversized numbers, no serif editorial tone.
 - Quiet technical atlas: abstract but meaningful maps, not grid/blueprint wallpaper.
 
 Pick your own if better. Just make it new.
