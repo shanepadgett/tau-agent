@@ -15,7 +15,8 @@ Goal: keep exploring single-page HTML report design systems until one floors the
 - Reference images are inspiration only. Do not copy layout, colors, fonts, shapes, marks, or composition directly.
 - Use Tailwind CDN. Custom CSS is allowed for real graphic effects, SVG filters, masks, animation, texture, or chart visuals.
 - No random dots, decorative pill tags, AI-tell confetti, fake complexity, generic glow, or blueprint/grid reuse unless the concept truly demands it.
-- Report = shareable evidence page. Adjacent CSV/JSON/raw artifacts may be referenced, but do not scaffold pipeline code.
+- Avoid gradients by default. They are a common AI-generated-site tell. Use flat fields, hard cuts, ink, texture, photography, or meaningful material effects first; use gradients only when the concept actually requires them.
+- Report = scrollable shareable evidence page, not a static slide/poster pretending to be a site. Adjacent CSV/JSON/raw artifacts may be referenced, but do not scaffold pipeline code.
 - Use actual generated assets only if the current concept calls for them and they already exist or the user provided them.
 - Do not create product extension files. This is design exploration.
 
@@ -29,13 +30,14 @@ Good report pages:
 - make evidence easy to scan
 - distinguish report page, raw artifacts, and global ledger
 - use color for meaning or atmosphere, not decoration
-- have typography with intent
-- work at 1920×1080 first, then degrade gracefully
+- have typography with intent; loud is one option, not the default
+- work above the fold at 1920×1080 first, then continue as a real scrollable page and degrade gracefully
 - avoid being another SaaS dashboard wearing a costume
 
 Elite designer behavior:
 
 - Pick a lane deliberately.
+- Elite can be quiet, elegant, beautiful, spare, weird, luxurious, brutal, technical, or loud. Do not default to huge punchy type and high-contrast swagger every time.
 - Make a new visual idea, not a remix of the last one.
 - Vary the whole system, not just one surface detail.
 - Iterate with screenshots until the composition is worth showing.
@@ -129,11 +131,17 @@ These are already explored. Use them as negative space.
 - V8 `report-design-baseline-v8.html`
   - Related bucket: C editorial/research memo.
   - Warm financial newspaper / market tape evidence page: cream newsprint field, huge serif headline, black verdict card, ticker strip, dense tables, green/gold/red deltas. Competent but too close to V7 on light evidence-sheet severity and serif/mono/table language; next run must break hard from paper, legal, newspaper, off-white, serif-headline, and table-led systems.
+- V9 `report-design-baseline-v9.html`
+  - Related bucket: D calm geometric product fields.
+  - Saturated amber scrollable report page with huge condensed grotesk command, integrated black thermal mass specimen, horizontal threshold rules, and artifact strip continuing into policy evidence below. Revised after overlap/card critique; avoid yellow-orange field + WEIGH REPO FIRST + black mass specimen/stacked threshold columns next.
 
 Taste notes from prior review:
 
 - User likes elite, spacious, intentional design.
-- User dislikes random dots, decorative pill tags, AI-tell dot pills, cheap glow, UI confetti, copied reference composition, and repeated grid/blueprint/checker motifs.
+- User wants difference, not a fixed house style. Avoid treating bold/in-your-face/oversized typography as the only way to look designed.
+- User dislikes random dots, decorative pill tags, AI-tell dot pills, cheap glow, UI confetti, copied reference composition, repeated grid/blueprint/checker motifs, and gradient-overuse as a default AI-design crutch.
+- Cards-in-cards is an AI-slop smell. Some card-like surfaces are fine when the evidence needs containment, but do not make the whole page a card and then nest more cards inside it by reflex.
+- These reports should feel like scrollable public webpages, not single static PowerPoint slides. A strong 16:9 capture matters, but the design must imply there is more report below the fold.
 - Image edges must blend; hard image rectangles look bad.
 - Responsive medium widths matter. If art crowds the headline, hide it and let content use the space.
 - Animation should not fight object motion; shader/refraction timing should sync with physical motion.
@@ -151,6 +159,7 @@ HTML:
 - `docs/plans/fs-tool-research/report-design-baseline-v6.html`
 - `docs/plans/fs-tool-research/report-design-baseline-v7.html`
 - `docs/plans/fs-tool-research/report-design-baseline-v8.html`
+- `docs/plans/fs-tool-research/report-design-baseline-v9.html`
 
 Captures:
 
@@ -162,6 +171,7 @@ Captures:
 - `docs/plans/fs-tool-research/design-captures/report-design-baseline-v6.png`
 - `docs/plans/fs-tool-research/design-captures/report-design-baseline-v7.png`
 - `docs/plans/fs-tool-research/design-captures/report-design-baseline-v8.png`
+- `docs/plans/fs-tool-research/design-captures/report-design-baseline-v9.png`
 
 ## Reference buckets
 
