@@ -1,0 +1,107 @@
+# Projection/compaction simulation
+
+Question: does deterministic state -> compiled context view beat raw transcript and model summaries?
+
+This is a turn-by-turn simulation over five agentic sessions. It models visible context rent, prompt-cache reuse, hidden evidence, model compaction calls, exact recall, stale-evidence exposure, and retry risk. Recall probabilities are explicit assumptions; fixture benchmarks still have to measure them.
+
+## Strategy shapes
+
+| strategy | shape |
+|---|---|
+| raw_retained_transcript | append-only full transcript/tool output; cache-friendly but pays rent forever |
+| adaptive_raw_then_mrc | keep raw append-only under 24k, then switch to KEEP/REF/DROP projection |
+| rolling_model_summary | periodic model summary plus recent raw buffer; cheap context, lossy exact recall |
+| vcc_source_view | raw event log as truth; deterministic source-coordinate view with expandable records |
+| pi_vcc_sections | deterministic sections: goal, files/changes, outstanding context, preferences, brief transcript |
+| pi_mrc_keep_ref_drop | KEEP critical facts, REF hidden evidence, DROP noise; smallest visible view with lookup burden |
+| hybrid_sections_prompt_classifier | pi-vcc-style deterministic sections plus cheap prompt-only classifier metadata |
+
+## Cost assumptions
+
+| item | value |
+|---|---:|
+| main input | $3.00/Mtok |
+| cached input | $0.30/Mtok |
+| main output | $15.00/Mtok |
+| summary input | $1.25/Mtok |
+| summary output | $5.00/Mtok |
+| classifier input | $0.20/Mtok |
+| classifier output | $0.60/Mtok |
+| output tokens/turn | 650 |
+
+Cache model: raw transcript is append-only and cache-friendly; model summaries rewrite prefix on compaction turns; deterministic projections have only a stable section share cached and pay the dynamic view uncached each turn.
+
+## Cost-only winner counts
+
+| strategy | wins |
+|---|---:|
+| pi_mrc_keep_ref_drop | 5 |
+
+## Quality-gated winner counts
+
+Requires at least 95% critical-fact recall and 90% exact recall. This is the sanity brake against choosing a tiny view that looks cheap but under-remembers intent.
+
+| strategy | wins |
+|---|---:|
+| hybrid_sections_prompt_classifier | 5 |
+
+## Session winners
+
+| session | cost winner | quality-gated winner | cost $ | quality $ | cost recall | quality recall | quality exact |
+|---|---|---|---:|---:|---:|---:|---:|
+| small_edit_8 | pi_mrc_keep_ref_drop | hybrid_sections_prompt_classifier | $0.0931 | $0.0977 | 92.5% | 97.0% | 91.5% |
+| broad_refactor_18 | pi_mrc_keep_ref_drop | hybrid_sections_prompt_classifier | $0.2522 | $0.2709 | 92.5% | 97.0% | 91.5% |
+| debug_loop_22 | pi_mrc_keep_ref_drop | hybrid_sections_prompt_classifier | $0.3142 | $0.3354 | 92.5% | 97.0% | 91.5% |
+| research_design_40 | pi_mrc_keep_ref_drop | hybrid_sections_prompt_classifier | $0.6542 | $0.7053 | 92.5% | 97.0% | 91.5% |
+| long_mixed_80 | pi_mrc_keep_ref_drop | hybrid_sections_prompt_classifier | $1.5814 | $1.7263 | 91.8% | 96.3% | 91.0% |
+
+## Long mixed 80-turn session
+
+| strategy | dollars | peak visible | cumulative visible | cached % | hidden bytes | compactions | recall | exact | stale share | retry turns |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| pi_mrc_keep_ref_drop | $1.5814 | 7,484 | 325,559 | 24.3% | 1,143,800 | 0 | 91.8% | 96.0% | 0.37% | 2.00 |
+| adaptive_raw_then_mrc | $1.6481 | 16,850 | 364,369 | 28.9% | 1,143,800 | 0 | 93.3% | 95.5% | 2.63% | 2.97 |
+| hybrid_sections_prompt_classifier | $1.7263 | 10,664 | 467,446 | 39.0% | 1,143,800 | 0 | 96.3% | 91.0% | 0.34% | 1.67 |
+| pi_vcc_sections | $1.8569 | 11,210 | 486,030 | 34.1% | 1,143,800 | 0 | 92.8% | 86.5% | 0.49% | 2.96 |
+| vcc_source_view | $2.0683 | 15,824 | 682,212 | 43.9% | 1,143,800 | 0 | 94.8% | 93.0% | 0.47% | 1.96 |
+| rolling_model_summary | $3.8604 | 26,331 | 1,023,792 | 64.3% | 0 | 22 | 83.3% | 37.5% | 1.41% | 10.62 |
+| raw_retained_transcript | $5.8221 | 285,950 | 11,680,000 | 97.5% | 0 | 0 | 55.0% | 50.0% | 0.68% | 12.12 |
+
+## Broad refactor 18-turn session
+
+| strategy | dollars | end visible | uncached tokens | compaction input | classifier input | recall | exact | false pref risk | retry turns |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| pi_mrc_keep_ref_drop | $0.2522 | 2,297 | 23,741 | 0 | 0 | 92.5% | 96.5% | 1.0% | 0.25 |
+| hybrid_sections_prompt_classifier | $0.2709 | 3,462 | 29,062 | 0 | 800 | 97.0% | 91.5% | 0.4% | 0.20 |
+| pi_vcc_sections | $0.2797 | 3,530 | 31,523 | 0 | 0 | 93.5% | 87.0% | 1.5% | 0.34 |
+| vcc_source_view | $0.3030 | 5,037 | 38,422 | 0 | 0 | 95.5% | 93.5% | 1.2% | 0.25 |
+| adaptive_raw_then_mrc | $0.3245 | 2,297 | 44,049 | 0 | 0 | 94.0% | 96.0% | 1.2% | 0.43 |
+| raw_retained_transcript | $0.5668 | 65,650 | 65,650 | 0 | 0 | 99.0% | 97.0% | 2.0% | 0.34 |
+| rolling_model_summary | $0.6090 | 5,534 | 66,572 | 81,088 | 0 | 84.0% | 38.0% | 6.0% | 0.99 |
+
+## Turn trace: long mixed 80, raw vs hybrid tail
+
+Last ten turns only.
+
+| turn | raw visible | raw uncached | hybrid visible | hybrid uncached | hybrid classifier |
+|---:|---:|---:|---:|---:|---:|
+| 71 | 254,600 | 650 | 9,315 | 5,612 | 0 |
+| 72 | 258,100 | 3,500 | 9,437 | 5,711 | 0 |
+| 73 | 258,750 | 650 | 9,493 | 5,719 | 0 |
+| 74 | 259,400 | 650 | 9,549 | 5,752 | 0 |
+| 75 | 265,400 | 6,000 | 9,774 | 5,955 | 0 |
+| 76 | 268,000 | 2,600 | 9,868 | 5,959 | 0 |
+| 77 | 275,500 | 7,500 | 10,120 | 6,173 | 0 |
+| 78 | 279,300 | 3,800 | 10,383 | 6,335 | 1 |
+| 79 | 279,950 | 650 | 10,439 | 6,286 | 0 |
+| 80 | 285,950 | 6,000 | 10,664 | 6,489 | 0 |
+
+## Takeaways
+
+- Raw transcript is cache-friendly but eventually loses on stale evidence, attention, and context-window pressure.
+- Rolling model summaries look cheap but are bad at exact recall and preference/correction fidelity. Use only as fallback.
+- Cost-only winner is pi-mrc in this sim, but that is not enough. With a 95%/90% recall gate, hybrid/VCC-style views become the safer default.
+- Deterministic VCC/pi-vcc projections win the normal lane: no model compaction calls, compact visible state, exact handles retained hidden.
+- pi-mrc KEEP/REF/DROP is the cost floor when lookup tools are reliable; it needs good UX for expanding refs before reasoning from hidden evidence.
+- Prompt-intake classifier is cheap enough to test. It mainly buys goal/preference/correction recall, not file exactness.
+- Projection output must remain prompt-cache-aware: stable kernel/pinned facts cached, volatile current-state capsule late and small.

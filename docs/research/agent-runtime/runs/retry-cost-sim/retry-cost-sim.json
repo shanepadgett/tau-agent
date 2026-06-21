@@ -1,0 +1,840 @@
+{
+  "cases": [
+    {
+      "name": "fresh_unique",
+      "description": "fresh digest, unique old block",
+      "read_tokens": 2000,
+      "edit_tokens": 120,
+      "duplicate_candidates": 1,
+      "digest_changed": false,
+      "old_block_unique": true,
+      "neighbor_unique": true,
+      "line_shift": 0,
+      "moved": false,
+      "semantic": false
+    },
+    {
+      "name": "fresh_duplicate_line",
+      "description": "fresh digest, duplicate target text",
+      "read_tokens": 2200,
+      "edit_tokens": 130,
+      "duplicate_candidates": 5,
+      "digest_changed": false,
+      "old_block_unique": false,
+      "neighbor_unique": true,
+      "line_shift": 0,
+      "moved": false,
+      "semantic": false
+    },
+    {
+      "name": "line_shift_same_digest",
+      "description": "line numbers stale but digest/snapshot still usable",
+      "read_tokens": 2800,
+      "edit_tokens": 180,
+      "duplicate_candidates": 1,
+      "digest_changed": false,
+      "old_block_unique": true,
+      "neighbor_unique": true,
+      "line_shift": 12,
+      "moved": false,
+      "semantic": false
+    },
+    {
+      "name": "stale_moved_unique",
+      "description": "digest changed, exact old block moved and remains unique",
+      "read_tokens": 3000,
+      "edit_tokens": 220,
+      "duplicate_candidates": 1,
+      "digest_changed": true,
+      "old_block_unique": true,
+      "neighbor_unique": true,
+      "line_shift": 60,
+      "moved": true,
+      "semantic": false
+    },
+    {
+      "name": "stale_moved_duplicate",
+      "description": "digest changed, old block exists in multiple locations",
+      "read_tokens": 3000,
+      "edit_tokens": 220,
+      "duplicate_candidates": 4,
+      "digest_changed": true,
+      "old_block_unique": false,
+      "neighbor_unique": false,
+      "line_shift": 60,
+      "moved": true,
+      "semantic": false
+    },
+    {
+      "name": "stale_neighbor_unique",
+      "description": "digest changed, old block changed slightly but neighbors unique",
+      "read_tokens": 3200,
+      "edit_tokens": 260,
+      "duplicate_candidates": 1,
+      "digest_changed": true,
+      "old_block_unique": false,
+      "neighbor_unique": true,
+      "line_shift": 40,
+      "moved": true,
+      "semantic": false
+    },
+    {
+      "name": "concurrent_nearby_edit",
+      "description": "digest changed due to nearby human edit",
+      "read_tokens": 3500,
+      "edit_tokens": 260,
+      "duplicate_candidates": 2,
+      "digest_changed": true,
+      "old_block_unique": false,
+      "neighbor_unique": true,
+      "line_shift": 5,
+      "moved": false,
+      "semantic": false
+    },
+    {
+      "name": "semantic_rename_shifted",
+      "description": "semantic rename after files shifted",
+      "read_tokens": 6000,
+      "edit_tokens": 80,
+      "duplicate_candidates": 12,
+      "digest_changed": true,
+      "old_block_unique": false,
+      "neighbor_unique": false,
+      "line_shift": 100,
+      "moved": true,
+      "semantic": true
+    }
+  ],
+  "policies": [
+    {
+      "name": "exact_old_string",
+      "description": "exact old/new text replacement",
+      "base_tokens": 180,
+      "can_apply_on_digest_match": true,
+      "can_relocate_exact_unique": true,
+      "can_relocate_neighbor": false,
+      "fuzzy_model_relocate": false,
+      "duplicate_wrong_risk": 0.025,
+      "stale_fail_cost": 0.8
+    },
+    {
+      "name": "apply_patch_context",
+      "description": "patch context matcher",
+      "base_tokens": 320,
+      "can_apply_on_digest_match": true,
+      "can_relocate_exact_unique": true,
+      "can_relocate_neighbor": true,
+      "fuzzy_model_relocate": false,
+      "duplicate_wrong_risk": 0.018,
+      "stale_fail_cost": 0.6
+    },
+    {
+      "name": "visible_hashline",
+      "description": "line+visible hash anchors",
+      "base_tokens": 180,
+      "can_apply_on_digest_match": true,
+      "can_relocate_exact_unique": false,
+      "can_relocate_neighbor": false,
+      "fuzzy_model_relocate": false,
+      "duplicate_wrong_risk": 0.01,
+      "stale_fail_cost": 0.65
+    },
+    {
+      "name": "hidden_handle_strict",
+      "description": "hidden handle applies only when digest matches",
+      "base_tokens": 90,
+      "can_apply_on_digest_match": true,
+      "can_relocate_exact_unique": false,
+      "can_relocate_neighbor": false,
+      "fuzzy_model_relocate": false,
+      "duplicate_wrong_risk": 0.002,
+      "stale_fail_cost": 1.0
+    },
+    {
+      "name": "hidden_handle_exact_relocate",
+      "description": "hidden handle relocates only exact unique old block",
+      "base_tokens": 130,
+      "can_apply_on_digest_match": true,
+      "can_relocate_exact_unique": true,
+      "can_relocate_neighbor": false,
+      "fuzzy_model_relocate": false,
+      "duplicate_wrong_risk": 0.004,
+      "stale_fail_cost": 0.55
+    },
+    {
+      "name": "hidden_handle_neighbor_relocate",
+      "description": "exact unique first, then unique neighbor pair",
+      "base_tokens": 160,
+      "can_apply_on_digest_match": true,
+      "can_relocate_exact_unique": true,
+      "can_relocate_neighbor": true,
+      "fuzzy_model_relocate": false,
+      "duplicate_wrong_risk": 0.009,
+      "stale_fail_cost": 0.45
+    },
+    {
+      "name": "hidden_handle_fuzzy_model",
+      "description": "model/fuzzy relocation after stale digest",
+      "base_tokens": 120,
+      "can_apply_on_digest_match": true,
+      "can_relocate_exact_unique": true,
+      "can_relocate_neighbor": true,
+      "fuzzy_model_relocate": true,
+      "duplicate_wrong_risk": 0.05,
+      "stale_fail_cost": 0.35
+    },
+    {
+      "name": "lsp_semantic",
+      "description": "semantic LSP edit/rename",
+      "base_tokens": 80,
+      "can_apply_on_digest_match": true,
+      "can_relocate_exact_unique": true,
+      "can_relocate_neighbor": true,
+      "fuzzy_model_relocate": false,
+      "duplicate_wrong_risk": 0.006,
+      "stale_fail_cost": 0.4
+    }
+  ],
+  "rows": [
+    {
+      "case": "fresh_unique",
+      "policy": "exact_old_string",
+      "request_tokens": 2300,
+      "expected_retry_turns": 0.02,
+      "wrong_edit_risk": 0.025,
+      "dollars": 0.01218,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "fresh_unique",
+      "policy": "apply_patch_context",
+      "request_tokens": 2440,
+      "expected_retry_turns": 0.02,
+      "wrong_edit_risk": 0.018,
+      "dollars": 0.011256,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "fresh_unique",
+      "policy": "visible_hashline",
+      "request_tokens": 2300,
+      "expected_retry_turns": 0.02,
+      "wrong_edit_risk": 0.01,
+      "dollars": 0.0093,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "fresh_unique",
+      "policy": "hidden_handle_strict",
+      "request_tokens": 2210,
+      "expected_retry_turns": 0.015,
+      "wrong_edit_risk": 0.001,
+      "dollars": 0.007182,
+      "winner": "winner",
+      "quality_winner": "quality_winner"
+    },
+    {
+      "case": "fresh_unique",
+      "policy": "hidden_handle_exact_relocate",
+      "request_tokens": 2250,
+      "expected_retry_turns": 0.02,
+      "wrong_edit_risk": 0.004,
+      "dollars": 0.007998,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "fresh_unique",
+      "policy": "hidden_handle_neighbor_relocate",
+      "request_tokens": 2280,
+      "expected_retry_turns": 0.02,
+      "wrong_edit_risk": 0.009,
+      "dollars": 0.009048,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "fresh_unique",
+      "policy": "hidden_handle_fuzzy_model",
+      "request_tokens": 2240,
+      "expected_retry_turns": 0.02,
+      "wrong_edit_risk": 0.05,
+      "dollars": 0.0168,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "fresh_unique",
+      "policy": "lsp_semantic",
+      "request_tokens": 2200,
+      "expected_retry_turns": 0.5,
+      "wrong_edit_risk": 0.02,
+      "dollars": 0.02244,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "fresh_duplicate_line",
+      "policy": "exact_old_string",
+      "request_tokens": 2510,
+      "expected_retry_turns": 0.1,
+      "wrong_edit_risk": 0.025,
+      "dollars": 0.01473,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "fresh_duplicate_line",
+      "policy": "apply_patch_context",
+      "request_tokens": 2650,
+      "expected_retry_turns": 0.1,
+      "wrong_edit_risk": 0.0236,
+      "dollars": 0.014881,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "fresh_duplicate_line",
+      "policy": "visible_hashline",
+      "request_tokens": 2510,
+      "expected_retry_turns": 0.02,
+      "wrong_edit_risk": 0.002,
+      "dollars": 0.008394,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "fresh_duplicate_line",
+      "policy": "hidden_handle_strict",
+      "request_tokens": 2420,
+      "expected_retry_turns": 0.015,
+      "wrong_edit_risk": 0.001,
+      "dollars": 0.007812,
+      "winner": "winner",
+      "quality_winner": "quality_winner"
+    },
+    {
+      "case": "fresh_duplicate_line",
+      "policy": "hidden_handle_exact_relocate",
+      "request_tokens": 2460,
+      "expected_retry_turns": 0.02,
+      "wrong_edit_risk": 0.0008,
+      "dollars": 0.008014,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "fresh_duplicate_line",
+      "policy": "hidden_handle_neighbor_relocate",
+      "request_tokens": 2490,
+      "expected_retry_turns": 0.02,
+      "wrong_edit_risk": 0.0018,
+      "dollars": 0.008296,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "fresh_duplicate_line",
+      "policy": "hidden_handle_fuzzy_model",
+      "request_tokens": 2450,
+      "expected_retry_turns": 0.02,
+      "wrong_edit_risk": 0.01,
+      "dollars": 0.00975,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "fresh_duplicate_line",
+      "policy": "lsp_semantic",
+      "request_tokens": 2410,
+      "expected_retry_turns": 0.5,
+      "wrong_edit_risk": 0.02,
+      "dollars": 0.02307,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "line_shift_same_digest",
+      "policy": "exact_old_string",
+      "request_tokens": 3160,
+      "expected_retry_turns": 0.02,
+      "wrong_edit_risk": 0.025,
+      "dollars": 0.01476,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "line_shift_same_digest",
+      "policy": "apply_patch_context",
+      "request_tokens": 3300,
+      "expected_retry_turns": 0.02,
+      "wrong_edit_risk": 0.018,
+      "dollars": 0.013836,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "line_shift_same_digest",
+      "policy": "visible_hashline",
+      "request_tokens": 3160,
+      "expected_retry_turns": 0.02,
+      "wrong_edit_risk": 0.01,
+      "dollars": 0.01188,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "line_shift_same_digest",
+      "policy": "hidden_handle_strict",
+      "request_tokens": 3070,
+      "expected_retry_turns": 0.015,
+      "wrong_edit_risk": 0.001,
+      "dollars": 0.009762,
+      "winner": "winner",
+      "quality_winner": "quality_winner"
+    },
+    {
+      "case": "line_shift_same_digest",
+      "policy": "hidden_handle_exact_relocate",
+      "request_tokens": 3110,
+      "expected_retry_turns": 0.02,
+      "wrong_edit_risk": 0.004,
+      "dollars": 0.010578,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "line_shift_same_digest",
+      "policy": "hidden_handle_neighbor_relocate",
+      "request_tokens": 3140,
+      "expected_retry_turns": 0.02,
+      "wrong_edit_risk": 0.009,
+      "dollars": 0.011628,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "line_shift_same_digest",
+      "policy": "hidden_handle_fuzzy_model",
+      "request_tokens": 3100,
+      "expected_retry_turns": 0.02,
+      "wrong_edit_risk": 0.05,
+      "dollars": 0.01938,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "line_shift_same_digest",
+      "policy": "lsp_semantic",
+      "request_tokens": 3060,
+      "expected_retry_turns": 0.5,
+      "wrong_edit_risk": 0.02,
+      "dollars": 0.02502,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_moved_unique",
+      "policy": "exact_old_string",
+      "request_tokens": 3400,
+      "expected_retry_turns": 0.08,
+      "wrong_edit_risk": 0.028,
+      "dollars": 0.017496,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_moved_unique",
+      "policy": "apply_patch_context",
+      "request_tokens": 3540,
+      "expected_retry_turns": 0.08,
+      "wrong_edit_risk": 0.021,
+      "dollars": 0.016572,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_moved_unique",
+      "policy": "visible_hashline",
+      "request_tokens": 3400,
+      "expected_retry_turns": 0.79,
+      "wrong_edit_risk": 0.012,
+      "dollars": 0.031464,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_moved_unique",
+      "policy": "hidden_handle_strict",
+      "request_tokens": 3310,
+      "expected_retry_turns": 1.0,
+      "wrong_edit_risk": 0.0005,
+      "dollars": 0.034026,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_moved_unique",
+      "policy": "hidden_handle_exact_relocate",
+      "request_tokens": 3350,
+      "expected_retry_turns": 0.08,
+      "wrong_edit_risk": 0.007,
+      "dollars": 0.013314,
+      "winner": "winner",
+      "quality_winner": "quality_winner"
+    },
+    {
+      "case": "stale_moved_unique",
+      "policy": "hidden_handle_neighbor_relocate",
+      "request_tokens": 3380,
+      "expected_retry_turns": 0.08,
+      "wrong_edit_risk": 0.012,
+      "dollars": 0.014364,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_moved_unique",
+      "policy": "hidden_handle_fuzzy_model",
+      "request_tokens": 3340,
+      "expected_retry_turns": 0.08,
+      "wrong_edit_risk": 0.053,
+      "dollars": 0.022116,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_moved_unique",
+      "policy": "lsp_semantic",
+      "request_tokens": 3300,
+      "expected_retry_turns": 0.5,
+      "wrong_edit_risk": 0.02,
+      "dollars": 0.02574,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_moved_duplicate",
+      "policy": "exact_old_string",
+      "request_tokens": 3400,
+      "expected_retry_turns": 0.82,
+      "wrong_edit_risk": 0.0382,
+      "dollars": 0.037214,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_moved_duplicate",
+      "policy": "apply_patch_context",
+      "request_tokens": 3540,
+      "expected_retry_turns": 0.62,
+      "wrong_edit_risk": 0.0365,
+      "dollars": 0.032508,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_moved_duplicate",
+      "policy": "visible_hashline",
+      "request_tokens": 3400,
+      "expected_retry_turns": 0.79,
+      "wrong_edit_risk": 0.0045,
+      "dollars": 0.030024,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_moved_duplicate",
+      "policy": "hidden_handle_strict",
+      "request_tokens": 3310,
+      "expected_retry_turns": 1.0,
+      "wrong_edit_risk": 0.0005,
+      "dollars": 0.034026,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_moved_duplicate",
+      "policy": "hidden_handle_exact_relocate",
+      "request_tokens": 3350,
+      "expected_retry_turns": 0.57,
+      "wrong_edit_risk": 0.003,
+      "dollars": 0.024306,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_moved_duplicate",
+      "policy": "hidden_handle_neighbor_relocate",
+      "request_tokens": 3380,
+      "expected_retry_turns": 0.47,
+      "wrong_edit_risk": 0.0043,
+      "dollars": 0.022246,
+      "winner": "winner",
+      "quality_winner": "quality_winner"
+    },
+    {
+      "case": "stale_moved_duplicate",
+      "policy": "hidden_handle_fuzzy_model",
+      "request_tokens": 3340,
+      "expected_retry_turns": 0.2,
+      "wrong_edit_risk": 0.1125,
+      "dollars": 0.03642,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_moved_duplicate",
+      "policy": "lsp_semantic",
+      "request_tokens": 3300,
+      "expected_retry_turns": 0.5,
+      "wrong_edit_risk": 0.02,
+      "dollars": 0.02574,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_neighbor_unique",
+      "policy": "exact_old_string",
+      "request_tokens": 3640,
+      "expected_retry_turns": 0.82,
+      "wrong_edit_risk": 0.027,
+      "dollars": 0.035784,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_neighbor_unique",
+      "policy": "apply_patch_context",
+      "request_tokens": 3780,
+      "expected_retry_turns": 0.14,
+      "wrong_edit_risk": 0.03,
+      "dollars": 0.02046,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_neighbor_unique",
+      "policy": "visible_hashline",
+      "request_tokens": 3640,
+      "expected_retry_turns": 0.79,
+      "wrong_edit_risk": 0.012,
+      "dollars": 0.032184,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_neighbor_unique",
+      "policy": "hidden_handle_strict",
+      "request_tokens": 3550,
+      "expected_retry_turns": 1.0,
+      "wrong_edit_risk": 0.0005,
+      "dollars": 0.034746,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_neighbor_unique",
+      "policy": "hidden_handle_exact_relocate",
+      "request_tokens": 3590,
+      "expected_retry_turns": 0.57,
+      "wrong_edit_risk": 0.006,
+      "dollars": 0.025602,
+      "winner": "",
+      "quality_winner": "quality_winner"
+    },
+    {
+      "case": "stale_neighbor_unique",
+      "policy": "hidden_handle_neighbor_relocate",
+      "request_tokens": 3620,
+      "expected_retry_turns": 0.14,
+      "wrong_edit_risk": 0.021,
+      "dollars": 0.018252,
+      "winner": "winner",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_neighbor_unique",
+      "policy": "hidden_handle_fuzzy_model",
+      "request_tokens": 3580,
+      "expected_retry_turns": 0.14,
+      "wrong_edit_risk": 0.062,
+      "dollars": 0.026004,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "stale_neighbor_unique",
+      "policy": "lsp_semantic",
+      "request_tokens": 3540,
+      "expected_retry_turns": 0.5,
+      "wrong_edit_risk": 0.02,
+      "dollars": 0.02646,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "concurrent_nearby_edit",
+      "policy": "exact_old_string",
+      "request_tokens": 3940,
+      "expected_retry_turns": 0.82,
+      "wrong_edit_risk": 0.0145,
+      "dollars": 0.034284,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "concurrent_nearby_edit",
+      "policy": "apply_patch_context",
+      "request_tokens": 4080,
+      "expected_retry_turns": 0.14,
+      "wrong_edit_risk": 0.021,
+      "dollars": 0.019632,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "concurrent_nearby_edit",
+      "policy": "visible_hashline",
+      "request_tokens": 3940,
+      "expected_retry_turns": 0.67,
+      "wrong_edit_risk": 0.007,
+      "dollars": 0.029244,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "concurrent_nearby_edit",
+      "policy": "hidden_handle_strict",
+      "request_tokens": 3850,
+      "expected_retry_turns": 1.0,
+      "wrong_edit_risk": 0.0005,
+      "dollars": 0.035646,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "concurrent_nearby_edit",
+      "policy": "hidden_handle_exact_relocate",
+      "request_tokens": 3890,
+      "expected_retry_turns": 0.57,
+      "wrong_edit_risk": 0.004,
+      "dollars": 0.026118,
+      "winner": "",
+      "quality_winner": "quality_winner"
+    },
+    {
+      "case": "concurrent_nearby_edit",
+      "policy": "hidden_handle_neighbor_relocate",
+      "request_tokens": 3920,
+      "expected_retry_turns": 0.14,
+      "wrong_edit_risk": 0.0165,
+      "dollars": 0.018288,
+      "winner": "winner",
+      "quality_winner": ""
+    },
+    {
+      "case": "concurrent_nearby_edit",
+      "policy": "hidden_handle_fuzzy_model",
+      "request_tokens": 3880,
+      "expected_retry_turns": 0.14,
+      "wrong_edit_risk": 0.037,
+      "dollars": 0.022104,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "concurrent_nearby_edit",
+      "policy": "lsp_semantic",
+      "request_tokens": 3840,
+      "expected_retry_turns": 0.5,
+      "wrong_edit_risk": 0.02,
+      "dollars": 0.02736,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "semantic_rename_shifted",
+      "policy": "exact_old_string",
+      "request_tokens": 6260,
+      "expected_retry_turns": 0.45,
+      "wrong_edit_risk": 0.03,
+      "dollars": 0.03534,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "semantic_rename_shifted",
+      "policy": "apply_patch_context",
+      "request_tokens": 6400,
+      "expected_retry_turns": 0.45,
+      "wrong_edit_risk": 0.03,
+      "dollars": 0.03576,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "semantic_rename_shifted",
+      "policy": "visible_hashline",
+      "request_tokens": 6260,
+      "expected_retry_turns": 0.45,
+      "wrong_edit_risk": 0.03,
+      "dollars": 0.03534,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "semantic_rename_shifted",
+      "policy": "hidden_handle_strict",
+      "request_tokens": 6170,
+      "expected_retry_turns": 0.45,
+      "wrong_edit_risk": 0.03,
+      "dollars": 0.03507,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "semantic_rename_shifted",
+      "policy": "hidden_handle_exact_relocate",
+      "request_tokens": 6210,
+      "expected_retry_turns": 0.45,
+      "wrong_edit_risk": 0.03,
+      "dollars": 0.03519,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "semantic_rename_shifted",
+      "policy": "hidden_handle_neighbor_relocate",
+      "request_tokens": 6240,
+      "expected_retry_turns": 0.45,
+      "wrong_edit_risk": 0.03,
+      "dollars": 0.03528,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "semantic_rename_shifted",
+      "policy": "hidden_handle_fuzzy_model",
+      "request_tokens": 6200,
+      "expected_retry_turns": 0.45,
+      "wrong_edit_risk": 0.03,
+      "dollars": 0.03516,
+      "winner": "",
+      "quality_winner": ""
+    },
+    {
+      "case": "semantic_rename_shifted",
+      "policy": "lsp_semantic",
+      "request_tokens": 6160,
+      "expected_retry_turns": 0.42,
+      "wrong_edit_risk": 0.0025,
+      "dollars": 0.02904,
+      "winner": "winner",
+      "quality_winner": "quality_winner"
+    }
+  ]
+}

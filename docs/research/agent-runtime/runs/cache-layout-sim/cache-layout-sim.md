@@ -1,0 +1,101 @@
+# Cache-layout simulation
+
+Question: what actually busts prompt cache in agentic sessions, turn by turn?
+
+Inputs come from `cache-layout-research.md`. Rates are illustrative; provider cache semantics are the important part.
+
+## Simulated layouts
+
+| layout | shape |
+|---|---|
+| stable_tools_runtime_after_user | stable tools/system/context, append transcript, latest user, volatile runtime at absolute tail |
+| stable_tools_runtime_before_user | same, but volatile runtime before latest user; poisons next-turn prefix |
+| soul_system_rewrite | posture/runtime in system prompt; system identity changes on posture switch |
+| mode_specific_tools_runtime_after_user | smaller tool schema; each tool switch is modeled as a new unseen schema |
+| volatile_context_runtime_after_user | compiled context identity changes every turn before transcript |
+| generic_dispatcher_runtime_after_user | tiny stable dispatcher schema, 6% illustrative retry penalty |
+
+## Provider models
+
+| provider | modeled cache behavior |
+|---|---|
+| anthropic_explicit_5m | tools->system->messages; breakpoint before volatile runtime; cache writes 1.25x, reads 0.1x |
+| openai_auto_lcp | automatic longest common prefix, >=1024 tokens, rounded to 128-token chunks |
+| gemini_explicit_static | immutable cachedContent for tools+system+context; dynamic transcript/runtime outside cache |
+| xai_auto_message_prefix | exact append-only prefix from start of messages/request, sticky routing assumed |
+
+## Winner counts
+
+| layout | wins |
+|---|---:|
+| mode_specific_tools_runtime_after_user | 24 |
+| stable_tools_runtime_after_user | 16 |
+| generic_dispatcher_runtime_after_user | 11 |
+| soul_system_rewrite | 9 |
+| stable_tools_runtime_before_user | 4 |
+
+## Representative mixed 12-turn session, 80k context
+
+Events: posture switches on turns 3/6/9, tool switches on 5/9, context updates on 4/8.
+
+| provider | layout | miss turns | cache read % | write tokens | uncached tokens | retry turns | dollars |
+|---|---|---:|---:|---:|---:|---:|---:|
+| anthropic_explicit_5m | stable_tools_runtime_after_user | 1 | 77.3% | 291,950 | 12,000 | 0.00 | $1.5590 |
+| anthropic_explicit_5m | generic_dispatcher_runtime_after_user | 1 | 75.8% | 280,950 | 12,000 | 0.72 | $1.5704 |
+| anthropic_explicit_5m | stable_tools_runtime_before_user | 1 | 76.8% | 289,550 | 21,600 | 0.00 | $1.5767 |
+| anthropic_explicit_5m | mode_specific_tools_runtime_after_user | 3 | 59.9% | 488,050 | 12,000 | 0.00 | $2.2068 |
+| anthropic_explicit_5m | soul_system_rewrite | 1 | 56.3% | 585,750 | 0 | 0.00 | $2.5402 |
+| anthropic_explicit_5m | volatile_context_runtime_after_user | 1 | 18.0% | 1,087,300 | 12,000 | 0.00 | $4.3030 |
+| openai_auto_lcp | stable_tools_runtime_after_user | 1 | 77.3% | 0 | 304,628 | 0.00 | $1.3185 |
+| openai_auto_lcp | generic_dispatcher_runtime_after_user | 1 | 75.7% | 0 | 293,716 | 0.72 | $1.3244 |
+| openai_auto_lcp | stable_tools_runtime_before_user | 1 | 76.7% | 0 | 311,924 | 0.00 | $1.3382 |
+| openai_auto_lcp | mode_specific_tools_runtime_after_user | 3 | 59.8% | 0 | 500,724 | 0.00 | $1.8191 |
+| openai_auto_lcp | soul_system_rewrite | 1 | 56.3% | 0 | 586,740 | 0.00 | $2.0802 |
+| openai_auto_lcp | volatile_context_runtime_after_user | 1 | 17.9% | 0 | 1,100,532 | 0.00 | $3.4674 |
+| gemini_explicit_static | generic_dispatcher_runtime_after_user | 3 | 67.7% | 273,000 | 117,300 | 0.72 | $0.7083 |
+| gemini_explicit_static | stable_tools_runtime_after_user | 3 | 68.4% | 306,000 | 117,300 | 0.00 | $0.7219 |
+| gemini_explicit_static | stable_tools_runtime_before_user | 3 | 68.4% | 306,000 | 117,300 | 0.00 | $0.7219 |
+| gemini_explicit_static | mode_specific_tools_runtime_after_user | 5 | 52.8% | 470,000 | 117,300 | 0.00 | $0.8944 |
+| gemini_explicit_static | soul_system_rewrite | 6 | 46.1% | 618,000 | 105,300 | 0.00 | $1.0594 |
+| gemini_explicit_static | volatile_context_runtime_after_user | 12 | 0.0% | 1,224,000 | 117,300 | 0.00 | $1.7546 |
+| xai_auto_message_prefix | stable_tools_runtime_after_user | 1 | 77.3% | 0 | 303,950 | 0.00 | $1.3401 |
+| xai_auto_message_prefix | generic_dispatcher_runtime_after_user | 1 | 75.8% | 0 | 292,950 | 0.72 | $1.3470 |
+| xai_auto_message_prefix | stable_tools_runtime_before_user | 1 | 76.8% | 0 | 311,150 | 0.00 | $1.3595 |
+| xai_auto_message_prefix | mode_specific_tools_runtime_after_user | 3 | 59.9% | 0 | 500,050 | 0.00 | $1.8407 |
+| xai_auto_message_prefix | soul_system_rewrite | 1 | 56.3% | 0 | 585,750 | 0.00 | $2.1009 |
+| xai_auto_message_prefix | volatile_context_runtime_after_user | 1 | 18.0% | 0 | 1,099,300 | 0.00 | $3.4875 |
+
+## Runtime before vs after latest user
+
+OpenAI-style automatic LCP, mixed 12-turn, 80k context.
+
+| layout | cached read | uncached | dollars |
+|---|---:|---:|---:|
+| stable_tools_runtime_after_user | 1,036,672 | 304,628 | $1.3185 |
+| stable_tools_runtime_before_user | 1,029,376 | 311,924 | $1.3382 |
+
+## Turn trace: OpenAI-style LCP, mixed session, stable tail runtime
+
+| turn | event | input | cached | uncached | dollars |
+|---:|---|---:|---:|---:|---:|
+| 1 | - | 103,800 | 0 | 103,800 | $0.3192 |
+| 2 | - | 105,250 | 102,784 | 2,466 | $0.0460 |
+| 3 | posture | 106,700 | 104,192 | 2,508 | $0.0466 |
+| 4 | context | 108,150 | 21,888 | 86,262 | $0.2732 |
+| 5 | tool | 109,600 | 107,136 | 2,464 | $0.0473 |
+| 6 | posture | 111,050 | 108,544 | 2,506 | $0.0479 |
+| 7 | - | 112,500 | 109,952 | 2,548 | $0.0484 |
+| 8 | context | 113,950 | 21,888 | 92,062 | $0.2906 |
+| 9 | posture+tool | 115,400 | 112,896 | 2,504 | $0.0492 |
+| 10 | - | 116,850 | 114,304 | 2,546 | $0.0497 |
+| 11 | - | 118,300 | 115,840 | 2,460 | $0.0499 |
+| 12 | - | 119,750 | 117,248 | 2,502 | $0.0505 |
+
+## Takeaways
+
+- Tail runtime after the latest user is better than runtime before the latest user for automatic longest-prefix caches; delta scales with latest-user size.
+- Soul-style system rewrite is worst when posture switches happen because system sits before messages.
+- Tool schema churn is provider-visible. Mode-specific schemas win surprisingly often here despite conservative new-schema-on-each-switch modeling; repeated known modes would improve them further.
+- Volatile compiled context before transcript is cache poison. Context projection must be deterministic and stable except real state changes.
+- Gemini explicit caching favors stable static context packs; transcript/runtime remain normal appended input.
+- Generic dispatcher is a cache floor, not a product answer. Need behavior/error-rate measurement before considering it.

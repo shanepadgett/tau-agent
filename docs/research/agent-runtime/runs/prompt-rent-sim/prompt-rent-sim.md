@@ -1,0 +1,46 @@
+# Prompt-rent simulation
+
+Question: how much permanent prompt should live in the stable prefix?
+
+## Winner counts
+
+| policy | cost wins | quality-gated wins |
+|---|---:|---:|
+| kernel_tool_error_guidance | 4 | 4 |
+
+## Session detail
+
+| session | policy | prompt total | cache misses | cached input | uncached input | retry turns | dollars | flags |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| small_edit_8 | kernel_tool_error_guidance | 31,200 | 1 | 442,400 | 68,800 | 0.01 | $0.4173 | winner, quality_winner |
+| small_edit_8 | dynamic_posture_system_rewrite | 65,600 | 1 | 477,400 | 68,200 | 0.02 | $0.4263 |  |
+| small_edit_8 | compact_kernel_late_runtime | 39,200 | 1 | 448,000 | 71,200 | 0.02 | $0.4264 |  |
+| small_edit_8 | kernel_plus_mode_shards | 59,200 | 1 | 465,500 | 73,700 | 0.02 | $0.4392 |  |
+| small_edit_8 | medium_permanent_prompt | 112,000 | 1 | 518,000 | 74,000 | 0.03 | $0.4560 |  |
+| small_edit_8 | giant_permanent_prompt | 256,000 | 1 | 644,000 | 92,000 | 0.05 | $0.5487 |  |
+| debug_20 | kernel_tool_error_guidance | 78,000 | 1 | 1,200,800 | 77,200 | 0.04 | $0.7877 | winner, quality_winner |
+| debug_20 | compact_kernel_late_runtime | 98,000 | 1 | 1,216,000 | 82,000 | 0.08 | $0.8078 |  |
+| debug_20 | dynamic_posture_system_rewrite | 164,000 | 3 | 1,279,400 | 84,600 | 0.07 | $0.8343 |  |
+| debug_20 | medium_permanent_prompt | 280,000 | 1 | 1,406,000 | 74,000 | 0.08 | $0.8407 |  |
+| debug_20 | kernel_plus_mode_shards | 148,000 | 2 | 1,257,000 | 91,000 | 0.06 | $0.8466 |  |
+| debug_20 | giant_permanent_prompt | 640,000 | 1 | 1,748,000 | 92,000 | 0.13 | $0.9993 |  |
+| refactor_40 | kernel_tool_error_guidance | 156,000 | 1 | 2,464,800 | 91,200 | 0.08 | $1.4049 | winner, quality_winner |
+| refactor_40 | compact_kernel_late_runtime | 196,000 | 1 | 2,496,000 | 100,000 | 0.17 | $1.4428 |  |
+| refactor_40 | medium_permanent_prompt | 560,000 | 1 | 2,886,000 | 74,000 | 0.16 | $1.4816 |  |
+| refactor_40 | kernel_plus_mode_shards | 296,000 | 5 | 2,567,500 | 128,500 | 0.13 | $1.5489 |  |
+| refactor_40 | dynamic_posture_system_rewrite | 328,000 | 9 | 2,594,200 | 133,800 | 0.15 | $1.5730 |  |
+| refactor_40 | giant_permanent_prompt | 1,280,000 | 1 | 3,588,000 | 92,000 | 0.44 | $1.7555 |  |
+| research_80 | kernel_tool_error_guidance | 312,000 | 1 | 4,992,800 | 119,200 | 0.19 | $2.6398 | winner, quality_winner |
+| research_80 | compact_kernel_late_runtime | 392,000 | 1 | 5,056,000 | 136,000 | 0.32 | $2.7124 |  |
+| research_80 | medium_permanent_prompt | 1,120,000 | 1 | 5,846,000 | 74,000 | 0.31 | $2.7632 |  |
+| research_80 | kernel_plus_mode_shards | 592,000 | 9 | 5,201,500 | 190,500 | 0.24 | $2.9180 |  |
+| research_80 | dynamic_posture_system_rewrite | 656,000 | 17 | 5,256,600 | 199,400 | 0.29 | $2.9616 |  |
+| research_80 | giant_permanent_prompt | 2,560,000 | 1 | 7,268,000 | 92,000 | 0.70 | $3.2571 |  |
+
+## Takeaways
+
+- Permanent prompt text is rent even when cached; giant prompts only look okay when ignored future turns are cheap.
+- Small stable kernel plus late runtime wins normal sessions.
+- Tool-error guidance is a good place for rare edge-case instructions; do not prepay every turn.
+- Mode shards can work, but mode-switch churn must not rewrite the early system prompt.
+- Current Soul-style dynamic system rewrite is the wrong shape for prompt caching.

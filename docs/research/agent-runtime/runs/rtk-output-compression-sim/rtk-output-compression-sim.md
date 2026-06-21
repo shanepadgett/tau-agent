@@ -1,0 +1,65 @@
+# RTK output-compression simulation
+
+Question: when should shell/tool output be raw, truncated, command-reduced, typed, or quiet?
+
+RTK here means Rust Token Killer style command-aware output reducers, not the whole harness.
+
+## Winner counts
+
+| policy | cost wins | quality-gated wins |
+|---|---:|---:|
+| quiet_status_handle | 3 | 3 |
+| typed_tool_output | 5 | 5 |
+
+## Scenario detail
+
+| scenario | policy | visible | hidden bytes | rent | recall | retry | dollars | flags |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| git_status_dirty_80 | typed_tool_output | 264 | 5,600 | 1,320 | 98.0% | 0.02 | $0.0017 | winner, quality_winner |
+| git_status_dirty_80 | quiet_status_handle | 420 | 5,600 | 2,100 | 96.5% | 0.02 | $0.0024 |  |
+| git_status_dirty_80 | rtk_command_reducer | 336 | 5,600 | 1,680 | 96.0% | 0.04 | $0.0025 |  |
+| git_status_dirty_80 | raw_output | 1,400 | 0 | 7,000 | 97.4% | 0.06 | $0.0077 |  |
+| git_status_dirty_80 | head_tail_truncation | 252 | 5,600 | 1,260 | 73.7% | 0.28 | $0.0078 |  |
+| git_diff_large | typed_tool_output | 660 | 88,000 | 3,300 | 98.0% | 0.02 | $0.0034 | winner, quality_winner |
+| git_diff_large | quiet_status_handle | 1,050 | 88,000 | 5,250 | 96.5% | 0.02 | $0.0053 |  |
+| git_diff_large | rtk_command_reducer | 1,210 | 88,000 | 6,050 | 96.0% | 0.04 | $0.0065 |  |
+| git_diff_large | head_tail_truncation | 3,960 | 88,000 | 19,800 | 49.0% | 0.55 | $0.0311 |  |
+| git_diff_large | raw_output | 22,000 | 0 | 110,000 | 89.2% | 0.12 | $0.1019 |  |
+| rg_many_hits | typed_tool_output | 440 | 72,000 | 2,200 | 98.0% | 0.02 | $0.0025 | winner, quality_winner |
+| rg_many_hits | quiet_status_handle | 700 | 72,000 | 3,500 | 96.5% | 0.02 | $0.0037 |  |
+| rg_many_hits | rtk_command_reducer | 990 | 72,000 | 4,950 | 96.0% | 0.04 | $0.0055 |  |
+| rg_many_hits | head_tail_truncation | 3,240 | 72,000 | 16,200 | 53.7% | 0.44 | $0.0250 |  |
+| rg_many_hits | raw_output | 18,000 | 0 | 90,000 | 90.8% | 0.11 | $0.0836 |  |
+| tsc_120_errors | typed_tool_output | 2,640 | 112,000 | 13,200 | 98.0% | 0.02 | $0.0124 | winner, quality_winner |
+| tsc_120_errors | rtk_command_reducer | 3,360 | 112,000 | 16,800 | 96.0% | 0.04 | $0.0162 |  |
+| tsc_120_errors | quiet_status_handle | 4,200 | 112,000 | 21,000 | 96.5% | 0.02 | $0.0194 |  |
+| tsc_120_errors | head_tail_truncation | 5,040 | 112,000 | 25,200 | 35.0% | 0.67 | $0.0387 |  |
+| tsc_120_errors | raw_output | 28,000 | 0 | 140,000 | 86.8% | 0.30 | $0.1332 |  |
+| test_long_failure | typed_tool_output | 396 | 220,000 | 1,980 | 98.0% | 0.02 | $0.0023 | winner, quality_winner |
+| test_long_failure | quiet_status_handle | 630 | 220,000 | 3,150 | 96.5% | 0.02 | $0.0034 |  |
+| test_long_failure | rtk_command_reducer | 3,025 | 220,000 | 15,125 | 96.0% | 0.04 | $0.0146 |  |
+| test_long_failure | head_tail_truncation | 9,900 | 220,000 | 49,500 | 46.6% | 0.49 | $0.0564 |  |
+| test_long_failure | raw_output | 55,000 | 0 | 275,000 | 76.0% | 0.39 | $0.2568 |  |
+| build_pass_noise | quiet_status_handle | 30 | 64,000 | 150 | 99.0% | 0.02 | $0.0006 | winner, quality_winner |
+| build_pass_noise | typed_tool_output | 120 | 64,000 | 600 | 98.0% | 0.02 | $0.0010 |  |
+| build_pass_noise | rtk_command_reducer | 880 | 64,000 | 4,400 | 96.0% | 0.04 | $0.0050 |  |
+| build_pass_noise | head_tail_truncation | 2,880 | 64,000 | 14,400 | 43.6% | 0.52 | $0.0254 |  |
+| build_pass_noise | raw_output | 16,000 | 0 | 80,000 | 91.6% | 0.10 | $0.0745 |  |
+| npm_install_noise | quiet_status_handle | 210 | 176,000 | 1,050 | 96.5% | 0.02 | $0.0015 | winner, quality_winner |
+| npm_install_noise | rtk_command_reducer | 2,420 | 176,000 | 12,100 | 96.0% | 0.04 | $0.0119 |  |
+| npm_install_noise | head_tail_truncation | 7,920 | 176,000 | 39,600 | 44.6% | 0.51 | $0.0479 |  |
+| npm_install_noise | typed_tool_output | 9,680 | 176,000 | 48,400 | 88.0% | 0.19 | $0.0482 |  |
+| npm_install_noise | raw_output | 44,000 | 0 | 220,000 | 80.4% | 0.35 | $0.2065 |  |
+| unknown_shell_dump | quiet_status_handle | 280 | 140,000 | 1,400 | 96.5% | 0.02 | $0.0018 | winner, quality_winner |
+| unknown_shell_dump | rtk_command_reducer | 1,925 | 140,000 | 9,625 | 96.0% | 0.04 | $0.0097 |  |
+| unknown_shell_dump | typed_tool_output | 7,700 | 140,000 | 38,500 | 88.0% | 0.19 | $0.0393 |  |
+| unknown_shell_dump | head_tail_truncation | 6,300 | 140,000 | 31,500 | 46.4% | 0.49 | $0.0402 |  |
+| unknown_shell_dump | raw_output | 35,000 | 0 | 175,000 | 84.0% | 0.32 | $0.1653 |  |
+
+## Takeaways
+
+- Typed compact tools beat shell reducers when structured output is available.
+- RTK-style command-aware reducers are the right shell escape-hatch lane: compact visible output plus hidden full log.
+- Generic head/tail truncation is not safe for high-critical-line outputs; it often hides the one line needed.
+- Passing build/test output should be quiet/status-only, not retained model context.
+- Raw output is a debug expansion, not normal provider context.

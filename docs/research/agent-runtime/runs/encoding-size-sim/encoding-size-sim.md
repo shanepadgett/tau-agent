@@ -1,0 +1,98 @@
+# Encoding-size simulation
+
+Question: which edit/addressing encoding minimizes total task cost without buying wrong edits?
+
+This compares read-visible overhead, mutation payload size, future visible rent, hidden snapshot bytes, and expected retry turns. Token counts are estimated from generated fixture payloads, not hand-waved constants.
+
+## Encodings
+
+| encoding | shape |
+|---|---|
+| exact_old_string | current exact old/new string edit; repeats old text |
+| apply_patch | multi-file patch/diff with context lines |
+| visible_hashline | read lines as LINE:HASH|content; edits address hashes visibly |
+| hidden_handle_tuple | plain read plus hidden snapshot handle; compact tuple ops; stale digest fails tight |
+| verbose_json_handle | hidden handle but verbose JSON object ops; stale digest fails tight |
+| whole_file_write | replace whole file content |
+| lsp_command | semantic LSP rename/organize command |
+
+## Winner counts
+
+| encoding | cost wins | quality-gated wins |
+|---|---:|---:|
+| apply_patch | 1 | 1 |
+| hidden_handle_tuple | 5 | 5 |
+| lsp_command | 3 | 3 |
+| whole_file_write | 1 | 1 |
+
+## Fixture winners
+
+| fixture | cost winner | quality winner | cost $ | quality $ |
+|---|---|---|---:|---:|
+| single_line | hidden_handle_tuple | hidden_handle_tuple | $0.0063 | $0.0063 |
+| three_edits_one_file | hidden_handle_tuple | hidden_handle_tuple | $0.0100 | $0.0100 |
+| range_replacement | hidden_handle_tuple | hidden_handle_tuple | $0.0143 | $0.0143 |
+| duplicate_lines | hidden_handle_tuple | hidden_handle_tuple | $0.0123 | $0.0123 |
+| full_config_rewrite | whole_file_write | whole_file_write | $0.0053 | $0.0053 |
+| refactor_three_files | lsp_command | lsp_command | $0.0060 | $0.0060 |
+| refactor_ten_files | lsp_command | lsp_command | $0.0104 | $0.0104 |
+| small_edits_25_files | hidden_handle_tuple | hidden_handle_tuple | $0.0852 | $0.0852 |
+| stale_moved_block | apply_patch | apply_patch | $0.0200 | $0.0200 |
+| lsp_rename_workspace | lsp_command | lsp_command | $0.0168 | $0.0168 |
+
+## Detail: duplicate_lines
+
+| encoding | read | mutation | output | future rent | hidden bytes | retry turns | dollars | flags |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| hidden_handle_tuple | 1,924 | 50 | 175 | 12,450 | 12,800 | 0.08 | $0.0123 | winner, quality_winner |
+| verbose_json_handle | 1,924 | 85 | 175 | 12,450 | 12,800 | 0.09 | $0.0125 |  |
+| apply_patch | 1,900 | 134 | 265 | 12,990 | 0 | 0.15 | $0.0148 |  |
+| visible_hashline | 2,374 | 66 | 265 | 15,834 | 0 | 0.08 | $0.0149 |  |
+| exact_old_string | 1,900 | 100 | 265 | 12,990 | 0 | 0.20 | $0.0158 |  |
+| whole_file_write | 1,900 | 3,240 | 3,200 | 30,600 | 0 | 0.09 | $0.0365 |  |
+| lsp_command | 999,999 | 999,999 | 999,999 | 11,999,844 | 0 | 10.00 | $12.8594 |  |
+
+## Detail: refactor_ten_files
+
+| encoding | read | mutation | output | future rent | hidden bytes | retry turns | dollars | flags |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| lsp_command | 1,200 | 47 | 630 | 10,836 | 96,000 | 0.06 | $0.0104 | winner, quality_winner |
+| hidden_handle_tuple | 10,024 | 144 | 490 | 62,940 | 96,000 | 0.26 | $0.0577 |  |
+| verbose_json_handle | 10,024 | 385 | 490 | 62,940 | 96,000 | 0.27 | $0.0585 |  |
+| apply_patch | 10,000 | 520 | 670 | 64,020 | 0 | 0.33 | $0.0612 |  |
+| exact_old_string | 10,000 | 433 | 670 | 64,020 | 0 | 0.45 | $0.0642 |  |
+| visible_hashline | 12,500 | 220 | 670 | 79,020 | 0 | 0.26 | $0.0707 |  |
+| whole_file_write | 10,000 | 24,040 | 5,000 | 90,000 | 0 | 0.36 | $0.1535 |  |
+
+## Detail: small_edits_25_files
+
+| encoding | read | mutation | output | future rent | hidden bytes | retry turns | dollars | flags |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| hidden_handle_tuple | 16,024 | 414 | 1,015 | 102,090 | 144,000 | 0.09 | $0.0852 | winner, quality_winner |
+| verbose_json_handle | 16,024 | 1,013 | 1,015 | 102,090 | 144,000 | 0.09 | $0.0871 |  |
+| apply_patch | 16,000 | 1,545 | 1,345 | 104,070 | 0 | 0.09 | $0.0902 |  |
+| exact_old_string | 16,000 | 1,268 | 1,345 | 104,070 | 0 | 0.18 | $0.0918 |  |
+| visible_hashline | 20,000 | 595 | 1,345 | 128,070 | 0 | 0.05 | $0.1055 |  |
+| whole_file_write | 16,000 | 36,040 | 5,000 | 126,000 | 0 | 0.13 | $0.2123 |  |
+| lsp_command | 999,999 | 999,999 | 999,999 | 11,999,844 | 0 | 10.00 | $12.8594 |  |
+
+## Detail: stale_moved_block
+
+| encoding | read | mutation | output | future rent | hidden bytes | retry turns | dollars | flags |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| apply_patch | 2,700 | 473 | 265 | 17,790 | 0 | 0.17 | $0.0200 | winner, quality_winner |
+| exact_old_string | 2,700 | 363 | 265 | 17,790 | 0 | 0.20 | $0.0204 |  |
+| visible_hashline | 3,374 | 199 | 265 | 21,834 | 0 | 0.10 | $0.0208 |  |
+| hidden_handle_tuple | 2,724 | 188 | 175 | 17,250 | 22,000 | 0.29 | $0.0219 |  |
+| verbose_json_handle | 2,724 | 204 | 175 | 17,250 | 22,000 | 0.29 | $0.0220 |  |
+| whole_file_write | 2,700 | 5,540 | 5,000 | 46,200 | 0 | 0.10 | $0.0562 |  |
+| lsp_command | 999,999 | 999,999 | 999,999 | 11,999,844 | 0 | 10.00 | $12.8594 |  |
+
+## Takeaways
+
+- Hidden handle tuples dominate ordinary text edits: low read tax, tiny mutation payloads, low duplicate/stale retry risk.
+- Visible hashlines are a useful stateless fallback, but their per-line read rent compounds across future turns.
+- `apply_patch` remains table stakes for compatibility and can be competitive on moved-block retries, but repeats old/context text and needs duplicate/stale safeguards.
+- Whole-file write is fine for tiny config rewrites; bad default for large or multi-file source edits.
+- LSP command wins semantic workspace refactors. Do not make text edit syntax compete with rename/organize-import operations.
+- V1 hidden-handle policy should fail tight on stale digest. Relocation is a separate retry-cost test, not assumed here.
