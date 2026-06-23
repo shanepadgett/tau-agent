@@ -12,6 +12,14 @@ task_output = "quiet"
 description = "Run Biome, TypeScript, Markdown, and Fallow checks"
 depends = ["check:schema", "check:biome", "check:types", "check:markdown", "check:deadcode"]
 
+[tasks."check:ts"]
+description = "TS and config checks"
+depends = ["check:schema", "check:biome", "check:types", "check:deadcode"]
+
+[tasks."check:md"]
+description = "Markdown checks"
+depends = ["check:markdown"]
+
 [tasks.generate-schema]
 description = "Generate Tau settings schema"
 run = "node --experimental-strip-types scripts/generate-tau-schema.ts --write"

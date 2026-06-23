@@ -38,6 +38,89 @@
 					},
 					"additionalProperties": false
 				},
+				"silentCommandRunner": {
+					"type": "object",
+					"properties": {
+						"enabled": {
+							"type": "boolean",
+							"default": true,
+							"description": "Enable silent command runner."
+						},
+						"maxOutputBytes": {
+							"type": "integer",
+							"default": 51200,
+							"minimum": 1,
+							"description": "Maximum raw stdout/stderr bytes sent to the agent."
+						},
+						"commands": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"required": [
+									"name",
+									"command"
+								],
+								"properties": {
+									"name": {
+										"type": "string",
+										"description": "Short command name shown in notifications and failure messages."
+									},
+									"enabled": {
+										"type": "boolean",
+										"default": true,
+										"description": "Enable this command."
+									},
+									"command": {
+										"type": "string",
+										"description": "Shell command run with sh -lc after matching files change."
+									},
+									"cwd": {
+										"type": "string",
+										"default": ".",
+										"description": "Command working directory, relative to project root."
+									},
+									"env": {
+										"type": "object",
+										"patternProperties": {
+											"^.*$": {
+												"type": "string"
+											}
+										},
+										"description": "Extra environment values."
+									},
+									"includeGlobs": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										},
+										"default": [
+											"**/*"
+										],
+										"description": "Project-relative files that trigger this command."
+									},
+									"excludeGlobs": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										},
+										"default": [],
+										"description": "Project-relative files ignored for this command."
+									},
+									"timeoutMs": {
+										"type": "integer",
+										"default": 120000,
+										"minimum": 1,
+										"description": "Command timeout in milliseconds."
+									}
+								},
+								"additionalProperties": false
+							},
+							"default": [],
+							"description": "Commands run after matched files change."
+						}
+					},
+					"additionalProperties": false
+				},
 				"soul": {
 					"type": "object",
 					"properties": {

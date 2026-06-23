@@ -1,6 +1,11 @@
 {
   "packages": [
-    "..",
+    {
+      "source": "..",
+      "extensions": [
+        "+src/extensions/silent-command-runner/index.ts"
+      ]
+    },
     {
       "source": "git:github.com/shanepadgett/crumbs",
       "extensions": [

@@ -14,7 +14,7 @@ type Hashes = Map<string, string>;
 
 export default function tauSchemaSync(pi: ExtensionAPI): void {
 	let baseline: Hashes | undefined;
-	let run: Promise<string> | undefined;
+	let run: Promise<string | undefined> | undefined;
 	let pendingNotice: string | undefined;
 
 	pi.on("session_start", async (_event, ctx) => {
@@ -31,10 +31,7 @@ export default function tauSchemaSync(pi: ExtensionAPI): void {
 				baseline = next;
 				return "Tau schema regenerated: schemas/tau.schema.json";
 			})
-			.catch((error) => {
-				const message = error instanceof Error ? error.message : String(error);
-				return `Tau schema generation failed after settings change: ${message}`;
-			})
+			.catch(() => undefined)
 			.finally(() => {
 				run = undefined;
 			});
@@ -45,7 +42,7 @@ export default function tauSchemaSync(pi: ExtensionAPI): void {
 	pi.on("agent_end", async (_event, ctx) => {
 		if (run) pendingNotice = await run;
 		if (!pendingNotice || !ctx.hasUI) return;
-		ctx.ui.notify(pendingNotice, pendingNotice.includes("failed") ? "warning" : "info");
+		ctx.ui.notify(pendingNotice, "info");
 		pendingNotice = undefined;
 	});
 }
