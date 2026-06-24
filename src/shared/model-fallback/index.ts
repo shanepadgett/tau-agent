@@ -1,4 +1,5 @@
-import { type Api, completeSimple, type Message, type Model, type ThinkingLevel } from "@earendil-works/pi-ai";
+import type { Api, Message, Model, ThinkingLevel } from "@earendil-works/pi-ai";
+import { completeSimple } from "@earendil-works/pi-ai/compat";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { loadTauExtensionSettings, updateTauExtensionSettings } from "../settings/load.ts";
 import { errorText, truncAt } from "../text.ts";

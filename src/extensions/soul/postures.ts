@@ -1,7 +1,8 @@
 import { readFile, stat } from "node:fs/promises";
 import { basename, join, resolve, sep } from "node:path";
 import type { Api, Message, Model, ThinkingLevel } from "@earendil-works/pi-ai";
-import { completeSimple, StringEnum } from "@earendil-works/pi-ai";
+import { StringEnum } from "@earendil-works/pi-ai";
+import { completeSimple } from "@earendil-works/pi-ai/compat";
 import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
