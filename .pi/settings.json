@@ -3,7 +3,7 @@
     {
       "source": "..",
       "extensions": [
-        "-src/extensions/file-operations/index.ts",
+        "-src/extensions/file-operations/index.ts"
       ]
     },
     {
