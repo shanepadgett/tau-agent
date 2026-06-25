@@ -38,6 +38,30 @@
 					},
 					"additionalProperties": false
 				},
+				"reference": {
+					"type": "object",
+					"properties": {
+						"editor": {
+							"anyOf": [
+								{
+									"type": "string",
+									"const": "default"
+								},
+								{
+									"type": "string",
+									"const": "code"
+								},
+								{
+									"type": "string",
+									"const": "zed"
+								}
+							],
+							"default": "default",
+							"description": "Editor used by the reference picker open action. default uses $VISUAL, $EDITOR, then code."
+						}
+					},
+					"additionalProperties": false
+				},
 				"silentCommandRunner": {
 					"type": "object",
 					"properties": {

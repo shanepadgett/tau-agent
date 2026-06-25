@@ -7,17 +7,28 @@
 		"footer": {
 			"enabled": true
 		},
+		"reference": {
+			"editor": "code"
+		},
 		"silentCommandRunner": {
 			"commands": [
 				{
 					"name": "ts-check",
 					"command": "mise run check:ts",
-					"includeGlobs": ["src/**/*.ts", ".pi/extensions/**/*.ts", "scripts/**/*.ts", "biome.json", "tsconfig.json"]
+					"includeGlobs": [
+						"src/**/*.ts",
+						".pi/extensions/**/*.ts",
+						"scripts/**/*.ts",
+						"biome.json",
+						"tsconfig.json"
+					]
 				},
 				{
 					"name": "md-check",
 					"command": "mise run check:md",
-					"includeGlobs": ["**/*.md"]
+					"includeGlobs": [
+						"**/*.md"
+					]
 				}
 			]
 		}
