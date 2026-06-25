@@ -451,7 +451,7 @@ function footerItemsText(items: ReadonlyMap<string, FooterItem>): string {
 
 function extensionStatusesText(statuses: ReadonlyMap<string, string>): string {
 	return [...statuses]
-		.filter(([key, text]) => key !== "tau-posture" && text.trim())
+		.filter(([, text]) => text.trim())
 		.sort(([left], [right]) => left.localeCompare(right))
 		.map(([, text]) => text.trim())
 		.join(" • ");

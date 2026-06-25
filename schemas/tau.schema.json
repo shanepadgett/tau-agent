@@ -151,7 +151,7 @@
 						"enabled": {
 							"type": "boolean",
 							"default": true,
-							"description": "Enable Tau's Lyle system prompt replacement."
+							"description": "Enable Tau's Rok system prompt and slash-command guides."
 						}
 					},
 					"additionalProperties": false

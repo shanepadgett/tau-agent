@@ -33,9 +33,6 @@ export type TauAgentEvents = {
 		text?: string;
 		priority?: number;
 	};
-	"tau:posture.continuation_queued": {
-		posture: string;
-	};
 };
 
 export interface TauFooterItem {

@@ -5,7 +5,6 @@ Sends a terminal-driven attention notification when Tau is ready for input.
 ## Behavior
 
 - Emits an attention notification on `agent_end`.
-- Suppresses exactly one `agent_end` notification after `tau:posture.continuation_queued`, because a hidden continuation turn is about to start.
 - Listens for shared event `tau:agent.blocked` when Tau is waiting on user input.
 - Uses the terminal or host OS notification path that best fits the current environment.
 

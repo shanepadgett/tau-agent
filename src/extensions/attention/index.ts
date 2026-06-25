@@ -23,12 +23,6 @@ function playMacOSSound(pi: ExtensionAPI): void {
 }
 
 export default function attentionExtension(pi: ExtensionAPI): void {
-	let suppressNextAgentEnd = false;
-
-	onTauEvent(pi, "tau:posture.continuation_queued", () => {
-		suppressNextAgentEnd = true;
-	});
-
 	function notify(data: { title?: string; body?: string }): void {
 		const raw: unknown = data;
 		const record = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
@@ -71,11 +65,6 @@ export default function attentionExtension(pi: ExtensionAPI): void {
 	onTauEvent(pi, "tau:agent.blocked", notify);
 
 	pi.on("agent_end", () => {
-		if (suppressNextAgentEnd) {
-			suppressNextAgentEnd = false;
-			return;
-		}
-
 		notify({ title: DEFAULT_TITLE, body: DEFAULT_BODY });
 	});
 }

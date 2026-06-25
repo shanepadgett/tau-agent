@@ -2,11 +2,6 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-c
 
 const DEFAULT_GIT_TIMEOUT_MS = 10_000;
 
-// Full staged picture: tracked edits and newly-added files alike, as stat +
-// patch, color/ext-diff disabled for stable parsing. Shared by /commit and
-// /review's new-chat evidence.
-export const STAGED_PATCH_DIFF_ARGS = ["diff", "--cached", "--stat", "--patch", "--no-color", "--no-ext-diff"] as const;
-
 export interface GitRunner {
 	cwd: string;
 	run(args: string[], options?: { cwd?: string; optional?: boolean; timeout?: number }): Promise<string>;
