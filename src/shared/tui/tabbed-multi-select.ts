@@ -1,6 +1,9 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import {
 	type Component,
+	type Focusable,
+	fuzzyFilter,
+	Input,
 	Key,
 	matchesKey,
 	truncateToWidth,
@@ -25,16 +28,28 @@ export interface TabbedMultiSelectSelection {
 	itemId: string;
 }
 
-export class TabbedMultiSelect implements Component {
+export class TabbedMultiSelect implements Component, Focusable {
 	private readonly title: string;
 	private readonly tabs: readonly TabbedMultiSelectTab[];
 	private readonly theme: Theme;
 	private readonly done: (result: TabbedMultiSelectSelection[] | undefined) => void;
+	private readonly filterInput = new Input();
 	private activeTabIndex = 0;
 	private itemIndex = 0;
+	private filterMode = false;
 	private cachedWidth?: number;
 	private cachedLines?: string[];
 	private readonly selected = new Set<string>();
+	private _focused = false;
+
+	get focused(): boolean {
+		return this._focused;
+	}
+
+	set focused(value: boolean) {
+		this._focused = value;
+		this.filterInput.focused = value && this.filterMode;
+	}
 
 	constructor(
 		title: string,
@@ -46,9 +61,37 @@ export class TabbedMultiSelect implements Component {
 		this.tabs = tabs;
 		this.theme = theme;
 		this.done = done;
+		this.filterInput.onSubmit = () => {
+			this.setFilterMode(false);
+		};
+		this.filterInput.onEscape = () => {
+			if (this.filterInput.getValue()) this.filterInput.setValue("");
+			else this.setFilterMode(false);
+			this.itemIndex = 0;
+			this.invalidate();
+		};
 	}
 
 	handleInput(data: string): void {
+		if (this.filterMode) {
+			if (matchesKey(data, Key.up) || matchesKey(data, Key.down)) {
+				this.handleListInput(data);
+				return;
+			}
+
+			if (data === " ") {
+				this.toggleCurrentItem();
+				return;
+			}
+
+			const previousFilter = this.filterInput.getValue();
+			this.filterInput.handleInput(data);
+			if (this.filterInput.getValue() !== previousFilter) this.itemIndex = 0;
+			this.clampItemIndex();
+			this.invalidate();
+			return;
+		}
+
 		if (matchesKey(data, Key.escape) || matchesKey(data, Key.ctrl("c"))) {
 			this.done(undefined);
 			return;
@@ -69,28 +112,33 @@ export class TabbedMultiSelect implements Component {
 			return;
 		}
 
+		if (data === "f") {
+			this.setFilterMode(true);
+			return;
+		}
+
+		this.handleListInput(data);
+	}
+
+	private handleListInput(data: string): void {
 		const tab = this.currentTab();
 		if (!tab) return;
+		const items = this.currentItems();
 
 		if (matchesKey(data, Key.up)) {
-			this.itemIndex = tab.items.length === 0 ? 0 : (this.itemIndex - 1 + tab.items.length) % tab.items.length;
+			this.itemIndex = items.length === 0 ? 0 : (this.itemIndex - 1 + items.length) % items.length;
 			this.invalidate();
 			return;
 		}
 
 		if (matchesKey(data, Key.down)) {
-			this.itemIndex = tab.items.length === 0 ? 0 : (this.itemIndex + 1) % tab.items.length;
+			this.itemIndex = items.length === 0 ? 0 : (this.itemIndex + 1) % items.length;
 			this.invalidate();
 			return;
 		}
 
 		if (data === " ") {
-			const item = tab.items[this.itemIndex];
-			if (!item) return;
-			const key = selectionKey(tab.id, item.id);
-			if (this.selected.has(key)) this.selected.delete(key);
-			else this.selected.add(key);
-			this.invalidate();
+			this.toggleCurrentItem();
 		}
 	}
 
@@ -111,11 +159,15 @@ export class TabbedMultiSelect implements Component {
 		lines.push("");
 		lines.push(...this.renderTabs(renderWidth));
 		lines.push("");
+		if (this.filterMode) {
+			lines.push(...this.filterInput.render(renderWidth));
+			lines.push("");
+		}
 		lines.push(...this.renderItems(renderWidth));
 		lines.push("");
 		lines.push(
 			truncateToWidth(
-				` ${this.theme.fg("dim", "↑↓ move · Space toggle · ←/→ Tab switch tabs · Enter submit · Esc cancel")}`,
+				` ${this.theme.fg("dim", this.filterMode ? "↑↓ move · Space toggle · Enter close filter · Esc clear/close filter" : "↑↓ move · Space toggle · f filter · ←/→ Tab switch tabs · Enter submit · Esc cancel")}`,
 				renderWidth,
 				"",
 			),
@@ -145,15 +197,17 @@ export class TabbedMultiSelect implements Component {
 	private renderItems(width: number): string[] {
 		const tab = this.currentTab();
 		if (!tab) return [` ${this.theme.fg("warning", "No tabs")}`];
+		const items = this.currentItems();
 		if (tab.items.length === 0) return [` ${this.theme.fg("dim", "No items")}`];
+		if (items.length === 0) return [` ${this.theme.fg("dim", "No matching items")}`];
 
 		const lines: string[] = [];
 		const maxVisible = 12;
-		const start = Math.max(0, Math.min(this.itemIndex - Math.floor(maxVisible / 2), tab.items.length - maxVisible));
-		const end = Math.min(tab.items.length, start + maxVisible);
+		const start = Math.max(0, Math.min(this.itemIndex - Math.floor(maxVisible / 2), items.length - maxVisible));
+		const end = Math.min(items.length, start + maxVisible);
 
 		for (let i = start; i < end; i++) {
-			const item = tab.items[i]!;
+			const item = items[i]!;
 			const isActive = i === this.itemIndex;
 			const checked = this.selected.has(selectionKey(tab.id, item.id));
 			const prefix = isActive ? this.theme.fg("accent", "> ") : "  ";
@@ -166,8 +220,8 @@ export class TabbedMultiSelect implements Component {
 			}
 		}
 
-		if (start > 0 || end < tab.items.length) {
-			lines.push(this.theme.fg("dim", `  (${this.itemIndex + 1}/${tab.items.length})`));
+		if (start > 0 || end < items.length) {
+			lines.push(this.theme.fg("dim", `  (${this.itemIndex + 1}/${items.length})`));
 		}
 
 		return lines;
@@ -178,6 +232,36 @@ export class TabbedMultiSelect implements Component {
 		this.activeTabIndex = (this.activeTabIndex + direction + this.tabs.length) % this.tabs.length;
 		this.itemIndex = 0;
 		this.invalidate();
+	}
+
+	private setFilterMode(enabled: boolean): void {
+		this.filterMode = enabled;
+		this.filterInput.focused = this._focused && enabled;
+		this.clampItemIndex();
+		this.invalidate();
+	}
+
+	private toggleCurrentItem(): void {
+		const tab = this.currentTab();
+		const item = this.currentItems()[this.itemIndex];
+		if (!tab || !item) return;
+		const key = selectionKey(tab.id, item.id);
+		if (this.selected.has(key)) this.selected.delete(key);
+		else this.selected.add(key);
+		this.invalidate();
+	}
+
+	private currentItems(): readonly TabbedMultiSelectItem[] {
+		const tab = this.currentTab();
+		if (!tab) return [];
+		const filter = this.filterInput.getValue();
+		return filter
+			? fuzzyFilter([...tab.items], filter, (item) => `${item.label} ${item.description ?? ""}`)
+			: tab.items;
+	}
+
+	private clampItemIndex(): void {
+		this.itemIndex = Math.min(this.itemIndex, Math.max(0, this.currentItems().length - 1));
 	}
 
 	private currentTab(): TabbedMultiSelectTab | undefined {
