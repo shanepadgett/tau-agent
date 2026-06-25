@@ -18,6 +18,7 @@ Select local reference repositories, add new ones, and send a prompt that points
 - `u` runs `git pull --ff-only --quiet` in each reference without closing the picker, showing `…`, `✓`, or `!` next to each name.
 - `o` opens the highlighted reference in an editor. Defaults to `$VISUAL`, `$EDITOR`, then `code`; settings can force `code` or `zed`.
 - `d` deletes the selected references from disk (with confirm). Disabled with nothing selected.
+- `f` filters references by name, branch, or path. Enter closes the filter; Esc clears/closes it.
 - Space selects references; Enter opens an editor for the request.
 - Sends the request with selected reference paths in the chat.
 

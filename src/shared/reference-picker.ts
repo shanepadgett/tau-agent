@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
-import { Key, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { fuzzyFilter, Input, Key, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import referenceSettings, { type ReferenceEditor } from "../extensions/reference/settings.ts";
 import { createGitRunner, type GitRunner } from "./git.ts";
 import { loadTauExtensionSettings } from "./settings/load.ts";
@@ -121,11 +121,37 @@ async function showReferencePanel(
 	return ctx.ui.custom<ReferencePanelAction>((tui, theme, _keybindings, done) => {
 		let cursor = 0;
 		let items = [...references];
+		let filterMode = false;
+		const filterInput = new Input();
 		let updating = false;
 		const updateStates = new Map<string, ReferenceUpdateState>();
 
+		filterInput.onSubmit = () => setFilterMode(false);
+		filterInput.onEscape = () => {
+			if (filterInput.getValue()) filterInput.setValue("");
+			else setFilterMode(false);
+			cursor = 0;
+			tui.requestRender();
+		};
+
+		function visibleItems(): ReferenceItem[] {
+			const filter = filterInput.getValue();
+			return filter ? fuzzyFilter(items, filter, referenceFilterText) : items;
+		}
+
+		function clampCursor(): void {
+			cursor = Math.min(cursor, Math.max(0, visibleItems().length - 1));
+		}
+
+		function setFilterMode(enabled: boolean): void {
+			filterMode = enabled;
+			filterInput.focused = enabled;
+			clampCursor();
+			tui.requestRender();
+		}
+
 		function toggleCurrent(): void {
-			const item = items[cursor];
+			const item = visibleItems()[cursor];
 			if (!item) return;
 			if (!selected.delete(item.path)) selected.add(item.path);
 			tui.requestRender();
@@ -133,24 +159,25 @@ async function showReferencePanel(
 
 		async function updateVisibleReferences(): Promise<void> {
 			if (updating) return;
-			if (items.length === 0) {
+			const refs = visibleItems();
+			if (refs.length === 0) {
 				ctx.ui.notify("No references.", "info");
 				return;
 			}
 
 			updating = true;
 			updateStates.clear();
-			ctx.ui.setStatus("reference", `updating ${items.length} reference(s)`);
+			ctx.ui.setStatus("reference", `updating ${refs.length} reference(s)`);
 			tui.requestRender();
 
 			let updated = 0;
 			const failures: string[] = [];
 			try {
-				for (const ref of items) updateStates.set(ref.path, "updating");
+				for (const ref of refs) updateStates.set(ref.path, "updating");
 				tui.requestRender();
 
 				await Promise.all(
-					items.map(async (ref) => {
+					refs.map(async (ref) => {
 						try {
 							await git.run(["pull", "--ff-only", "--quiet"], { cwd: ref.path, timeout: UPDATE_TIMEOUT_MS });
 							updated += 1;
@@ -164,7 +191,7 @@ async function showReferencePanel(
 				);
 
 				items = await loadReferences(git);
-				cursor = Math.min(cursor, Math.max(0, items.length - 1));
+				clampCursor();
 			} finally {
 				updating = false;
 				ctx.ui.setStatus("reference", undefined);
@@ -176,7 +203,7 @@ async function showReferencePanel(
 		}
 
 		function openCurrentReference(): void {
-			const item = items[cursor];
+			const item = visibleItems()[cursor];
 			if (!item) {
 				ctx.ui.notify("No reference highlighted.", "info");
 				return;
@@ -187,24 +214,31 @@ async function showReferencePanel(
 
 		return {
 			render(width: number): string[] {
+				const refs = visibleItems();
 				const { border, lines, renderWidth } = panelHeader(
 					theme,
 					width,
 					"References",
-					`${items.length} folder(s) in ${root}`,
+					`${refs.length}/${items.length} folder(s) in ${root}`,
 				);
+				if (filterMode) {
+					lines.push(...filterInput.render(renderWidth));
+					lines.push("");
+				}
 
 				if (items.length === 0) {
 					lines.push(truncateToWidth(theme.fg("muted", "No reference folders. Press n for new."), renderWidth));
+				} else if (refs.length === 0) {
+					lines.push(truncateToWidth(theme.fg("muted", "No matching references."), renderWidth));
 				} else {
-					if (items.some((item) => item.dirty)) {
+					if (refs.some((item) => item.dirty)) {
 						lines.push(
 							truncateToWidth(theme.fg("warning", "Warning: dirty reference repos are read-only."), renderWidth),
 						);
 						lines.push("");
 					}
 
-					for (const [index, item] of items.entries()) {
+					for (const [index, item] of refs.entries()) {
 						const active = index === cursor;
 						const pointer = active ? theme.fg("accent", "> ") : "  ";
 						const box = selected.has(item.path) ? "[x]" : "[ ]";
@@ -222,7 +256,9 @@ async function showReferencePanel(
 					...wrapTextWithAnsi(
 						theme.fg(
 							"dim",
-							"↑↓ move • space toggle • o open in editor • d delete • n new • u update • enter attach • esc cancel",
+							filterMode
+								? "↑↓ move • space toggle • enter close filter • esc clear/close filter"
+								: "↑↓ move • space toggle • f filter • o open in editor • d delete • n new • u update • enter attach • esc cancel",
 						),
 						renderWidth,
 					),
@@ -232,7 +268,30 @@ async function showReferencePanel(
 			},
 			invalidate() {},
 			handleInput(data: string) {
-				const nextCursor = moveCursor(data, cursor, Math.max(0, items.length - 1));
+				if (filterMode) {
+					if (matchesKey(data, Key.up) || matchesKey(data, Key.down)) {
+						const nextCursor = moveCursor(data, cursor, Math.max(0, visibleItems().length - 1));
+						if (nextCursor !== undefined) {
+							cursor = nextCursor;
+							tui.requestRender();
+						}
+						return;
+					}
+
+					if (matchesKey(data, Key.space)) {
+						toggleCurrent();
+						return;
+					}
+
+					const previousFilter = filterInput.getValue();
+					filterInput.handleInput(data);
+					if (filterInput.getValue() !== previousFilter) cursor = 0;
+					clampCursor();
+					tui.requestRender();
+					return;
+				}
+
+				const nextCursor = moveCursor(data, cursor, Math.max(0, visibleItems().length - 1));
 				if (nextCursor !== undefined) {
 					cursor = nextCursor;
 					tui.requestRender();
@@ -244,8 +303,13 @@ async function showReferencePanel(
 					return;
 				}
 
+				if (data === "f" || data === "F") {
+					setFilterMode(true);
+					return;
+				}
+
 				if (matchesKey(data, Key.enter)) {
-					const picked = items.filter((item) => selected.has(item.path));
+					const picked = visibleItems().filter((item) => selected.has(item.path));
 					if (picked.length > 0) done({ action: "submit", selected: picked });
 					return;
 				}
@@ -266,7 +330,7 @@ async function showReferencePanel(
 				}
 
 				if (data === "d" || data === "D") {
-					const picked = items.filter((item) => selected.has(item.path));
+					const picked = visibleItems().filter((item) => selected.has(item.path));
 					if (picked.length === 0) {
 						ctx.ui.notify("No references selected.", "info");
 						return;
@@ -279,6 +343,10 @@ async function showReferencePanel(
 			},
 		};
 	});
+}
+
+function referenceFilterText(item: ReferenceItem): string {
+	return `${item.name} ${item.branch} ${item.path}`;
 }
 
 async function promptAndCloneReference(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
