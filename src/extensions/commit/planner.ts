@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { generateValidated } from "../../shared/model-fallback/index.ts";
-import type { ModelCandidate } from "../../shared/model-fallback/types.ts";
+import { generateValidated, resolveCandidatesForPrompt } from "../../shared/model-fallback/index.ts";
 import { errorText, truncAt } from "../../shared/text.ts";
 import { cleanMessage, stripCodeFence, validateMessage } from "./message.ts";
 import type { CommitEvidence, CommitPlanGroup, DirtyFile } from "./types.ts";
 
-const MAX_PLAN_EVIDENCE_CHARS = 70_000;
+const MAX_PLAN_EVIDENCE_CHARS = 640_000;
 
 interface RawPlan {
 	commits?: unknown;
@@ -20,15 +19,15 @@ interface RawGroup {
 
 export async function generateInitialPlan(
 	ctx: ExtensionCommandContext,
-	candidates: readonly ModelCandidate[],
 	evidence: CommitEvidence,
 	previousPlan: readonly CommitPlanGroup[] = [],
 	regenerationNote = "",
 ): Promise<CommitPlanGroup[]> {
+	const prompt = buildPlanPrompt(evidence, previousPlan, regenerationNote);
 	return generateValidated(
 		ctx,
-		candidates,
-		buildPlanPrompt(evidence, previousPlan, regenerationNote),
+		await resolveCandidatesForPrompt(ctx, prompt),
+		prompt,
 		(text) => validatePlanResponse(text, evidence.files),
 		(error, text) =>
 			[
@@ -45,7 +44,6 @@ export async function generateInitialPlan(
 
 export async function regenerateGroupMessage(
 	ctx: ExtensionCommandContext,
-	candidates: readonly ModelCandidate[],
 	evidence: CommitEvidence,
 	files: readonly string[],
 	previousPlan: readonly CommitPlanGroup[] = [],
@@ -53,10 +51,11 @@ export async function regenerateGroupMessage(
 	regenerationNote = "",
 ): Promise<string> {
 	const selected = evidence.files.filter((file) => files.includes(file.path));
+	const prompt = buildMessagePrompt(evidence, selected, previousPlan, selectedGroupId, regenerationNote);
 	return generateValidated(
 		ctx,
-		candidates,
-		buildMessagePrompt(evidence, selected, previousPlan, selectedGroupId, regenerationNote),
+		await resolveCandidatesForPrompt(ctx, prompt),
+		prompt,
 		(text) => validateMessage(cleanMessage(text)),
 		(error, text) =>
 			[

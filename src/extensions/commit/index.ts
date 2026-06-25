@@ -2,8 +2,6 @@ import type { Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { emitAgentBlocked } from "../../shared/agent-blocked.ts";
 import { createGitRunner, type GitRunner, loadRepoStatus } from "../../shared/git.ts";
-import { resolveCandidates } from "../../shared/model-fallback/index.ts";
-import type { ModelCandidate } from "../../shared/model-fallback/types.ts";
 import { errorText } from "../../shared/text.ts";
 import { collectFileEvidence, commitStaged, computeWorktreeSignature, loadDirtyFiles, stageFilesOnly } from "./git.ts";
 import {
@@ -50,19 +48,18 @@ export default function commitExtension(pi: ExtensionAPI): void {
 					return;
 				}
 
-				const candidates = await resolveCandidates(ctx);
 				let evidence = await loadEvidence(git, repo.root, ctx.sessionManager.getBranch());
 				assertCommittableState(evidence.files);
 				let state: CommitPlanState = {
 					files: evidence.files,
-					groups: await generateInitialPlan(ctx, candidates, evidence),
+					groups: await generateInitialPlan(ctx, evidence),
 					worktreeSignature: await computeWorktreeSignature(git, repo.root, evidence.files),
 				};
 				let selectedGroupId: string | undefined = state.groups[0]?.id;
 
 				if (ctx.hasUI) {
 					emitAgentBlocked(pi, { body: "Waiting for commit plan review", source: "commit.review" });
-					const result = await reviewPlan(ctx, git, repo.root, candidates, evidence, state, selectedGroupId);
+					const result = await reviewPlan(ctx, git, repo.root, evidence, state, selectedGroupId);
 					if (!result) return;
 					state = result.state;
 					evidence = result.evidence;
@@ -107,7 +104,6 @@ async function reviewPlan(
 	ctx: ExtensionCommandContext,
 	git: GitRunner,
 	root: string,
-	candidates: readonly ModelCandidate[],
 	evidence: CommitEvidence,
 	initialState: CommitPlanState,
 	initialSelectedGroupId: string | undefined,
@@ -167,7 +163,7 @@ async function reviewPlan(
 				// burning a model call when the user cancels.
 				const edited = await ctx.ui.editor("New commit message (empty = auto-generate)", "");
 				if (edited === undefined) break;
-				const message = edited.trim() || (await regenerateGroupMessage(ctx, candidates, currentEvidence, result));
+				const message = edited.trim() || (await regenerateGroupMessage(ctx, currentEvidence, result));
 				try {
 					const groups = appendGroup(state.groups, message, result);
 					state = { ...state, groups };
@@ -192,7 +188,6 @@ async function reviewPlan(
 				if (note === undefined) break;
 				const message = await regenerateGroupMessage(
 					ctx,
-					candidates,
 					currentEvidence,
 					group.files,
 					state.groups,
@@ -211,7 +206,7 @@ async function reviewPlan(
 				assertCommittableState(currentEvidence.files);
 				state = {
 					files: currentEvidence.files,
-					groups: await generateInitialPlan(ctx, candidates, currentEvidence, previousPlan, note),
+					groups: await generateInitialPlan(ctx, currentEvidence, previousPlan, note),
 					worktreeSignature: await computeWorktreeSignature(git, root, currentEvidence.files),
 				};
 				selectedGroupId = state.groups[0]?.id;
