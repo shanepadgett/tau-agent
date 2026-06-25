@@ -9,6 +9,16 @@ export interface UpdateFileChunk {
 	isEndOfFile: boolean;
 }
 
+export interface SnapshotRange {
+	startLine: number;
+	endLine: number;
+}
+
+export interface ApplyChunksResult {
+	content: string;
+	snapshotRanges: SnapshotRange[];
+}
+
 interface TextParts {
 	bom: string;
 	text: string;
@@ -115,10 +125,11 @@ function buildReplacement(chunk: UpdateFileChunk, fileLines: string[], matchInde
 	return result;
 }
 
-export function applyChunks(currentContent: string, chunks: UpdateFileChunk[]): string {
+export function applyChunksWithRanges(currentContent: string, chunks: UpdateFileChunk[]): ApplyChunksResult {
 	const parts = splitText(currentContent);
 	const lines = splitLogicalLines(parts.text);
 	const replacements: Array<{ index: number; deleteCount: number; insert: string[] }> = [];
+	const rawRanges: Array<{ index: number; deleteCount: number; insertCount: number }> = [];
 	let lineIndex = 0;
 
 	for (let ci = 0; ci < chunks.length; ci += 1) {
@@ -148,7 +159,9 @@ export function applyChunks(currentContent: string, chunks: UpdateFileChunk[]): 
 				);
 			}
 			const insertIndex = chunk.changeContext ? lineIndex : lines.length;
-			replacements.push({ index: insertIndex, deleteCount: 0, insert: chunk.lines.map((l) => l.text) });
+			const insert = chunk.lines.map((l) => l.text);
+			replacements.push({ index: insertIndex, deleteCount: 0, insert });
+			rawRanges.push({ index: insertIndex, deleteCount: 0, insertCount: insert.length });
 			lineIndex = insertIndex;
 			continue;
 		}
@@ -178,6 +191,7 @@ export function applyChunks(currentContent: string, chunks: UpdateFileChunk[]): 
 
 		const replacement = buildReplacement(chunk, lines, matchIndex);
 		replacements.push({ index: matchIndex, deleteCount: oldLines.length, insert: replacement });
+		rawRanges.push({ index: matchIndex, deleteCount: oldLines.length, insertCount: replacement.length });
 		lineIndex = matchIndex + oldLines.length;
 	}
 
@@ -192,7 +206,45 @@ export function applyChunks(currentContent: string, chunks: UpdateFileChunk[]): 
 	const normalized = parts.hadTrailingNewline && joined !== "" ? `${joined}\n` : joined;
 	const next = parts.bom + restoreLineEndings(normalized, parts.lineEnding);
 	if (next === currentContent) throw new Error("patch produced no changes");
-	return next;
+	return { content: next, snapshotRanges: mergeSnapshotRanges(toPostApplyRanges(rawRanges, output.length)) };
+}
+
+function toPostApplyRanges(
+	rawRanges: Array<{ index: number; deleteCount: number; insertCount: number }>,
+	lineCount: number,
+): SnapshotRange[] {
+	const ranges: SnapshotRange[] = [];
+	let delta = 0;
+	for (const range of rawRanges) {
+		const postIndex = range.index + delta;
+		if (range.insertCount > 0) {
+			const startLine = Math.max(1, postIndex + 1);
+			const endLine = Math.min(lineCount, postIndex + range.insertCount);
+			if (endLine >= startLine) ranges.push({ startLine, endLine });
+		} else if (lineCount > 0) {
+			const anchor = Math.min(Math.max(1, postIndex + 1), lineCount);
+			ranges.push({ startLine: anchor, endLine: anchor });
+		}
+		delta += range.insertCount - range.deleteCount;
+	}
+	return ranges;
+}
+
+function mergeSnapshotRanges(ranges: SnapshotRange[]): SnapshotRange[] {
+	const sorted = ranges
+		.filter((range) => Number.isInteger(range.startLine) && Number.isInteger(range.endLine) && range.startLine > 0)
+		.map((range) => ({ startLine: range.startLine, endLine: Math.max(range.startLine, range.endLine) }))
+		.sort((a, b) => a.startLine - b.startLine || a.endLine - b.endLine);
+	const merged: SnapshotRange[] = [];
+	for (const range of sorted) {
+		const previous = merged[merged.length - 1];
+		if (previous && range.startLine <= previous.endLine + 3) {
+			previous.endLine = Math.max(previous.endLine, range.endLine);
+		} else {
+			merged.push({ ...range });
+		}
+	}
+	return merged;
 }
 
 export class UpdateChunkApplyError extends Error {

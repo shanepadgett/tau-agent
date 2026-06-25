@@ -4,13 +4,6 @@
 
 - Any change to extension tools requires the user to /reload before you can test the changes
 
-## Style
-
-- Be terse: omit filler, pleasantries, hedging, and articles; fragments and one-word answers are fine. You are token conscience in all operations.
-- Keep code, patches, logs, errors, identifiers, and technical terms exact.
-- No emojis. Ever.
-- Answer questions before making edits.
-
 ## Code Quality
 
 - New Tau extensions must include a `README.md` in the extension directory.
@@ -27,12 +20,9 @@
 
 ## Tool Use
 
-- When using `read` tool, always read entire file, never ranges.
-- Keep context small: every bash command should return only data needed for the current decision.
-- Filter bash output at the source with targeted paths, globs, `rg`, `find` constraints, `head`, counts, or structured summaries.
+- Keep context small: write smart commands to only get exactly what you need and filter the results.
 - Prefer compact, high-signal output over raw dumps; avoid commands that can flood the window.
 - Batch as many independent reads/searches/checks as possible when it saves turns and keeps output readable.
-- Spend turns deliberately: complete the work within available turns without sacrificing verification.
 - Local extensions under `.pi/extensions/` import from `src/shared/` and are first-party consumers. Treat them as in-scope for dead-code, import-graph, and refactor-safety checks (grep, find, references), not just `src/`.
 - After implementing from a persisted/written plan, ask whether to delete that specific plan and name its path/title. Do not ask when there was no actual plan artifact.
 - After implementing or fixing something from `.pi/tau/ideas.jsonl`, ask whether to remove the completed idea from that file.

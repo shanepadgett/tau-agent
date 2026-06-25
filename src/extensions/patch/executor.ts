@@ -1,7 +1,7 @@
 import { access, mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
-import { applyChunks, countLogicalLines, UpdateChunkApplyError } from "./matcher.ts";
+import { applyChunksWithRanges, countLogicalLines, UpdateChunkApplyError } from "./matcher.ts";
 import { type PatchFailure, type PatchOperation, parsePatch } from "./parser.ts";
 
 export interface ApplyPatchChange {
@@ -11,6 +11,7 @@ export interface ApplyPatchChange {
 	move?: { from: string; to: string };
 	linesAdded: number;
 	linesRemoved: number;
+	snapshotRanges?: Array<{ startLine: number; endLine: number }>;
 }
 
 export interface ApplyPatchSummary {
@@ -112,8 +113,16 @@ async function stageWholeFile(
 	if (await pathExists(target)) {
 		linesRemoved = countLogicalLines(await readUtf8(target, op.path));
 	}
+	const lineCount = countLogicalLines(op.content);
 	return {
-		change: { sectionIndex: op.sectionIndex, kind: op.type, path: op.path, linesAdded: op.linesAdded, linesRemoved },
+		change: {
+			sectionIndex: op.sectionIndex,
+			kind: op.type,
+			path: op.path,
+			linesAdded: op.linesAdded,
+			linesRemoved,
+			snapshotRanges: lineCount > 0 ? [{ startLine: 1, endLine: Math.min(lineCount, 120) }] : undefined,
+		},
 		async commit() {
 			await mkdir(dirname(target), { recursive: true });
 			await writeFile(target, op.content, "utf8");
@@ -143,7 +152,8 @@ async function stageUpdate(cwd: string, op: Extract<PatchOperation, { type: "upd
 	const source = resolvePath(cwd, op.path);
 	await assertExistingFile(source, op.path);
 	const current = await readUtf8(source, op.path);
-	const next = op.chunks.length > 0 ? applyChunks(current, op.chunks) : current;
+	const result = op.chunks.length > 0 ? applyChunksWithRanges(current, op.chunks) : undefined;
+	const next = result?.content ?? current;
 	const moveTarget = op.movePath ? resolvePath(cwd, op.movePath) : undefined;
 
 	if (!moveTarget || moveTarget === source) {
@@ -155,6 +165,7 @@ async function stageUpdate(cwd: string, op: Extract<PatchOperation, { type: "upd
 				path: op.path,
 				linesAdded: op.linesAdded,
 				linesRemoved: op.linesRemoved,
+				snapshotRanges: result?.snapshotRanges,
 			},
 			async commit() {
 				await writeFile(source, next, "utf8");
@@ -175,6 +186,7 @@ async function stageUpdate(cwd: string, op: Extract<PatchOperation, { type: "upd
 			move: { from: op.path, to: op.movePath! },
 			linesAdded: op.linesAdded,
 			linesRemoved: op.linesRemoved,
+			snapshotRanges: result?.snapshotRanges,
 		},
 		async commit() {
 			await mkdir(dirname(moveTarget), { recursive: true });

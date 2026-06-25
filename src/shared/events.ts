@@ -6,6 +6,20 @@ export type TauAgentEvents = {
 		body?: string;
 		source?: string;
 	};
+	"tau:file-mutation.applied": {
+		source: "patch";
+		toolCallId: string;
+		cwd: string;
+		status: "completed" | "partial" | "failed";
+		changes: Array<{
+			path: string;
+			kind: "add" | "replace" | "update" | "delete";
+			move?: { from: string; to: string };
+			linesAdded: number;
+			linesRemoved: number;
+			snapshotRanges?: Array<{ startLine: number; endLine: number }>;
+		}>;
+	};
 	"tau:footer-item": {
 		id: string;
 		text?: string;

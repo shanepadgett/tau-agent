@@ -11,9 +11,11 @@ This extension observes and advises. It does not prune context or rewrite tool r
 - Inject ephemeral agent-only budget notes before model calls.
 - Report context usage from `ctx.getContextUsage()`.
 - Track turn count and tool-call batching pressure.
+- Track recent tool-result count and approximate text size.
 - Surface recent usage/cost/cache signals from assistant usage metadata when available.
 - Classify cache state as hot, cold, or unknown using provider/model policy and last provider request time.
 - Encourage batching, focused reads, cleanup checkpoints, or compaction when pressure is high.
+- Add a tiny outbound tail note only when the last context message is a `toolResult` and pressure is high.
 
 No context pruning, no tool superseding, no persisted hidden message spam, no automatic keepalive pings.
 
@@ -30,6 +32,31 @@ Budget note:
 ```
 
 The note is injected only into outbound context. It is not appended to session history.
+
+Inside an active tool loop, prefer appending a small note to the last outbound `toolResult` instead of adding a new message:
+
+```text
+<budget-note>context 63%; 9 recent tool results / ~18k chars; batch remaining reads/checks before answering.</budget-note>
+```
+
+Skip the note when the last message is not a `toolResult` unless Pi offers a safe system/prompt hook that does not disturb role ordering.
+
+## Tool-result pressure
+
+Compute cheap signals from the current outbound message list:
+
+- count recent successful tool results since the last user message
+- approximate text characters in those results
+- count tool calls since the last assistant text-only response
+- detect large single outputs
+
+Do not parse tool semantics. Do not decide what is stale. That belongs to `working-memory`.
+
+Guidance examples:
+
+- high recent tool-output size: batch remaining inspection before answering
+- high context percent and cold cache: use cleanup/checkpoint tools before the next expensive reasoning pass
+- hot cache and low pressure: avoid churn; continue current batch
 
 ## Cache policy facts
 
@@ -100,7 +127,7 @@ This simulator belongs here because it evaluates budget policy. It should not im
 
 - No stale-read/grep detection.
 - No `forget` tool.
-- No tool result stubbing.
+- No tool result stubbing or replacement.
 - No assistant-message pruning.
 - No code map.
 - No automatic provider pings in v1.

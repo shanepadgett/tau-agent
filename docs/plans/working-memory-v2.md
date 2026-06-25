@@ -59,6 +59,7 @@ bash npm test
 ```
 
 Keep failed checks if no later passing equivalent exists.
+Prefer rerunning checks when exact old output is needed.
 
 ### Wider exploration pruning
 
@@ -72,6 +73,7 @@ Do not prune directory shape by default.
 - No provider keepalive behavior.
 - No raw session mutation.
 - No automatic semantic summarization without an explicit checkpoint.
+- No working-memory query/archive tool.
 
 ## Entry criteria
 

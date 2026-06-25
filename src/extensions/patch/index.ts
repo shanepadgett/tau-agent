@@ -1,5 +1,6 @@
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { emitTauEvent } from "../../shared/events.js";
 import { type ApplyPatchSummary, applyPatch, deriveStats } from "./executor.ts";
 import { renderPatchCall, renderPatchResult } from "./render.ts";
 
@@ -182,6 +183,7 @@ const PATCH_TOOL = defineTool<typeof patchParams, ApplyPatchSummary>({
 		return renderPatchCall(args as { input?: string }, theme, {
 			expanded: context.expanded,
 			executionStarted: context.executionStarted,
+			isPartial: context.isPartial,
 		});
 	},
 
@@ -198,9 +200,25 @@ export default function patchExtension(pi: ExtensionAPI): void {
 
 	// AgentToolResult has no isError field, so execute returns are always treated as success.
 	// Override via tool_result to flag partial/failed patches as errors for the model and UI.
-	pi.on("tool_result", (event) => {
+	pi.on("tool_result", (event, ctx) => {
 		if (event.toolName !== "patch") return;
 		const summary = event.details as ApplyPatchSummary | undefined;
+		if (summary) {
+			emitTauEvent(pi, "tau:file-mutation.applied", {
+				source: "patch",
+				toolCallId: event.toolCallId,
+				cwd: ctx.cwd,
+				status: summary.status,
+				changes: summary.changes.map((change) => ({
+					path: change.path,
+					kind: change.kind,
+					move: change.move,
+					linesAdded: change.linesAdded,
+					linesRemoved: change.linesRemoved,
+					snapshotRanges: change.snapshotRanges,
+				})),
+			});
+		}
 		if (!summary || summary.status === "completed") return;
 		return { isError: true };
 	});

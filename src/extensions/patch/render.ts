@@ -135,12 +135,13 @@ function renderOpLine(op: PreviewOp, status: OpStatus | undefined, theme: Theme)
 interface RenderCallContext {
 	expanded: boolean;
 	executionStarted: boolean;
+	isPartial: boolean;
 }
 
 export function renderPatchCall(args: { input?: string } | undefined, theme: Theme, context: RenderCallContext): Text {
 	// Once execution starts, renderResult owns the view (it gets the live summary). Yield to avoid
 	// a duplicated op list, since pi stacks both renderers in the same container.
-	if (context.executionStarted) return new Text("", 0, 0);
+	if (context.executionStarted || !context.isPartial) return new Text("", 0, 0);
 
 	const input = args?.input;
 	const preview = scanPreview(input);
