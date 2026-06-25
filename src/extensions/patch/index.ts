@@ -1,6 +1,6 @@
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { type ApplyPatchSummary, applyPatch } from "./executor.ts";
+import { type ApplyPatchSummary, applyPatch, deriveStats } from "./executor.ts";
 import { renderPatchCall, renderPatchResult } from "./render.ts";
 
 const SUPPRESSED_TOOLS = new Set(["edit", "write"]);
@@ -14,6 +14,8 @@ const patchParams = Type.Object({
 			"*** Begin Patch",
 			"*** Add File: <path>",
 			"+content line",
+			"*** Replace File: <path>",
+			"+full file content line",
 			"*** Update File: <path>",
 			"[*** Move to: <new-path>]     (optional — renames while editing; target must not exist)",
 			"[@@ <line from file>]         (optional — anchors search position; see below)",
@@ -27,11 +29,15 @@ const patchParams = Type.Object({
 			"The input must start with exactly *** Begin Patch and end with exactly *** End Patch.",
 			"Malformed patch envelopes fail the whole patch. Section-level parse, match, duplicate-path, missing-file, and move-target errors fail those sections while independent valid sections still apply.",
 			"",
-			"ADD FILE: Only + lines are content. Writes the file — new or overwrite. Use for full rewrites of existing files too.",
+			"ADD FILE / REPLACE FILE: Only + lines are content. Both write the whole file — new or overwrite. Prefer Add File for new files and Replace File for known full rewrites.",
 			"",
 			"UPDATE FILE: Context lines (space prefix) and removed lines (- prefix) together form the search pattern. They must match the file exactly. Minor trailing whitespace, smart quote/dash, and Unicode-space differences are tolerated. Context lines are kept unchanged from the original file.",
 			"",
 			"@@ ANCHOR RULE: The @@ line positions the search cursor AFTER itself. The @@ line is NOT part of the search pattern — do not repeat it as a context line in the same chunk. Use @@ when you have multiple edits in one file, when context lines could match more than one location, or for pure insertions. Unanchored ambiguous matches fail instead of guessing.",
+			"",
+			"CURSOR ORDERING: The cursor advances forward only — it never moves backward. Order chunks top-to-bottom in file order. After a chunk matches, the cursor sits past it permanently; text above the match (including earlier anchors) is unreachable by later chunks. Re-read the file if you need to re-anchor earlier.",
+			"",
+			"ANCHOR VS REMOVAL: The @@ anchor line survives in the file unchanged — it is located, not matched. To delete or modify the anchored line itself, put it as a - line (plus its + replacement) in a separate chunk; never re-anchor the line you want to change. @@ followed by only + lines inserts below the anchor, never replaces it.",
 			"",
 			"PURE INSERTIONS: A chunk with only + lines must use @@ to insert after an anchor, or *** End of File to append. Pure insertion with neither anchor nor EOF marker is rejected. For EOF append, either put + lines before *** End of File in that chunk or put *** End of File before the + lines.",
 			"",
@@ -40,12 +46,15 @@ const patchParams = Type.Object({
 			"DELETE FILE: Removes the file. Must be the only line in the section.",
 			"",
 			"RULES",
-			"- One section per path per patch. Never two Add/Update/Delete for the same file.",
+			"- One section per path per patch. Never two Add/Replace/Update/Delete sections for the same file.",
 			"- Read the file before writing Update File patches so context and removed lines match.",
 			"- Use @@ anchors whenever the same context may appear more than once.",
+			"- Order @@ chunks top-to-bottom: the cursor never moves backward after a match.",
+			"- The @@ anchor line survives in the file. To delete or modify it, use it as a - line in a separate chunk — never re-anchor the line you want to change.",
+			"- @@ followed by only + lines inserts below the anchor; it never replaces the anchored line. To modify a line, pair -old/+new instead.",
 			"- Pure insertions must use @@ or *** End of File.",
 			"- If a match fails, read the current file content and retry with corrected lines.",
-			"- Only + prefixed lines are file content in Add File sections.",
+			"- Only + prefixed lines are file content in Add File and Replace File sections.",
 			"- Empty + line in Add File = blank line in the file. Line with just + = blank line.",
 			"",
 			"EXAMPLE — multi-operation patch (create, edit, move, delete):",
@@ -55,6 +64,8 @@ const patchParams = Type.Object({
 			"+export function init() {",
 			"+\treturn version;",
 			"+}",
+			"*** Replace File: src/generated.ts",
+			"+export const generated = true;",
 			"*** Update File: src/config.ts",
 			" export const PORT = 3000;",
 			"-export const DEBUG = false;",
@@ -96,21 +107,23 @@ const patchParams = Type.Object({
 });
 
 function formatSummary(summary: ApplyPatchSummary): string {
+	const s = deriveStats(summary);
 	const lines: string[] = [];
 	if (summary.status === "failed") {
 		lines.push("No changes applied.");
 	} else {
 		const parts: string[] = [];
-		if (summary.linesAdded > 0) parts.push(`+${summary.linesAdded}`);
-		if (summary.linesRemoved > 0) parts.push(`-${summary.linesRemoved}`);
+		if (s.linesAdded > 0) parts.push(`+${s.linesAdded}`);
+		if (s.linesRemoved > 0) parts.push(`-${s.linesRemoved}`);
 		const badge = parts.length > 0 ? ` [${parts.join(" ")}]` : "";
-		lines.push(`Applied ${summary.completedOperations}/${summary.totalOperations} sections.${badge}`);
+		lines.push(`Applied ${s.completedOperations}/${summary.totalSections} sections.${badge}`);
 	}
 
-	for (const path of summary.added) lines.push(`A ${path}`);
-	for (const path of summary.updated) lines.push(`M ${path}`);
-	for (const path of summary.deleted) lines.push(`D ${path}`);
-	for (const move of summary.moved) lines.push(`R ${move.from} -> ${move.to}`);
+	for (const path of s.added) lines.push(`A ${path}`);
+	for (const path of s.replaced) lines.push(`M ${path}`);
+	for (const path of s.updated) lines.push(`M ${path}`);
+	for (const path of s.deleted) lines.push(`D ${path}`);
+	for (const move of s.moved) lines.push(`R ${move.from} -> ${move.to}`);
 
 	if (summary.failures.length > 0) {
 		lines.push("Failures:");
@@ -135,14 +148,16 @@ const PATCH_TOOL = defineTool<typeof patchParams, ApplyPatchSummary>({
 	promptSnippet: "Apply multi-file patches to create, edit, move, and delete files",
 	promptGuidelines: [
 		"Use patch for all file creation, editing, deletion, and moves. This is the only file-mutation tool.",
-		"CRITICAL: Batch all file changes for a task into a single patch call. Every file you intend to create, edit, move, or delete goes in one Begin Patch / End Patch block. Multiple patch calls per task waste tokens and are never acceptable.",
+		"Prefer one coherent patch call for all file changes in a task. Include adds, replaces, updates, deletes, and moves together when possible; retry failed sections separately when needed.",
 		"Before writing your patch, read every file you need to touch. Then batch all edits across all files into one call. Include all adds, updates, moves, and deletes together.",
 		"Patch input must start with exactly *** Begin Patch and end with exactly *** End Patch.",
 		"Malformed patch envelopes fail the whole patch. Section-level parse, match, duplicate-path, missing-file, and move-target errors fail those sections while independent valid sections still apply.",
 		"Read the file before writing Update File patches so context and removed lines match exactly.",
 		"Use @@ anchors whenever context could match more than once. Ambiguous unanchored matches fail instead of guessing.",
+		"Order @@ chunks top-to-bottom in file order. The cursor advances forward only — text above a previous match is unreachable by later chunks.",
+		"The @@ anchor line survives unchanged. To delete or modify the anchored line itself, use it as a - line in a separate chunk; never re-anchor the line you intend to change. @@ plus pure + lines inserts below the anchor, never replaces it.",
 		"Pure insertion chunks must use @@ to insert after an anchor, or *** End of File to append. The @@ anchor line is not part of the hunk; edits begin after it.",
-		"Use Add File for new files and full rewrites of existing files. Use Update File for contextual edits only.",
+		"Use Add File for new files, Replace File for full rewrites of existing files, and Update File for contextual edits only. Add File and Replace File both write whole-file content and may overwrite existing files.",
 		"If patch fails on context mismatch, read the current file content and retry with corrected lines.",
 	],
 	parameters: patchParams,

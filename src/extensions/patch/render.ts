@@ -1,6 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import type { ApplyPatchSummary } from "./executor.ts";
+import { type ApplyPatchSummary, deriveStats } from "./executor.ts";
 
 // renderCall owns only the pre-execution streaming preview. Once execution starts, pi stacks
 // renderResult below renderCall in the same container, so yielding here avoids a duplicated op list.
@@ -9,7 +9,7 @@ import type { ApplyPatchSummary } from "./executor.ts";
 
 interface PreviewOp {
 	sectionIndex: number;
-	kind: "add" | "update" | "delete";
+	kind: "add" | "replace" | "update" | "delete";
 	path: string;
 	moveTo?: string;
 	linesAdded: number;
@@ -25,9 +25,15 @@ function scanPreview(input: string | undefined): PreviewOp[] {
 
 	for (const line of lines) {
 		if (line === "*** End Patch") break;
-		const addMatch = line.match(/^\*\*\* (?:Add|Replace) File: (.+)$/);
+		const addMatch = line.match(/^\*\*\* (Add|Replace) File: (.+)$/);
 		if (addMatch) {
-			current = { sectionIndex: ops.length + 1, kind: "add", path: addMatch[1]!, linesAdded: 0, linesRemoved: 0 };
+			current = {
+				sectionIndex: ops.length + 1,
+				kind: addMatch[1] === "Replace" ? "replace" : "add",
+				path: addMatch[2]!,
+				linesAdded: 0,
+				linesRemoved: 0,
+			};
 			ops.push(current);
 			continue;
 		}
@@ -51,7 +57,7 @@ function scanPreview(input: string | undefined): PreviewOp[] {
 			continue;
 		}
 
-		if (current.kind === "add") {
+		if (current.kind === "add" || current.kind === "replace") {
 			if (line.startsWith("+")) current.linesAdded += 1;
 			continue;
 		}
@@ -63,17 +69,24 @@ function scanPreview(input: string | undefined): PreviewOp[] {
 	return ops;
 }
 
-function touchedFileCount(preview: PreviewOp[]): number {
-	return new Set(preview.map((op) => op.moveTo ?? op.path)).size;
-}
-
 function statsBadge(summary: ApplyPatchSummary | undefined, preview: PreviewOp[], theme: Theme): string {
-	const changedFileCount = summary ? new Set(summary.changes.map((c) => c.move?.to ?? c.path)).size : 0;
-	const fileCount = summary && changedFileCount > 0 ? changedFileCount : touchedFileCount(preview);
+	let fileCount: number;
+	let linesAdded: number;
+	let linesRemoved: number;
+	let moves: number;
 
-	const linesAdded = summary ? summary.linesAdded : preview.reduce((s, op) => s + op.linesAdded, 0);
-	const linesRemoved = summary ? summary.linesRemoved : preview.reduce((s, op) => s + op.linesRemoved, 0);
-	const moves = summary ? summary.moved.length : preview.filter((op) => op.moveTo).length;
+	if (summary && summary.changes.length > 0) {
+		const s = deriveStats(summary);
+		fileCount = new Set(summary.changes.map((c) => c.move?.to ?? c.path)).size;
+		linesAdded = s.linesAdded;
+		linesRemoved = s.linesRemoved;
+		moves = s.moved.length;
+	} else {
+		fileCount = new Set(preview.map((op) => op.moveTo ?? op.path)).size;
+		linesAdded = preview.reduce((sum, op) => sum + op.linesAdded, 0);
+		linesRemoved = preview.reduce((sum, op) => sum + op.linesRemoved, 0);
+		moves = preview.filter((op) => op.moveTo).length;
+	}
 
 	const stats = [
 		linesAdded > 0 ? `+${linesAdded}` : "",
@@ -92,6 +105,7 @@ function statsBadge(summary: ApplyPatchSummary | undefined, preview: PreviewOp[]
 function opLabel(op: PreviewOp): string {
 	if (op.moveTo) return `Move   ${op.path} → ${op.moveTo}`;
 	if (op.kind === "add") return `Add    ${op.path}`;
+	if (op.kind === "replace") return `Replace ${op.path}`;
 	if (op.kind === "delete") return `Delete ${op.path}`;
 	return `Edit   ${op.path}`;
 }
@@ -107,15 +121,14 @@ function deriveStatuses(summary: ApplyPatchSummary): Map<number, OpStatus> {
 	return map;
 }
 
-function indicator(status: OpStatus | undefined, theme: Theme): string {
-	if (status === "applied") return theme.fg("success", "✓");
-	if (status === "failed") return theme.fg("error", "!");
-	return theme.fg("muted", "…");
-}
-
 function renderOpLine(op: PreviewOp, status: OpStatus | undefined, theme: Theme): string {
 	const label = `${theme.fg("muted", "  ")}${theme.fg("text", opLabel(op))}`;
-	const ind = indicator(status, theme);
+	const ind =
+		status === "applied"
+			? theme.fg("success", "✓")
+			: status === "failed"
+				? theme.fg("error", "!")
+				: theme.fg("muted", "…");
 	return ind ? `${label}  ${ind}` : label;
 }
 

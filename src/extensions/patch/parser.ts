@@ -2,6 +2,7 @@ import type { ChunkLine, UpdateFileChunk } from "./matcher.ts";
 
 type ParsedSection =
 	| { type: "add"; path: string; content: string; linesAdded: number }
+	| { type: "replace"; path: string; content: string; linesAdded: number }
 	| {
 			type: "update";
 			path: string;
@@ -14,6 +15,7 @@ type ParsedSection =
 
 export type PatchOperation =
 	| { type: "add"; sectionIndex: number; path: string; content: string; linesAdded: number }
+	| { type: "replace"; sectionIndex: number; path: string; content: string; linesAdded: number }
 	| {
 			type: "update";
 			sectionIndex: number;
@@ -137,25 +139,18 @@ function parseUpdateBody(
 			continue;
 		}
 
-		if (line === "*** End of File") {
-			if (!current) {
-				if (sawAnyChunk || chunks.length > 0) {
-					throw new Error(`Only the first update chunk may omit @@: ${operationPath}`);
-				}
-				current = createChunk();
-				sawAnyChunk = true;
-			}
-			current.isEndOfFile = true;
-			index += 1;
-			continue;
-		}
-
 		if (!current) {
 			if (sawAnyChunk || chunks.length > 0) {
 				throw new Error(`Only the first update chunk may omit @@: ${operationPath}`);
 			}
 			current = createChunk();
 			sawAnyChunk = true;
+		}
+
+		if (line === "*** End of File") {
+			current.isEndOfFile = true;
+			index += 1;
+			continue;
 		}
 
 		const parsedLine = parseChunkLine(line);
@@ -179,11 +174,14 @@ function parseSection(sectionLines: string[]): ParsedSection {
 	const header = sectionLines[0] ?? "";
 
 	if (header.startsWith("*** Add File: ") || header.startsWith("*** Replace File: ")) {
-		const prefix = header.startsWith("*** Add File: ") ? "*** Add File: " : "*** Replace File: ";
+		const isReplace = header.startsWith("*** Replace File: ");
+		const prefix = isReplace ? "*** Replace File: " : "*** Add File: ";
 		const path = requirePath(header, prefix);
 		const body = parseAddBody(sectionLines, 1);
-		if (body.nextIndex !== sectionLines.length) throw new Error(`Malformed Add File section: ${path}`);
-		return { type: "add", path, content: body.content, linesAdded: body.lineCount };
+		if (body.nextIndex !== sectionLines.length) {
+			throw new Error(`Malformed ${isReplace ? "Replace" : "Add"} File section: ${path}`);
+		}
+		return { type: isReplace ? "replace" : "add", path, content: body.content, linesAdded: body.lineCount };
 	}
 
 	if (header.startsWith("*** Delete File: ")) {
@@ -211,7 +209,10 @@ function parseSection(sectionLines: string[]): ParsedSection {
 
 function parseHeaderMetadata(header: string): Pick<PatchFailure, "kind" | "path"> {
 	if (header.startsWith("*** Add File: ") || header.startsWith("*** Replace File: ")) {
-		return { kind: "add", path: header.slice(header.indexOf(": ") + 2).trim() || undefined };
+		return {
+			kind: header.startsWith("*** Replace File: ") ? "replace" : "add",
+			path: header.slice(header.indexOf(": ") + 2).trim() || undefined,
+		};
 	}
 	if (header.startsWith("*** Delete File: ")) {
 		return { kind: "delete", path: header.slice("*** Delete File: ".length).trim() || undefined };

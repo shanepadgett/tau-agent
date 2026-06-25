@@ -46,18 +46,13 @@ function splitText(content: string): TextParts {
 }
 
 function splitLogicalLines(content: string): string[] {
-	const lines = normalizeToLf(content).split("\n");
+	const lines = content.split("\n");
 	if (lines[lines.length - 1] === "") lines.pop();
 	return lines;
 }
 
 export function countLogicalLines(content: string): number {
-	return splitLogicalLines(stripBom(content).text).length;
-}
-
-function serializeLines(lines: string[], trailingNewline: boolean): string {
-	const result = lines.join("\n");
-	return trailingNewline && result !== "" ? `${result}\n` : result;
+	return splitLogicalLines(normalizeToLf(stripBom(content).text)).length;
 }
 
 function normalizeUnicodeText(value: string): string {
@@ -104,10 +99,6 @@ function seekSequence(lines: string[], pattern: string[], start: number): number
 	return findSequenceMatches(lines, pattern, start)[0] ?? -1;
 }
 
-function buildOldLines(chunk: UpdateFileChunk): string[] {
-	return chunk.lines.filter((l) => l.prefix !== "+").map((l) => l.text);
-}
-
 function buildReplacement(chunk: UpdateFileChunk, fileLines: string[], matchIndex: number): string[] {
 	const result: string[] = [];
 	let fileOffset = 0;
@@ -132,7 +123,7 @@ export function applyChunks(currentContent: string, chunks: UpdateFileChunk[]): 
 
 	for (let ci = 0; ci < chunks.length; ci += 1) {
 		const chunk = chunks[ci]!;
-		const oldLines = buildOldLines(chunk);
+		const oldLines = chunk.lines.filter((l) => l.prefix !== "+").map((l) => l.text);
 
 		if (chunk.changeContext) {
 			const contextIndex = seekSequence(lines, [chunk.changeContext], lineIndex);
@@ -197,7 +188,8 @@ export function applyChunks(currentContent: string, chunks: UpdateFileChunk[]): 
 			output.splice(r.index, r.deleteCount, ...r.insert);
 		});
 
-	const normalized = serializeLines(output, parts.hadTrailingNewline);
+	const joined = output.join("\n");
+	const normalized = parts.hadTrailingNewline && joined !== "" ? `${joined}\n` : joined;
 	const next = parts.bom + restoreLineEndings(normalized, parts.lineEnding);
 	if (next === currentContent) throw new Error("patch produced no changes");
 	return next;
@@ -217,7 +209,7 @@ export class UpdateChunkApplyError extends Error {
 	}
 }
 
-export function formatContextHint(chunk: UpdateFileChunk): string | undefined {
+function formatContextHint(chunk: UpdateFileChunk): string | undefined {
 	const raw = chunk.changeContext ?? chunk.lines.find((l) => l.text.trim().length > 0)?.text;
 	if (!raw) return undefined;
 	const compact = raw.replace(/\s+/g, " ").trim();

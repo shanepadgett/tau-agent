@@ -1,7 +1,7 @@
 import { access, mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
-import { applyChunks, countLogicalLines, formatContextHint, UpdateChunkApplyError } from "./matcher.ts";
+import { applyChunks, countLogicalLines, UpdateChunkApplyError } from "./matcher.ts";
 import { type PatchFailure, type PatchOperation, parsePatch } from "./parser.ts";
 
 export interface ApplyPatchChange {
@@ -15,16 +15,51 @@ export interface ApplyPatchChange {
 
 export interface ApplyPatchSummary {
 	status: "completed" | "partial" | "failed";
+	changes: ApplyPatchChange[];
+	failures: PatchFailure[];
+	totalSections: number;
+}
+
+export interface ApplyPatchStats {
 	added: string[];
+	replaced: string[];
 	updated: string[];
 	deleted: string[];
 	moved: Array<{ from: string; to: string }>;
 	linesAdded: number;
 	linesRemoved: number;
-	changes: ApplyPatchChange[];
-	failures: PatchFailure[];
 	completedOperations: number;
-	totalOperations: number;
+}
+
+export function deriveStats(summary: ApplyPatchSummary): ApplyPatchStats {
+	const added: string[] = [];
+	const replaced: string[] = [];
+	const updated: string[] = [];
+	const deleted: string[] = [];
+	const moved: Array<{ from: string; to: string }> = [];
+	let linesAdded = 0;
+	let linesRemoved = 0;
+	for (const c of summary.changes) {
+		if (c.kind === "add") added.push(c.path);
+		else if (c.kind === "replace") replaced.push(c.path);
+		else if (c.kind === "delete") deleted.push(c.path);
+		else {
+			updated.push(c.move?.to ?? c.path);
+			if (c.move) moved.push(c.move);
+		}
+		linesAdded += c.linesAdded;
+		linesRemoved += c.linesRemoved;
+	}
+	return {
+		added,
+		replaced,
+		updated,
+		deleted,
+		moved,
+		linesAdded,
+		linesRemoved,
+		completedOperations: summary.changes.length,
+	};
 }
 
 interface StagedMutation {
@@ -53,42 +88,32 @@ async function pathExists(path: string): Promise<boolean> {
 	}
 }
 
-async function readUtf8(path: string, displayPath: string, signal: AbortSignal | undefined): Promise<string> {
-	throwIfAborted(signal);
+async function readUtf8(path: string, displayPath: string): Promise<string> {
 	try {
-		const content = await readFile(path, "utf8");
-		throwIfAborted(signal);
-		return content;
+		return await readFile(path, "utf8");
 	} catch (error) {
-		throwIfAborted(signal);
 		const message = error instanceof Error && "code" in error ? `Error code: ${error.code}` : String(error);
 		throw new Error(`Could not read file: ${displayPath}. ${message}.`);
 	}
 }
 
-async function assertExistingFile(path: string, displayPath: string, signal: AbortSignal | undefined): Promise<void> {
-	throwIfAborted(signal);
+async function assertExistingFile(path: string, displayPath: string): Promise<void> {
 	if (!(await pathExists(path))) throw new Error(`Path does not exist: ${displayPath}`);
-	throwIfAborted(signal);
 	const info = await stat(path);
-	throwIfAborted(signal);
 	if (!info.isFile()) throw new Error(`Expected a file: ${displayPath}`);
 }
 
-async function stageAdd(
+async function stageWholeFile(
 	cwd: string,
-	op: Extract<PatchOperation, { type: "add" }>,
-	signal: AbortSignal | undefined,
+	op: Extract<PatchOperation, { type: "add" | "replace" }>,
 ): Promise<StagedMutation> {
 	const target = resolvePath(cwd, op.path);
 	let linesRemoved = 0;
 	if (await pathExists(target)) {
-		const current = await readUtf8(target, op.path, signal);
-		linesRemoved = countLogicalLines(current);
+		linesRemoved = countLogicalLines(await readUtf8(target, op.path));
 	}
-	throwIfAborted(signal);
 	return {
-		change: { sectionIndex: op.sectionIndex, kind: "add", path: op.path, linesAdded: op.linesAdded, linesRemoved },
+		change: { sectionIndex: op.sectionIndex, kind: op.type, path: op.path, linesAdded: op.linesAdded, linesRemoved },
 		async commit() {
 			await mkdir(dirname(target), { recursive: true });
 			await writeFile(target, op.content, "utf8");
@@ -96,14 +121,10 @@ async function stageAdd(
 	};
 }
 
-async function stageDelete(
-	cwd: string,
-	op: Extract<PatchOperation, { type: "delete" }>,
-	signal: AbortSignal | undefined,
-): Promise<StagedMutation> {
+async function stageDelete(cwd: string, op: Extract<PatchOperation, { type: "delete" }>): Promise<StagedMutation> {
 	const target = resolvePath(cwd, op.path);
-	await assertExistingFile(target, op.path, signal);
-	const current = await readUtf8(target, op.path, signal);
+	await assertExistingFile(target, op.path);
+	const current = await readUtf8(target, op.path);
 	return {
 		change: {
 			sectionIndex: op.sectionIndex,
@@ -118,25 +139,11 @@ async function stageDelete(
 	};
 }
 
-async function stageUpdate(
-	cwd: string,
-	op: Extract<PatchOperation, { type: "update" }>,
-	signal: AbortSignal | undefined,
-): Promise<StagedMutation> {
+async function stageUpdate(cwd: string, op: Extract<PatchOperation, { type: "update" }>): Promise<StagedMutation> {
 	const source = resolvePath(cwd, op.path);
-	await assertExistingFile(source, op.path, signal);
-	const current = await readUtf8(source, op.path, signal);
-
-	let next = current;
-	if (op.chunks.length > 0) {
-		try {
-			next = applyChunks(current, op.chunks);
-		} catch (error) {
-			if (error instanceof UpdateChunkApplyError) throw new ChunkApplyFailure(op, error);
-			throw error;
-		}
-	}
-
+	await assertExistingFile(source, op.path);
+	const current = await readUtf8(source, op.path);
+	const next = op.chunks.length > 0 ? applyChunks(current, op.chunks) : current;
 	const moveTarget = op.movePath ? resolvePath(cwd, op.movePath) : undefined;
 
 	if (!moveTarget || moveTarget === source) {
@@ -160,7 +167,6 @@ async function stageUpdate(
 			`move target already exists: ${op.movePath}. Move targets must be unused to avoid overwriting existing files.`,
 		);
 	}
-	throwIfAborted(signal);
 	return {
 		change: {
 			sectionIndex: op.sectionIndex,
@@ -176,21 +182,6 @@ async function stageUpdate(
 			await unlink(source);
 		},
 	};
-}
-
-class ChunkApplyFailure extends Error {
-	chunkIndex: number;
-	totalChunks: number;
-	contextHint?: string;
-
-	constructor(op: Extract<PatchOperation, { type: "update" }>, error: UpdateChunkApplyError) {
-		const hint = error.contextHint ?? formatContextHint(op.chunks[error.chunkIndex - 1]!);
-		super(error.message);
-		this.name = "ChunkApplyFailure";
-		this.chunkIndex = error.chunkIndex;
-		this.totalChunks = error.totalChunks;
-		this.contextHint = hint;
-	}
 }
 
 function collectDupPathFailures(cwd: string, operations: PatchOperation[]): PatchFailure[] {
@@ -218,39 +209,11 @@ function collectDupPathFailures(cwd: string, operations: PatchOperation[]): Patc
 				phase: "apply",
 				sectionIndex,
 				path: display,
-				message: `conflicting operations for path: ${display} (sections ${sections.join(", ")}). Use Add File to overwrite, or split dependent changes into separate patches.`,
+				message: `conflicting operations for path: ${display} (sections ${sections.join(", ")}). Use Add File or Replace File for whole-file writes, or split dependent changes into separate patches.`,
 			});
 		}
 	}
 	return failures;
-}
-
-function emptySummary(totalOperations: number, failures: PatchFailure[] = []): ApplyPatchSummary {
-	return {
-		status: "failed",
-		added: [],
-		updated: [],
-		deleted: [],
-		moved: [],
-		linesAdded: 0,
-		linesRemoved: 0,
-		changes: [],
-		failures,
-		completedOperations: 0,
-		totalOperations,
-	};
-}
-
-function snapshot(summary: ApplyPatchSummary): ApplyPatchSummary {
-	return {
-		...summary,
-		added: [...summary.added],
-		updated: [...summary.updated],
-		deleted: [...summary.deleted],
-		moved: summary.moved.map((m) => ({ ...m })),
-		changes: summary.changes.map((c) => ({ ...c, move: c.move ? { ...c.move } : undefined })),
-		failures: summary.failures.map((f) => ({ ...f })),
-	};
 }
 
 function withMutationQueuePaths<T>(paths: string[], fn: () => Promise<T>): Promise<T> {
@@ -263,19 +226,6 @@ function withMutationQueuePaths<T>(paths: string[], fn: () => Promise<T>): Promi
 	return current();
 }
 
-function recordChange(summary: ApplyPatchSummary, change: ApplyPatchChange): void {
-	summary.changes.push(change);
-	if (change.kind === "add") summary.added.push(change.path);
-	else if (change.kind === "delete") summary.deleted.push(change.path);
-	else {
-		summary.updated.push(change.move?.to ?? change.path);
-		if (change.move) summary.moved.push(change.move);
-	}
-	summary.linesAdded += change.linesAdded;
-	summary.linesRemoved += change.linesRemoved;
-	summary.completedOperations = summary.changes.length;
-}
-
 export async function applyPatch(
 	cwd: string,
 	input: string,
@@ -284,11 +234,15 @@ export async function applyPatch(
 ): Promise<ApplyPatchSummary> {
 	throwIfAborted(signal);
 	const { operations, parseFailures, totalSections } = parsePatch(input);
-	const totalOperations = totalSections;
 
 	if (operations.length === 0) {
-		const summary = emptySummary(totalOperations || 1, parseFailures);
-		await onProgress?.(snapshot(summary));
+		const summary: ApplyPatchSummary = {
+			status: "failed",
+			changes: [],
+			failures: parseFailures,
+			totalSections: totalSections || 1,
+		};
+		await onProgress?.(summary);
 		return summary;
 	}
 
@@ -309,22 +263,19 @@ export async function applyPatch(
 
 		for (const op of runnableOperations) {
 			try {
-				let mutation: StagedMutation;
-				if (op.type === "add") mutation = await stageAdd(cwd, op, signal);
-				else if (op.type === "delete") mutation = await stageDelete(cwd, op, signal);
-				else mutation = await stageUpdate(cwd, op, signal);
-				staged.push(mutation);
+				if (op.type === "add" || op.type === "replace") staged.push(await stageWholeFile(cwd, op));
+				else if (op.type === "delete") staged.push(await stageDelete(cwd, op));
+				else staged.push(await stageUpdate(cwd, op));
 			} catch (error) {
 				if (error instanceof Error && error.message === "Operation aborted") throw error;
-				const message = error instanceof Error ? error.message : String(error);
 				const failure: PatchFailure = {
 					phase: "apply",
 					sectionIndex: op.sectionIndex,
 					path: op.path,
 					kind: op.type,
-					message,
+					message: error instanceof Error ? error.message : String(error),
 				};
-				if (error instanceof ChunkApplyFailure) {
+				if (error instanceof UpdateChunkApplyError) {
 					failure.chunkIndex = error.chunkIndex;
 					failure.totalChunks = error.totalChunks;
 					failure.contextHint = error.contextHint;
@@ -334,37 +285,41 @@ export async function applyPatch(
 		}
 
 		if (staged.length === 0) {
-			const summary = emptySummary(totalOperations, failures);
-			await onProgress?.(snapshot(summary));
+			const summary: ApplyPatchSummary = { status: "failed", changes: [], failures, totalSections };
+			await onProgress?.(summary);
 			return summary;
 		}
 
 		throwIfAborted(signal);
-		const summary: ApplyPatchSummary = emptySummary(totalOperations, []);
-		summary.failures.push(...failures);
-		summary.status = failures.length > 0 ? "partial" : "completed";
 
+		const changes: ApplyPatchChange[] = [];
 		for (const mutation of staged) {
 			try {
 				await mutation.commit();
-				recordChange(summary, mutation.change);
-				await onProgress?.(snapshot(summary));
+				changes.push(mutation.change);
+				await onProgress?.({ status: "partial", changes: [...changes], failures: [...failures], totalSections });
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
-				summary.failures.push({
+				failures.push({
 					phase: "apply",
 					sectionIndex: mutation.change.sectionIndex,
 					path: mutation.change.path,
 					kind: mutation.change.kind,
 					message,
 				});
-				summary.status = summary.changes.length === 0 ? "failed" : "partial";
-				await onProgress?.(snapshot(summary));
+				const status = changes.length === 0 ? "failed" : "partial";
+				const summary: ApplyPatchSummary = {
+					status,
+					changes: [...changes],
+					failures: [...failures],
+					totalSections,
+				};
+				await onProgress?.(summary);
 				return summary;
 			}
 		}
 
-		summary.status = summary.failures.length > 0 ? "partial" : "completed";
-		return summary;
+		const status: ApplyPatchSummary["status"] = failures.length > 0 ? "partial" : "completed";
+		return { status, changes, failures, totalSections };
 	});
 }

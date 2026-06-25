@@ -20,6 +20,8 @@ The model calls `patch` automatically when it needs to change files — no user 
 *** Begin Patch
 *** Add File: path/to/new.ts
 +file content here
+*** Replace File: path/to/existing-full-rewrite.ts
++full replacement content here
 *** Update File: path/to/existing.ts
 @@ function heading
  context line
@@ -33,7 +35,8 @@ The model calls `patch` automatically when it needs to change files — no user 
 *** End Patch
 ```
 
-- **Add File** — creates new files or overwrites existing ones. Only `+` lines become file content.
+- **Add File** — writes whole-file content, usually for new files. May overwrite existing files when that is the intended edit. Only `+` lines become file content.
+- **Replace File** — writes whole-file content, usually for full rewrites of existing files. Same apply behavior as Add File, but renders as a replacement.
 - **Update File** — contextual edits via context/removal/addition lines. Use `@@` anchors when context may repeat. `@@` positions the edit after the anchor line; do not repeat the anchor as a removed/context line. Pure insertions must use `@@` or `*** End of File`.
 - **Delete File** — removes files.
 
