@@ -9,6 +9,12 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 const execFileAsync = promisify(execFile);
 const SETTINGS_ROOT = join("src", "extensions");
 const GENERATOR = join("scripts", "generate-tau-schema.ts");
+const SETTINGS_PROMPT = [
+	"Tau settings schemas are discovered only from extension-local settings files.",
+	"When adding or changing Tau extension settings, put the spec at src/extensions/<extension>/settings.ts next to that extension's index.ts.",
+	"Do not put Tau extension settings under src/shared; the schema sync watcher and generator won't treat that as an extension settings file.",
+	"Do not manually edit schemas/tau.schema.json. Change the extension settings.ts spec and let tau-schema-sync or mise run generate-schema update the schema.",
+].join("\n");
 
 type Hashes = Map<string, string>;
 
@@ -19,6 +25,12 @@ export default function tauSchemaSync(pi: ExtensionAPI): void {
 
 	pi.on("session_start", async (_event, ctx) => {
 		baseline = await hashSettingsFiles(ctx.cwd);
+	});
+
+	pi.on("before_agent_start", (event) => {
+		event.systemPromptOptions.appendSystemPrompt = [event.systemPromptOptions.appendSystemPrompt, SETTINGS_PROMPT]
+			.filter(Boolean)
+			.join("\n\n");
 	});
 
 	pi.on("turn_end", async (_event, ctx) => {
