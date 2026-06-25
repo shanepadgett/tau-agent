@@ -1,5 +1,9 @@
 # Development Rules
 
+## General
+
+- Any change to extension tools requires the user to /reload before you can test the changes
+
 ## Style
 
 - Be terse: omit filler, pleasantries, hedging, and articles; fragments and one-word answers are fine. You are token conscience in all operations.

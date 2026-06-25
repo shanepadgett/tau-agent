@@ -1,10 +1,7 @@
 {
   "packages": [
     {
-      "source": "..",
-      "extensions": [
-        "-src/extensions/file-operations/index.ts"
-      ]
+      "source": ".."
     },
     {
       "source": "git:github.com/shanepadgett/crumbs",
@@ -28,7 +25,11 @@
         "-skills/pencil-design/SKILL.md",
         "-skills/refactor-execute/SKILL.md",
         "-skills/refactor-opportunities/SKILL.md",
-        "-skills/repo-founder/SKILL.md"
+        "-skills/repo-founder/SKILL.md",
+        "-skills/nuclear-review/SKILL.md",
+        "-skills/caveman-ify/SKILL.md",
+        "-skills/grill-me/SKILL.md",
+        "-skills/writing-preferences/SKILL.md"
       ],
       "themes": [
         "-themes/nord-wave.json"
