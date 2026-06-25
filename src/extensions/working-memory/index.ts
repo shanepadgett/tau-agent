@@ -62,7 +62,7 @@ interface ReadEvidence {
 
 interface SnapshotEvidence {
 	messageIndex: number;
-	sourceToolCallId: string;
+	sourceToolCallId?: string;
 	path: string;
 	state: "present" | "deleted";
 	ranges: Range[];
@@ -84,18 +84,29 @@ interface ForgetDirective {
 }
 
 interface SnapshotDetails {
-	workingMemory: {
-		version: 1;
-		type: "mutation-snapshot";
-		sourceToolCallId: string;
-		toolName: "patch";
-		path: string;
-		state: "present" | "deleted";
-		ranges: Range[];
-	};
+	workingMemory:
+		| {
+				version: 1;
+				type: "mutation-snapshot";
+				sourceToolCallId: string;
+				toolName: "patch";
+				path: string;
+				state: "present" | "deleted";
+				ranges: Range[];
+		  }
+		| {
+				version: 1;
+				type: "context-snapshot";
+				source: "tau-edit";
+				batchId: string;
+				path: string;
+				state: "present";
+				ranges: Range[];
+		  };
 }
 
 type MutationEvent = TauAgentEvents["tau:file-mutation.applied"];
+type ContextSnapshotEvent = TauAgentEvents["tau:context.snapshot"];
 type AgentMessage = ContextEvent["messages"][number];
 type MutableMessage = AgentMessage & Record<string, unknown>;
 type ReadStatus = "superseded" | "stale" | "forgotten";
@@ -198,7 +209,8 @@ class SnapshotComponent implements Component {
 		const details = this.message.details?.workingMemory;
 		const path = details?.path ?? "mutation snapshot";
 		const suffix = details?.state === "deleted" ? " deleted" : formatRanges(details?.ranges ?? []);
-		const header = `${this.theme.fg("toolTitle", this.theme.bold("snapshot"))} ${this.theme.fg("muted", path)}${this.theme.fg("muted", suffix)} ${this.theme.fg("muted", "[patch]")}`;
+		const source = details?.type === "context-snapshot" ? details.source : "patch";
+		const header = `${this.theme.fg("toolTitle", this.theme.bold("snapshot"))} ${this.theme.fg("muted", path)}${this.theme.fg("muted", suffix)} ${this.theme.fg("muted", `[${source}]`)}`;
 		if (!this.expanded) return [header];
 		const content =
 			typeof this.message.content === "string" ? this.message.content : (textContent(this.message.content) ?? "");
@@ -288,8 +300,12 @@ export default function workingMemory(pi: ExtensionAPI): void {
 	const unsubscribeMutationEvent = onTauEvent(pi, "tau:file-mutation.applied", (event) => {
 		void sendPatchSnapshots(pi, event);
 	});
+	const unsubscribeContextSnapshotEvent = onTauEvent(pi, "tau:context.snapshot", (event) => {
+		sendContextSnapshots(pi, event);
+	});
 	pi.on("session_shutdown", () => {
 		unsubscribeMutationEvent();
+		unsubscribeContextSnapshotEvent();
 	});
 
 	pi.on("session_start", (_event, ctx) => {
@@ -402,6 +418,22 @@ async function sendPatchSnapshots(pi: ExtensionAPI, event: MutationEvent): Promi
 	}
 }
 
+function sendContextSnapshots(pi: ExtensionAPI, event: ContextSnapshotEvent): void {
+	for (const file of event.files) {
+		const lines = splitLines(file.content);
+		const ranges = lines.length > 0 ? [{ startLine: 1, endLine: lines.length }] : [];
+		pi.sendMessage<SnapshotDetails>(
+			{
+				customType: CUSTOM_TYPE,
+				content: renderContextSnapshot(file.path, file.content, ranges),
+				display: true,
+				details: contextSnapshotDetails(event.batchId, file.path, ranges),
+			},
+			{ ...(event.deliverAs ? { deliverAs: event.deliverAs } : {}) },
+		);
+	}
+}
+
 function getSentSnapshotKeys(): Set<string> {
 	const key = Symbol.for("tau.working-memory.sentSnapshotKeys");
 	const globalStore = globalThis as Record<PropertyKey, unknown>;
@@ -436,9 +468,11 @@ function pruneContext(messages: AgentMessage[], cwd: string): AgentMessage[] {
 		const snapshot = snapshotEvidence(message, index, cwd, latestEpoch);
 		if (snapshot) {
 			snapshots.push(snapshot);
-			const existing = patchSnapshots.get(snapshot.sourceToolCallId) ?? [];
-			existing.push(snapshot);
-			patchSnapshots.set(snapshot.sourceToolCallId, existing);
+			if (snapshot.sourceToolCallId) {
+				const existing = patchSnapshots.get(snapshot.sourceToolCallId) ?? [];
+				existing.push(snapshot);
+				patchSnapshots.set(snapshot.sourceToolCallId, existing);
+			}
 			continue;
 		}
 
@@ -476,7 +510,7 @@ function pruneContext(messages: AgentMessage[], cwd: string): AgentMessage[] {
 		}
 
 		if (message.toolName === "forget") {
-			applyForget(message, index, cwd, reads, greps, stubs);
+			applyForget(message, index, cwd, reads, greps, snapshots, stubs);
 			continue;
 		}
 
@@ -619,7 +653,7 @@ function snapshotEvidence(
 	if (!path) return undefined;
 	return {
 		messageIndex,
-		sourceToolCallId: details.sourceToolCallId,
+		...(details.type === "mutation-snapshot" ? { sourceToolCallId: details.sourceToolCallId } : {}),
 		path,
 		state: details.state,
 		ranges: details.ranges,
@@ -631,7 +665,24 @@ function snapshotEvidence(
 function snapshotDetailsFromUnknown(value: unknown): SnapshotDetails["workingMemory"] | undefined {
 	if (!isRecord(value) || !isRecord(value.workingMemory)) return undefined;
 	const wm = value.workingMemory;
-	if (wm.version !== 1 || wm.type !== "mutation-snapshot" || wm.toolName !== "patch") return undefined;
+	if (wm.version !== 1) return undefined;
+	if (wm.type === "context-snapshot") {
+		if (wm.source !== "tau-edit" || typeof wm.batchId !== "string" || typeof wm.path !== "string") return undefined;
+		if (wm.state !== "present") return undefined;
+		if (!Array.isArray(wm.ranges)) return undefined;
+		const ranges = parseRanges(wm.ranges);
+		if (ranges.length !== wm.ranges.length) return undefined;
+		return {
+			version: 1,
+			type: "context-snapshot",
+			source: wm.source,
+			batchId: wm.batchId,
+			path: wm.path,
+			state: wm.state,
+			ranges,
+		};
+	}
+	if (wm.type !== "mutation-snapshot" || wm.toolName !== "patch") return undefined;
 	if (typeof wm.sourceToolCallId !== "string" || typeof wm.path !== "string") return undefined;
 	if (wm.state !== "present" && wm.state !== "deleted") return undefined;
 	if (!Array.isArray(wm.ranges)) return undefined;
@@ -711,10 +762,15 @@ function applyForget(
 	cwd: string,
 	reads: ReadEvidence[],
 	greps: Array<{ message: MutableMessage; messageIndex: number; args: Record<string, unknown> }>,
+	snapshots: SnapshotEvidence[],
 	stubs: Map<number, string>,
 ): void {
 	const directive = forgetDirective(message.details, cwd);
 	if (!directive || directive.mode === "superseded_reads") return;
+	for (const snapshot of snapshots) {
+		if (directive.mode === "paths" && !directive.paths?.has(snapshot.path)) continue;
+		maybeStub(stubs, snapshot.messageIndex, snapshot.textLength, STUB_FORGOTTEN);
+	}
 	for (const read of reads) {
 		if (directive.mode === "paths" && !directive.paths?.has(read.path)) continue;
 		maybeStub(stubs, read.messageIndex, read.textLength, STUB_FORGOTTEN);
@@ -876,12 +932,31 @@ function snapshotDetails(
 	};
 }
 
+function contextSnapshotDetails(batchId: string, path: string, ranges: Range[]): SnapshotDetails {
+	return {
+		workingMemory: {
+			version: 1,
+			type: "context-snapshot",
+			source: "tau-edit",
+			batchId,
+			path,
+			state: "present",
+			ranges,
+		},
+	};
+}
+
 function renderSnapshot(path: string, ranges: Range[], lines: string[]): string {
 	const blocks = ranges.map((range) => {
 		const content = lines.slice(range.startLine - 1, range.endLine).join("\n");
 		return `${path}:${range.startLine}-${range.endLine}\n\`\`\`${languageForPath(path)}\n${content}\n\`\`\``;
 	});
 	return blocks.join("\n\n");
+}
+
+function renderContextSnapshot(path: string, content: string, ranges: Range[]): string {
+	if (ranges.length === 0) return `${path}\n\`\`\`${languageForPath(path)}\n\`\`\``;
+	return `${path}:${ranges[0]!.startLine}-${ranges[0]!.endLine}\n\`\`\`${languageForPath(path)}\n${content}${content.endsWith("\n") ? "" : "\n"}\`\`\``;
 }
 
 function expandRanges(rawRanges: Range[] | undefined, lineCount: number): Range[] {

@@ -1,13 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { promptForDescription } from "../../../src/shared/description.ts";
-import {
-	clearEmittedInjectedContexts,
-	clearPendingInjectedContexts,
-	queueInjectedContext,
-	shiftPendingInjectedContext,
-} from "../../../src/shared/injected-context.ts";
+import { emitTauEvent } from "../../../src/shared/events.ts";
 import { pickReferences, type ReferenceItem, referenceLines } from "../../../src/shared/reference-picker.ts";
 import {
 	TabbedMultiSelect,
@@ -24,6 +20,16 @@ interface Resource {
 	path: string;
 }
 
+interface SnapshotFile {
+	path: string;
+	content: string;
+}
+
+interface ResourceContext {
+	manifest: string;
+	files: SnapshotFile[];
+}
+
 const TAB_LABELS: Record<ResourceKind, string> = {
 	"local-extension": "Local extensions",
 	"tau-extension": "Tau extensions",
@@ -34,21 +40,8 @@ const TAB_LABELS: Record<ResourceKind, string> = {
 
 export default function tauEdit(pi: ExtensionAPI): void {
 	pi.registerCommand("tau-edit", {
-		description: "Pick Tau resources and inject their files as hidden context",
+		description: "Pick Tau resources and inject their files as working-memory snapshots",
 		handler: async (_args, ctx) => run(pi, ctx),
-	});
-
-	pi.on("before_agent_start", () => {
-		const message = shiftPendingInjectedContext();
-		return message ? { message } : undefined;
-	});
-
-	pi.on("agent_end", () => {
-		clearEmittedInjectedContexts();
-	});
-
-	pi.on("session_shutdown", () => {
-		clearPendingInjectedContexts();
 	});
 }
 
@@ -89,8 +82,17 @@ async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void
 	const references = await getReferences(pi, ctx);
 	if (references === null) return;
 
-	queueInjectedContext(await buildContext(ctx.cwd, selected), { source: "tau-edit", title: "Tau edit context" });
-	const message = buildMessage(prompt.text, prompt.source === "idea", references);
+	const context = await buildContext(ctx.cwd, selected);
+	const deliverAs = ctx.isIdle() ? undefined : "followUp";
+	emitTauEvent(pi, "tau:context.snapshot", {
+		source: "tau-edit",
+		title: "Tau edit context",
+		cwd: ctx.cwd,
+		batchId: randomUUID(),
+		...(deliverAs ? { deliverAs } : {}),
+		files: context.files,
+	});
+	const message = buildMessage(prompt.text, prompt.source === "idea", references, context.manifest);
 	if (ctx.isIdle()) pi.sendUserMessage(message);
 	else pi.sendUserMessage(message, { deliverAs: "followUp" });
 }
@@ -162,14 +164,16 @@ function resourceToItem(resource: Resource): TabbedMultiSelectItem {
 	return { id: resource.path, label: resource.name };
 }
 
-async function buildContext(cwd: string, resources: Resource[]): Promise<string> {
+async function buildContext(cwd: string, resources: Resource[]): Promise<ResourceContext> {
 	const rootFiles = await listRootFiles(cwd);
 	const sharedFiles = resources.some((resource) => resource.kind.endsWith("extension"))
 		? await listFiles(cwd, "src/shared")
 		: [];
-	const resourceBlocks = await Promise.all(resources.map((resource) => renderResource(cwd, resource)));
+	const resourcesContext = await Promise.all(resources.map((resource) => renderResource(cwd, resource)));
+	const filesByPath = new Map<string, SnapshotFile>();
+	for (const file of resourcesContext.flatMap((resource) => resource.files)) filesByPath.set(file.path, file);
 
-	return [
+	const manifest = [
 		"Tau context:",
 		"",
 		"Root files:",
@@ -177,19 +181,26 @@ async function buildContext(cwd: string, resources: Resource[]): Promise<string>
 		...(sharedFiles.length > 0 ? ["", "Shared files:", ...sharedFiles.map((path) => `- ${path}`)] : []),
 		"",
 		"Selected resources:",
-		resourceBlocks.join("\n\n"),
+		resourcesContext.map((resource) => resource.manifest).join("\n\n"),
 	].join("\n");
+
+	return { manifest, files: [...filesByPath.values()] };
 }
 
-function buildMessage(request: string, fromIdea: boolean, references: readonly ReferenceItem[]): string {
+function buildMessage(
+	request: string,
+	fromIdea: boolean,
+	references: readonly ReferenceItem[],
+	manifest: string,
+): string {
 	const refs = referenceLines(references);
 
 	return [
 		"# /tau-edit request",
 		"",
-		"Selected Tau resource files are injected as hidden context. Treat those file contents as current and authoritative. Do not reread injected files unless you edited them, the user says they changed, or needed content is missing from context.",
+		"Selected Tau resource files are injected as working-memory snapshots. Treat those snapshot contents as current and authoritative. Do not reread snapshotted files unless you edited them, the user says they changed, or needed content is missing from context.",
 		"",
-		"Root/shared files are injected as file names only. Read them only when this request directly requires their contents; do not read them for discovery.",
+		"Root/shared files are listed as file names only. Read them only when this request directly requires their contents; do not read them for discovery.",
 		"",
 		...(fromIdea
 			? [
@@ -198,28 +209,30 @@ function buildMessage(request: string, fromIdea: boolean, references: readonly R
 				]
 			: []),
 		...(refs.length > 0 ? [...refs, ""] : []),
+		manifest,
+		"",
 		"Request:",
 		request,
 	].join("\n");
 }
 
-async function renderResource(cwd: string, resource: Resource): Promise<string> {
+async function renderResource(cwd: string, resource: Resource): Promise<ResourceContext> {
 	const files = await listResourceFiles(cwd, resource.path);
-	const blocks = await Promise.all(
-		files.map(async (path) => {
-			const content = await readFile(join(cwd, path), "utf8");
-			return `File: ${path}
-${fencedFileContent(path, content)}`;
-		}),
+	const snapshots = await Promise.all(
+		files.map(async (path) => ({ path, content: await readFile(join(cwd, path), "utf8") })),
 	);
 
-	return [
-		`Resource: ${resource.name}`,
-		`Kind: ${resource.kind}`,
-		`Path: ${resource.path}`,
-		"",
-		blocks.join("\n\n"),
-	].join("\n");
+	return {
+		manifest: [
+			`Resource: ${resource.name}`,
+			`Kind: ${resource.kind}`,
+			`Path: ${resource.path}`,
+			"",
+			"Files:",
+			...files.map((path) => `- ${path}`),
+		].join("\n"),
+		files: snapshots,
+	};
 }
 
 async function listResourceFiles(cwd: string, path: string): Promise<string[]> {
@@ -271,9 +284,4 @@ function errorCode(error: unknown): string | undefined {
 	return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
 		? error.code
 		: undefined;
-}
-
-function fencedFileContent(path: string, content: string): string {
-	const fence = "`".repeat(Math.max(4, ...[...content.matchAll(/`+/g)].map((match) => match[0].length + 1)));
-	return `${fence}${extname(path).slice(1)}\n${content}${content.endsWith("\n") ? "" : "\n"}${fence}`;
 }

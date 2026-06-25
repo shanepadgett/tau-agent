@@ -20,6 +20,14 @@ export type TauAgentEvents = {
 			snapshotRanges?: Array<{ startLine: number; endLine: number }>;
 		}>;
 	};
+	"tau:context.snapshot": {
+		source: "tau-edit";
+		title?: string;
+		cwd: string;
+		batchId: string;
+		deliverAs?: "steer" | "followUp" | "nextTurn";
+		files: Array<{ path: string; content: string }>;
+	};
 	"tau:footer-item": {
 		id: string;
 		text?: string;
