@@ -79,10 +79,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	let run: Promise<void> | undefined;
 	let abortController: AbortController | undefined;
 
-	const SILENT_CHECK_PROMPT =
-		"Silent checks active: configured commands run automatically after matching file changes. " +
-		"Do not run checks manually. When a check fails, you'll receive the output directly — fix what it reports. Edit freely.";
-
 	pi.registerMessageRenderer<FailureDetails>(MESSAGE_TYPE, (message, { expanded }, theme) =>
 		renderFailure(asFailureDetails(message.details), expanded, theme),
 	);
@@ -90,7 +86,9 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	pi.on("before_agent_start", (event) => {
 		if (!settings.enabled || settings.commands.length === 0) return;
 		const existing = event.systemPromptOptions.appendSystemPrompt;
-		event.systemPromptOptions.appendSystemPrompt = [existing, SILENT_CHECK_PROMPT].filter(Boolean).join("\n\n");
+		event.systemPromptOptions.appendSystemPrompt = [existing, formatSilentCheckPrompt(settings.commands)]
+			.filter(Boolean)
+			.join("\n\n");
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
@@ -195,6 +193,24 @@ function normalizeSettings(value: typeof silentCommandRunnerSettings.defaults): 
 			];
 		}),
 	};
+}
+
+function formatSilentCheckPrompt(commands: readonly CommandConfig[]): string {
+	return [
+		"Silent checks active: these configured commands run automatically after matching file changes.",
+		"Do not manually run these commands after edits. Not for verification, not as a cheap confidence check, not before saying you're done. The silent runner will run them. Wait for silent-command-runner output; if one fails, fix the reported output. Only run a manual command when the user explicitly asks or when you need a different narrow diagnostic that is not one of these automatic commands.",
+		"Automatic commands:",
+		...commands.map(formatSilentCheckCommand),
+	].join("\n");
+}
+
+function formatSilentCheckCommand(command: CommandConfig): string {
+	return [
+		`- ${command.name}: ${command.command}`,
+		`  cwd: ${command.cwd}`,
+		`  triggers: ${command.includeGlobs.join(", ")}`,
+		...(command.excludeGlobs.length ? [`  excludes: ${command.excludeGlobs.join(", ")}`] : []),
+	].join("\n");
 }
 
 async function scanChangedCommands(
