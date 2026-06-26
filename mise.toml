@@ -42,4 +42,4 @@ run = "npm run test:unit"
 
 [tasks."check:deadcode"]
 description = "Run Fallow dead-code and duplication checks"
-run = "fallow --only dead-code,dupes"
+run = "fallow --only dead-code,dupes --fail-on-issues"

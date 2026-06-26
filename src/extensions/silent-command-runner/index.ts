@@ -40,6 +40,7 @@ interface CommandConfig {
 	command: string;
 	cwd: string;
 	env: Record<string, string>;
+	details: string | undefined;
 	includeGlobs: string[];
 	excludeGlobs: string[];
 	timeoutMs: number;
@@ -108,7 +109,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		turnPaths = new Set(await walkFiles(projectRoot));
 	});
 
-	pi.on("agent_end", (_event, ctx) => {
+	pi.on("agent_end", (event, ctx) => {
+		if (hasAbortedAssistantMessage(event.messages)) return;
 		if (run) return;
 		run = runChangedCommands(ctx.cwd, turnStart, ctx.ui.notify)
 			.catch((error: unknown) => {
@@ -186,6 +188,7 @@ function normalizeSettings(value: typeof silentCommandRunnerSettings.defaults): 
 					command: commandText,
 					cwd: command.cwd?.trim() || ".",
 					env: command.env ?? {},
+					details: command.details?.trim() || undefined,
 					includeGlobs: nonEmptyStrings(command.includeGlobs, ["**/*"]),
 					excludeGlobs: [...DEFAULT_EXCLUDE_GLOBS, ...nonEmptyStrings(command.excludeGlobs, [])],
 					timeoutMs: positiveInteger(command.timeoutMs, DEFAULT_TIMEOUT_MS),
@@ -207,10 +210,17 @@ function formatSilentCheckPrompt(commands: readonly CommandConfig[]): string {
 function formatSilentCheckCommand(command: CommandConfig): string {
 	return [
 		`- ${command.name}: ${command.command}`,
+		...(command.details ? [`  details: ${command.details}`] : []),
 		`  cwd: ${command.cwd}`,
 		`  triggers: ${command.includeGlobs.join(", ")}`,
 		...(command.excludeGlobs.length ? [`  excludes: ${command.excludeGlobs.join(", ")}`] : []),
 	].join("\n");
+}
+
+function hasAbortedAssistantMessage(messages: readonly unknown[]): boolean {
+	return messages.some(
+		(message) => isRecord(message) && message.role === "assistant" && message.stopReason === "aborted",
+	);
 }
 
 async function scanChangedCommands(

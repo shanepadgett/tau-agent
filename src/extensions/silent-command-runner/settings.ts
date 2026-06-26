@@ -10,6 +10,9 @@ const commandSchema = Type.Object(
 			Type.String({ default: ".", description: "Command working directory, relative to project root." }),
 		),
 		env: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "Extra environment values." })),
+		details: Type.Optional(
+			Type.String({ description: "Free-text explanation of what this command checks or runs." }),
+		),
 		includeGlobs: Type.Optional(
 			Type.Array(Type.String(), {
 				default: ["**/*"],
@@ -37,6 +40,7 @@ export default defineTauExtensionSettings({
 			command: string;
 			cwd?: string;
 			env?: Record<string, string>;
+			details?: string;
 			includeGlobs?: string[];
 			excludeGlobs?: string[];
 			timeoutMs?: number;

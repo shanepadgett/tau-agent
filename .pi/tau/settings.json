@@ -15,6 +15,7 @@
 				{
 					"name": "ts-check",
 					"command": "mise run check:ts",
+					"details": "Runs Tau schema drift check, Biome formatting/lint, TypeScript checks, unit tests, and Fallow dead-code/duplication checks.",
 					"includeGlobs": [
 						"src/**/*.ts",
 						".pi/extensions/**/*.ts",
@@ -26,6 +27,7 @@
 				{
 					"name": "md-check",
 					"command": "mise run check:md",
+					"details": "Runs Markdown linting and fixes through markdownlint-cli2.",
 					"includeGlobs": [
 						"**/*.md"
 					]

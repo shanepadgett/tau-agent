@@ -112,6 +112,10 @@
 										},
 										"description": "Extra environment values."
 									},
+									"details": {
+										"type": "string",
+										"description": "Free-text explanation of what this command checks or runs."
+									},
 									"includeGlobs": {
 										"type": "array",
 										"items": {
