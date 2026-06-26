@@ -1,3 +1,5 @@
+import { type LineRange, mergeLineRanges } from "../../shared/ranges.js";
+
 export interface ChunkLine {
 	prefix: " " | "+" | "-";
 	text: string;
@@ -9,10 +11,7 @@ export interface UpdateFileChunk {
 	isEndOfFile: boolean;
 }
 
-export interface SnapshotRange {
-	startLine: number;
-	endLine: number;
-}
+export interface SnapshotRange extends LineRange {}
 
 export interface ApplyChunksResult {
 	content: string;
@@ -23,7 +22,6 @@ interface TextParts {
 	bom: string;
 	text: string;
 	lineEnding: "\n" | "\r\n";
-	hadTrailingNewline: boolean;
 }
 
 function stripBom(content: string): { bom: string; text: string } {
@@ -51,7 +49,6 @@ function splitText(content: string): TextParts {
 		bom,
 		text: normalizeToLf(text),
 		lineEnding: detectLineEnding(text),
-		hadTrailingNewline: text !== "" && /[\r\n]$/.test(text),
 	};
 }
 
@@ -81,7 +78,10 @@ function normalizeForFuzzyMatch(value: string): string {
 function matchesAt(source: string[], pattern: string[], start: number, normalize: (value: string) => string): boolean {
 	if (start < 0 || start + pattern.length > source.length) return false;
 	for (let offset = 0; offset < pattern.length; offset += 1) {
-		if (normalize(source[start + offset]!) !== normalize(pattern[offset]!)) return false;
+		const sourceLine = source[start + offset];
+		const patternLine = pattern[offset];
+		if (sourceLine === undefined || patternLine === undefined) return false;
+		if (normalize(sourceLine) !== normalize(patternLine)) return false;
 	}
 	return true;
 }
@@ -128,12 +128,14 @@ function buildReplacement(chunk: UpdateFileChunk, fileLines: string[], matchInde
 export function applyChunksWithRanges(currentContent: string, chunks: UpdateFileChunk[]): ApplyChunksResult {
 	const parts = splitText(currentContent);
 	const lines = splitLogicalLines(parts.text);
-	const replacements: Array<{ index: number; deleteCount: number; insert: string[] }> = [];
+	const replacements: Array<{ index: number; deleteCount: number; insert: string[]; order: number }> = [];
 	const rawRanges: Array<{ index: number; deleteCount: number; insertCount: number }> = [];
 	let lineIndex = 0;
+	let order = 0;
 
 	for (let ci = 0; ci < chunks.length; ci += 1) {
-		const chunk = chunks[ci]!;
+		const chunk = chunks[ci];
+		if (chunk === undefined) continue;
 		const oldLines = chunk.lines.filter((l) => l.prefix !== "+").map((l) => l.text);
 
 		if (chunk.changeContext) {
@@ -150,19 +152,11 @@ export function applyChunksWithRanges(currentContent: string, chunks: UpdateFile
 		}
 
 		if (oldLines.length === 0) {
-			if (!chunk.changeContext && !chunk.isEndOfFile) {
-				throw new UpdateChunkApplyError(
-					ci + 1,
-					chunks.length,
-					formatContextHint(chunk),
-					"pure insertion requires @@ anchor or *** End of File",
-				);
-			}
-			const insertIndex = chunk.changeContext ? lineIndex : lines.length;
+			const insertIndex = lines.length;
 			const insert = chunk.lines.map((l) => l.text);
-			replacements.push({ index: insertIndex, deleteCount: 0, insert });
+			replacements.push({ index: insertIndex, deleteCount: 0, insert, order });
+			order += 1;
 			rawRanges.push({ index: insertIndex, deleteCount: 0, insertCount: insert.length });
-			lineIndex = insertIndex;
 			continue;
 		}
 
@@ -172,17 +166,6 @@ export function applyChunksWithRanges(currentContent: string, chunks: UpdateFile
 			if (eofIndex >= lineIndex && seekSequence(lines, oldLines, eofIndex) === eofIndex) {
 				matchIndex = eofIndex;
 			}
-		} else if (!chunk.changeContext) {
-			const matches = findSequenceMatches(lines, oldLines, lineIndex);
-			if (matches.length > 1) {
-				throw new UpdateChunkApplyError(
-					ci + 1,
-					chunks.length,
-					formatContextHint(chunk),
-					"ambiguous update match; add @@ anchor or more context",
-				);
-			}
-			matchIndex = matches[0] ?? -1;
 		}
 		if (matchIndex < 0) matchIndex = seekSequence(lines, oldLines, lineIndex);
 		if (matchIndex < 0) {
@@ -190,23 +173,23 @@ export function applyChunksWithRanges(currentContent: string, chunks: UpdateFile
 		}
 
 		const replacement = buildReplacement(chunk, lines, matchIndex);
-		replacements.push({ index: matchIndex, deleteCount: oldLines.length, insert: replacement });
+		replacements.push({ index: matchIndex, deleteCount: oldLines.length, insert: replacement, order });
+		order += 1;
 		rawRanges.push({ index: matchIndex, deleteCount: oldLines.length, insertCount: replacement.length });
 		lineIndex = matchIndex + oldLines.length;
 	}
 
 	const output = [...lines];
 	replacements
-		.sort((a, b) => b.index - a.index)
+		.sort((a, b) => b.index - a.index || b.order - a.order)
 		.forEach((r) => {
 			output.splice(r.index, r.deleteCount, ...r.insert);
 		});
 
 	const joined = output.join("\n");
-	const normalized = parts.hadTrailingNewline && joined !== "" ? `${joined}\n` : joined;
+	const normalized = joined === "" ? "" : `${joined}\n`;
 	const next = parts.bom + restoreLineEndings(normalized, parts.lineEnding);
-	if (next === currentContent) throw new Error("patch produced no changes");
-	return { content: next, snapshotRanges: mergeSnapshotRanges(toPostApplyRanges(rawRanges, output.length)) };
+	return { content: next, snapshotRanges: mergeLineRanges(toPostApplyRanges(rawRanges, output.length)) };
 }
 
 function toPostApplyRanges(
@@ -228,23 +211,6 @@ function toPostApplyRanges(
 		delta += range.insertCount - range.deleteCount;
 	}
 	return ranges;
-}
-
-function mergeSnapshotRanges(ranges: SnapshotRange[]): SnapshotRange[] {
-	const sorted = ranges
-		.filter((range) => Number.isInteger(range.startLine) && Number.isInteger(range.endLine) && range.startLine > 0)
-		.map((range) => ({ startLine: range.startLine, endLine: Math.max(range.startLine, range.endLine) }))
-		.sort((a, b) => a.startLine - b.startLine || a.endLine - b.endLine);
-	const merged: SnapshotRange[] = [];
-	for (const range of sorted) {
-		const previous = merged[merged.length - 1];
-		if (previous && range.startLine <= previous.endLine + 3) {
-			previous.endLine = Math.max(previous.endLine, range.endLine);
-		} else {
-			merged.push({ ...range });
-		}
-	}
-	return merged;
 }
 
 export class UpdateChunkApplyError extends Error {

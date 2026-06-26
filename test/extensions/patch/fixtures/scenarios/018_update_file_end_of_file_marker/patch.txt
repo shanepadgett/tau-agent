@@ -1,0 +1,7 @@
+*** Begin Patch
+*** Update File: eof.txt
+@@
+*** End of File
+-alpha
++omega
+*** End Patch

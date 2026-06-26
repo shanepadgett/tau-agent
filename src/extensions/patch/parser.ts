@@ -44,29 +44,79 @@ export interface ParsedPatch {
 	totalSections: number;
 }
 
+const BEGIN_PATCH_MARKER = "*** Begin Patch";
+const END_PATCH_MARKER = "*** End Patch";
+const ADD_FILE_MARKER = "*** Add File: ";
+const REPLACE_FILE_MARKER = "*** Replace File: ";
+const DELETE_FILE_MARKER = "*** Delete File: ";
+const UPDATE_FILE_MARKER = "*** Update File: ";
+const MOVE_TO_MARKER = "*** Move to: ";
+const CHANGE_CONTEXT_MARKER = "@@";
+const EOF_MARKER = "*** End of File";
+
 const TOP_LEVEL_BOUNDARIES = [
-	"*** End Patch",
-	"*** Add File: ",
-	"*** Replace File: ",
-	"*** Delete File: ",
-	"*** Update File: ",
+	END_PATCH_MARKER,
+	ADD_FILE_MARKER,
+	REPLACE_FILE_MARKER,
+	DELETE_FILE_MARKER,
+	UPDATE_FILE_MARKER,
 ] as const;
 
-function isTopLevelBoundary(line: string): boolean {
-	return TOP_LEVEL_BOUNDARIES.some((b) => (b === "*** End Patch" ? line === b : line.startsWith(b)));
+function topLevelDirective(line: string): string {
+	return line.trim();
 }
 
-function requirePath(line: string, prefix: string): string {
-	const value = line.slice(prefix.length).trim();
-	if (!value) throw new Error(`Missing path for patch directive: ${line}`);
-	return value;
+function updateDirective(line: string): string {
+	return line.trimEnd();
+}
+
+function isTopLevelBoundary(line: string): boolean {
+	const value = topLevelDirective(line);
+	return TOP_LEVEL_BOUNDARIES.some((b) => (b === END_PATCH_MARKER ? value === b : value.startsWith(b)));
+}
+
+function isUpdateBoundary(line: string): boolean {
+	const value = updateDirective(line);
+	return TOP_LEVEL_BOUNDARIES.some((b) => (b === END_PATCH_MARKER ? value === b : value.startsWith(b)));
+}
+
+function requirePathFromDirective(value: string, originalLine: string, prefix: string): string {
+	const path = value.slice(prefix.length).trim();
+	if (!path) throw new Error(`Missing path for patch directive: ${originalLine}`);
+	return path;
+}
+
+function requireTopLevelPath(line: string, prefix: string): string {
+	return requirePathFromDirective(topLevelDirective(line), line, prefix);
+}
+
+function requireUpdatePath(line: string, prefix: string): string {
+	return requirePathFromDirective(updateDirective(line), line, prefix);
+}
+
+function isUpdateHeader(line: string): boolean {
+	return topLevelDirective(line).startsWith(UPDATE_FILE_MARKER);
+}
+
+function nextSectionBoundary(lines: string[], start: number, updateBody: boolean): number {
+	let index = start;
+	const limit = lines.length - 1;
+	while (index < limit) {
+		const line = lines[index];
+		if (line === undefined) break;
+		if (updateBody ? isUpdateBoundary(line) : isTopLevelBoundary(line)) break;
+		index += 1;
+	}
+	return index;
 }
 
 function parseAddBody(lines: string[], startIndex: number): { content: string; lineCount: number; nextIndex: number } {
 	const body: string[] = [];
 	let index = startIndex;
-	while (index < lines.length && lines[index]!.startsWith("+")) {
-		body.push(lines[index]!.slice(1));
+	while (index < lines.length) {
+		const line = lines[index];
+		if (line === undefined || !line.startsWith("+")) break;
+		body.push(line.slice(1));
 		index += 1;
 	}
 	return {
@@ -120,20 +170,25 @@ function parseUpdateBody(
 	let linesRemoved = 0;
 
 	while (index < lines.length) {
-		const line = lines[index]!;
-		if (isTopLevelBoundary(line)) break;
+		const line = lines[index];
+		if (line === undefined) break;
+		const currentDirective = updateDirective(line);
+		if (isUpdateBoundary(line)) break;
 
-		if (line.startsWith("*** Move to: ")) {
+		if (currentDirective.startsWith(MOVE_TO_MARKER)) {
 			if (sawAnyChunk || current) throw new Error(`Move to must appear before update chunks: ${operationPath}`);
-			movePath = requirePath(line, "*** Move to: ");
+			movePath = requireUpdatePath(line, MOVE_TO_MARKER);
 			index += 1;
 			continue;
 		}
 
-		if (line.startsWith("@@")) {
+		if (currentDirective === CHANGE_CONTEXT_MARKER || currentDirective.startsWith(`${CHANGE_CONTEXT_MARKER} `)) {
 			finalizeChunk(current, chunks, operationPath);
-			const context = line.slice(2).trim();
-			current = createChunk(context.length > 0 ? context : undefined);
+			const context =
+				currentDirective === CHANGE_CONTEXT_MARKER
+					? undefined
+					: currentDirective.slice(CHANGE_CONTEXT_MARKER.length + 1).trim();
+			current = createChunk(context && context.length > 0 ? context : undefined);
 			sawAnyChunk = true;
 			index += 1;
 			continue;
@@ -147,7 +202,7 @@ function parseUpdateBody(
 			sawAnyChunk = true;
 		}
 
-		if (line === "*** End of File") {
+		if (currentDirective === EOF_MARKER) {
 			current.isEndOfFile = true;
 			index += 1;
 			continue;
@@ -173,10 +228,12 @@ function parseUpdateBody(
 function parseSection(sectionLines: string[]): ParsedSection {
 	const header = sectionLines[0] ?? "";
 
-	if (header.startsWith("*** Add File: ") || header.startsWith("*** Replace File: ")) {
-		const isReplace = header.startsWith("*** Replace File: ");
-		const prefix = isReplace ? "*** Replace File: " : "*** Add File: ";
-		const path = requirePath(header, prefix);
+	const headerDirective = topLevelDirective(header);
+
+	if (headerDirective.startsWith(ADD_FILE_MARKER) || headerDirective.startsWith(REPLACE_FILE_MARKER)) {
+		const isReplace = headerDirective.startsWith(REPLACE_FILE_MARKER);
+		const prefix = isReplace ? REPLACE_FILE_MARKER : ADD_FILE_MARKER;
+		const path = requireTopLevelPath(header, prefix);
 		const body = parseAddBody(sectionLines, 1);
 		if (body.nextIndex !== sectionLines.length) {
 			throw new Error(`Malformed ${isReplace ? "Replace" : "Add"} File section: ${path}`);
@@ -184,14 +241,14 @@ function parseSection(sectionLines: string[]): ParsedSection {
 		return { type: isReplace ? "replace" : "add", path, content: body.content, linesAdded: body.lineCount };
 	}
 
-	if (header.startsWith("*** Delete File: ")) {
-		const path = requirePath(header, "*** Delete File: ");
+	if (headerDirective.startsWith(DELETE_FILE_MARKER)) {
+		const path = requireTopLevelPath(header, DELETE_FILE_MARKER);
 		if (sectionLines.length !== 1) throw new Error(`Malformed Delete File section: ${path}`);
 		return { type: "delete", path };
 	}
 
-	if (header.startsWith("*** Update File: ")) {
-		const path = requirePath(header, "*** Update File: ");
+	if (headerDirective.startsWith(UPDATE_FILE_MARKER)) {
+		const path = requireTopLevelPath(header, UPDATE_FILE_MARKER);
 		const updateBody = parseUpdateBody(sectionLines, 1, path);
 		if (updateBody.nextIndex !== sectionLines.length) throw new Error(`Malformed Update File section: ${path}`);
 		return {
@@ -208,17 +265,18 @@ function parseSection(sectionLines: string[]): ParsedSection {
 }
 
 function parseHeaderMetadata(header: string): Pick<PatchFailure, "kind" | "path"> {
-	if (header.startsWith("*** Add File: ") || header.startsWith("*** Replace File: ")) {
+	const headerDirective = topLevelDirective(header);
+	if (headerDirective.startsWith(ADD_FILE_MARKER) || headerDirective.startsWith(REPLACE_FILE_MARKER)) {
 		return {
-			kind: header.startsWith("*** Replace File: ") ? "replace" : "add",
-			path: header.slice(header.indexOf(": ") + 2).trim() || undefined,
+			kind: headerDirective.startsWith(REPLACE_FILE_MARKER) ? "replace" : "add",
+			path: headerDirective.slice(headerDirective.indexOf(": ") + 2).trim() || undefined,
 		};
 	}
-	if (header.startsWith("*** Delete File: ")) {
-		return { kind: "delete", path: header.slice("*** Delete File: ".length).trim() || undefined };
+	if (headerDirective.startsWith(DELETE_FILE_MARKER)) {
+		return { kind: "delete", path: headerDirective.slice(DELETE_FILE_MARKER.length).trim() || undefined };
 	}
-	if (header.startsWith("*** Update File: ")) {
-		return { kind: "update", path: header.slice("*** Update File: ".length).trim() || undefined };
+	if (headerDirective.startsWith(UPDATE_FILE_MARKER)) {
+		return { kind: "update", path: headerDirective.slice(UPDATE_FILE_MARKER.length).trim() || undefined };
 	}
 	return {};
 }
@@ -228,13 +286,14 @@ function envelopeFailure(message: string): ParsedPatch {
 }
 
 export function parsePatch(input: string): ParsedPatch {
-	const normalized = input.replace(/\r\n/g, "\n").trim();
+	const normalized = input.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
 	if (!normalized) return envelopeFailure("Patch must not be empty.");
 
 	const lines = normalized.split("\n");
-	if (lines[0] !== "*** Begin Patch") return envelopeFailure("Patch must start with exactly *** Begin Patch.");
-	if (lines[lines.length - 1] !== "*** End Patch")
-		return envelopeFailure("Patch must end with exactly *** End Patch.");
+	if (topLevelDirective(lines[0] ?? "") !== BEGIN_PATCH_MARKER)
+		return envelopeFailure("Patch must start with *** Begin Patch.");
+	if (topLevelDirective(lines[lines.length - 1] ?? "") !== END_PATCH_MARKER)
+		return envelopeFailure("Patch must end with *** End Patch.");
 
 	const operations: PatchOperation[] = [];
 	const parseFailures: PatchFailure[] = [];
@@ -242,13 +301,15 @@ export function parsePatch(input: string): ParsedPatch {
 	let sectionIndex = 0;
 
 	while (index < lines.length - 1) {
-		const line = lines[index]!;
+		const line = lines[index];
+		if (line === undefined) break;
 		if (line.trim() === "") {
 			index += 1;
 			continue;
 		}
 
-		if (!isTopLevelBoundary(line) || line === "*** End Patch") {
+		const lineDirective = topLevelDirective(line);
+		if (!isTopLevelBoundary(line) || lineDirective === END_PATCH_MARKER) {
 			parseFailures.push({ phase: "parse", sectionIndex, message: `Unexpected patch line: ${line}` });
 			index += 1;
 			continue;
@@ -256,8 +317,7 @@ export function parsePatch(input: string): ParsedPatch {
 
 		sectionIndex += 1;
 		const sectionStart = index;
-		let nextBoundary = index + 1;
-		while (nextBoundary < lines.length && !isTopLevelBoundary(lines[nextBoundary]!)) nextBoundary += 1;
+		const nextBoundary = nextSectionBoundary(lines, index + 1, isUpdateHeader(line));
 
 		const sectionLines = lines.slice(sectionStart, nextBoundary);
 		try {

@@ -16,54 +16,84 @@ interface PreviewOp {
 	linesRemoved: number;
 }
 
+const END_PATCH_MARKER = "*** End Patch";
+const ADD_FILE_MARKER = "*** Add File: ";
+const REPLACE_FILE_MARKER = "*** Replace File: ";
+const DELETE_FILE_MARKER = "*** Delete File: ";
+const UPDATE_FILE_MARKER = "*** Update File: ";
+const MOVE_TO_MARKER = "*** Move to: ";
+
+function topLevelDirective(line: string): string {
+	return line.trim();
+}
+
+function updateDirective(line: string): string {
+	return line.trimEnd();
+}
+
+function pathAfter(value: string, prefix: string): string | undefined {
+	if (!value.startsWith(prefix)) return undefined;
+	const path = value.slice(prefix.length).trim();
+	return path.length > 0 ? path : undefined;
+}
+
+function startPreviewOp(ops: PreviewOp[], kind: PreviewOp["kind"], path: string): PreviewOp {
+	const op = { sectionIndex: ops.length + 1, kind, path, linesAdded: 0, linesRemoved: 0 };
+	ops.push(op);
+	return op;
+}
+
 // Tolerant preview scan — never throws, display-oriented (partial patches during streaming).
 function scanPreview(input: string | undefined): PreviewOp[] {
 	if (typeof input !== "string" || !input) return [];
-	const lines = input.replace(/\r\n/g, "\n").split("\n");
+	const lines = input.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
 	const ops: PreviewOp[] = [];
 	let current: PreviewOp | undefined;
 
 	for (const line of lines) {
-		if (line === "*** End Patch") break;
-		const addMatch = line.match(/^\*\*\* (Add|Replace) File: (.+)$/);
-		if (addMatch) {
-			current = {
-				sectionIndex: ops.length + 1,
-				kind: addMatch[1] === "Replace" ? "replace" : "add",
-				path: addMatch[2]!,
-				linesAdded: 0,
-				linesRemoved: 0,
-			};
-			ops.push(current);
+		const value = current?.kind === "update" ? updateDirective(line) : topLevelDirective(line);
+		if (value === END_PATCH_MARKER) break;
+
+		const addPath = pathAfter(value, ADD_FILE_MARKER);
+		if (addPath !== undefined) {
+			current = startPreviewOp(ops, "add", addPath);
 			continue;
 		}
-		const delMatch = line.match(/^\*\*\* Delete File: (.+)$/);
-		if (delMatch) {
-			current = { sectionIndex: ops.length + 1, kind: "delete", path: delMatch[1]!, linesAdded: 0, linesRemoved: 0 };
-			ops.push(current);
+
+		const replacePath = pathAfter(value, REPLACE_FILE_MARKER);
+		if (replacePath !== undefined) {
+			current = startPreviewOp(ops, "replace", replacePath);
 			continue;
 		}
-		const updMatch = line.match(/^\*\*\* Update File: (.+)$/);
-		if (updMatch) {
-			current = { sectionIndex: ops.length + 1, kind: "update", path: updMatch[1]!, linesAdded: 0, linesRemoved: 0 };
-			ops.push(current);
+
+		const deletePath = pathAfter(value, DELETE_FILE_MARKER);
+		if (deletePath !== undefined) {
+			current = startPreviewOp(ops, "delete", deletePath);
 			continue;
 		}
+
+		const updatePath = pathAfter(value, UPDATE_FILE_MARKER);
+		if (updatePath !== undefined) {
+			current = startPreviewOp(ops, "update", updatePath);
+			continue;
+		}
+
 		if (!current) continue;
 
-		const moveMatch = line.match(/^\*\*\* Move to: (.+)$/);
-		if (moveMatch && current.kind === "update") {
-			current.moveTo = moveMatch[1];
+		if (current.kind === "update") {
+			const movePath = pathAfter(updateDirective(line), MOVE_TO_MARKER);
+			if (movePath !== undefined) {
+				current.moveTo = movePath;
+				continue;
+			}
+			if (line.startsWith("+")) current.linesAdded += 1;
+			else if (line.startsWith("-")) current.linesRemoved += 1;
 			continue;
 		}
 
 		if (current.kind === "add" || current.kind === "replace") {
 			if (line.startsWith("+")) current.linesAdded += 1;
-			continue;
 		}
-		if (current.kind !== "update") continue;
-		if (line.startsWith("+")) current.linesAdded += 1;
-		else if (line.startsWith("-")) current.linesRemoved += 1;
 	}
 
 	return ops;

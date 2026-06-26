@@ -1,0 +1,5 @@
+*** Begin Patch
+*** Update File: remove.txt
+@@
+-delete me
+*** End Patch

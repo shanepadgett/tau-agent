@@ -1,0 +1,6 @@
+*** Begin Patch
+*** Update File: note.txt
+@@
+-old
++new
+*** End Patch

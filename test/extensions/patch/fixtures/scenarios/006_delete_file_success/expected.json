@@ -1,0 +1,7 @@
+{
+	"status": "completed",
+	"changes": [
+		"delete:old.txt"
+	],
+	"failureCount": 0
+}

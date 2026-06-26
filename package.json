@@ -5,6 +5,9 @@
 	"type": "module",
 	"description": "Tau is a custom agentic harness built with pi extensions",
 	"license": "MIT",
+	"scripts": {
+		"test:unit": "vitest --run --reporter=agent"
+	},
 	"pi": {
 		"extensions": [
 			"./src/extensions/*/index.ts"
@@ -32,7 +35,8 @@
 		"@types/node": "22.19.19",
 		"@typescript/native-preview": "7.0.0-dev.20260120.1",
 		"typebox": "1.1.38",
-		"typescript": "5.9.3"
+		"typescript": "5.9.3",
+		"vitest": "4.1.9"
 	},
 	"engines": {
 		"node": ">=22.19.0"

@@ -8,13 +8,9 @@ node = "22.19.0"
 jobs = 1
 task_output = "quiet"
 
-[tasks.check]
-description = "Run Biome, TypeScript, Markdown, and Fallow checks"
-depends = ["check:schema", "check:biome", "check:types", "check:markdown", "check:deadcode"]
-
 [tasks."check:ts"]
 description = "TS and config checks"
-depends = ["check:schema", "check:biome", "check:types", "check:deadcode"]
+depends = ["check:schema", "check:biome", "check:types", "test:unit", "check:deadcode"]
 
 [tasks."check:md"]
 description = "Markdown checks"
@@ -39,6 +35,10 @@ run = "markdownlint-cli2 --fix"
 [tasks."check:types"]
 description = "Run TypeScript checks"
 run = "./node_modules/.bin/tsgo --noEmit"
+
+[tasks."test:unit"]
+description = "Run unit tests"
+run = "npm run test:unit"
 
 [tasks."check:deadcode"]
 description = "Run Fallow dead-code and duplication checks"

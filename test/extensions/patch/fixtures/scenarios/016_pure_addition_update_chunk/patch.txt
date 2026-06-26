@@ -1,0 +1,6 @@
+*** Begin Patch
+*** Update File: append.txt
+@@
++third
++fourth
+*** End Patch

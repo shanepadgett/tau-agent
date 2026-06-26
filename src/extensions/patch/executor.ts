@@ -157,7 +157,6 @@ async function stageUpdate(cwd: string, op: Extract<PatchOperation, { type: "upd
 	const moveTarget = op.movePath ? resolvePath(cwd, op.movePath) : undefined;
 
 	if (!moveTarget || moveTarget === source) {
-		if (next === current) throw new Error("patch produced no changes");
 		return {
 			change: {
 				sectionIndex: op.sectionIndex,
@@ -173,17 +172,19 @@ async function stageUpdate(cwd: string, op: Extract<PatchOperation, { type: "upd
 		};
 	}
 
+	const movePath = op.movePath;
+	if (!movePath) throw new Error("Move target path is missing.");
 	if (await pathExists(moveTarget)) {
 		throw new Error(
-			`move target already exists: ${op.movePath}. Move targets must be unused to avoid overwriting existing files.`,
+			`move target already exists: ${movePath}. Move targets must be unused to avoid overwriting existing files.`,
 		);
 	}
 	return {
 		change: {
 			sectionIndex: op.sectionIndex,
 			kind: "update",
-			path: op.movePath!,
-			move: { from: op.path, to: op.movePath! },
+			path: movePath,
+			move: { from: op.path, to: movePath },
 			linesAdded: op.linesAdded,
 			linesRemoved: op.linesRemoved,
 			snapshotRanges: result?.snapshotRanges,
@@ -215,7 +216,7 @@ function collectDupPathFailures(cwd: string, operations: PatchOperation[]): Patc
 	const failures: PatchFailure[] = [];
 	for (const [canonical, sections] of pathSections) {
 		if (sections.length <= 1) continue;
-		const display = displayPaths.get(canonical)!;
+		const display = displayPaths.get(canonical) ?? canonical;
 		for (const sectionIndex of sections) {
 			failures.push({
 				phase: "apply",

@@ -1,0 +1,9 @@
+{
+	"status": "completed",
+	"changes": [
+		"add:nested/new.txt",
+		"delete:delete.txt",
+		"update:modify.txt"
+	],
+	"failureCount": 0
+}

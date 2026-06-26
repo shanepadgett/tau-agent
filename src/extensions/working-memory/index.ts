@@ -12,6 +12,7 @@ import {
 import type { Component } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { onTauEvent, type TauAgentEvents } from "../../shared/events.js";
+import { type LineRange, mergeLineRanges } from "../../shared/ranges.js";
 
 const SAVINGS_THRESHOLD = 1000;
 const STUB_SUPERSEDED = "[superseded]";
@@ -46,10 +47,7 @@ interface ToolCallInfo {
 	args: Record<string, unknown>;
 }
 
-interface Range {
-	startLine: number;
-	endLine: number;
-}
+interface Range extends LineRange {}
 
 interface ReadEvidence {
 	messageIndex: number;
@@ -965,7 +963,7 @@ function expandRanges(rawRanges: Range[] | undefined, lineCount: number): Range[
 		rawRanges && rawRanges.length > 0
 			? rawRanges
 			: [{ startLine: 1, endLine: Math.min(lineCount, SNAPSHOT_MAX_LINES) }];
-	const expanded = mergeRanges(
+	const expanded = mergeLineRanges(
 		ranges.map((range) => ({
 			startLine: Math.max(1, range.startLine - SNAPSHOT_CONTEXT_LINES),
 			endLine: Math.min(lineCount, range.endLine + SNAPSHOT_CONTEXT_LINES),
@@ -980,22 +978,6 @@ function expandRanges(rawRanges: Range[] | undefined, lineCount: number): Range[
 		remaining -= size;
 	}
 	return result;
-}
-
-function mergeRanges(ranges: Range[]): Range[] {
-	const sorted: Range[] = [];
-	for (const range of ranges) {
-		if (range.startLine > 0 && range.endLine >= range.startLine) sorted.push(range);
-	}
-	sorted.sort((a, b) => a.startLine - b.startLine || a.endLine - b.endLine);
-	const merged: Range[] = [];
-	for (const range of sorted) {
-		const previous = merged[merged.length - 1];
-		if (previous && range.startLine <= previous.endLine + 3)
-			previous.endLine = Math.max(previous.endLine, range.endLine);
-		else merged.push({ ...range });
-	}
-	return merged;
 }
 
 function splitLines(text: string): string[] {

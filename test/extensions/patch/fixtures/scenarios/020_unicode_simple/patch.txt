@@ -1,0 +1,6 @@
+*** Begin Patch
+*** Update File: unicode.txt
+@@
+-café
++こんにちは
+*** End Patch
