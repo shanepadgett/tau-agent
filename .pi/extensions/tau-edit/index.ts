@@ -84,7 +84,7 @@ async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void
 
 	const context = await buildContext(ctx.cwd, selected);
 	const deliverAs = ctx.isIdle() ? undefined : "followUp";
-	emitTauEvent(pi, "tau:context.snapshot", {
+	await emitTauEvent(pi, "tau:context.snapshot", {
 		source: "tau-edit",
 		title: "Tau edit context",
 		cwd: ctx.cwd,

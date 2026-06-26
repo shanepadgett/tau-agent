@@ -42,25 +42,52 @@ export interface TauFooterItem {
 }
 
 type EventAPI = Pick<ExtensionAPI, "events">;
+type TauEventHandler<Name extends keyof TauAgentEvents> = (data: TauAgentEvents[Name]) => void | Promise<void>;
 
-export function emitTauEvent<Name extends keyof TauAgentEvents>(
+const handlersByApi = new WeakMap<EventAPI, Map<keyof TauAgentEvents, Set<TauEventHandler<keyof TauAgentEvents>>>>();
+
+export async function emitTauEvent<Name extends keyof TauAgentEvents>(
 	pi: EventAPI,
 	name: Name,
 	data: TauAgentEvents[Name],
-): void {
+): Promise<void> {
 	pi.events.emit(name, data);
+	const handlers = handlersByApi.get(pi)?.get(name);
+	if (!handlers) return;
+	await Promise.all(
+		[...handlers].map(async (handler) => {
+			try {
+				await handler(data);
+			} catch (error) {
+				console.error(`Event handler error (${name}):`, error);
+			}
+		}),
+	);
 }
 
 export function onTauEvent<Name extends keyof TauAgentEvents>(
 	pi: EventAPI,
 	name: Name,
-	handler: (data: TauAgentEvents[Name]) => void,
+	handler: TauEventHandler<Name>,
 ): () => void {
-	return pi.events.on(name, (data) => {
-		handler(data as TauAgentEvents[Name]);
-	});
+	let handlersByName = handlersByApi.get(pi);
+	if (!handlersByName) {
+		handlersByName = new Map();
+		handlersByApi.set(pi, handlersByName);
+	}
+	let handlers = handlersByName.get(name);
+	if (!handlers) {
+		handlers = new Set();
+		handlersByName.set(name, handlers);
+	}
+	const storedHandler = handler as TauEventHandler<keyof TauAgentEvents>;
+	handlers.add(storedHandler);
+	return () => {
+		handlers?.delete(storedHandler);
+		if (handlers?.size === 0) handlersByName.delete(name);
+	};
 }
 
 export function setTauFooterItem(pi: EventAPI, item: TauFooterItem): void {
-	emitTauEvent(pi, "tau:footer-item", item);
+	void emitTauEvent(pi, "tau:footer-item", item);
 }

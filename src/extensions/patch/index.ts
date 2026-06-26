@@ -154,11 +154,11 @@ export default function patchExtension(pi: ExtensionAPI): void {
 
 	// AgentToolResult has no isError field, so execute returns are always treated as success.
 	// Override via tool_result to flag partial/failed patches as errors for the model and UI.
-	pi.on("tool_result", (event, ctx) => {
+	pi.on("tool_result", async (event, ctx) => {
 		if (event.toolName !== "patch") return;
 		const summary = event.details as ApplyPatchSummary | undefined;
 		if (summary) {
-			emitTauEvent(pi, "tau:file-mutation.applied", {
+			await emitTauEvent(pi, "tau:file-mutation.applied", {
 				source: "patch",
 				toolCallId: event.toolCallId,
 				cwd: ctx.cwd,

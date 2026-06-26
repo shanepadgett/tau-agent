@@ -1,16 +1,14 @@
 # Working Memory
 
-Working Memory keeps outbound model context smaller by replacing old tool evidence with tiny stubs while leaving raw session history intact.
+Working Memory keeps the model focused on current task evidence while raw session history stays intact.
 
-Use `forget` when exploration produced large reads or grep output and the remaining facts fit in a short checkpoint. If a read file is irrelevant and automatic stubbing will not remove it, forget it and put the discard reason in `keep` once. Old outputs stay as tiny stubs.
+It nudges the agent to search first, then read relevant repo-owned work files as whole files. Partial reads still exist for huge files, dependencies, generated/vendor files, and external docs.
 
-Automatic stubbing is deterministic and branch-local:
+After successful mutations, Working Memory adds current evidence before later reasoning:
 
-- broad reads become `[superseded]` after narrower reads cover the needed range
-- reads become `[stale]` after later file mutations touch that path
-- grep output becomes `[superseded]` after every matched file is read later, when stubbing saves enough context
-- patch input/results become `[superseded]` after compact per-file patch snapshots exist
+- `reread <path>` for relevant changed files, with full current file content
+- `path update` for creates, moves, deletes, and skipped rereads such as ignored, excluded, dependency, or too-large files
 
-Tiny grep results may stay visible because replacing them would not save enough context.
+Use `forget` when exploration turns out irrelevant. Keep one short checkpoint and, for forgotten paths, include a concrete “only reread if ...” condition.
 
 Reload Tau after changing extension code before testing it.

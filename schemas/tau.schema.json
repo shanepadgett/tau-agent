@@ -159,6 +159,19 @@
 						}
 					},
 					"additionalProperties": false
+				},
+				"working-memory": {
+					"type": "object",
+					"properties": {
+						"excludedPaths": {
+							"type": "array",
+							"items": {
+								"type": "string",
+								"description": "Paths or simple globs excluded from automatic working-memory rereads."
+							}
+						}
+					},
+					"additionalProperties": false
 				}
 			},
 			"additionalProperties": true,
