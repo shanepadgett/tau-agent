@@ -198,7 +198,7 @@ function normalizeSettings(value: typeof silentCommandRunnerSettings.defaults): 
 function formatSilentCheckPrompt(commands: readonly CommandConfig[]): string {
 	return [
 		"Silent checks active: these configured commands run automatically after matching file changes.",
-		"Do not manually run these commands after edits. Not for verification, not as a cheap confidence check, not before saying you're done. The silent runner will run them. Wait for silent-command-runner output; if one fails, fix the reported output. No rerun automatic checks manually after fixing failures. silent-command-runner runs them again. Only run a manual command when the user explicitly asks or when you need a different narrow diagnostic that is not one of these automatic commands.",
+		"Never manually run these commands after edits. If you run one, the session will be quit. Not for verification, not as a cheap confidence check, not before saying you're done, not after fixing a failure. The silent runner will run them. Wait for silent-command-runner output; if one fails, fix only the reported output, then wait again. Only run a manual command when the user explicitly asks or when you need a different narrow diagnostic that is not one of these automatic commands.",
 		"Automatic commands:",
 		...commands.map(formatSilentCheckCommand),
 	].join("\n");
