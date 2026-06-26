@@ -10,6 +10,9 @@
 - Keep Tau extension README files product-level: what it is, why it exists, and how users invoke it. Do not update READMEs for minor/internal changes unless the user-facing feature description materially changes. No implementation details unless explicitly asked.
 - Use strict TypeScript and erasable syntax only.
 - No `any` unless necessary.
+- Do not use TypeScript non-null assertions (`!`). Model the type correctly, narrow explicitly, or fix the boundary.
+- Do not add optional properties, parameters, or branches for hypothetical future callers.
+- Make required state explicit unless the domain is actually optional.
 - Use top-level imports only; avoid dynamic inline imports.
 - Inline single-use helpers unless extracting them clearly improves readability.
 - For external APIs, check installed types or docs only when current context does not already include the needed API details.

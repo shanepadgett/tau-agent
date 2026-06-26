@@ -1,7 +1,11 @@
 {
   "packages": [
     {
-      "source": ".."
+      "source": "..",
+      "extensions": [
+        "-src/extensions/working-memory/index.ts",
+        "-src/extensions/patch/index.ts"
+      ]
     },
     {
       "source": "git:github.com/shanepadgett/crumbs",
