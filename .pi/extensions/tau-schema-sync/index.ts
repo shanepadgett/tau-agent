@@ -10,10 +10,9 @@ const execFileAsync = promisify(execFile);
 const SETTINGS_ROOT = join("src", "extensions");
 const GENERATOR = join("scripts", "generate-tau-schema.ts");
 const SETTINGS_PROMPT = [
-	"Tau settings schemas are discovered only from extension-local settings files.",
-	"When adding or changing Tau extension settings, put the spec at src/extensions/<extension>/settings.ts next to that extension's index.ts.",
-	"Do not put Tau extension settings under src/shared; the schema sync watcher and generator won't treat that as an extension settings file.",
-	"Do not manually edit schemas/tau.schema.json. Change the extension settings.ts spec and let tau-schema-sync or mise run generate-schema update the schema.",
+	"Tau settings: src/extensions/<extension>/settings.ts only, next to index.ts. Not src/shared.",
+	"Never edit schemas/tau.schema.json manually; tau-schema-sync regenerates it after settings.ts tool results.",
+	"Do not write settings.ts and read schemas/tau.schema.json in same parallel tool batch; read schema only in a later tool call.",
 ].join("\n");
 
 type Hashes = Map<string, string>;
@@ -33,7 +32,7 @@ export default function tauSchemaSync(pi: ExtensionAPI): void {
 			.join("\n\n");
 	});
 
-	pi.on("turn_end", async (_event, ctx) => {
+	pi.on("tool_result", async (_event, ctx) => {
 		const next = await hashSettingsFiles(ctx.cwd);
 		if (baseline && sameHashes(baseline, next)) return;
 
