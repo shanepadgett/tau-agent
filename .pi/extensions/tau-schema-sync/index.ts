@@ -27,9 +27,13 @@ export default function tauSchemaSync(pi: ExtensionAPI): void {
 	});
 
 	pi.on("before_agent_start", (event) => {
-		event.systemPromptOptions.appendSystemPrompt = [event.systemPromptOptions.appendSystemPrompt, SETTINGS_PROMPT]
-			.filter(Boolean)
-			.join("\n\n");
+		const promptGuidelines = event.systemPromptOptions.promptGuidelines ?? [];
+		event.systemPromptOptions.promptGuidelines = promptGuidelines;
+		for (const guideline of SETTINGS_PROMPT.split("\n")) {
+			if (!promptGuidelines.includes(guideline)) promptGuidelines.push(guideline);
+		}
+
+		return { systemPrompt: `${event.systemPrompt}\n\n${SETTINGS_PROMPT}` };
 	});
 
 	pi.on("tool_result", async (_event, ctx) => {

@@ -86,10 +86,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 
 	pi.on("before_agent_start", (event) => {
 		if (!settings.enabled || settings.commands.length === 0) return;
-		const existing = event.systemPromptOptions.appendSystemPrompt;
-		event.systemPromptOptions.appendSystemPrompt = [existing, formatSilentCheckPrompt(settings.commands)]
-			.filter(Boolean)
-			.join("\n\n");
+		return { systemPrompt: `${event.systemPrompt}\n\n${formatSilentCheckPrompt(settings.commands)}` };
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
