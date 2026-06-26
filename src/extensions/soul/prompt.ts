@@ -64,7 +64,6 @@ export function buildRokPrompt(options: BuildSystemPromptOptions, runtimeContext
 	const tools = options.selectedTools ?? DEFAULT_TOOLS;
 	const prompt = [
 		ROK_CORE_PROMPT,
-		formatRuntimeContext(runtimeContext),
 		`Available tools:\n${formatToolList(tools, options.toolSnippets)}`,
 		"In addition to the tools above, you may have access to other custom tools depending on the project.",
 		`Guidelines:\n${formatGuidelines(options.promptGuidelines)}`,
@@ -79,6 +78,7 @@ export function buildRokPrompt(options: BuildSystemPromptOptions, runtimeContext
 
 	const skills = formatSkillsForPrompt(options.skills ?? []).trim();
 	if (skills) prompt.push(skills);
+	prompt.push(formatRuntimeContext(runtimeContext));
 
 	return prompt.join("\n\n");
 }

@@ -86,7 +86,9 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 
 	pi.on("before_agent_start", (event) => {
 		if (!settings.enabled || settings.commands.length === 0) return;
-		return { systemPrompt: `${event.systemPrompt}\n\n${formatSilentCheckPrompt(settings.commands)}` };
+		const prompt = formatSilentCheckPrompt(settings.commands);
+		event.systemPromptOptions.appendSystemPrompt = appendPrompt(event.systemPromptOptions.appendSystemPrompt, prompt);
+		return { systemPrompt: `${event.systemPrompt}\n\n${prompt}` };
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
@@ -197,11 +199,15 @@ function normalizeSettings(value: typeof silentCommandRunnerSettings.defaults): 
 
 function formatSilentCheckPrompt(commands: readonly CommandConfig[]): string {
 	return [
-		"Silent checks active: these configured commands run automatically after matching file changes.",
-		"Never manually run these commands after edits. If you run one, the session will be quit. Not for verification, not as a cheap confidence check, not before saying you're done, not after fixing a failure. The silent runner will run them. Wait for silent-command-runner output; if one fails, fix only the reported output, then wait again. Only run a manual command when the user explicitly asks or when you need a different narrow diagnostic that is not one of these automatic commands.",
+		"Silent checks run automatically after your turn when matching files change.",
+		"Do not run these commands yourself for verification. Finish your response normally; if a silent check fails, you will be notified. No need to wait on output or comment about checks.",
 		"Automatic commands:",
 		...commands.map(formatSilentCheckCommand),
 	].join("\n");
+}
+
+function appendPrompt(current: string | undefined, prompt: string): string {
+	return current ? `${current}\n\n${prompt}` : prompt;
 }
 
 function formatSilentCheckCommand(command: CommandConfig): string {
