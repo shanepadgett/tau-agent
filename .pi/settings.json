@@ -10,7 +10,6 @@
     {
       "source": "git:github.com/shanepadgett/crumbs",
       "extensions": [
-        "-extensions/caveman/index.ts",
         "-extensions/codex-compat/index.ts",
         "-extensions/commit/index.ts",
         "-extensions/cost-report/index.ts",
@@ -22,7 +21,8 @@
         "-extensions/repo-scaffold/index.ts",
         "-extensions/skills-manager/index.ts",
         "-extensions/status-line/index.ts",
-        "-extensions/terminal-clear/index.ts"
+        "-extensions/terminal-clear/index.ts",
+        "+extensions/caveman/index.ts"
       ],
       "skills": [
         "-skills/html-artifact/SKILL.md",
@@ -31,9 +31,9 @@
         "-skills/refactor-opportunities/SKILL.md",
         "-skills/repo-founder/SKILL.md",
         "-skills/nuclear-review/SKILL.md",
-        "-skills/caveman-ify/SKILL.md",
-        "-skills/grill-me/SKILL.md",
-        "-skills/writing-preferences/SKILL.md"
+        "+skills/caveman-ify/SKILL.md",
+        "+skills/grill-me/SKILL.md",
+        "+skills/writing-preferences/SKILL.md"
       ],
       "themes": [
         "-themes/nord-wave.json"
