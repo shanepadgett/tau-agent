@@ -27,8 +27,8 @@ Takes effect on session start.
 
 Bare command toggles that guide for the current branch.
 
-- inactive -> `<verb> enabled`
-- active -> `<verb> disabled`
+- inactive -> `Planning enabled` (or matching guide)
+- active -> `Planning disabled` (or matching guide)
 
 Only one guide is active on a branch. Prompted commands enable or keep the guide, then submit the prompt. They do not toggle off.
 

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ExtensionAPI, ExtensionCommandContext, SessionEntry } from "@earendil-works/pi-coding-agent";
+import { truncateToWidth } from "@earendil-works/pi-tui";
 
 const ROK_GUIDE_MESSAGE_TYPE = "tau:soul.guide";
 const ROK_GUIDE_MARKER_TYPE = "tau:soul.marker";
@@ -14,28 +15,30 @@ export interface GuideDefinition {
 	text: string;
 }
 
-interface GuideDetails extends GuideMarkerSource {
+interface GuideDetails {
 	guideId: string;
-}
-
-interface GuideMarkerSource {
 	guideKind: string;
 	verb: string;
-}
-
-interface GuideMarkerDetails extends GuideMarkerSource {
-	action: MarkerAction;
-	modelContext: false;
 }
 
 interface GuideControl {
 	action: "disable";
 	guideId: string;
-	guideKind: string;
 }
 
 export interface ActiveGuide extends GuideDetails {
 	content: string;
+}
+
+export function registerGuideMessageRenderers(pi: ExtensionAPI): void {
+	pi.registerMessageRenderer(ROK_GUIDE_MARKER_TYPE, (message, _options, theme) => {
+		if (typeof message.content !== "string") return undefined;
+		const label = `${message.content.slice(0, 1).toUpperCase()}${message.content.slice(1)}`;
+		return {
+			render: (width) => [truncateToWidth(theme.bold(label), width)],
+			invalidate: () => {},
+		};
+	});
 }
 
 export function registerGuideCommands(
@@ -107,14 +110,14 @@ async function runGuideCommand(
 
 	if (!prompt && active?.guideKind === target.kind) {
 		appendDisable(pi, active);
-		appendMarker(pi, active, "disabled");
+		appendMarker(pi, active.verb, "disabled");
 		updateFooter(undefined);
 		return;
 	}
 
 	if (active && active.guideKind !== target.kind) {
 		appendDisable(pi, active);
-		appendMarker(pi, active, "disabled");
+		appendMarker(pi, active.verb, "disabled");
 	}
 
 	if (active?.guideKind !== target.kind) {
@@ -124,27 +127,21 @@ async function runGuideCommand(
 			display: false,
 			details: { guideId: randomUUID(), guideKind: target.kind, verb: target.verb },
 		});
-		appendMarker(pi, { guideKind: target.kind, verb: target.verb }, "enabled");
+		appendMarker(pi, target.verb, "enabled");
 	}
 	updateFooter(target.verb);
 
 	if (prompt) pi.sendUserMessage(prompt, ctx.isIdle() ? undefined : { deliverAs: "followUp" });
 }
 
-function appendMarker(pi: ExtensionAPI, source: GuideMarkerSource, action: MarkerAction): void {
-	pi.sendMessage<GuideMarkerDetails>({
-		customType: ROK_GUIDE_MARKER_TYPE,
-		content: `${source.verb} ${action}`,
-		display: true,
-		details: { ...source, action, modelContext: false },
-	});
+function appendMarker(pi: ExtensionAPI, verb: string, action: MarkerAction): void {
+	pi.sendMessage({ customType: ROK_GUIDE_MARKER_TYPE, content: `${verb} ${action}`, display: true });
 }
 
 function appendDisable(pi: ExtensionAPI, active: ActiveGuide): void {
 	pi.appendEntry<GuideControl>(ROK_GUIDE_CONTROL_TYPE, {
 		action: "disable",
 		guideId: active.guideId,
-		guideKind: active.guideKind,
 	});
 }
 
@@ -162,6 +159,5 @@ function readGuideControl(value: unknown): GuideControl | undefined {
 	const record = value as Record<string, unknown>;
 	if (record.action !== "disable") return undefined;
 	if (typeof record.guideId !== "string") return undefined;
-	if (typeof record.guideKind !== "string") return undefined;
-	return { action: "disable", guideId: record.guideId, guideKind: record.guideKind };
+	return { action: "disable", guideId: record.guideId };
 }

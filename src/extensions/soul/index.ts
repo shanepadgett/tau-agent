@@ -1,7 +1,13 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { setTauFooterItem } from "../../shared/events.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
-import { deriveActiveGuide, filterGuideMessages, guides, registerGuideCommands } from "./guides/index.ts";
+import {
+	deriveActiveGuide,
+	filterGuideMessages,
+	guides,
+	registerGuideCommands,
+	registerGuideMessageRenderers,
+} from "./guides/index.ts";
 import { buildRokPrompt, freezeRuntimeContext, type RuntimeContext } from "./prompt.ts";
 import soulSettings from "./settings.ts";
 
@@ -39,6 +45,7 @@ export default function soulExtension(pi: ExtensionAPI): void {
 		() => enabled,
 		(verb) => updateFooter(pi, verb),
 	);
+	registerGuideMessageRenderers(pi);
 }
 
 function updateFooter(pi: ExtensionAPI, verb: string | undefined): void {
