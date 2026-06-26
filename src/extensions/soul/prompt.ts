@@ -137,7 +137,7 @@ function formatProjectContext(contextFiles: readonly { path: string; content: st
 	return [
 		"<project_context>",
 		"",
-		"Project-specific instructions and guidelines:",
+		"Project-specific instructions and modelines:",
 		"",
 		...contextFiles.map(
 			({ path, content }) => `<project_instructions path="${path}">\n${content}\n</project_instructions>`,

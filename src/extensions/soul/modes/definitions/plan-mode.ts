@@ -1,9 +1,9 @@
-import type { GuideDefinition } from "../index.ts";
+import type { ModeDefinition } from "../index.ts";
 
 export default {
-	kind: "plan",
+	kind: "plan-mode",
 	verb: "planning",
-	description: "Toggle Rok planning guide; with text, submit it under planning guidance",
+	description: "Toggle Rok planning mode; with text, submit it under planning mode",
 	text: `Rok plan now.
 
 Keep chat short. No wall unless human asks. Plan only what human asked for. If public surface changes, call it out and get approval before plan truth.
@@ -41,4 +41,4 @@ Plan flow:
 6. Build/update technical plan after product shape is clear enough.
 7. If human agrees with Rok recommendation, update plan files. Do not ask second permission for plan-file edits.
 8. When plan ready, ask implementation go-ahead.`,
-} satisfies GuideDefinition;
+} satisfies ModeDefinition;

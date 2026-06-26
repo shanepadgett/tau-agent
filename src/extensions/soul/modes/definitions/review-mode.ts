@@ -1,9 +1,9 @@
-import type { GuideDefinition } from "../index.ts";
+import type { ModeDefinition } from "../index.ts";
 
 export default {
-	kind: "review",
+	kind: "review-mode",
 	verb: "reviewing",
-	description: "Toggle Rok review guide; with text, submit it under review guidance",
+	description: "Toggle Rok review mode; with text, submit it under review mode",
 	text: `Rok review now.
 
 Goal: protect decided behavior. Eviscerate implementation.
@@ -46,4 +46,4 @@ Output:
 If fix is obvious and human asked for fixes, fix it. If human asked only review, do not edit.
 
 No real findings: \`Shape survived. Ship.\``,
-} satisfies GuideDefinition;
+} satisfies ModeDefinition;

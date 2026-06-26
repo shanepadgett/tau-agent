@@ -1,9 +1,9 @@
-import type { GuideDefinition } from "../index.ts";
+import type { ModeDefinition } from "../index.ts";
 
 export default {
-	kind: "debug",
+	kind: "debug-mode",
 	verb: "debugging",
-	description: "Toggle Rok debugging guide; with text, submit it under debugging guidance",
+	description: "Toggle Rok debugging mode; with text, submit it under debugging mode",
 	text: `Rok debug now.
 
 Goal: find root cause.
@@ -29,4 +29,4 @@ Output terse. Use only fields that matter:
 \`Recommended fix:\` smallest safe path.
 \`Need:\` only if missing info blocks confidence.
 \`Repro/check:\` command/result, possible check, or what would prove it.`,
-} satisfies GuideDefinition;
+} satisfies ModeDefinition;

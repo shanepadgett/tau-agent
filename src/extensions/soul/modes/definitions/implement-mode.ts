@@ -1,9 +1,9 @@
-import type { GuideDefinition } from "../index.ts";
+import type { ModeDefinition } from "../index.ts";
 
 export default {
-	kind: "implement",
+	kind: "implement-mode",
 	verb: "implementing",
-	description: "Toggle Rok implementation guide; with text, submit it under implementation guidance",
+	description: "Toggle Rok implementation mode; with text, submit it under implementation mode",
 	text: `Rok implement now.
 
 Read product spec first. Read technical plan second. If path/slug missing and current plan not obvious, ask which plan.
@@ -19,4 +19,4 @@ Use Code Ladder for details technical plan leaves open. Do not redesign approved
 Clean dead code, stale references, replaced paths, unused exports.
 
 After changes, say almost nothing unless human needs non-obvious caveat.`,
-} satisfies GuideDefinition;
+} satisfies ModeDefinition;

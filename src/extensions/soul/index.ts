@@ -2,16 +2,16 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { setTauFooterItem } from "../../shared/events.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import {
-	deriveActiveGuide,
-	filterGuideMessages,
-	guides,
-	registerGuideCommands,
-	registerGuideMessageRenderers,
-} from "./guides/index.ts";
+	deriveActiveMode,
+	filterModeMessages,
+	modes,
+	registerModeCommands,
+	registerModeMessageRenderers,
+} from "./modes/index.ts";
 import { buildRokPrompt, freezeRuntimeContext, type RuntimeContext } from "./prompt.ts";
 import soulSettings from "./settings.ts";
 
-const FOOTER_ID = "tau-soul-guide";
+const FOOTER_ID = "tau-soul-mode";
 
 export default function soulExtension(pi: ExtensionAPI): void {
 	let enabled = true;
@@ -20,11 +20,11 @@ export default function soulExtension(pi: ExtensionAPI): void {
 	pi.on("session_start", async (_event, ctx) => {
 		enabled = (await loadTauExtensionSettings(ctx, soulSettings)).enabled;
 		runtimeContext = freezeRuntimeContext(ctx.cwd);
-		updateFooter(pi, enabled ? deriveActiveGuide(ctx.sessionManager.getBranch())?.verb : undefined);
+		updateFooter(pi, enabled ? deriveActiveMode(ctx.sessionManager.getBranch())?.verb : undefined);
 	});
 
 	pi.on("session_tree", (_event, ctx) => {
-		updateFooter(pi, enabled ? deriveActiveGuide(ctx.sessionManager.getBranch())?.verb : undefined);
+		updateFooter(pi, enabled ? deriveActiveMode(ctx.sessionManager.getBranch())?.verb : undefined);
 	});
 
 	pi.on("before_agent_start", (event, ctx) => {
@@ -35,17 +35,17 @@ export default function soulExtension(pi: ExtensionAPI): void {
 
 	pi.on("context", (event, ctx) => {
 		if (!enabled) return undefined;
-		const active = deriveActiveGuide(ctx.sessionManager.getBranch());
-		return { messages: filterGuideMessages(event.messages, active) };
+		const active = deriveActiveMode(ctx.sessionManager.getBranch());
+		return { messages: filterModeMessages(event.messages, active) };
 	});
 
-	registerGuideCommands(
+	registerModeCommands(
 		pi,
-		guides,
+		modes,
 		() => enabled,
 		(verb) => updateFooter(pi, verb),
 	);
-	registerGuideMessageRenderers(pi);
+	registerModeMessageRenderers(pi);
 }
 
 function updateFooter(pi: ExtensionAPI, verb: string | undefined): void {
