@@ -40,7 +40,7 @@ const TAB_LABELS: Record<ResourceKind, string> = {
 
 export default function tauEdit(pi: ExtensionAPI): void {
 	pi.registerCommand("tau-edit", {
-		description: "Pick Tau resources and inject their files as working-memory snapshots",
+		description: "Pick Tau resources and inject their files as search memory snapshots",
 		handler: async (_args, ctx) => run(pi, ctx),
 	});
 }
@@ -198,7 +198,7 @@ function buildMessage(
 	return [
 		"# /tau-edit request",
 		"",
-		"Selected Tau resource files are injected as working-memory snapshots. Treat those snapshot contents as current and authoritative. Do not reread snapshotted files unless you edited them, the user says they changed, or needed content is missing from context.",
+		"Selected Tau resource files are injected as search memory snapshots. Treat those snapshot contents as current and authoritative. Do not reread snapshotted files unless you edited them, the user says they changed, or needed content is missing from context.",
 		"",
 		"Root/shared files are listed as file names only. Read them only when this request directly requires their contents; do not read them for discovery.",
 		"",

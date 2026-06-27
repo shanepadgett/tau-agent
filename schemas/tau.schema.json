@@ -62,6 +62,23 @@
 					},
 					"additionalProperties": false
 				},
+				"search": {
+					"type": "object",
+					"properties": {
+						"workingMemory": {
+							"type": "boolean",
+							"description": "Enable search working-memory pruning and forget."
+						},
+						"excludedPaths": {
+							"type": "array",
+							"items": {
+								"type": "string",
+								"description": "Paths or simple globs excluded from automatic search auto reads."
+							}
+						}
+					},
+					"additionalProperties": false
+				},
 				"silentCommandRunner": {
 					"type": "object",
 					"properties": {
@@ -156,19 +173,6 @@
 							"type": "boolean",
 							"default": true,
 							"description": "Enable Tau's Rok system prompt and slash-command modes."
-						}
-					},
-					"additionalProperties": false
-				},
-				"working-memory": {
-					"type": "object",
-					"properties": {
-						"excludedPaths": {
-							"type": "array",
-							"items": {
-								"type": "string",
-								"description": "Paths or simple globs excluded from automatic working-memory rereads."
-							}
 						}
 					},
 					"additionalProperties": false

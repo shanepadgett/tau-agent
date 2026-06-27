@@ -4,8 +4,8 @@
 		"soul": {
 			"enabled": true
 		},
-		"footer": {
-			"enabled": true
+		"search": {
+			"workingMemory": false
 		},
 		"reference": {
 			"editor": "code"
@@ -15,7 +15,7 @@
 				{
 					"name": "ts-check",
 					"command": "mise run check:ts",
-					"details": "Runs Tau schema drift check, Biome formatting/lint, TypeScript checks, unit tests, and Fallow dead-code/duplication checks.",
+					"details": "Runs Tau schema drift check, Biome formatting/lint, TypeScript (tsc) checks, unit tests, and Fallow dead-code/duplication checks.",
 					"includeGlobs": [
 						"src/**/*.ts",
 						".pi/extensions/**/*.ts",

@@ -43,8 +43,12 @@ export interface TauFooterItem {
 
 type EventAPI = Pick<ExtensionAPI, "events">;
 type TauEventHandler<Name extends keyof TauAgentEvents> = (data: TauAgentEvents[Name]) => void | Promise<void>;
+type HandlerStore = WeakMap<EventAPI["events"], Map<keyof TauAgentEvents, Set<TauEventHandler<keyof TauAgentEvents>>>>;
+type TauEventGlobal = typeof globalThis & { __tauAgentEventHandlers?: HandlerStore };
 
-const handlersByApi = new WeakMap<EventAPI, Map<keyof TauAgentEvents, Set<TauEventHandler<keyof TauAgentEvents>>>>();
+const tauEventGlobal = globalThis as TauEventGlobal;
+if (!tauEventGlobal.__tauAgentEventHandlers) tauEventGlobal.__tauAgentEventHandlers = new WeakMap();
+const handlersByBus: HandlerStore = tauEventGlobal.__tauAgentEventHandlers;
 
 export async function emitTauEvent<Name extends keyof TauAgentEvents>(
 	pi: EventAPI,
@@ -52,7 +56,7 @@ export async function emitTauEvent<Name extends keyof TauAgentEvents>(
 	data: TauAgentEvents[Name],
 ): Promise<void> {
 	pi.events.emit(name, data);
-	const handlers = handlersByApi.get(pi)?.get(name);
+	const handlers = handlersByBus.get(pi.events)?.get(name);
 	if (!handlers) return;
 	await Promise.all(
 		[...handlers].map(async (handler) => {
@@ -70,10 +74,10 @@ export function onTauEvent<Name extends keyof TauAgentEvents>(
 	name: Name,
 	handler: TauEventHandler<Name>,
 ): () => void {
-	let handlersByName = handlersByApi.get(pi);
+	let handlersByName = handlersByBus.get(pi.events);
 	if (!handlersByName) {
 		handlersByName = new Map();
-		handlersByApi.set(pi, handlersByName);
+		handlersByBus.set(pi.events, handlersByName);
 	}
 	let handlers = handlersByName.get(name);
 	if (!handlers) {

@@ -4,7 +4,8 @@
       "source": "..",
       "extensions": [
         "+src/extensions/patch/index.ts",
-        "-src/extensions/working-memory/index.ts"
+        "-src/extensions/working-memory/index.ts",
+        "+src/extensions/search/index.ts"
       ]
     },
     "npm:pi-cache-graph"

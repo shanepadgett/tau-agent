@@ -50,7 +50,7 @@ Compute cheap signals from the current outbound message list:
 - count tool calls since the last assistant text-only response
 - detect large single outputs
 
-Do not parse tool semantics. Do not decide what is stale. That belongs to `working-memory`.
+Do not parse tool semantics. Do not decide what is stale. That belongs to search working memory.
 
 Guidance examples:
 
