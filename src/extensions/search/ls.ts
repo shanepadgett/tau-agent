@@ -1,7 +1,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { defineTool, type ExtensionAPI, type Theme } from "@earendil-works/pi-coding-agent";
-import { type Component, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { type Component, Text, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
 import { withSearchEvidence } from "./evidence.ts";
 import { displayPath, fairShares, gitIgnored, hasNoisePart, isHiddenPath, resolveSearchPath } from "./path-utils.ts";
@@ -57,6 +57,11 @@ export function registerLsTool(pi: ExtensionAPI, renderState: SearchRenderState)
 			},
 			renderCall(args, theme, context) {
 				return new LsCall(args, theme, context.toolCallId, renderState);
+			},
+			renderResult(result, { expanded }, _theme, context) {
+				const text = context.lastComponent instanceof Text ? context.lastComponent : new Text("", 0, 0);
+				text.setText(expanded ? textContent(result.content) : "");
+				return text;
 			},
 		}),
 	);
@@ -176,9 +181,20 @@ class LsCall implements Component {
 	render(width: number): string[] {
 		const paths = Array.isArray(this.args.paths) ? this.args.paths : ["."];
 		return wrapTextWithAnsi(
-			`${toolHeader(this.theme, "ls")}${formatStatus(this.theme, this.state, this.toolCallId)} ${this.theme.fg("muted", `${paths.join(",")} depth=${this.args.depth ?? 1} limit=${this.args.limit ?? 100}`)}`,
+			`${toolHeader(this.theme, "ls")}${formatStatus(this.theme, this.state, this.toolCallId)} ${this.theme.fg("muted", `${paths.join(", ")} depth=${this.args.depth ?? 1} limit=${this.args.limit ?? 100}`)}`,
 			width,
 		);
 	}
 	invalidate(): void {}
+}
+
+function textContent(content: readonly { type: string }[]): string {
+	for (const item of content) {
+		if (isTextContent(item)) return item.text;
+	}
+	return "";
+}
+
+function isTextContent(content: { type: string }): content is { type: "text"; text: string } {
+	return content.type === "text" && "text" in content && typeof content.text === "string";
 }

@@ -1,6 +1,6 @@
 import { basename, dirname } from "node:path";
 import { defineTool, type ExtensionAPI, type Theme } from "@earendil-works/pi-coding-agent";
-import { type Component, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { type Component, Text, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
 import { type SearchEvidenceDetails, withSearchEvidence } from "./evidence.ts";
 import { fairShares, matchesGlob } from "./path-utils.ts";
@@ -86,6 +86,11 @@ export function registerFindTool(pi: ExtensionAPI, renderState: SearchRenderStat
 			renderCall(args, theme, context) {
 				return new FindCall(args, theme, context.toolCallId, renderState);
 			},
+			renderResult(result, { expanded }, _theme, context) {
+				const text = context.lastComponent instanceof Text ? context.lastComponent : new Text("", 0, 0);
+				text.setText(expanded ? textContent(result.content) : "");
+				return text;
+			},
 		}),
 	);
 }
@@ -148,11 +153,34 @@ class FindCall implements Component {
 		this.state = state;
 	}
 	render(width: number): string[] {
-		const queryCount = Array.isArray(this.args.queries) ? this.args.queries.length : 0;
+		const queries = Array.isArray(this.args.queries) ? this.args.queries : [];
+		const queryText = queries.map(formatFindQuery).join(", ");
 		return wrapTextWithAnsi(
-			`${toolHeader(this.theme, "find")}${formatStatus(this.theme, this.state, this.toolCallId)} ${this.theme.fg("muted", `${queryCount} queries limit=${this.args.limit ?? 100}`)}`,
+			`${toolHeader(this.theme, "find")}${formatStatus(this.theme, this.state, this.toolCallId)} ${this.theme.fg("muted", `${queryText} limit=${this.args.limit ?? 100}`)}`,
 			width,
 		);
 	}
 	invalidate(): void {}
+}
+
+function formatFindQuery(query: FindParams["queries"][number]): string {
+	const details: string[] = [];
+	if (query.patterns && query.patterns.length > 0) details.push(query.patterns.join("|"));
+	if (query.type && query.type !== "any") details.push(query.type);
+	if (typeof query.maxDepth === "number") details.push(`maxDepth=${query.maxDepth}`);
+	if (query.hidden === true) details.push("hidden");
+	if (query.noIgnore === true) details.push("noIgnore");
+	const path = query.path ?? ".";
+	return details.length > 0 ? `${path} (${details.join(",")})` : path;
+}
+
+function textContent(content: readonly { type: string }[]): string {
+	for (const item of content) {
+		if (isTextContent(item)) return item.text;
+	}
+	return "";
+}
+
+function isTextContent(content: { type: string }): content is { type: "text"; text: string } {
+	return content.type === "text" && "text" in content && typeof content.text === "string";
 }
