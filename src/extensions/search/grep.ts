@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { defineTool, type ExtensionAPI, type Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, Text, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
@@ -124,9 +124,8 @@ async function formatCompactGrep(
 		.filter((event) => event.type === "match" || event.type === "context");
 	const groups = events.sort((left, right) => left.path.localeCompare(right.path) || left.line - right.line);
 	const perFile = new Map<string, number>();
-	const lines: string[] = [];
+	const selected: RgLine[] = [];
 	const paths = new Set<string>();
-	let currentPath: string | undefined;
 	let shown = 0;
 	for (const event of groups) {
 		if (shown >= options.limit) break;
@@ -136,19 +135,26 @@ async function formatCompactGrep(
 		perFile.set(event.path, count + 1);
 		shown += 1;
 		paths.add(event.path);
+		selected.push(event);
+	}
+	const pathList = [...paths];
+	const labels = pathLabels(cwd, pathList);
+	const lineCounts = await fileLineCounts(cwd, pathList);
+	const lines = labels.base ? [`base ${labels.base}`] : [];
+	let currentPath: string | undefined;
+	for (const event of selected) {
 		const sep = event.type === "context" ? "-" : ":";
 		if (event.path !== currentPath) {
-			lines.push(event.path);
+			const lineCount = lineCounts.get(event.path);
+			lines.push(
+				`${labels.names.get(event.path) ?? event.path}${lineCount === undefined ? "" : ` (${lineCount} lines)`}`,
+			);
 			currentPath = event.path;
 		}
 		lines.push(`  ${event.line}${sep} ${truncateLine(event.text, event.matchStart, options.maxLineLength)}`);
 	}
 	const omitted = Math.max(0, groups.length - shown);
-	lines.push(
-		`[query ${options.queryIndex}: shown ${shown}/${groups.length}, omitted ${omitted}, files ${paths.size}]`,
-	);
-	const loc = await locFooter(cwd, [...paths]);
-	if (loc) lines.push(loc);
+	lines.push(`[q${options.queryIndex}: ${shown}/${groups.length} shown, ${omitted} omitted, ${paths.size} files]`);
 	return { text: lines.join("\n"), paths: [...paths] };
 }
 
@@ -198,16 +204,36 @@ function truncateLine(text: string, matchStart: number, max: number): string {
 	return `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`;
 }
 
-async function locFooter(cwd: string, paths: string[]): Promise<string | undefined> {
-	const entries: string[] = [];
+async function fileLineCounts(cwd: string, paths: string[]): Promise<Map<string, number>> {
+	const counts = new Map<string, number>();
 	for (const path of paths) {
 		const content = await readFile(resolve(cwd, path), "utf8").catch(() => undefined);
-		if (content !== undefined)
-			entries.push(
-				`${displayPath(cwd, resolve(cwd, path))}:${content.split("\n").length - (content.endsWith("\n") ? 1 : 0)}`,
-			);
+		if (content !== undefined) counts.set(path, content.split("\n").length - (content.endsWith("\n") ? 1 : 0));
 	}
-	return entries.length > 0 ? `[loc: ${entries.join(", ")}]` : undefined;
+	return counts;
+}
+
+function pathLabels(cwd: string, paths: string[]): { base: string | undefined; names: Map<string, string> } {
+	const names = new Map(paths.map((path) => [path, displayPath(cwd, resolve(cwd, path))]));
+	if (paths.length < 2 || paths.some((path) => !isAbsolute(path))) return { base: undefined, names };
+	const base = commonDirectory(paths);
+	if (base === undefined) return { base: undefined, names };
+	return {
+		base,
+		names: new Map(paths.map((path) => [path, relative(base, path)])),
+	};
+}
+
+function commonDirectory(paths: string[]): string | undefined {
+	let parts = dirname(paths[0] ?? "").split("/");
+	for (const path of paths.slice(1)) {
+		const nextParts = dirname(path).split("/");
+		let index = 0;
+		while (index < parts.length && parts[index] === nextParts[index]) index += 1;
+		parts = parts.slice(0, index);
+	}
+	const base = parts.join("/") || "/";
+	return base === "/" ? undefined : `${base}/`;
 }
 
 function fairShares(count: number, limit: number): number[] {
