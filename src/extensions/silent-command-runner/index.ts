@@ -199,8 +199,7 @@ function normalizeSettings(value: typeof silentCommandRunnerSettings.defaults): 
 
 function formatSilentCheckPrompt(commands: readonly CommandConfig[]): string {
 	return [
-		"Silent checks run automatically after your turn when matching files change.",
-		"Do not run these commands yourself for verification. Finish your response normally; if a silent check fails, you will be notified. No need to wait on output or comment about checks.",
+		"**NEVER** run the following commands. Ever. Not even following a failure. They will run automatically when you finish and if you just fixed an issue, end the turn and it will run again. Always assume your code is good.",
 		"Automatic commands:",
 		...commands.map(formatSilentCheckCommand),
 	].join("\n");
