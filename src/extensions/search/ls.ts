@@ -1,7 +1,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { defineTool, type ExtensionAPI, type Theme } from "@earendil-works/pi-coding-agent";
-import type { Component } from "@earendil-works/pi-tui";
+import { type Component, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
 import { withSearchEvidence } from "./evidence.ts";
 import { displayPath, fairShares, gitIgnored, hasNoisePart, isHiddenPath, resolveSearchPath } from "./path-utils.ts";
@@ -173,11 +173,12 @@ class LsCall implements Component {
 		this.toolCallId = toolCallId;
 		this.state = state;
 	}
-	render(): string[] {
+	render(width: number): string[] {
 		const paths = Array.isArray(this.args.paths) ? this.args.paths : ["."];
-		return [
+		return wrapTextWithAnsi(
 			`${toolHeader(this.theme, "ls")}${formatStatus(this.theme, this.state, this.toolCallId)} ${this.theme.fg("muted", `${paths.join(",")} depth=${this.args.depth ?? 1} limit=${this.args.limit ?? 100}`)}`,
-		];
+			width,
+		);
 	}
 	invalidate(): void {}
 }

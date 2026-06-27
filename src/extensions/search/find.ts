@@ -1,6 +1,6 @@
 import { basename, dirname } from "node:path";
 import { defineTool, type ExtensionAPI, type Theme } from "@earendil-works/pi-coding-agent";
-import type { Component } from "@earendil-works/pi-tui";
+import { type Component, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
 import { type SearchEvidenceDetails, withSearchEvidence } from "./evidence.ts";
 import { fairShares, matchesGlob } from "./path-utils.ts";
@@ -147,11 +147,12 @@ class FindCall implements Component {
 		this.toolCallId = toolCallId;
 		this.state = state;
 	}
-	render(): string[] {
+	render(width: number): string[] {
 		const queryCount = Array.isArray(this.args.queries) ? this.args.queries.length : 0;
-		return [
+		return wrapTextWithAnsi(
 			`${toolHeader(this.theme, "find")}${formatStatus(this.theme, this.state, this.toolCallId)} ${this.theme.fg("muted", `${queryCount} queries limit=${this.args.limit ?? 100}`)}`,
-		];
+			width,
+		);
 	}
 	invalidate(): void {}
 }

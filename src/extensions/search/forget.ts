@@ -1,5 +1,5 @@
 import { defineTool, type ExtensionAPI, type Theme } from "@earendil-works/pi-coding-agent";
-import type { Component } from "@earendil-works/pi-tui";
+import { type Component, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
 import { type SearchEvidenceDetails, withSearchEvidence } from "./evidence.ts";
 import { formatStatus, type SearchRenderState, toolHeader } from "./render-state.ts";
@@ -117,10 +117,11 @@ class ForgetCall implements Component {
 		this.toolCallId = toolCallId;
 		this.state = state;
 	}
-	render(): string[] {
-		return [
+	render(width: number): string[] {
+		return wrapTextWithAnsi(
 			`${toolHeader(this.theme, "forget")}${formatStatus(this.theme, this.state, this.toolCallId)} ${this.theme.fg("muted", this.args.disposition ?? "done")}`,
-		];
+			width,
+		);
 	}
 	invalidate(): void {}
 }
