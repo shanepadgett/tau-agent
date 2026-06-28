@@ -351,6 +351,7 @@ function formatAgentMessage(failures: readonly FailedCommandDetails[]): string {
 	return [
 		`silent-command-runner failed: ${failures.length} command${failures.length === 1 ? "" : "s"}`,
 		...failures.map(formatAgentFailure),
+		"**Do not** rerun these checks. They will run automatically after your fix.",
 	].join("\n\n");
 }
 
