@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { defineTool, type ExtensionAPI, type Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, Text, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { type Static, Type } from "typebox";
+import { Type } from "typebox";
 import { type SearchEvidenceDetails, withSearchEvidence } from "./evidence.ts";
 import { displayPath } from "./path-utils.ts";
 import { formatStatus, type SearchRenderState, toolHeader } from "./render-state.ts";
@@ -18,7 +18,6 @@ const grepParams = Type.Object({
 	contextOnly: Type.Optional(Type.Boolean({ description: "Show context lines only." })),
 });
 
-type GrepParams = Static<typeof grepParams>;
 type GrepDetails = SearchEvidenceDetails;
 
 const NATIVE_FLAGS = new Set([
@@ -271,24 +270,39 @@ function isTextContent(content: { type: string }): content is { type: "text"; te
 }
 
 class GrepCall implements Component {
-	private readonly args: GrepParams;
+	private readonly args: unknown;
 	private readonly theme: Theme;
 	private readonly toolCallId: string;
 	private readonly state: SearchRenderState;
 
-	constructor(args: GrepParams, theme: Theme, toolCallId: string, state: SearchRenderState) {
+	constructor(args: unknown, theme: Theme, toolCallId: string, state: SearchRenderState) {
 		this.args = args;
 		this.theme = theme;
 		this.toolCallId = toolCallId;
 		this.state = state;
 	}
 	render(width: number): string[] {
-		const queries = Array.isArray(this.args.queries) ? this.args.queries : [];
-		const queryText = queries.map((query) => query.join(" ")).join(", ");
+		const queryText = grepRenderQueries(this.args).map(formatGrepRenderQuery).filter(Boolean).join(", ");
 		return wrapTextWithAnsi(
 			`${toolHeader(this.theme, "grep")}${formatStatus(this.theme, this.state, this.toolCallId)} ${this.theme.fg("muted", queryText)}`,
 			width,
 		);
 	}
 	invalidate(): void {}
+}
+
+function grepRenderQueries(args: unknown): unknown[] {
+	if (typeof args !== "object" || args === null || !("queries" in args)) return [];
+	const queries = args.queries;
+	return Array.isArray(queries) ? queries : [];
+}
+
+function formatGrepRenderQuery(query: unknown): string {
+	if (Array.isArray(query)) return query.map(formatGrepRenderArg).join(" ");
+	if (typeof query === "string") return query;
+	return "";
+}
+
+function formatGrepRenderArg(arg: unknown): string {
+	return typeof arg === "string" ? arg : String(arg);
 }
