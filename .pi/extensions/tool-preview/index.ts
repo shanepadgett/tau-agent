@@ -1,5 +1,6 @@
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem, Component, TUI } from "@earendil-works/pi-tui";
+import { createAutoreadPreviewWidget } from "./widgets/autoread.ts";
 import { createFindPreviewWidget } from "./widgets/find.ts";
 import { createGrepPreviewWidget } from "./widgets/grep.ts";
 import { createLsPreviewWidget } from "./widgets/ls.ts";
@@ -8,6 +9,7 @@ import { createReadPreviewWidget } from "./widgets/read.ts";
 
 const COMMAND = "tool-preview";
 const WIDGETS: Record<string, (tui: TUI, cwd: string, theme: Theme) => Component> = {
+	autoread: createAutoreadPreviewWidget,
 	find: createFindPreviewWidget,
 	grep: createGrepPreviewWidget,
 	ls: createLsPreviewWidget,
@@ -15,6 +17,7 @@ const WIDGETS: Record<string, (tui: TUI, cwd: string, theme: Theme) => Component
 	read: createReadPreviewWidget,
 };
 const ARGUMENTS = [
+	{ value: "autoread", label: "autoread", description: "Show autoread line states" },
 	{ value: "grep", label: "grep", description: "Show grep row states" },
 	{ value: "find", label: "find", description: "Show find row states" },
 	{ value: "ls", label: "ls", description: "Show ls row states" },
