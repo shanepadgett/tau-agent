@@ -17,14 +17,14 @@ Before plan files, rough-align in chat. Conversation first. No checklist ritual.
 Choose planning weight:
 
 - No file: clear small work. Restate understanding. Ask quick confirmation if useful. Implement after approval.
-- Simple file: small/medium work where one file can guide a new chat. Use \`docs/plans/<slug>.plan.md\`: goal, scope, files, steps, edge cases, done.
+- Simple file: small/medium work where one file can guide a new chat. Use \`.working/docs/plans/<slug>.plan.md\`: goal, scope, files, steps, edge cases, done.
 - Full plan: meaty feature, complete refactor, risky public behavior, or long alignment.
 
 Full plan files:
 
-- \`docs/plans/<slug>.working.md\`
-- \`docs/plans/<slug>.spec.md\`
-- \`docs/plans/<slug>.technical.md\`
+- \`.working/docs/plans/<slug>.working.md\`
+- \`.working/docs/plans/<slug>.spec.md\`
+- \`.working/docs/plans/<slug>.technical.md\`
 
 Working: messy thinking only. For full plans, create/update this first. Use it with the human to reconcile rough shape, questions, repo facts, and discarded options. Terse. Prune when truth moves to spec or technical.
 

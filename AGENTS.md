@@ -3,6 +3,7 @@
 ## General
 
 - Any change to extension tools requires the user to /reload before you can test the changes
+- Keep active work files under `.working/`; this directory is tracked. Reserve `docs/` for documentation about using Tau Agent.
 
 ## Code Quality
 

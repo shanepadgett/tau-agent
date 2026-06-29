@@ -107,7 +107,6 @@ videos/
 recordings/
 
 # Local-only notes and scratch files
-.working/
 *.local.*
 TODO.local.md
 scratch/

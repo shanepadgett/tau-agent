@@ -32,8 +32,8 @@ export function createLsPreviewWidget(tui: TUI, cwd: string, theme: Theme): Cont
 		{
 			name: "ls",
 			sampleTitle: "Multiple Roots",
-			args: { paths: ["src/extensions/explore", "docs/plans"], depth: 1, limit: 12 },
-			argText: "src/extensions/explore docs/plans depth=1 limit=12",
+			args: { paths: ["src/extensions/explore", ".working/docs/plans"], depth: 1, limit: 12 },
+			argText: "src/extensions/explore .working/docs/plans depth=1 limit=12",
 			result: [
 				"src/extensions/explore/",
 				"  find.ts",
@@ -43,7 +43,7 @@ export function createLsPreviewWidget(tui: TUI, cwd: string, theme: Theme): Cont
 				"  path-display.ts",
 				"… omitted 5 entries (limit 6)",
 				"",
-				"docs/plans/",
+				".working/docs/plans/",
 				"  explore.review.md",
 				"  explore.spec.md",
 				"  explore.technical.md",
@@ -53,7 +53,7 @@ export function createLsPreviewWidget(tui: TUI, cwd: string, theme: Theme): Cont
 				"src/extensions/explore/: find.ts, grep.ts, index.ts, ls.ts, path-display.ts",
 				"… omitted 5 entries (limit 6)",
 				"",
-				"docs/plans/: explore.review.md, explore.spec.md, explore.technical.md, explore.working.md",
+				".working/docs/plans/: explore.review.md, explore.spec.md, explore.technical.md, explore.working.md",
 			].join("\n"),
 		},
 		{
