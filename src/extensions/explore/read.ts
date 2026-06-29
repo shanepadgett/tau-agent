@@ -8,6 +8,16 @@ type ReadExecute = ReadDefinition["execute"];
 type ReadRenderCall = NonNullable<ReadDefinition["renderCall"]>;
 type ReadRenderResult = NonNullable<ReadDefinition["renderResult"]>;
 
+const readDefinitionByCwd = new Map<string, ReadDefinition>();
+
+function readDefinitionForCwd(cwd: string): ReadDefinition {
+	const existing = readDefinitionByCwd.get(cwd);
+	if (existing) return existing;
+	const definition = createReadToolDefinition(cwd);
+	readDefinitionByCwd.set(cwd, definition);
+	return definition;
+}
+
 function normalizeCountLimit(value: number | undefined, fallback: number): number {
 	if (value === undefined) return fallback;
 	if (!Number.isFinite(value)) return fallback;
@@ -33,8 +43,9 @@ function renderCallSummary(args: ReadToolInput | undefined): string {
 }
 
 export function createExploreReadTool(rowState: ToolRowStateStore): ReadDefinition {
+	const baseDefinition = readDefinitionForCwd(process.cwd());
 	return {
-		...createReadToolDefinition(process.cwd()),
+		...baseDefinition,
 		async execute(
 			toolCallId: Parameters<ReadExecute>[0],
 			params: Parameters<ReadExecute>[1],
@@ -42,7 +53,7 @@ export function createExploreReadTool(rowState: ToolRowStateStore): ReadDefiniti
 			onUpdate: Parameters<ReadExecute>[3],
 			ctx: Parameters<ReadExecute>[4],
 		) {
-			const definition = createReadToolDefinition(ctx.cwd);
+			const definition = readDefinitionForCwd(ctx.cwd);
 			return definition.execute(toolCallId, normalizeReadParams(params), signal, onUpdate, ctx);
 		},
 		renderCall(
@@ -67,7 +78,7 @@ export function createExploreReadTool(rowState: ToolRowStateStore): ReadDefiniti
 				text.setText("");
 				return text;
 			}
-			const definition = createReadToolDefinition(context.cwd);
+			const definition = readDefinitionForCwd(context.cwd);
 			return definition.renderResult?.(result, { ...options, expanded: true }, theme, context) ?? new Text("", 0, 0);
 		},
 	};
