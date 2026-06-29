@@ -21,10 +21,13 @@ Messy alignment file. No spec truth yet.
 - Local playground extension is generic custom tool preview at `.pi/extensions/tool-preview/`, not explore-specific.
 - Code style should follow Pi core tool style from the uncompiled reference repo.
 - Do not read focus spec files yet.
+- Do not directly reuse the current `src/extensions/search/` implementation. Use it only to understand retirement blast radius or concrete behavior that already shaped the spec.
 
 ## Locked rough decisions
 
 - `explore` registers the normal tool names: `ls`, `find`, `grep`, `read`.
+- When `explore` lands, the old `search` extension surface is retired from default Tau extension loading; `explore` owns `ls`, `find`, `grep`, and `read`.
+- `forget` and working-memory pruning do not move into `explore`.
 - Argument schemas may be a clean break where useful; no backward-compatibility promise for old `search` args.
 - `read` keeps the built-in Pi surface: `path`, `offset?`, `limit?`.
 - `ls` keeps a small structured surface: `paths?`, `depth?`, `limit?`, `all?`, `long?`.
