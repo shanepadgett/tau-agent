@@ -8,7 +8,11 @@
     {
       "source": "..",
       "extensions": [
-        "-src/extensions/working-memory/index.ts"
+        "-src/extensions/working-memory/index.ts",
+        "+src/extensions/auto-name/index.ts",
+        "-src/extensions/explore/index.ts",
+        "-src/extensions/patch/index.ts",
+        "-src/extensions/soul/index.ts"
       ]
     },
     "npm:pi-cache-graph"
