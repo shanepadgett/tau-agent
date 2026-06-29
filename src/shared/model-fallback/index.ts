@@ -33,7 +33,7 @@ const MEDIUM_PROMPT_MODELS: ReadonlyArray<{ provider: string; model: string; rea
 ];
 
 const LARGE_PROMPT_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
-	{ provider: "openai-codex", model: "gpt-5.5", reasoning: "high" },
+	{ provider: "openai-codex", model: "gpt-5.5", reasoning: "medium" },
 ];
 
 interface GenerationContext {
