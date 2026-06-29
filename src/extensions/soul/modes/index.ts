@@ -1,8 +1,8 @@
 export { modes } from "./definitions/index.ts";
 export type { ModeDefinition } from "./runtime.ts";
 export {
+	applyActiveModeContext,
 	deriveActiveMode,
-	filterModeMessages,
 	registerModeCommands,
 	registerModeMessageRenderers,
 } from "./runtime.ts";

@@ -2,8 +2,8 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { setTauFooterItem } from "../../shared/events.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import {
+	applyActiveModeContext,
 	deriveActiveMode,
-	filterModeMessages,
 	modes,
 	registerModeCommands,
 	registerModeMessageRenderers,
@@ -20,11 +20,11 @@ export default function soulExtension(pi: ExtensionAPI): void {
 	pi.on("session_start", async (_event, ctx) => {
 		enabled = (await loadTauExtensionSettings(ctx, soulSettings)).enabled;
 		runtimeContext = freezeRuntimeContext(ctx.cwd);
-		updateFooter(pi, enabled ? deriveActiveMode(ctx.sessionManager.getBranch())?.verb : undefined);
+		updateFooter(pi, enabled ? deriveActiveMode(ctx.sessionManager.getBranch(), modes)?.verb : undefined);
 	});
 
 	pi.on("session_tree", (_event, ctx) => {
-		updateFooter(pi, enabled ? deriveActiveMode(ctx.sessionManager.getBranch())?.verb : undefined);
+		updateFooter(pi, enabled ? deriveActiveMode(ctx.sessionManager.getBranch(), modes)?.verb : undefined);
 	});
 
 	pi.on("before_agent_start", (event, ctx) => {
@@ -35,8 +35,8 @@ export default function soulExtension(pi: ExtensionAPI): void {
 
 	pi.on("context", (event, ctx) => {
 		if (!enabled) return undefined;
-		const active = deriveActiveMode(ctx.sessionManager.getBranch());
-		return { messages: filterModeMessages(event.messages, active) };
+		const active = deriveActiveMode(ctx.sessionManager.getBranch(), modes);
+		return { messages: applyActiveModeContext(event.messages, active) };
 	});
 
 	registerModeCommands(

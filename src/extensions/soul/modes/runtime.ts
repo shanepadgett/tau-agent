@@ -1,10 +1,15 @@
-import { randomUUID } from "node:crypto";
-import type { ExtensionAPI, ExtensionCommandContext, SessionEntry } from "@earendil-works/pi-coding-agent";
+import type {
+	ContextEvent,
+	ExtensionAPI,
+	ExtensionCommandContext,
+	SessionEntry,
+} from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
 
-const ROK_MODE_MESSAGE_TYPE = "tau:soul.mode";
+const ROK_MODE_CONTEXT_TYPE = "tau:soul.mode-context";
+const LEGACY_ROK_MODE_MESSAGE_TYPE = "tau:soul.mode";
 const ROK_MODE_MARKER_TYPE = "tau:soul.marker";
-const ROK_MODE_CONTROL_TYPE = "tau:soul.mode-control";
+const ROK_MODE_STATE_TYPE = "tau:soul.mode-state";
 
 type MarkerAction = "enabled" | "disabled";
 
@@ -15,18 +20,13 @@ export interface ModeDefinition {
 	text: string;
 }
 
-interface ModeDetails {
-	modeId: string;
+interface ModeState {
+	modeKind: string | null;
+}
+
+export interface ActiveMode {
 	modeKind: string;
 	verb: string;
-}
-
-interface ModeControl {
-	action: "disable";
-	modeId: string;
-}
-
-export interface ActiveMode extends ModeDetails {
 	content: string;
 }
 
@@ -56,77 +56,70 @@ export function registerModeCommands(
 					return;
 				}
 				const prompt = args.trim() || undefined;
-				await runModeCommand(pi, mode, prompt, ctx, updateFooter);
+				await runModeCommand(pi, modes, mode, prompt, ctx, updateFooter);
 			},
 		});
 	}
 }
 
-export function deriveActiveMode(entries: readonly SessionEntry[]): ActiveMode | undefined {
+export function deriveActiveMode(
+	entries: readonly SessionEntry[],
+	modes: readonly ModeDefinition[],
+): ActiveMode | undefined {
+	const modesByKind = new Map(modes.map((mode) => [mode.kind, mode]));
 	let active: ActiveMode | undefined;
-	const disabled = new Set<string>();
 
 	for (const entry of entries) {
-		if (entry.type === "custom" && entry.customType === ROK_MODE_CONTROL_TYPE) {
-			const control = readModeControl(entry.data);
-			if (control) {
-				disabled.add(control.modeId);
-				if (active?.modeId === control.modeId) active = undefined;
-			}
+		if (entry.type !== "custom" || entry.customType !== ROK_MODE_STATE_TYPE) continue;
+		const state = readModeState(entry.data);
+		if (!state) continue;
+
+		if (state.modeKind === null) {
+			active = undefined;
 			continue;
 		}
 
-		if (entry.type !== "custom_message" || entry.customType !== ROK_MODE_MESSAGE_TYPE) continue;
-		if (typeof entry.content !== "string") continue;
-		const details = readModeDetails(entry.details);
-		if (!details || disabled.has(details.modeId)) continue;
-		active = { ...details, content: entry.content };
+		const mode = modesByKind.get(state.modeKind);
+		active = mode ? { modeKind: mode.kind, verb: mode.verb, content: mode.text } : undefined;
 	}
 
 	return active;
 }
 
-export function filterModeMessages<T extends { role: string; customType?: string; details?: unknown }>(
-	messages: readonly T[],
+export function applyActiveModeContext(
+	messages: ContextEvent["messages"],
 	active: ActiveMode | undefined,
-): T[] {
-	return messages.filter((message) => {
+): ContextEvent["messages"] {
+	const filtered = messages.filter((message) => {
 		if (message.role !== "custom") return true;
-		if (message.customType === ROK_MODE_MARKER_TYPE) return false;
-		if (message.customType !== ROK_MODE_MESSAGE_TYPE) return true;
-		const details = readModeDetails(message.details);
-		return Boolean(active && details && details.modeId === active.modeId);
+		return !isSoulModeMessageType(message.customType);
 	});
+
+	if (!active) return filtered;
+	return [createModeContextMessage(active), ...filtered];
 }
 
 async function runModeCommand(
 	pi: ExtensionAPI,
+	modes: readonly ModeDefinition[],
 	target: ModeDefinition,
 	prompt: string | undefined,
 	ctx: ExtensionCommandContext,
 	updateFooter: (verb: string | undefined) => void,
 ): Promise<void> {
-	const active = deriveActiveMode(ctx.sessionManager.getBranch());
+	const active = deriveActiveMode(ctx.sessionManager.getBranch(), modes);
 
 	if (!prompt && active?.modeKind === target.kind) {
-		appendDisable(pi, active);
+		appendModeState(pi, null);
 		appendMarker(pi, active.verb, "disabled");
 		updateFooter(undefined);
 		return;
 	}
 
-	if (active && active.modeKind !== target.kind) {
-		appendDisable(pi, active);
-		appendMarker(pi, active.verb, "disabled");
-	}
+	if (active && active.modeKind !== target.kind) appendMarker(pi, active.verb, "disabled");
 
 	if (active?.modeKind !== target.kind) {
-		pi.sendMessage<ModeDetails>({
-			customType: ROK_MODE_MESSAGE_TYPE,
-			content: target.text,
-			display: false,
-			details: { modeId: randomUUID(), modeKind: target.kind, verb: target.verb },
-		});
+		appendModeState(pi, target.kind);
 		appendMarker(pi, target.verb, "enabled");
 	}
 	updateFooter(target.verb);
@@ -138,26 +131,33 @@ function appendMarker(pi: ExtensionAPI, verb: string, action: MarkerAction): voi
 	pi.sendMessage({ customType: ROK_MODE_MARKER_TYPE, content: `${verb} ${action}`, display: true });
 }
 
-function appendDisable(pi: ExtensionAPI, active: ActiveMode): void {
-	pi.appendEntry<ModeControl>(ROK_MODE_CONTROL_TYPE, {
-		action: "disable",
-		modeId: active.modeId,
-	});
+function appendModeState(pi: ExtensionAPI, modeKind: string | null): void {
+	pi.appendEntry<ModeState>(ROK_MODE_STATE_TYPE, { modeKind });
 }
 
-function readModeDetails(value: unknown): ModeDetails | undefined {
-	if (!value || typeof value !== "object") return undefined;
-	const record = value as Record<string, unknown>;
-	if (typeof record.modeId !== "string") return undefined;
-	if (typeof record.modeKind !== "string") return undefined;
-	if (typeof record.verb !== "string") return undefined;
-	return { modeId: record.modeId, modeKind: record.modeKind, verb: record.verb };
+function createModeContextMessage(active: ActiveMode): ContextEvent["messages"][number] {
+	const message = {
+		role: "custom",
+		customType: ROK_MODE_CONTEXT_TYPE,
+		content: active.content,
+		display: false,
+		timestamp: Date.now(),
+	} satisfies ContextEvent["messages"][number];
+	return message;
 }
 
-function readModeControl(value: unknown): ModeControl | undefined {
+function isSoulModeMessageType(customType: string): boolean {
+	return (
+		customType === ROK_MODE_CONTEXT_TYPE ||
+		customType === LEGACY_ROK_MODE_MESSAGE_TYPE ||
+		customType === ROK_MODE_MARKER_TYPE
+	);
+}
+
+function readModeState(value: unknown): ModeState | undefined {
 	if (!value || typeof value !== "object") return undefined;
 	const record = value as Record<string, unknown>;
-	if (record.action !== "disable") return undefined;
-	if (typeof record.modeId !== "string") return undefined;
-	return { action: "disable", modeId: record.modeId };
+	const modeKind = record.modeKind;
+	if (modeKind !== null && typeof modeKind !== "string") return undefined;
+	return { modeKind };
 }
