@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Message } from "@earendil-works/pi-ai";
+import { type Message, type Tool, Type } from "@earendil-works/pi-ai";
 import {
 	type ExtensionAPI,
 	type ExtensionCommandContext,
@@ -24,7 +24,11 @@ import {
 } from "@earendil-works/pi-tui";
 import { emitAgentBlocked } from "../../shared/agent-blocked.ts";
 import { createGitRunner, type GitRunner, loadRepoStatus } from "../../shared/git.ts";
-import { generateValidated, resolveCandidatesForPrompt } from "../../shared/model-fallback/index.ts";
+import {
+	generateToolValidated,
+	generateValidated,
+	resolveCandidatesForPrompt,
+} from "../../shared/model-fallback/index.ts";
 import { errorText, truncAt } from "../../shared/text.ts";
 
 const COMMIT_MARKER_TYPE = "tau.commit";
@@ -37,18 +41,20 @@ const MAX_INTENT_CHARS = 8_000;
 const MAX_UNTRACKED_PREVIEW_BYTES = 12_000;
 const MAX_VISIBLE_PLAN_LINES = 18;
 
-const CONVENTIONAL_COMMIT_TYPES = new Set([
-	"feat",
-	"fix",
-	"docs",
-	"refactor",
-	"test",
-	"chore",
-	"perf",
-	"ci",
-	"build",
-	"revert",
-]);
+const CONVENTIONAL_COMMIT_TYPES = "feat, fix, docs, refactor, test, chore, perf, ci, build, revert";
+const COMMIT_PLAN_TOOL = {
+	name: "create_commit_plan",
+	description: "Submit the commit plan for the dirty repository files.",
+	parameters: Type.Object({
+		commits: Type.Array(
+			Type.Object({
+				message: Type.String({ description: "Git commit message." }),
+				allFiles: Type.Boolean({ description: "True only for a single commit that includes every dirty file." }),
+				files: Type.Array(Type.Integer({ description: "Numeric dirty file ID. Empty when allFiles is true." })),
+			}),
+		),
+	}),
+} satisfies Tool;
 
 export default function commitExtension(pi: ExtensionAPI): void {
 	pi.registerCommand("commit", {
@@ -146,7 +152,7 @@ async function reviewPlan(
 				const edited = await ctx.ui.editor("Edit commit message", group.message);
 				if (!edited?.trim()) break;
 				try {
-					const message = validateCommitMessage(edited);
+					const message = requireCommitMessage(edited);
 					state = {
 						...state,
 						groups: state.groups.map((item) => (item.id === action.groupId ? { ...item, message } : item)),
@@ -195,7 +201,7 @@ async function reviewPlan(
 				let message: string;
 				if (edited.trim()) {
 					try {
-						message = validateCommitMessage(edited);
+						message = requireCommitMessage(edited);
 					} catch (error) {
 						ctx.ui.notify(`Invalid commit message: ${errorText(error)}`, "error");
 						break;
@@ -565,6 +571,16 @@ interface CommitGroup {
 	files: string[];
 }
 
+interface CommitPlanToolInput {
+	commits: readonly CommitPlanToolCommit[];
+}
+
+interface CommitPlanToolCommit {
+	message: string;
+	allFiles: boolean;
+	files: readonly number[];
+}
+
 interface CommitPlanState {
 	files: readonly DirtyFile[];
 	groups: CommitGroup[];
@@ -593,39 +609,23 @@ async function generatePlan(
 	const prompt = buildPlanPrompt(evidence, previousPlan, regenerationNote);
 	const pathById = new Map(evidence.files.map((file) => [file.id, file.path]));
 
-	return generateValidated(
+	return generateToolValidated(
 		ctx,
 		await resolveCandidatesForPrompt(ctx, prompt),
 		prompt,
-		(text) => {
-			let parsed: unknown;
-			try {
-				parsed = JSON.parse(stripCodeFence(text));
-			} catch (error) {
-				throw new Error(`Commit plan must be valid JSON: ${errorText(error)}`);
-			}
-			if (!isRecord(parsed) || !Array.isArray(parsed.commits)) {
-				throw new Error("Commit plan JSON must contain a commits array.");
-			}
-
+		COMMIT_PLAN_TOOL,
+		(input) => {
+			if (!isCommitPlanToolInput(input)) throw new Error("Commit plan tool input is malformed.");
 			const seen = new Set<string>();
 			const groups: CommitGroup[] = [];
-			for (const value of parsed.commits) {
-				if (!isRecord(value)) throw new Error("Every commit must be an object.");
-				if (typeof value.message !== "string") throw new Error("Every commit must include a message string.");
-
-				let files: string[];
-				if (value.files === "ALL") {
-					if (parsed.commits.length !== 1) throw new Error('files: "ALL" is only valid for a single-commit plan.');
+			for (const value of input.commits) {
+				let files: string[] = [];
+				if (value.allFiles) {
+					if (input.commits.length !== 1) throw new Error("allFiles is only valid for a single-commit plan.");
 					files = evidence.files.map((file) => file.path);
 					for (const file of files) seen.add(file);
 				} else {
-					if (!Array.isArray(value.files)) throw new Error('Every commit must include a files array or "ALL".');
-					files = [];
 					for (const fileId of value.files) {
-						if (typeof fileId !== "number" || !Number.isInteger(fileId)) {
-							throw new Error("Commit file references must be numeric file IDs.");
-						}
 						const path = pathById.get(fileId);
 						if (!path) throw new Error(`Unknown dirty file ID in commit plan: ${fileId}`);
 						if (seen.has(path)) continue;
@@ -635,7 +635,7 @@ async function generatePlan(
 				}
 				if (files.length === 0) continue;
 
-				groups.push({ id: randomUUID(), message: validateCommitMessage(value.message), files });
+				groups.push({ id: randomUUID(), message: requireCommitMessage(value.message), files });
 			}
 
 			if (groups.length === 0) throw new Error("Commit plan produced no non-empty commits.");
@@ -644,9 +644,9 @@ async function generatePlan(
 		(error, text) =>
 			[
 				`That commit plan failed validation: ${error.message}`,
-				"Return corrected JSON only.",
-				'Use only numeric file IDs provided in the prompt, or files: "ALL" for a single all-files commit.',
-				"Every message must be a valid conventional commit message.",
+				`Call ${COMMIT_PLAN_TOOL.name} again with corrected arguments only.`,
+				"Use only numeric file IDs provided in the prompt.",
+				"Set allFiles true only for a single all-files commit; then set files to an empty array.",
 				"Previous response:",
 				text,
 			].join("\n"),
@@ -668,16 +668,8 @@ async function regenerateMessage(
 		ctx,
 		await resolveCandidatesForPrompt(ctx, prompt),
 		prompt,
-		(text) => validateCommitMessage(text),
-		(error, text) =>
-			[
-				`That commit message failed validation: ${error.message}`,
-				"Return one corrected commit message only.",
-				"If this is not a breaking change, return exactly one line with no body.",
-				"Do not include explanations, markdown, or code fences.",
-				"Previous response:",
-				text,
-			].join("\n"),
+		(text) => requireCommitMessage(text),
+		undefined,
 		{ statusKey: "commit", notifyOnFallback: true },
 	);
 }
@@ -689,14 +681,12 @@ function buildPlanPrompt(
 ): string {
 	return [
 		"Create the fewest useful commits for the dirty repository files.",
-		"Return strict JSON only, no markdown, in one of these shapes:",
-		'{"commits":[{"message":"feat(scope): imperative subject","files":[1,2,3]}]}',
-		'{"commits":[{"message":"feat(scope): imperative subject","files":"ALL"}]}',
-		"File references in output must be numeric IDs only, never paths.",
+		`Call ${COMMIT_PLAN_TOOL.name} exactly once with the final plan.`,
+		"File references must be numeric IDs only, never paths.",
 		"Commit ladder:",
 		"1. Can all dirty files be committed together with one honest conventional commit message a user would understand?",
 		"   If yes, return one commit.",
-		'2. For one all-files commit, use files: "ALL" instead of listing every ID.',
+		"2. For one all-files commit, set allFiles true and files to an empty array instead of listing every ID.",
 		"3. If one message would be misleading, split off only files with a clearly different purpose.",
 		"4. Keep README/docs/tests/prompts/UI text with the code change they describe or verify.",
 		"5. Do not split by file type, directory, or conventional commit type alone.",
@@ -705,13 +695,13 @@ function buildPlanPrompt(
 		"Rules:",
 		"- Prefer fewer coherent commits over tidy-looking categories.",
 		"- Use each dirty file at most once.",
-		'- Use only numeric file IDs listed below, except the sole-commit files: "ALL" shortcut.',
-		"- Commit messages must use strict conventional commit format.",
-		"- Allowed types: feat, fix, docs, refactor, test, chore, perf, ci, build, revert.",
+		"- Use only numeric file IDs listed below.",
+		"- Prefer conventional commit messages.",
+		`- Allowed conventional commit types: ${CONVENTIONAL_COMMIT_TYPES}.`,
 		"- Optional scope must be lowercase kebab-case, singular, and useful; omit it for broad or unrelated changes.",
 		"- Subject must be one concise imperative line, no trailing period, max 100 characters.",
-		"- For non-breaking changes, message must be exactly one line.",
-		"- For breaking changes, add ! and include one body paragraph starting with BREAKING CHANGE:.",
+		"- Prefer exactly one line for non-breaking changes.",
+		"- For breaking changes, prefer ! plus one body paragraph starting with BREAKING CHANGE:.",
 		"Recent commit subjects are style guidance. User intent explains why. File evidence is authoritative.",
 		"When regenerating, use the previous plan and user note to understand what to change; do not copy mistakes.",
 		"",
@@ -739,13 +729,13 @@ function buildMessagePrompt(
 ): string {
 	return [
 		"Write one git commit message for the selected dirty files.",
-		"Use this strict conventional commit format:",
+		"Prefer this conventional commit format:",
 		"<type>[optional scope][!]: <description>",
-		"Allowed types: feat, fix, docs, refactor, test, chore, perf, ci, build, revert.",
-		"Optional scope must be lowercase kebab-case, singular, and useful; omit it for broad or unrelated changes.",
-		"Subject must be one concise imperative line, no trailing period, max 100 characters.",
-		"For non-breaking changes, return exactly one line and no body.",
-		"For breaking changes, add ! to the header and include exactly one body paragraph starting with BREAKING CHANGE:.",
+		`Allowed conventional commit types: ${CONVENTIONAL_COMMIT_TYPES}.`,
+		"Prefer lowercase kebab-case scopes only when useful; omit scope for broad or unrelated changes.",
+		"Prefer one concise imperative subject with no trailing period.",
+		"For non-breaking changes, prefer one line and no body.",
+		"For breaking changes, prefer ! plus one body paragraph starting with BREAKING CHANGE:.",
 		"Do not wrap the message in markdown or code fences.",
 		"When regenerating, use the previous plan, selected previous commit, and user note to understand what to change; do not copy mistakes.",
 		"",
@@ -761,33 +751,26 @@ function buildMessagePrompt(
 	].join("\n");
 }
 
-function validateCommitMessage(rawMessage: string): string {
+function requireCommitMessage(rawMessage: string): string {
 	const message = stripCodeFence(rawMessage)
 		.replace(/^commit message:\s*/i, "")
 		.trim();
 	if (!message) throw new Error("Commit message is empty.");
+	return message;
+}
 
-	const [header = "", ...bodyLines] = message.split("\n");
-	const headerMatch = header.match(/^([a-z]+)(?:\(([a-z0-9]+(?:-[a-z0-9]+)*)\))?(!)?: (.+)$/);
-	if (!headerMatch) throw new Error("Commit message must use conventional commit format.");
+function isCommitPlanToolInput(value: unknown): value is CommitPlanToolInput {
+	return isRecord(value) && Array.isArray(value.commits) && value.commits.every(isCommitPlanToolCommit);
+}
 
-	const type = headerMatch[1];
-	const breakingMark = headerMatch[3];
-	const subject = headerMatch[4];
-	if (!type || !CONVENTIONAL_COMMIT_TYPES.has(type)) throw new Error(`Unsupported commit type: ${type || "missing"}.`);
-	if (!subject || subject.length > 100) throw new Error("Commit subject must be 1-100 characters.");
-	if (subject.endsWith(".")) throw new Error("Commit subject must not end with a period.");
-
-	const body = bodyLines.join("\n").trim();
-	if (!breakingMark && body) throw new Error("Commit body is only allowed for breaking changes.");
-	if (breakingMark && !body.startsWith("BREAKING CHANGE: ")) {
-		throw new Error("Breaking commits must include a body starting with BREAKING CHANGE:.");
-	}
-	if (breakingMark && body.split("\n\n").filter((paragraph) => paragraph.trim()).length !== 1) {
-		throw new Error("Breaking commits must include exactly one BREAKING CHANGE paragraph.");
-	}
-
-	return body ? `${header}\n\n${body}` : header;
+function isCommitPlanToolCommit(value: unknown): value is CommitPlanToolCommit {
+	return (
+		isRecord(value) &&
+		typeof value.message === "string" &&
+		typeof value.allFiles === "boolean" &&
+		Array.isArray(value.files) &&
+		value.files.every((file) => typeof file === "number" && Number.isInteger(file))
+	);
 }
 
 function formatFileCatalog(files: readonly DirtyFile[]): string {

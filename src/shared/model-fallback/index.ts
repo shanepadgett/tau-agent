@@ -1,4 +1,4 @@
-import type { Api, Message, Model, ThinkingLevel } from "@earendil-works/pi-ai";
+import type { Api, Message, Model, ThinkingLevel, Tool } from "@earendil-works/pi-ai";
 import { completeSimple } from "@earendil-works/pi-ai/compat";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { loadTauExtensionSettings, updateTauExtensionSettings } from "../settings/load.ts";
@@ -7,6 +7,7 @@ import modelFallbackSettings from "./settings.ts";
 import type { ModelCandidate } from "./types.ts";
 
 const MAX_ATTEMPTS = 5;
+const MAX_TOOL_ATTEMPTS = 2;
 const SEVEN_DAYS_MS = 604_800_000;
 const CHARS_PER_TOKEN_ESTIMATE = 4;
 const MEDIUM_PROMPT_TOKENS = 4_000;
@@ -96,6 +97,31 @@ export async function generateValidated<T>(
 	correctionPrompt?: (error: Error, text: string) => string,
 	options?: { statusKey?: string; notifyOnFallback?: boolean },
 ): Promise<T> {
+	return withModelFallback(ctx, candidates, options, (candidate) =>
+		requestValidated(ctx, candidate, prompt, validate, correctionPrompt),
+	);
+}
+
+export async function generateToolValidated<T>(
+	ctx: GenerationContext,
+	candidates: readonly ModelCandidate[],
+	prompt: string,
+	tool: Tool,
+	validate: (input: unknown) => T,
+	correctionPrompt?: (error: Error, output: string) => string,
+	options?: { statusKey?: string; notifyOnFallback?: boolean },
+): Promise<T> {
+	return withModelFallback(ctx, candidates, options, (candidate) =>
+		requestToolValidated(ctx, candidate, prompt, tool, validate, correctionPrompt),
+	);
+}
+
+async function withModelFallback<T>(
+	ctx: GenerationContext,
+	candidates: readonly ModelCandidate[],
+	options: { statusKey?: string; notifyOnFallback?: boolean } | undefined,
+	request: (candidate: ModelCandidate) => Promise<T>,
+): Promise<T> {
 	const failures: string[] = [];
 	const statusKey = options?.statusKey;
 	const notifyOnFallback = options?.notifyOnFallback ?? false;
@@ -105,7 +131,7 @@ export async function generateValidated<T>(
 		if (statusKey) ctx.ui.setStatus(statusKey, `generating (${label})`);
 
 		try {
-			return await requestValidated(ctx, candidate, prompt, validate, correctionPrompt);
+			return await request(candidate);
 		} catch (error) {
 			if (ctx.signal?.aborted) throw new Error("Cancelled.");
 			if (shouldCooldownProvider(error)) await markProviderUnavailable(candidate.model.provider);
@@ -162,6 +188,68 @@ async function requestValidated<T>(
 	}
 
 	throw new Error("Model generation failed.");
+}
+
+async function requestToolValidated<T>(
+	ctx: GenerationContext,
+	candidate: ModelCandidate,
+	prompt: string,
+	tool: Tool,
+	validate: (input: unknown) => T,
+	correctionPrompt?: (error: Error, output: string) => string,
+): Promise<T> {
+	const messages: Message[] = [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }];
+
+	for (let attempt = 1; attempt <= MAX_TOOL_ATTEMPTS; attempt++) {
+		const response = await completeSimple(
+			candidate.model,
+			{ messages, tools: [tool] },
+			{ apiKey: candidate.apiKey, headers: candidate.headers, signal: ctx.signal, reasoning: candidate.reasoning },
+		);
+
+		if (response.stopReason === "aborted") throw new Error("Cancelled.");
+
+		const text = response.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
+		const toolCalls = response.content.flatMap((part) => (part.type === "toolCall" ? [part] : []));
+		const output = text || formatToolCalls(toolCalls);
+		if (response.stopReason === "error") {
+			const error = new Error(response.errorMessage || "model returned an error");
+			if (attempt < MAX_TOOL_ATTEMPTS && !shouldCooldownProvider(error)) continue;
+			throw error;
+		}
+
+		try {
+			if (toolCalls.length !== 1) throw new Error(`Model must call ${tool.name} exactly once.`);
+			const [toolCall] = toolCalls;
+			if (!toolCall) throw new Error(`Model must call ${tool.name}.`);
+			if (toolCall.name !== tool.name) throw new Error(`Model called ${toolCall.name}; expected ${tool.name}.`);
+			return validate(toolCall.arguments);
+		} catch (error) {
+			if (!(error instanceof Error) || attempt >= MAX_TOOL_ATTEMPTS) throw error;
+			if (!correctionPrompt) throw error;
+
+			messages.push({
+				role: "user",
+				content: [{ type: "text", text: correctionPrompt(error, truncAt(output, 4_000)) }],
+				timestamp: Date.now(),
+			});
+		}
+	}
+
+	throw new Error("Model generation failed.");
+}
+
+function formatToolCalls(toolCalls: readonly { name: string; arguments: unknown }[]): string {
+	if (toolCalls.length === 0) return "(no tool call)";
+	try {
+		return JSON.stringify(
+			toolCalls.map((call) => ({ name: call.name, arguments: call.arguments })),
+			null,
+			2,
+		);
+	} catch {
+		return "(tool call arguments unavailable)";
+	}
 }
 
 function shouldCooldownProvider(error: unknown): boolean {
