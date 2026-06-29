@@ -1,5 +1,5 @@
-import { access, mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { access, mkdir, readFile, rmdir, stat, unlink, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 import { applyChunksWithRanges, countLogicalLines, UpdateChunkApplyError } from "./matcher.ts";
 import { type PatchFailure, type PatchOperation, parsePatch } from "./parser.ts";
@@ -104,6 +104,21 @@ async function assertExistingFile(path: string, displayPath: string): Promise<vo
 	if (!info.isFile()) throw new Error(`Expected a file: ${displayPath}`);
 }
 
+async function removeEmptyParentDirs(cwd: string, startDir: string): Promise<void> {
+	let current = resolve(startDir);
+	const root = resolve(cwd);
+	while (current !== root) {
+		const rel = relative(root, current);
+		if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) return;
+		try {
+			await rmdir(current);
+		} catch {
+			return;
+		}
+		current = dirname(current);
+	}
+}
+
 async function stageWholeFile(
 	cwd: string,
 	op: Extract<PatchOperation, { type: "add" | "replace" }>,
@@ -144,6 +159,7 @@ async function stageDelete(cwd: string, op: Extract<PatchOperation, { type: "del
 		},
 		async commit() {
 			await unlink(target);
+			await removeEmptyParentDirs(cwd, dirname(target));
 		},
 	};
 }
@@ -193,6 +209,7 @@ async function stageUpdate(cwd: string, op: Extract<PatchOperation, { type: "upd
 			await mkdir(dirname(moveTarget), { recursive: true });
 			await writeFile(moveTarget, next, "utf8");
 			await unlink(source);
+			await removeEmptyParentDirs(cwd, dirname(source));
 		},
 	};
 }
