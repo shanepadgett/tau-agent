@@ -169,13 +169,13 @@ interface RenderCallContext {
 	isPartial: boolean;
 	lastComponent?: unknown;
 	rowState: ToolRowStateStore;
-	toolCallId: string;
+	rowId: string;
 	invalidate: () => void;
 }
 
-function patchTitle(theme: Theme, context: Pick<RenderCallContext, "rowState" | "toolCallId" | "invalidate">): string {
-	context.rowState.watch(context.toolCallId, context.invalidate);
-	return formatToolRowTitle(context.rowState, context.toolCallId, "patch", theme);
+function patchTitle(theme: Theme, context: Pick<RenderCallContext, "rowState" | "rowId" | "invalidate">): string {
+	context.rowState.watch(context.rowId, context.invalidate);
+	return formatToolRowTitle(context.rowState, context.rowId, "patch", theme);
 }
 
 function textComponent(lastComponent: unknown): Text {
@@ -219,7 +219,7 @@ export function renderPatchResult(
 		args?: { input?: string };
 		lastComponent?: unknown;
 		rowState: ToolRowStateStore;
-		toolCallId: string;
+		rowId: string;
 		invalidate: () => void;
 	},
 ): Text {

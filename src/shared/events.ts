@@ -21,13 +21,12 @@ export type TauAgentEvents = {
 			snapshotRanges?: Array<{ startLine: number; endLine: number }>;
 		}>;
 	};
-	"tau:context.snapshot": {
-		source: "tau-edit";
+	"tau:autoread.requested": {
+		source: "tau-context";
 		title?: string;
 		cwd: string;
 		batchId: string;
-		deliverAs?: "steer" | "followUp" | "nextTurn";
-		files: Array<{ path: string; content: string }>;
+		files: Array<{ path: string }>;
 	};
 	"tau:footer-item": {
 		id: string;
@@ -35,7 +34,7 @@ export type TauAgentEvents = {
 		priority?: number;
 	};
 	"tau:tool-row-state.set": {
-		toolCallId: string;
+		rowId: string;
 		state?: ToolRowVisualState;
 	};
 };

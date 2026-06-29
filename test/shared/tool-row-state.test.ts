@@ -26,14 +26,14 @@ describe("tool row state", () => {
 		});
 
 		expect(formatToolRowTitle(store, "call-1", "grep", theme)).toBe("<toolTitle>*grep*</toolTitle>");
-		await emitTauEvent(pi, "tau:tool-row-state.set", { toolCallId: "call-1", state: "pruned" });
+		await emitTauEvent(pi, "tau:tool-row-state.set", { rowId: "call-1", state: "pruned" });
 		expect(invalidations).toBe(1);
 		const title = formatToolRowTitle(store, "call-1", "grep", theme);
 		expect(title).toBe("<warning>*grep*</warning>");
 		expect(title).not.toContain("pruned");
 
 		const result = { content: [{ type: "text", text: "saved result" }] };
-		await emitTauEvent(pi, "tau:tool-row-state.set", { toolCallId: "call-1" });
+		await emitTauEvent(pi, "tau:tool-row-state.set", { rowId: "call-1" });
 		expect(result.content[0]?.text).toBe("saved result");
 		expect(formatToolRowTitle(store, "call-1", "grep", theme)).toBe("<toolTitle>*grep*</toolTitle>");
 	});

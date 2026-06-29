@@ -1,10 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { promptForDescription } from "../../../src/shared/description.ts";
 import { emitTauEvent } from "../../../src/shared/events.ts";
-import { pickReferences, type ReferenceItem, referenceLines } from "../../../src/shared/reference-picker.ts";
+import { INJECTED_CONTEXT_TYPE } from "../../../src/shared/injected-context.ts";
 import {
 	TabbedMultiSelect,
 	type TabbedMultiSelectItem,
@@ -20,14 +19,13 @@ interface Resource {
 	path: string;
 }
 
-interface SnapshotFile {
+interface ContextFile {
 	path: string;
-	content: string;
 }
 
 interface ResourceContext {
 	manifest: string;
-	files: SnapshotFile[];
+	files: ContextFile[];
 }
 
 const TAB_LABELS: Record<ResourceKind, string> = {
@@ -38,16 +36,20 @@ const TAB_LABELS: Record<ResourceKind, string> = {
 	skill: "Skills",
 };
 
-export default function tauEdit(pi: ExtensionAPI): void {
-	pi.registerCommand("tau-edit", {
-		description: "Pick Tau resources and inject their files as search memory snapshots",
+export default function tauContext(pi: ExtensionAPI): void {
+	pi.registerCommand("tau-context", {
+		description: "Pick Tau resources and prepare context",
 		handler: async (_args, ctx) => run(pi, ctx),
 	});
 }
 
 async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
 	if (ctx.mode !== "tui") {
-		ctx.ui.notify("/tau-edit requires TUI mode.", "error");
+		ctx.ui.notify("/tau-context requires TUI mode.", "error");
+		return;
+	}
+	if (!ctx.isIdle()) {
+		ctx.ui.notify("/tau-context requires an idle agent.", "error");
 		return;
 	}
 
@@ -59,7 +61,7 @@ async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void
 	}
 
 	const selections = await ctx.ui.custom<TabbedMultiSelectSelection[] | undefined>(
-		(_tui, theme, _keybindings, done) => new TabbedMultiSelect("Tau edit", tabs, theme, done),
+		(_tui, theme, _keybindings, done) => new TabbedMultiSelect("Tau context", tabs, theme, done),
 	);
 	if (!selections) return;
 	if (selections.length === 0) {
@@ -73,35 +75,21 @@ async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void
 		return resource ? [resource] : [];
 	});
 
-	const prompt = await promptForDescription(
-		ctx,
-		"Describe what you want to work on",
-		"Description required: describe what you want to work on",
-	);
-	if (!prompt) return;
-	const references = await getReferences(pi, ctx);
-	if (references === null) return;
-
 	const context = await buildContext(ctx.cwd, selected);
-	const deliverAs = ctx.isIdle() ? undefined : "followUp";
-	await emitTauEvent(pi, "tau:context.snapshot", {
-		source: "tau-edit",
-		title: "Tau edit context",
+	const batchId = randomUUID();
+	pi.sendMessage({
+		customType: INJECTED_CONTEXT_TYPE,
+		content: context.manifest,
+		display: false,
+		details: { source: "tau-context", title: "Tau context" },
+	});
+	await emitTauEvent(pi, "tau:autoread.requested", {
+		source: "tau-context",
+		title: "Tau context",
 		cwd: ctx.cwd,
-		batchId: randomUUID(),
-		...(deliverAs ? { deliverAs } : {}),
+		batchId,
 		files: context.files,
 	});
-	const message = buildMessage(prompt.text, prompt.source === "idea", references, context.manifest);
-	if (ctx.isIdle()) pi.sendUserMessage(message);
-	else pi.sendUserMessage(message, { deliverAs: "followUp" });
-}
-
-async function getReferences(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<ReferenceItem[] | null> {
-	const choice = await ctx.ui.select("Attach reference repos?", ["no", "yes"]);
-	if (choice === undefined) return null;
-	if (choice !== "yes") return [];
-	return (await pickReferences(pi, ctx)) ?? null;
 }
 
 async function discoverResources(cwd: string): Promise<Resource[]> {
@@ -170,68 +158,38 @@ async function buildContext(cwd: string, resources: Resource[]): Promise<Resourc
 		? await listFiles(cwd, "src/shared")
 		: [];
 	const resourcesContext = await Promise.all(resources.map((resource) => renderResource(cwd, resource)));
-	const filesByPath = new Map<string, SnapshotFile>();
+	const filesByPath = new Map<string, ContextFile>();
 	for (const file of resourcesContext.flatMap((resource) => resource.files)) filesByPath.set(file.path, file);
 
 	const manifest = [
-		"Tau context:",
+		"# /tau-context",
+		"",
+		"Autoread files are visible context items in this conversation.",
+		"Do not reread autoread files before answering questions or making changes.",
+		"",
+		"Root files are pointers only. Read only when directly needed.",
 		"",
 		"Root files:",
 		...rootFiles.map((path) => `- ${path}`),
-		...(sharedFiles.length > 0 ? ["", "Shared files:", ...sharedFiles.map((path) => `- ${path}`)] : []),
+		"",
+		"Shared files are pointers only. Read only when directly needed.",
+		"",
+		"Shared files:",
+		...sharedFiles.map((path) => `- ${path}`),
 		"",
 		"Selected resources:",
-		resourcesContext.map((resource) => resource.manifest).join("\n\n"),
+		...resourcesContext.map((resource) => resource.manifest),
 	].join("\n");
 
 	return { manifest, files: [...filesByPath.values()] };
 }
 
-function buildMessage(
-	request: string,
-	fromIdea: boolean,
-	references: readonly ReferenceItem[],
-	manifest: string,
-): string {
-	const refs = referenceLines(references);
-
-	return [
-		"# /tau-edit request",
-		"",
-		"Selected Tau resource files are injected as search memory snapshots. Treat those snapshot contents as current and authoritative. Do not reread snapshotted files unless you edited them, the user says they changed, or needed content is missing from context.",
-		"",
-		"Root/shared files are listed as file names only. Read them only when this request directly requires their contents; do not read them for discovery.",
-		"",
-		...(fromIdea
-			? [
-					"This request is from an idea. After completing it, ask whether to remove the completed idea from .pi/tau/ideas.jsonl.",
-					"",
-				]
-			: []),
-		...(refs.length > 0 ? [...refs, ""] : []),
-		manifest,
-		"",
-		"Request:",
-		request,
-	].join("\n");
-}
-
 async function renderResource(cwd: string, resource: Resource): Promise<ResourceContext> {
 	const files = await listResourceFiles(cwd, resource.path);
-	const snapshots = await Promise.all(
-		files.map(async (path) => ({ path, content: await readFile(join(cwd, path), "utf8") })),
-	);
 
 	return {
-		manifest: [
-			`Resource: ${resource.name}`,
-			`Kind: ${resource.kind}`,
-			`Path: ${resource.path}`,
-			"",
-			"Files:",
-			...files.map((path) => `- ${path}`),
-		].join("\n"),
-		files: snapshots,
+		manifest: `- ${resource.name} (${resource.kind}): ${resource.path}`,
+		files: files.map((path) => ({ path })),
 	};
 }
 

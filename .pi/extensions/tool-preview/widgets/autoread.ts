@@ -66,7 +66,7 @@ class AutoreadLineComponent {
 		);
 
 		this.cachedWidth = width;
-		this.cachedLines = ["", truncateToWidth(text, width)];
+		this.cachedLines = [truncateToWidth(text, width)];
 		return this.cachedLines;
 	}
 

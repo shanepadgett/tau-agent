@@ -142,7 +142,7 @@ function createPatchTool(rowState: ReturnType<typeof createToolRowStateStore>) {
 				isPartial: context.isPartial,
 				lastComponent: context.lastComponent,
 				rowState,
-				toolCallId: context.toolCallId,
+				rowId: context.toolCallId,
 				invalidate: context.invalidate,
 			});
 		},
@@ -153,7 +153,7 @@ function createPatchTool(rowState: ReturnType<typeof createToolRowStateStore>) {
 				args: context.args as { input?: string },
 				lastComponent: context.lastComponent,
 				rowState,
-				toolCallId: context.toolCallId,
+				rowId: context.toolCallId,
 				invalidate: context.invalidate,
 			});
 		},

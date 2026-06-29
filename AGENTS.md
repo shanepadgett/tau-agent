@@ -33,7 +33,7 @@
 ## Tau Customization Workflow
 
 - If the user intends to create a Tau extension, prompt, theme, or skill, recommend `/tau-new <extension|prompt|theme|skill>`, but you dont need to enforce it.
-- If the user intends to edit an existing Tau extension, prompt, theme, or skill, recommend they use `/tau-edit`, but it's okay if they dont.
+- If the user intends to add Tau resource context, recommend they use `/tau-context`, but it's okay if they dont.
 - Treat injected Tau context file contents as authoritative. Do not reread injected files unless you edited them, the user says they changed, or needed content is missing from context.
 
 ## Commands

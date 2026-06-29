@@ -197,7 +197,7 @@ function createPatchPreviewDefinition(warning: boolean) {
 				args: context.args,
 				lastComponent: context.lastComponent,
 				rowState,
-				toolCallId: context.toolCallId,
+				rowId: context.toolCallId,
 				invalidate: context.invalidate,
 			});
 		},
@@ -274,7 +274,7 @@ function renderContext(context: PatchRenderContext, rowState: ToolRowStateStore)
 		isPartial: context.isPartial,
 		lastComponent: context.lastComponent,
 		rowState,
-		toolCallId: context.toolCallId,
+		rowId: context.toolCallId,
 		invalidate: context.invalidate,
 	};
 }
