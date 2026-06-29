@@ -108,7 +108,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		turnPaths = new Set(await walkFiles(projectRoot));
 	});
 
-	pi.on("agent_end", (event, ctx) => {
+	pi.on("agent_end", async (event, ctx) => {
 		if (hasAbortedAssistantMessage(event.messages)) return;
 		if (run) return;
 		run = runChangedCommands(ctx.cwd, turnStart, ctx.ui.notify)
@@ -118,6 +118,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			.finally(() => {
 				run = undefined;
 			});
+		await run;
 	});
 
 	pi.on("session_shutdown", () => {
