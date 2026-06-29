@@ -1,5 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { Box, Container, Spacer, Text, type TUI, truncateToWidth } from "@earendil-works/pi-tui";
+import { Box, Container, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
+import { LabeledDotLine } from "../../../../src/shared/tui/labeled-dot-line.ts";
 
 interface TurnBudgetSample {
 	title: string;
@@ -12,21 +13,23 @@ interface TurnBudgetSample {
 const SAMPLES: TurnBudgetSample[] = [
 	{
 		title: "Normal Boundary",
-		message: "Turn budget: 10/30 tool calls used. Batch tools when possible.",
+		message: "Turn budget: 10/30 turns used for this user prompt. Batch tools when more tool work remains.",
 		used: 10,
 		cap: 30,
 		extended: false,
 	},
 	{
 		title: "Soft Cap Reached",
-		message: "Turn budget: 30/30 tool calls used. Soft cap extended to 40. Batch tools when possible.",
+		message:
+			"Turn budget: 30/30 turns used for this user prompt. Soft cap extended to 40. Batch tools when more tool work remains.",
 		used: 30,
 		cap: 40,
 		extended: true,
 	},
 	{
 		title: "Soft Cap Exceeded",
-		message: "Turn budget: 35/30 tool calls used. Soft cap extended to 45. Batch tools when possible.",
+		message:
+			"Turn budget: 35/30 turns used for this user prompt. Soft cap extended to 45. Batch tools when more tool work remains.",
 		used: 35,
 		cap: 45,
 		extended: true,
@@ -41,7 +44,7 @@ export function createTurnBudgetPreviewWidget(_tui: TUI, _cwd: string, theme: Th
 	for (const sample of SAMPLES) {
 		container.addChild(new Text(theme.fg("accent", theme.bold(sample.title)), 1, 0));
 		container.addChild(new Spacer(1));
-		addAgentPayload(container, theme, sample.message);
+		addSteeringMessage(container, theme, sample.message);
 		addVisibleMarker(container, theme, sample);
 		container.addChild(new Spacer(1));
 	}
@@ -49,8 +52,8 @@ export function createTurnBudgetPreviewWidget(_tui: TUI, _cwd: string, theme: Th
 	return container;
 }
 
-function addAgentPayload(container: Container, theme: Theme, message: string): void {
-	container.addChild(new Text(theme.bold("Agent Payload"), 1, 0));
+function addSteeringMessage(container: Container, theme: Theme, message: string): void {
+	container.addChild(new Text(theme.bold("Visible Steering Message"), 1, 0));
 	container.addChild(new Spacer(1));
 	const box = new Box(1, 1, (text) => theme.bg("customMessageBg", text));
 	box.addChild(new Text(theme.fg("customMessageText", message), 0, 0));
@@ -65,33 +68,24 @@ function addVisibleMarker(container: Container, theme: Theme, sample: TurnBudget
 }
 
 class TurnBudgetMarker {
-	private readonly theme: Theme;
-	private readonly sample: TurnBudgetSample;
-	private cachedWidth?: number;
-	private cachedLines?: string[];
+	private readonly line: LabeledDotLine;
 
 	constructor(theme: Theme, sample: TurnBudgetSample) {
-		this.theme = theme;
-		this.sample = sample;
+		this.line = new LabeledDotLine({
+			theme,
+			dotColor: "dim",
+			label: "Turn Budget:",
+			labelColor: "toolTitle",
+			parts: [
+				theme.fg("muted", `${sample.used}/${sample.cap}`),
+				...(sample.extended ? [theme.fg("muted", "Soft cap extended.")] : []),
+			],
+		});
 	}
 
 	render(width: number): string[] {
-		if (this.cachedLines && this.cachedWidth === width) return this.cachedLines;
-
-		const parts = [
-			` ${this.theme.fg("dim", "●")}`,
-			this.theme.fg("toolTitle", this.theme.bold("Turn Budget:")),
-			this.theme.fg("muted", `${this.sample.used}/${this.sample.cap}`),
-			this.sample.extended ? this.theme.fg("muted", "Soft cap extended.") : "",
-		].filter(Boolean);
-
-		this.cachedWidth = width;
-		this.cachedLines = [truncateToWidth(parts.join(" "), width)];
-		return this.cachedLines;
+		return this.line.render(width);
 	}
 
-	invalidate(): void {
-		this.cachedWidth = undefined;
-		this.cachedLines = undefined;
-	}
+	invalidate(): void {}
 }

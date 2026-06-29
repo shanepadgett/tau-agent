@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth } from "@earendil-works/pi-tui";
 import { onTauEvent } from "../../shared/events.js";
-import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.js";
+import type { ToolRowStateStore } from "../../shared/tool-row-state.js";
+import { LabeledDotLine } from "../../shared/tui/labeled-dot-line.ts";
 
 const AUTOREAD_MESSAGE_TYPE = "tau.autoread";
 
@@ -116,9 +116,13 @@ class AutoreadMessageComponent {
 
 	render(width: number): string[] {
 		const dotColor = this.status === "reading" ? "dim" : "success";
-		const title = formatToolRowTitle(this.rowState, this.rowId, "autoread", this.theme);
-		const row = [` ${this.theme.fg(dotColor, "●")}`, title, this.theme.fg("muted", this.path)].join(" ");
-		const lines = [truncateToWidth(row, width)];
+		const lines = new LabeledDotLine({
+			theme: this.theme,
+			dotColor,
+			label: "autoread",
+			labelColor: this.rowState.get(this.rowId) === "pruned" ? "warning" : "toolTitle",
+			parts: [this.theme.fg("muted", this.path)],
+		}).render(width);
 		if (this.expanded && typeof this.content === "string") lines.push(this.theme.fg("muted", this.content));
 		return lines;
 	}

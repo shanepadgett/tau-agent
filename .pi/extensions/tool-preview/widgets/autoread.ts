@@ -1,5 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { Box, Container, Spacer, Text, type TUI, truncateToWidth } from "@earendil-works/pi-tui";
+import { Box, Container, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
+import { LabeledDotLine } from "../../../../src/shared/tui/labeled-dot-line.ts";
 
 interface AutoreadLine {
 	path: string;
@@ -47,46 +48,21 @@ function addAgentPreview(container: Container, theme: Theme): void {
 }
 
 class AutoreadLineComponent {
-	private readonly theme: Theme;
-	private readonly line: AutoreadLine;
-	private cachedWidth?: number;
-	private cachedLines?: string[];
+	private readonly line: LabeledDotLine;
 
 	constructor(theme: Theme, line: AutoreadLine) {
-		this.theme = theme;
-		this.line = line;
+		this.line = new LabeledDotLine({
+			theme,
+			dotColor: line.state === "reading" ? "dim" : "success",
+			label: "autoread",
+			labelColor: line.state === "pruned" ? "warning" : "toolTitle",
+			parts: [theme.fg("muted", line.path)],
+		});
 	}
 
 	render(width: number): string[] {
-		if (this.cachedLines && this.cachedWidth === width) return this.cachedLines;
-
-		const dotColor = this.dotColor();
-		const text = [` ${this.theme.fg(dotColor, "●")}`, this.toolName(), this.theme.fg("muted", this.line.path)].join(
-			" ",
-		);
-
-		this.cachedWidth = width;
-		this.cachedLines = [truncateToWidth(text, width)];
-		return this.cachedLines;
+		return this.line.render(width);
 	}
 
-	invalidate(): void {
-		this.cachedWidth = undefined;
-		this.cachedLines = undefined;
-	}
-
-	private dotColor(): "dim" | "success" {
-		switch (this.line.state) {
-			case "reading":
-				return "dim";
-			case "read":
-			case "pruned":
-				return "success";
-		}
-	}
-
-	private toolName(): string {
-		const name = this.theme.bold("autoread");
-		return this.line.state === "pruned" ? this.theme.fg("warning", name) : this.theme.fg("toolTitle", name);
-	}
+	invalidate(): void {}
 }

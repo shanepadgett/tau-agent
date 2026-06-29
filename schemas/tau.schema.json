@@ -159,6 +159,35 @@
 						}
 					},
 					"additionalProperties": false
+				},
+				"turnBudget": {
+					"type": "object",
+					"properties": {
+						"enabled": {
+							"type": "boolean",
+							"default": true,
+							"description": "Enable turn-budget hints."
+						},
+						"turnLimit": {
+							"type": "integer",
+							"default": 30,
+							"minimum": 1,
+							"description": "Initial soft cap for tool-using turns per user prompt."
+						},
+						"nudgeEveryTurns": {
+							"type": "integer",
+							"default": 5,
+							"minimum": 1,
+							"description": "Tool-using turn interval between turn-budget hints."
+						},
+						"softCapIncrement": {
+							"type": "integer",
+							"default": 10,
+							"minimum": 1,
+							"description": "Turns added when the soft cap is reached."
+						}
+					},
+					"additionalProperties": false
 				}
 			},
 			"additionalProperties": true,
