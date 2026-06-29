@@ -7,6 +7,7 @@ import { createGrepPreviewWidget } from "./widgets/grep.ts";
 import { createLsPreviewWidget } from "./widgets/ls.ts";
 import { createPatchPreviewWidget } from "./widgets/patch.ts";
 import { createReadPreviewWidget } from "./widgets/read.ts";
+import { createTurnBudgetPreviewWidget } from "./widgets/turn-budget.ts";
 
 const COMMAND = "tool-preview";
 const WIDGETS: Record<string, (tui: TUI, cwd: string, theme: Theme) => Component> = {
@@ -16,6 +17,7 @@ const WIDGETS: Record<string, (tui: TUI, cwd: string, theme: Theme) => Component
 	ls: createLsPreviewWidget,
 	patch: createPatchPreviewWidget,
 	read: createReadPreviewWidget,
+	"turn-budget": createTurnBudgetPreviewWidget,
 };
 const ARGUMENTS = [
 	{ value: "autoread", label: "autoread", description: "Show autoread line states" },
@@ -24,6 +26,7 @@ const ARGUMENTS = [
 	{ value: "ls", label: "ls", description: "Show ls row states" },
 	{ value: "patch", label: "patch", description: "Show patch row states" },
 	{ value: "read", label: "read", description: "Show read row states" },
+	{ value: "turn-budget", label: "turn-budget", description: "Show turn-budget hint states" },
 	{ value: "clear", label: "clear", description: "Hide the preview widget" },
 ] satisfies AutocompleteItem[];
 
