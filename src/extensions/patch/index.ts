@@ -115,7 +115,7 @@ function createPatchTool(rowState: ReturnType<typeof createToolRowStateStore>) {
 			"Before writing Update File patches, read every file you need to touch so context and removed lines match current content.",
 			"In Update File hunks, one leading prefix is syntax: space for context, - for removed text, + for added text. The rest of the line is file text.",
 			"Use context body lines for positional inserts. A pure + update chunk appends to EOF.",
-			"Unanchored repeated matches use the first forward match. Add context when the first match is not the intended match.",
+			"Unanchored repeated matches use the first forward match. Anchor hunks on distinctive nearby lines when matching could be ambiguous; avoid lone braces or generic repeated lines.",
 			"The @@ context marker moves the search cursor after that existing line; the marker line itself is not changed by the hunk.",
 			"Move targets must not already exist.",
 			"If a match fails, read the current file content and retry with corrected lines.",
