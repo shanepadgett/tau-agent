@@ -1,0 +1,374 @@
+import { defineTool, type Theme, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
+import { Box, type Component, Container, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
+import { Type } from "typebox";
+import { type ApplyPatchSummary, deriveStats } from "../../../../src/extensions/patch/executor.ts";
+import { renderPatchCall, renderPatchResult } from "../../../../src/extensions/patch/render.ts";
+
+interface PatchPreviewSpec {
+	title: string;
+	input: string;
+	agentPayload: string;
+	summary?: ApplyPatchSummary;
+	isPartial?: boolean;
+	isError?: boolean;
+}
+
+interface PatchRenderContext {
+	expanded: boolean;
+	executionStarted: boolean;
+	isPartial: boolean;
+}
+
+const patchPreviewParams = Type.Object({ input: Type.String() });
+
+const mixedPatchInput = [
+	"*** Begin Patch",
+	"*** Add File: src/extensions/explore/index.ts",
+	"+export const exploreExtension = {};",
+	"*** Replace File: src/extensions/explore/README.md",
+	"+# Explore",
+	"+",
+	"+Explore repository files.",
+	"*** Update File: src/extensions/search/index.ts",
+	" export const searchExtension = defineExtension({",
+	'-\tname: "search",',
+	'+\tname: "explore",',
+	" });",
+	"*** Delete File: src/extensions/search/forget.ts",
+	"*** Update File: src/extensions/search/read.ts",
+	"*** Move to: src/extensions/explore/read.ts",
+	'import { createReadToolDefinition } from "@earendil-works/pi-coding-agent";',
+	"*** End Patch",
+].join("\n");
+
+const partialFailureInput = [
+	"*** Begin Patch",
+	"*** Add File: src/extensions/explore/settings.ts",
+	"+export const EXPLORE_LIMIT = 100;",
+	"*** Update File: src/extensions/search/index.ts",
+	"@@ old registration block",
+	'-\tname: "search",',
+	'+\tname: "explore",',
+	"*** Delete File: src/extensions/search/obsolete.ts",
+	"*** End Patch",
+].join("\n");
+
+const failedInput = [
+	"*** Begin Patch",
+	"*** Update File: src/extensions/explore/missing.ts",
+	" export const missing = true;",
+	"*** End Patch",
+].join("\n");
+
+const runningSummary: ApplyPatchSummary = {
+	status: "partial",
+	totalSections: 5,
+	changes: [
+		{
+			sectionIndex: 1,
+			kind: "add",
+			path: "src/extensions/explore/index.ts",
+			linesAdded: 1,
+			linesRemoved: 0,
+		},
+		{
+			sectionIndex: 2,
+			kind: "replace",
+			path: "src/extensions/explore/README.md",
+			linesAdded: 3,
+			linesRemoved: 7,
+		},
+	],
+	failures: [],
+};
+
+const completedSummary: ApplyPatchSummary = {
+	status: "completed",
+	totalSections: 5,
+	changes: [
+		{
+			sectionIndex: 1,
+			kind: "add",
+			path: "src/extensions/explore/index.ts",
+			linesAdded: 1,
+			linesRemoved: 0,
+		},
+		{
+			sectionIndex: 2,
+			kind: "replace",
+			path: "src/extensions/explore/README.md",
+			linesAdded: 3,
+			linesRemoved: 7,
+		},
+		{
+			sectionIndex: 3,
+			kind: "update",
+			path: "src/extensions/search/index.ts",
+			linesAdded: 1,
+			linesRemoved: 1,
+		},
+		{
+			sectionIndex: 4,
+			kind: "delete",
+			path: "src/extensions/search/forget.ts",
+			linesAdded: 0,
+			linesRemoved: 42,
+		},
+		{
+			sectionIndex: 5,
+			kind: "update",
+			path: "src/extensions/explore/read.ts",
+			move: { from: "src/extensions/search/read.ts", to: "src/extensions/explore/read.ts" },
+			linesAdded: 0,
+			linesRemoved: 0,
+		},
+	],
+	failures: [],
+};
+
+const partialFailureSummary: ApplyPatchSummary = {
+	status: "partial",
+	totalSections: 3,
+	changes: [
+		{
+			sectionIndex: 1,
+			kind: "add",
+			path: "src/extensions/explore/settings.ts",
+			linesAdded: 1,
+			linesRemoved: 0,
+		},
+		{
+			sectionIndex: 3,
+			kind: "delete",
+			path: "src/extensions/search/obsolete.ts",
+			linesAdded: 0,
+			linesRemoved: 31,
+		},
+	],
+	failures: [
+		{
+			phase: "apply",
+			sectionIndex: 2,
+			path: "src/extensions/search/index.ts",
+			kind: "update",
+			chunkIndex: 1,
+			totalChunks: 1,
+			contextHint: "old registration block",
+			message: "could not match",
+		},
+	],
+};
+
+const failedSummary: ApplyPatchSummary = {
+	status: "failed",
+	totalSections: 1,
+	changes: [],
+	failures: [
+		{
+			phase: "apply",
+			sectionIndex: 1,
+			path: "src/extensions/explore/missing.ts",
+			kind: "update",
+			message: "Path does not exist: src/extensions/explore/missing.ts",
+		},
+	],
+};
+
+function createPatchPreviewDefinition(warning: boolean) {
+	return defineTool<typeof patchPreviewParams, ApplyPatchSummary, unknown>({
+		name: "patch",
+		label: "Patch",
+		description: "Preview patch row",
+		parameters: patchPreviewParams,
+		async execute(_toolCallId, _params, _signal, _onUpdate, _ctx) {
+			return { content: [{ type: "text" as const, text: "" }], details: failedSummary };
+		},
+		renderCall(args, theme, context) {
+			const row = renderPatchCall(args, theme, renderContext(context));
+			return warning ? new WarningPatchTitle(row, theme) : row;
+		},
+		renderResult(result, options, theme, context) {
+			const row = renderPatchResult(result, { expanded: options.expanded }, theme, {
+				expanded: options.expanded,
+				args: context.args,
+			});
+			return warning ? new WarningPatchTitle(row, theme) : row;
+		},
+	});
+}
+
+const patchSpecs: PatchPreviewSpec[] = [
+	{
+		title: "Streaming Input",
+		input: mixedPatchInput,
+		agentPayload: "[No tool result yet. The agent has sent the patch input; execution has not returned.]",
+	},
+	{
+		title: "Running Partial Update",
+		input: mixedPatchInput,
+		summary: runningSummary,
+		isPartial: true,
+		agentPayload: ["[UI partial update; not final model input]", "", formatSummary(runningSummary)].join("\n"),
+	},
+	{
+		title: "Completed Result",
+		input: mixedPatchInput,
+		summary: completedSummary,
+		agentPayload: formatSummary(completedSummary),
+	},
+	{
+		title: "Partial Failure Result",
+		input: partialFailureInput,
+		summary: partialFailureSummary,
+		isError: true,
+		agentPayload: formatSummary(partialFailureSummary),
+	},
+	{
+		title: "Failed Result",
+		input: failedInput,
+		summary: failedSummary,
+		isError: true,
+		agentPayload: formatSummary(failedSummary),
+	},
+];
+
+export function createPatchPreviewWidget(tui: TUI, cwd: string, theme: Theme): Container {
+	const container = new Container();
+	addPageTitle(container, theme, "Patch Row Preview");
+	for (const spec of patchSpecs) {
+		addSampleTitle(container, theme, spec.title);
+		addAgentPayload(container, theme, spec.agentPayload);
+		addSection(container, theme, "Collapsed Row", [createPatchRow(tui, cwd, spec, false)]);
+		addSection(container, theme, "Expanded Row", [createPatchRow(tui, cwd, spec, true)]);
+	}
+	const prunedSpec = patchSpecs[2];
+	if (prunedSpec) {
+		addSampleTitle(container, theme, "Pruned Result");
+		addSection(container, theme, "Collapsed", [createPatchRow(tui, cwd, prunedSpec, false, true)]);
+		addSection(container, theme, "Expanded", [createPatchRow(tui, cwd, prunedSpec, true, true)]);
+	}
+	return container;
+}
+
+function renderContext(context: PatchRenderContext) {
+	return {
+		expanded: context.expanded,
+		executionStarted: context.executionStarted,
+		isPartial: context.isPartial,
+	};
+}
+
+function createPatchRow(
+	tui: TUI,
+	cwd: string,
+	spec: PatchPreviewSpec,
+	expanded: boolean,
+	warning = false,
+): ToolExecutionComponent {
+	const row = new ToolExecutionComponent(
+		"patch",
+		`patch-${warning ? "warning-" : ""}${spec.title.toLowerCase().replaceAll(" ", "-")}-${expanded ? "expanded" : "collapsed"}`,
+		{ input: spec.input },
+		{},
+		createPatchPreviewDefinition(warning),
+		tui,
+		cwd,
+	);
+	if (spec.summary) {
+		row.markExecutionStarted();
+		row.setArgsComplete();
+		row.updateResult(
+			{
+				content: [{ type: "text", text: spec.agentPayload }],
+				details: spec.summary,
+				isError: spec.isError ?? false,
+			},
+			spec.isPartial ?? false,
+		);
+	}
+	row.setExpanded(expanded);
+	return row;
+}
+
+class WarningPatchTitle implements Component {
+	private readonly inner: Component;
+	private readonly theme: Theme;
+
+	constructor(inner: Component, theme: Theme) {
+		this.inner = inner;
+		this.theme = theme;
+	}
+
+	render(width: number): string[] {
+		const normalTitle = this.theme.fg("toolTitle", this.theme.bold("patch"));
+		const warningTitle = this.theme.fg("warning", this.theme.bold("patch"));
+		return this.inner.render(width).map((line) => line.replace(normalTitle, warningTitle));
+	}
+
+	invalidate(): void {
+		this.inner.invalidate();
+	}
+}
+
+function formatSummary(summary: ApplyPatchSummary): string {
+	const s = deriveStats(summary);
+	const lines: string[] = [];
+	if (summary.status === "failed") {
+		lines.push("No changes applied.");
+	} else {
+		const parts: string[] = [];
+		if (s.linesAdded > 0) parts.push(`+${s.linesAdded}`);
+		if (s.linesRemoved > 0) parts.push(`-${s.linesRemoved}`);
+		const badge = parts.length > 0 ? ` [${parts.join(" ")}]` : "";
+		lines.push(`Applied ${s.completedOperations}/${summary.totalSections} sections.${badge}`);
+	}
+
+	for (const path of s.added) lines.push(`A ${path}`);
+	for (const path of s.replaced) lines.push(`M ${path}`);
+	for (const path of s.updated) lines.push(`M ${path}`);
+	for (const path of s.deleted) lines.push(`D ${path}`);
+	for (const move of s.moved) lines.push(`R ${move.from} -> ${move.to}`);
+
+	if (summary.failures.length > 0) {
+		lines.push("Failures:");
+		for (const failure of summary.failures) {
+			const kind = failure.kind ? `${failure.kind} ` : "";
+			const path = failure.path ?? "";
+			const chunk =
+				failure.chunkIndex && failure.totalChunks ? ` chunk ${failure.chunkIndex}/${failure.totalChunks}` : "";
+			const ctx = failure.contextHint ? ` (context: "${failure.contextHint}")` : "";
+			lines.push(`- ${kind}${path}${chunk}: ${failure.message}${ctx}`.trim());
+		}
+	}
+
+	return lines.join("\n");
+}
+
+function addPageTitle(container: Container, theme: Theme, title: string): void {
+	container.addChild(new Text(theme.fg("text", theme.bold(title)), 1, 0));
+	container.addChild(new Spacer(1));
+}
+
+function addSampleTitle(container: Container, theme: Theme, title: string): void {
+	container.addChild(new Text(theme.fg("accent", theme.bold(title)), 1, 0));
+	container.addChild(new Spacer(1));
+}
+
+function addSection(container: Container, theme: Theme, title: string, rows: ToolExecutionComponent[]): void {
+	addSectionHeading(container, theme, title);
+	for (const row of rows) container.addChild(row);
+	container.addChild(new Spacer(1));
+}
+
+function addAgentPayload(container: Container, theme: Theme, payload: string): void {
+	addSectionHeading(container, theme, "Agent Payload");
+	container.addChild(new Spacer(1));
+	const box = new Box(1, 1, (text) => theme.bg("customMessageBg", text));
+	box.addChild(new Text(theme.fg("customMessageText", payload), 0, 0));
+	container.addChild(box);
+	container.addChild(new Spacer(1));
+}
+
+function addSectionHeading(container: Container, theme: Theme, title: string): void {
+	container.addChild(new Text(theme.bold(title), 1, 0));
+}
