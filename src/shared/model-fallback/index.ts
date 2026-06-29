@@ -19,9 +19,20 @@ const PREFERRED_MODELS: ReadonlyArray<{ provider: string; model: string; reasoni
 	{ provider: "anthropic", model: "claude-haiku-4-5", reasoning: "high" },
 ];
 
-const SIZE_ROUTED_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
+const SMALL_PROMPT_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
 	{ provider: "openrouter", model: "cohere/north-mini-code:free", reasoning: "high" },
 	{ provider: "github-copilot", model: "gemini-3.5-flash", reasoning: "high" },
+	{ provider: "openai-codex", model: "gpt-5.4-mini", reasoning: "high" },
+	{ provider: "openai-codex", model: "gpt-5.5", reasoning: "high" },
+];
+
+const MEDIUM_PROMPT_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
+	{ provider: "github-copilot", model: "gemini-3.5-flash", reasoning: "high" },
+	{ provider: "openai-codex", model: "gpt-5.4-mini", reasoning: "high" },
+	{ provider: "openai-codex", model: "gpt-5.5", reasoning: "high" },
+];
+
+const LARGE_PROMPT_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
 	{ provider: "openai-codex", model: "gpt-5.5", reasoning: "high" },
 ];
 
@@ -72,9 +83,9 @@ function routedModelsForPrompt(
 	prompt: string,
 ): ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> {
 	const tokens = Math.ceil(prompt.length / CHARS_PER_TOKEN_ESTIMATE);
-	if (tokens < MEDIUM_PROMPT_TOKENS) return SIZE_ROUTED_MODELS;
-	if (tokens < LARGE_PROMPT_TOKENS) return SIZE_ROUTED_MODELS.slice(1);
-	return SIZE_ROUTED_MODELS.slice(2);
+	if (tokens < MEDIUM_PROMPT_TOKENS) return SMALL_PROMPT_MODELS;
+	if (tokens < LARGE_PROMPT_TOKENS) return MEDIUM_PROMPT_MODELS;
+	return LARGE_PROMPT_MODELS;
 }
 
 export async function generateValidated<T>(

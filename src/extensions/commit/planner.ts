@@ -26,7 +26,7 @@ export async function generateInitialPlan(
 	const prompt = buildPlanPrompt(evidence, previousPlan, regenerationNote);
 	return generateValidated(
 		ctx,
-		await resolveCandidatesForPrompt(ctx, prompt),
+		await resolveCommitCandidates(ctx, prompt),
 		prompt,
 		(text) => validatePlanResponse(text, evidence.files),
 		(error, text) =>
@@ -54,7 +54,7 @@ export async function regenerateGroupMessage(
 	const prompt = buildMessagePrompt(evidence, selected, previousPlan, selectedGroupId, regenerationNote);
 	return generateValidated(
 		ctx,
-		await resolveCandidatesForPrompt(ctx, prompt),
+		await resolveCommitCandidates(ctx, prompt),
 		prompt,
 		(text) => validateMessage(cleanMessage(text)),
 		(error, text) =>
@@ -68,6 +68,13 @@ export async function regenerateGroupMessage(
 			].join("\n"),
 		{ statusKey: "commit", notifyOnFallback: true },
 	);
+}
+
+async function resolveCommitCandidates(
+	ctx: Pick<ExtensionCommandContext, "modelRegistry" | "model" | "cwd" | "isProjectTrusted">,
+	prompt: string,
+): Promise<Awaited<ReturnType<typeof resolveCandidatesForPrompt>>> {
+	return resolveCandidatesForPrompt(ctx, prompt);
 }
 
 function validatePlanResponse(raw: string, dirtyFiles: readonly DirtyFile[]): CommitPlanGroup[] {
