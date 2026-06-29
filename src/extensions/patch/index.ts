@@ -10,6 +10,8 @@ const SUPPRESSED_TOOLS = new Set(["edit", "write"]);
 const patchParams = Type.Object({
 	input: Type.String({
 		description: [
+			'Pass the full patch as this input string. Tool call arguments must be exactly { "input": "*** Begin Patch\\n...\\n*** End Patch" }; never put the patch text in a JSON object key.',
+			"",
 			"Apply one structured multi-file patch. Put the full patch text in this field.",
 			"",
 			"ENVELOPE",
@@ -106,6 +108,7 @@ function createPatchTool(rowState: ReturnType<typeof createToolRowStateStore>) {
 			"Apply a multi-file patch to create, edit, move, and delete files. This is the only file-mutation tool available. Use it for all file writes, edits, creation, deletion, and moves. Invalid sections fail independently when possible.",
 		promptSnippet: "Apply multi-file patches to create, edit, move, and delete files",
 		promptGuidelines: [
+			'Call patch with arguments shaped exactly as { "input": "*** Begin Patch\\n...\\n*** End Patch" }. Do not put the patch body in a JSON key.',
 			"Use patch for all file creation, editing, deletion, and moves. This is the only file-mutation tool.",
 			"Use one envelope: *** Begin Patch, one or more sections, then *** End Patch.",
 			"Use one section per touched path. Include adds, replaces, updates, deletes, and moves together when possible; retry failed sections separately when needed.",
