@@ -1,5 +1,6 @@
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem, Component, TUI } from "@earendil-works/pi-tui";
+import { matchesKey } from "@earendil-works/pi-tui";
 import { createAutoreadPreviewWidget } from "./widgets/autoread.ts";
 import { createFindPreviewWidget } from "./widgets/find.ts";
 import { createGrepPreviewWidget } from "./widgets/grep.ts";
@@ -27,6 +28,12 @@ const ARGUMENTS = [
 ] satisfies AutocompleteItem[];
 
 export default function toolPreview(pi: ExtensionAPI): void {
+	let clearOnEscape: (() => void) | undefined;
+	pi.on("session_shutdown", () => {
+		clearOnEscape?.();
+		clearOnEscape = undefined;
+	});
+
 	pi.registerCommand(COMMAND, {
 		description: "Preview custom tool UI widgets",
 		getArgumentCompletions(prefix) {
@@ -35,6 +42,12 @@ export default function toolPreview(pi: ExtensionAPI): void {
 			return items.length > 0 ? items : null;
 		},
 		handler: async (args, ctx) => {
+			const clearPreview = () => {
+				ctx.ui.setWidget(COMMAND, undefined);
+				clearOnEscape?.();
+				clearOnEscape = undefined;
+			};
+
 			if (ctx.mode !== "tui") {
 				ctx.ui.notify("Tool preview requires TUI mode", "error");
 				return;
@@ -42,7 +55,7 @@ export default function toolPreview(pi: ExtensionAPI): void {
 
 			const command = args.trim();
 			if (command === "" || command === "clear") {
-				ctx.ui.setWidget(COMMAND, undefined);
+				clearPreview();
 				return;
 			}
 
@@ -54,6 +67,12 @@ export default function toolPreview(pi: ExtensionAPI): void {
 
 			ctx.ui.setWidget(COMMAND, (tui, theme) => createWidget(tui, ctx.cwd, theme), {
 				placement: "aboveEditor",
+			});
+			clearOnEscape?.();
+			clearOnEscape = ctx.ui.onTerminalInput((data) => {
+				if (!matchesKey(data, "escape")) return undefined;
+				clearPreview();
+				return { consume: true };
 			});
 		},
 	});
