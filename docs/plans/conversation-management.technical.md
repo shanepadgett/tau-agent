@@ -62,8 +62,8 @@ Range shape:
 
 ```ts
 interface LineRange {
-	start: number;
-	end: number;
+ start: number;
+ end: number;
 }
 ```
 
@@ -186,11 +186,11 @@ Use `event.preparation` for the compaction return fields. Follow `custom-compact
 
 ```ts
 return {
-	compaction: {
-		summary,
-		firstKeptEntryId: event.preparation.firstKeptEntryId,
-		tokensBefore: event.preparation.tokensBefore,
-	},
+ compaction: {
+  summary,
+  firstKeptEntryId: event.preparation.firstKeptEntryId,
+  tokensBefore: event.preparation.tokensBefore,
+ },
 };
 ```
 

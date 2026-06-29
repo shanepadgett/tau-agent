@@ -1,15 +1,10 @@
 {
-	// Keep markdownlint scoped to source/docs owned by this package.
+	// Lint all markdown in the repo, excluding generated/vendor paths below.
 	"globs": [
-		"*.md",
-		".pi/**/*.md",
-		"prompts/**/*.md",
-		"skills/**/*.md",
-		"themes/**/*.md"
+		"**/*.md"
 	],
 	"ignores": [
 		"node_modules/**",
-		"references/**",
 		".pi/sessions/**",
 		".pi/cache/**",
 		".pi/tmp/**",
