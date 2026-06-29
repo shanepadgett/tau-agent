@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ToolRowVisualState } from "./tool-row-state.js";
 
 export type TauAgentEvents = {
 	"tau:agent.blocked": {
@@ -32,6 +33,10 @@ export type TauAgentEvents = {
 		id: string;
 		text?: string;
 		priority?: number;
+	};
+	"tau:tool-row-state.set": {
+		toolCallId: string;
+		state?: ToolRowVisualState;
 	};
 };
 

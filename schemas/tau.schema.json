@@ -62,23 +62,6 @@
 					},
 					"additionalProperties": false
 				},
-				"search": {
-					"type": "object",
-					"properties": {
-						"workingMemory": {
-							"type": "boolean",
-							"description": "Enable search working-memory pruning and forget."
-						},
-						"excludedPaths": {
-							"type": "array",
-							"items": {
-								"type": "string",
-								"description": "Paths or simple globs excluded from automatic search auto reads."
-							}
-						}
-					},
-					"additionalProperties": false
-				},
 				"silentCommandRunner": {
 					"type": "object",
 					"properties": {

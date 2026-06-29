@@ -1,6 +1,7 @@
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { emitTauEvent } from "../../shared/events.js";
+import { createToolRowStateStore } from "../../shared/tool-row-state.js";
 import { type ApplyPatchSummary, applyPatch, deriveStats } from "./executor.ts";
 import { renderPatchCall, renderPatchResult } from "./render.ts";
 
@@ -97,60 +98,71 @@ function formatSummary(summary: ApplyPatchSummary): string {
 	return lines.join("\n");
 }
 
-const PATCH_TOOL = defineTool<typeof patchParams, ApplyPatchSummary>({
-	name: "patch",
-	label: "Patch",
-	description:
-		"Apply a multi-file patch to create, edit, move, and delete files. This is the only file-mutation tool available. Use it for all file writes, edits, creation, deletion, and moves. Invalid sections fail independently when possible.",
-	promptSnippet: "Apply multi-file patches to create, edit, move, and delete files",
-	promptGuidelines: [
-		"Use patch for all file creation, editing, deletion, and moves. This is the only file-mutation tool.",
-		"Use one envelope: *** Begin Patch, one or more sections, then *** End Patch.",
-		"Use one section per touched path. Include adds, replaces, updates, deletes, and moves together when possible; retry failed sections separately when needed.",
-		"Before writing Update File patches, read every file you need to touch so context and removed lines match current content.",
-		"In Update File hunks, one leading prefix is syntax: space for context, - for removed text, + for added text. The rest of the line is file text.",
-		"Use context body lines for positional inserts. A pure + update chunk appends to EOF.",
-		"Unanchored repeated matches use the first forward match. Add context when the first match is not the intended match.",
-		"The @@ context marker moves the search cursor after that existing line; the marker line itself is not changed by the hunk.",
-		"Move targets must not already exist.",
-		"If a match fails, read the current file content and retry with corrected lines.",
-	],
-	parameters: patchParams,
-	executionMode: "sequential",
+function createPatchTool(rowState: ReturnType<typeof createToolRowStateStore>) {
+	return defineTool<typeof patchParams, ApplyPatchSummary>({
+		name: "patch",
+		label: "Patch",
+		description:
+			"Apply a multi-file patch to create, edit, move, and delete files. This is the only file-mutation tool available. Use it for all file writes, edits, creation, deletion, and moves. Invalid sections fail independently when possible.",
+		promptSnippet: "Apply multi-file patches to create, edit, move, and delete files",
+		promptGuidelines: [
+			"Use patch for all file creation, editing, deletion, and moves. This is the only file-mutation tool.",
+			"Use one envelope: *** Begin Patch, one or more sections, then *** End Patch.",
+			"Use one section per touched path. Include adds, replaces, updates, deletes, and moves together when possible; retry failed sections separately when needed.",
+			"Before writing Update File patches, read every file you need to touch so context and removed lines match current content.",
+			"In Update File hunks, one leading prefix is syntax: space for context, - for removed text, + for added text. The rest of the line is file text.",
+			"Use context body lines for positional inserts. A pure + update chunk appends to EOF.",
+			"Unanchored repeated matches use the first forward match. Add context when the first match is not the intended match.",
+			"The @@ context marker moves the search cursor after that existing line; the marker line itself is not changed by the hunk.",
+			"Move targets must not already exist.",
+			"If a match fails, read the current file content and retry with corrected lines.",
+		],
+		parameters: patchParams,
+		executionMode: "sequential",
 
-	async execute(_toolCallId, params, signal, onUpdate, ctx) {
-		const input = params.input.replace(/\r\n/g, "\n").trim();
-		const summary = await applyPatch(ctx.cwd, input, signal, async (progress) => {
-			await onUpdate?.({
-				content: [{ type: "text", text: formatSummary(progress) }],
-				details: progress,
+		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+			const input = params.input.replace(/\r\n/g, "\n").trim();
+			const summary = await applyPatch(ctx.cwd, input, signal, async (progress) => {
+				await onUpdate?.({
+					content: [{ type: "text", text: formatSummary(progress) }],
+					details: progress,
+				});
 			});
-		});
 
-		return {
-			content: [{ type: "text", text: formatSummary(summary) }],
-			details: summary,
-		};
-	},
+			return {
+				content: [{ type: "text", text: formatSummary(summary) }],
+				details: summary,
+			};
+		},
 
-	renderCall(args, theme, context) {
-		return renderPatchCall(args as { input?: string }, theme, {
-			expanded: context.expanded,
-			executionStarted: context.executionStarted,
-			isPartial: context.isPartial,
-		});
-	},
+		renderCall(args, theme, context) {
+			return renderPatchCall(args as { input?: string }, theme, {
+				expanded: context.expanded,
+				executionStarted: context.executionStarted,
+				isPartial: context.isPartial,
+				lastComponent: context.lastComponent,
+				rowState,
+				toolCallId: context.toolCallId,
+				invalidate: context.invalidate,
+			});
+		},
 
-	renderResult(result, options, theme, context) {
-		return renderPatchResult(result, { expanded: options.expanded }, theme, {
-			expanded: options.expanded,
-			args: context.args as { input?: string },
-		});
-	},
-});
+		renderResult(result, options, theme, context) {
+			return renderPatchResult(result, { expanded: options.expanded }, theme, {
+				expanded: options.expanded,
+				args: context.args as { input?: string },
+				lastComponent: context.lastComponent,
+				rowState,
+				toolCallId: context.toolCallId,
+				invalidate: context.invalidate,
+			});
+		},
+	});
+}
 
 export default function patchExtension(pi: ExtensionAPI): void {
-	pi.registerTool(PATCH_TOOL);
+	const rowState = createToolRowStateStore(pi);
+	pi.registerTool(createPatchTool(rowState));
 
 	// AgentToolResult has no isError field, so execute returns are always treated as success.
 	// Override via tool_result to flag partial/failed patches as errors for the model and UI.
@@ -178,6 +190,7 @@ export default function patchExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_start", () => {
+		rowState.clear();
 		const active = new Set(pi.getActiveTools());
 		active.add("patch");
 		for (const tool of SUPPRESSED_TOOLS) active.delete(tool);

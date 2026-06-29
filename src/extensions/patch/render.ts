@@ -1,5 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.js";
 import { type ApplyPatchSummary, deriveStats } from "./executor.ts";
 
 // renderCall owns only the pre-execution streaming preview. Once execution starts, pi stacks
@@ -166,46 +167,81 @@ interface RenderCallContext {
 	expanded: boolean;
 	executionStarted: boolean;
 	isPartial: boolean;
+	lastComponent?: unknown;
+	rowState: ToolRowStateStore;
+	toolCallId: string;
+	invalidate: () => void;
+}
+
+function patchTitle(theme: Theme, context: Pick<RenderCallContext, "rowState" | "toolCallId" | "invalidate">): string {
+	context.rowState.watch(context.toolCallId, context.invalidate);
+	return formatToolRowTitle(context.rowState, context.toolCallId, "patch", theme);
+}
+
+function textComponent(lastComponent: unknown): Text {
+	return (lastComponent as Text | undefined) ?? new Text("", 0, 0);
 }
 
 export function renderPatchCall(args: { input?: string } | undefined, theme: Theme, context: RenderCallContext): Text {
+	const text = textComponent(context.lastComponent);
 	// Once execution starts, renderResult owns the view (it gets the live summary). Yield to avoid
 	// a duplicated op list, since pi stacks both renderers in the same container.
-	if (context.executionStarted || !context.isPartial) return new Text("", 0, 0);
+	if (context.executionStarted || !context.isPartial) {
+		text.setText("");
+		return text;
+	}
 
 	const input = args?.input;
 	const preview = scanPreview(input);
-	const header = `${theme.fg("toolTitle", theme.bold("patch"))}  ${statsBadge(undefined, preview, theme)}`;
+	const header = `${patchTitle(theme, context)}  ${statsBadge(undefined, preview, theme)}`;
 
 	if (context.expanded) {
 		const raw = typeof input === "string" ? input.replace(/\r\n/g, "\n").trim() : "";
-		return new Text(raw ? `${header}\n${theme.fg("muted", raw)}` : header, 0, 0);
+		text.setText(raw ? `${header}\n${theme.fg("muted", raw)}` : header);
+		return text;
 	}
 
-	if (preview.length === 0) return new Text(header, 0, 0);
+	if (preview.length === 0) {
+		text.setText(header);
+		return text;
+	}
 	const lines = preview.map((op) => renderOpLine(op, "pending", theme));
-	return new Text([header, ...lines].join("\n"), 0, 0);
+	text.setText([header, ...lines].join("\n"));
+	return text;
 }
 
 export function renderPatchResult(
 	result: { details?: ApplyPatchSummary },
 	options: { expanded: boolean },
 	theme: Theme,
-	context: { expanded: boolean; args?: { input?: string } },
+	context: {
+		expanded: boolean;
+		args?: { input?: string };
+		lastComponent?: unknown;
+		rowState: ToolRowStateStore;
+		toolCallId: string;
+		invalidate: () => void;
+	},
 ): Text {
+	const text = textComponent(context.lastComponent);
 	const summary = result.details;
-	if (!summary) return new Text("", 0, 0);
+	if (!summary) {
+		text.setText("");
+		return text;
+	}
 	const preview = scanPreview(context.args?.input);
-	const header = `${theme.fg("toolTitle", theme.bold("patch"))}  ${statsBadge(summary, preview, theme)}`;
+	const header = `${patchTitle(theme, context)}  ${statsBadge(summary, preview, theme)}`;
 	const statuses = deriveStatuses(summary);
 
 	if (options.expanded) {
 		const raw = context.args?.input?.replace(/\r\n/g, "\n").trim() ?? "";
 		const sections = [header];
 		if (raw) sections.push(theme.fg("muted", raw));
-		return new Text(sections.join("\n"), 0, 0);
+		text.setText(sections.join("\n"));
+		return text;
 	}
 
 	const lines = preview.map((op) => renderOpLine(op, statuses.get(op.sectionIndex), theme));
-	return new Text([header, ...lines].join("\n"), 0, 0);
+	text.setText([header, ...lines].join("\n"));
+	return text;
 }

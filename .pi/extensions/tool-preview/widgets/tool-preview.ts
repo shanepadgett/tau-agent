@@ -117,8 +117,8 @@ function createDefinition(spec: ToolPreviewSpec, warning: boolean): ToolDefiniti
 				: theme.fg("toolTitle", theme.bold(spec.name));
 			return new Text(`${title} ${theme.fg("muted", spec.argText)}`, 0, 0);
 		},
-		renderResult(result, { expanded }, _theme, context) {
-			return new Text(expanded || context.isError ? textContent(result.content) : "", 0, 0);
+		renderResult(result, { expanded }, _theme, _context) {
+			return new Text(expanded ? textContent(result.content) : "", 0, 0);
 		},
 	};
 }

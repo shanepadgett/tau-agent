@@ -1,8 +1,9 @@
 import { defineTool, type Theme, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
-import { Box, type Component, Container, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
+import { Box, Container, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { type ApplyPatchSummary, deriveStats } from "../../../../src/extensions/patch/executor.ts";
 import { renderPatchCall, renderPatchResult } from "../../../../src/extensions/patch/render.ts";
+import type { ToolRowStateStore } from "../../../../src/shared/tool-row-state.ts";
 
 interface PatchPreviewSpec {
 	title: string;
@@ -17,6 +18,9 @@ interface PatchRenderContext {
 	expanded: boolean;
 	executionStarted: boolean;
 	isPartial: boolean;
+	lastComponent?: unknown;
+	toolCallId: string;
+	invalidate: () => void;
 }
 
 const patchPreviewParams = Type.Object({ input: Type.String() });
@@ -175,6 +179,7 @@ const failedSummary: ApplyPatchSummary = {
 };
 
 function createPatchPreviewDefinition(warning: boolean) {
+	const rowState = previewRowState(warning);
 	return defineTool<typeof patchPreviewParams, ApplyPatchSummary, unknown>({
 		name: "patch",
 		label: "Patch",
@@ -184,15 +189,17 @@ function createPatchPreviewDefinition(warning: boolean) {
 			return { content: [{ type: "text" as const, text: "" }], details: failedSummary };
 		},
 		renderCall(args, theme, context) {
-			const row = renderPatchCall(args, theme, renderContext(context));
-			return warning ? new WarningPatchTitle(row, theme) : row;
+			return renderPatchCall(args, theme, renderContext(context, rowState));
 		},
 		renderResult(result, options, theme, context) {
-			const row = renderPatchResult(result, { expanded: options.expanded }, theme, {
+			return renderPatchResult(result, { expanded: options.expanded }, theme, {
 				expanded: options.expanded,
 				args: context.args,
+				lastComponent: context.lastComponent,
+				rowState,
+				toolCallId: context.toolCallId,
+				invalidate: context.invalidate,
 			});
-			return warning ? new WarningPatchTitle(row, theme) : row;
 		},
 	});
 }
@@ -250,11 +257,25 @@ export function createPatchPreviewWidget(tui: TUI, cwd: string, theme: Theme): C
 	return container;
 }
 
-function renderContext(context: PatchRenderContext) {
+function previewRowState(warning: boolean): ToolRowStateStore {
+	return {
+		get() {
+			return warning ? "pruned" : undefined;
+		},
+		watch() {},
+		clear() {},
+	};
+}
+
+function renderContext(context: PatchRenderContext, rowState: ToolRowStateStore) {
 	return {
 		expanded: context.expanded,
 		executionStarted: context.executionStarted,
 		isPartial: context.isPartial,
+		lastComponent: context.lastComponent,
+		rowState,
+		toolCallId: context.toolCallId,
+		invalidate: context.invalidate,
 	};
 }
 
@@ -288,26 +309,6 @@ function createPatchRow(
 	}
 	row.setExpanded(expanded);
 	return row;
-}
-
-class WarningPatchTitle implements Component {
-	private readonly inner: Component;
-	private readonly theme: Theme;
-
-	constructor(inner: Component, theme: Theme) {
-		this.inner = inner;
-		this.theme = theme;
-	}
-
-	render(width: number): string[] {
-		const normalTitle = this.theme.fg("toolTitle", this.theme.bold("patch"));
-		const warningTitle = this.theme.fg("warning", this.theme.bold("patch"));
-		return this.inner.render(width).map((line) => line.replace(normalTitle, warningTitle));
-	}
-
-	invalidate(): void {
-		this.inner.invalidate();
-	}
 }
 
 function formatSummary(summary: ApplyPatchSummary): string {
