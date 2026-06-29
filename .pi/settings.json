@@ -3,7 +3,10 @@
     {
       "source": "git:github.com/shanepadgett/tau-agent",
       "extensions": [],
-      "skills": []
+      "skills": [],
+      "prompts": [
+        "-prompts/cavemanify.md"
+      ]
     },
     {
       "source": "..",
@@ -13,6 +16,12 @@
         "+src/extensions/explore/index.ts",
         "+src/extensions/patch/index.ts",
         "+src/extensions/soul/index.ts"
+      ],
+      "prompts": [
+        "+prompts/cavemanify.md"
+      ],
+      "skills": [
+        "+skills/writing-preferences/SKILL.md"
       ]
     }
   ]
