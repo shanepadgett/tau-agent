@@ -6,7 +6,7 @@ Structured question UI for blocked agent decisions.
 
 `/qna [context]` temporarily enables `ask_question` and sends a hidden instruction asking the agent to re-ask its last question with structured UI. Optional context is included as framing guidance for the question.
 
-`/interview [topic]` creates `.working/interviews/<timestamp>-<slug>/decisions.md`, enables interview tools, and sends a hidden instruction to run a structured interview.
+`/interview [topic]` creates `.working/interviews/<date>/decisions.md`, enables interview tools, and sends a hidden instruction to run a structured interview.
 
 Interview sessions keep `ask_question` active across turns. The agent updates the decisions file after each answer, confirms the exit condition with the user, then calls `interview_end`.
 

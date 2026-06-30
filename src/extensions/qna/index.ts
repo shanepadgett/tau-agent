@@ -308,10 +308,10 @@ function formatNotes(answer: QnaResult["answers"][string], indent: string, value
 }
 
 async function createInterviewFile(cwd: string, topic: string): Promise<string> {
-	const dir = join(".working", "interviews", `${timestamp()}-${slugify(topic || "interview")}`);
+	const dir = join(".working", "interviews", dateStamp());
 	await mkdir(join(cwd, dir), { recursive: true });
 	const path = join(dir, "decisions.md");
-	await writeFile(join(cwd, path), interviewTemplate(topic), "utf8");
+	await writeFile(join(cwd, path), interviewTemplate(topic), { encoding: "utf8", flag: "wx" });
 	return path;
 }
 
@@ -363,15 +363,6 @@ Rules:
 - Do not call interview_end before user confirmation.`;
 }
 
-function slugify(value: string): string {
-	return (
-		value
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/g, "-")
-			.replace(/^-|-$/g, "") || "interview"
-	);
-}
-
-function timestamp(): string {
-	return new Date().toISOString().replace(/[:.]/g, "-");
+function dateStamp(): string {
+	return new Date().toISOString().slice(0, 10);
 }
