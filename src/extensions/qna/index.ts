@@ -308,7 +308,7 @@ function formatNotes(answer: QnaResult["answers"][string], indent: string, value
 }
 
 async function createInterviewFile(cwd: string, topic: string): Promise<string> {
-	const dir = join(".working", "interviews", dateStamp());
+	const dir = join(".working", "interviews", dateTimeStamp());
 	await mkdir(join(cwd, dir), { recursive: true });
 	const path = join(dir, "decisions.md");
 	await writeFile(join(cwd, path), interviewTemplate(topic), { encoding: "utf8", flag: "wx" });
@@ -363,6 +363,6 @@ Rules:
 - Do not call interview_end before user confirmation.`;
 }
 
-function dateStamp(): string {
-	return new Date().toISOString().slice(0, 10);
+function dateTimeStamp(): string {
+	return new Date().toISOString().replace(/[:.]/g, "-");
 }
