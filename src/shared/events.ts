@@ -22,7 +22,7 @@ export type TauAgentEvents = {
 		}>;
 	};
 	"tau:autoread.requested": {
-		source: "tau-context";
+		source: string;
 		title?: string;
 		cwd: string;
 		batchId: string;
@@ -47,30 +47,13 @@ export interface TauFooterItem {
 
 type EventAPI = Pick<ExtensionAPI, "events">;
 type TauEventHandler<Name extends keyof TauAgentEvents> = (data: TauAgentEvents[Name]) => void | Promise<void>;
-type HandlerStore = WeakMap<EventAPI["events"], Map<keyof TauAgentEvents, Set<TauEventHandler<keyof TauAgentEvents>>>>;
-type TauEventGlobal = typeof globalThis & { __tauAgentEventHandlers?: HandlerStore };
 
-const tauEventGlobal = globalThis as TauEventGlobal;
-if (!tauEventGlobal.__tauAgentEventHandlers) tauEventGlobal.__tauAgentEventHandlers = new WeakMap();
-const handlersByBus: HandlerStore = tauEventGlobal.__tauAgentEventHandlers;
-
-export async function emitTauEvent<Name extends keyof TauAgentEvents>(
+export function emitTauEvent<Name extends keyof TauAgentEvents>(
 	pi: EventAPI,
 	name: Name,
 	data: TauAgentEvents[Name],
-): Promise<void> {
+): void {
 	pi.events.emit(name, data);
-	const handlers = handlersByBus.get(pi.events)?.get(name);
-	if (!handlers) return;
-	await Promise.all(
-		[...handlers].map(async (handler) => {
-			try {
-				await handler(data);
-			} catch (error) {
-				console.error(`Event handler error (${name}):`, error);
-			}
-		}),
-	);
 }
 
 export function onTauEvent<Name extends keyof TauAgentEvents>(
@@ -78,24 +61,9 @@ export function onTauEvent<Name extends keyof TauAgentEvents>(
 	name: Name,
 	handler: TauEventHandler<Name>,
 ): () => void {
-	let handlersByName = handlersByBus.get(pi.events);
-	if (!handlersByName) {
-		handlersByName = new Map();
-		handlersByBus.set(pi.events, handlersByName);
-	}
-	let handlers = handlersByName.get(name);
-	if (!handlers) {
-		handlers = new Set();
-		handlersByName.set(name, handlers);
-	}
-	const storedHandler = handler as TauEventHandler<keyof TauAgentEvents>;
-	handlers.add(storedHandler);
-	return () => {
-		handlers?.delete(storedHandler);
-		if (handlers?.size === 0) handlersByName.delete(name);
-	};
+	return pi.events.on(name, handler as (data: unknown) => void);
 }
 
 export function setTauFooterItem(pi: EventAPI, item: TauFooterItem): void {
-	void emitTauEvent(pi, "tau:footer-item", item);
+	emitTauEvent(pi, "tau:footer-item", item);
 }

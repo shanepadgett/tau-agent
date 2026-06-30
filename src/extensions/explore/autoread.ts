@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
-import { onTauEvent } from "../../shared/events.js";
+import { onTauEvent, type TauAgentEvents } from "../../shared/events.js";
 import type { ToolRowStateStore } from "../../shared/tool-row-state.js";
 import { LabeledDotLine } from "../../shared/tui/labeled-dot-line.ts";
 
@@ -13,14 +13,16 @@ interface AutoreadDetails {
 	rowId: string;
 	path: string;
 	cwd: string;
-	source: "tau-context";
+	source: string;
 	batchId: string;
 	status: AutoreadStatus;
 	error?: string;
 }
 
 export function registerAutoread(pi: ExtensionAPI, rowState: ToolRowStateStore): void {
-	onTauEvent(pi, "tau:autoread.requested", async (event) => {
+	onTauEvent(pi, "tau:autoread.requested", async (data) => {
+		const event = readAutoreadRequestedEvent(data);
+		if (!event) return;
 		await Promise.all(
 			event.files.map(async (file, index) => {
 				const rowId = `${event.batchId}:${index}`;
@@ -67,13 +69,38 @@ export function registerAutoread(pi: ExtensionAPI, rowState: ToolRowStateStore):
 	});
 }
 
+function readAutoreadRequestedEvent(value: unknown): TauAgentEvents["tau:autoread.requested"] | undefined {
+	if (!value || typeof value !== "object") return undefined;
+	const record = value as Record<string, unknown>;
+	if (typeof record.source !== "string") return undefined;
+	if (typeof record.cwd !== "string") return undefined;
+	if (typeof record.batchId !== "string") return undefined;
+	if (record.title !== undefined && typeof record.title !== "string") return undefined;
+	if (!Array.isArray(record.files)) return undefined;
+	const files: Array<{ path: string }> = [];
+	for (const file of record.files) {
+		if (!file || typeof file !== "object") return undefined;
+		const path = (file as Record<string, unknown>).path;
+		if (typeof path !== "string") return undefined;
+		files.push({ path });
+	}
+
+	return {
+		source: record.source,
+		...(record.title === undefined ? {} : { title: record.title }),
+		cwd: record.cwd,
+		batchId: record.batchId,
+		files,
+	};
+}
+
 function readDetails(value: unknown): AutoreadDetails | undefined {
 	if (!value || typeof value !== "object") return undefined;
 	const record = value as Record<string, unknown>;
 	if (typeof record.rowId !== "string") return undefined;
 	if (typeof record.path !== "string") return undefined;
 	if (typeof record.cwd !== "string") return undefined;
-	if (record.source !== "tau-context") return undefined;
+	if (typeof record.source !== "string") return undefined;
 	if (typeof record.batchId !== "string") return undefined;
 	if (record.status !== "reading" && record.status !== "read" && record.status !== "failed") return undefined;
 	return {

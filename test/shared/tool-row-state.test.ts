@@ -1,4 +1,4 @@
-import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
+import { createEventBus, type ExtensionAPI, type Theme } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { emitTauEvent } from "../../src/shared/events.ts";
 import { createToolRowStateStore, formatToolRowTitle } from "../../src/shared/tool-row-state.ts";
@@ -13,7 +13,7 @@ const theme = {
 } as unknown as Theme;
 
 function eventApi(): Pick<ExtensionAPI, "events"> {
-	return { events: { emit() {} } } as unknown as Pick<ExtensionAPI, "events">;
+	return { events: createEventBus() };
 }
 
 describe("tool row state", () => {
@@ -26,14 +26,14 @@ describe("tool row state", () => {
 		});
 
 		expect(formatToolRowTitle(store, "call-1", "grep", theme)).toBe("<toolTitle>*grep*</toolTitle>");
-		await emitTauEvent(pi, "tau:tool-row-state.set", { rowId: "call-1", state: "pruned" });
+		emitTauEvent(pi, "tau:tool-row-state.set", { rowId: "call-1", state: "pruned" });
 		expect(invalidations).toBe(1);
 		const title = formatToolRowTitle(store, "call-1", "grep", theme);
 		expect(title).toBe("<warning>*grep*</warning>");
 		expect(title).not.toContain("pruned");
 
 		const result = { content: [{ type: "text", text: "saved result" }] };
-		await emitTauEvent(pi, "tau:tool-row-state.set", { rowId: "call-1" });
+		emitTauEvent(pi, "tau:tool-row-state.set", { rowId: "call-1" });
 		expect(result.content[0]?.text).toBe("saved result");
 		expect(formatToolRowTitle(store, "call-1", "grep", theme)).toBe("<toolTitle>*grep*</toolTitle>");
 	});

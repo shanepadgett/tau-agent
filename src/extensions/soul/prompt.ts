@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
 	type BuildSystemPromptOptions,
 	formatSkillsForPrompt,
@@ -68,6 +71,7 @@ export function buildRokPrompt(options: BuildSystemPromptOptions, runtimeContext
 		"In addition to the tools above, you may have access to other custom tools depending on the project.",
 		`Guidelines:\n${formatGuidelines(options.promptGuidelines)}`,
 		formatPiDocsGuidance(),
+		formatTauDocsGuidance(),
 	];
 
 	if (options.customPrompt) prompt.push(options.customPrompt);
@@ -129,6 +133,40 @@ function formatPiDocsGuidance(): string {
 - When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md)
 - When working on pi topics, read the docs and examples, and follow .md cross-references before implementing
 - Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)`;
+}
+
+function formatTauDocsGuidance(): string {
+	return `Tau Agent documentation (read only when the user asks about Tau Agent, Rok, Tau extensions, Tau event APIs, harness behavior, or extending Tau Agent):
+- Tau Agent docs: ${getTauDocsPath()}
+- For external Tau Agent integration, read docs/extending-tau-agent.md first
+- Resolve Tau docs/... under Tau Agent docs, not the current working directory
+- Do not read Tau Agent docs for normal coding tasks`;
+}
+
+function getTauDocsPath(): string {
+	return join(resolveTauPackageRoot(), "docs");
+}
+
+function resolveTauPackageRoot(): string {
+	const start = dirname(fileURLToPath(import.meta.url));
+	for (let dir = start; ; dir = dirname(dir)) {
+		const packagePath = join(dir, "package.json");
+		if (existsSync(packagePath) && packageName(packagePath) === "tau-agent") return dir;
+		const parent = dirname(dir);
+		if (parent === dir) break;
+	}
+	return resolve(start, "../../..");
+}
+
+function packageName(packagePath: string): string | undefined {
+	try {
+		const data: unknown = JSON.parse(readFileSync(packagePath, "utf8"));
+		if (!data || typeof data !== "object") return undefined;
+		const name = (data as Record<string, unknown>).name;
+		return typeof name === "string" ? name : undefined;
+	} catch {
+		return undefined;
+	}
 }
 
 function formatProjectContext(contextFiles: readonly { path: string; content: string }[]): string {

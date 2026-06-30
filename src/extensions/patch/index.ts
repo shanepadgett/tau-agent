@@ -173,7 +173,7 @@ export default function patchExtension(pi: ExtensionAPI): void {
 		if (event.toolName !== "patch") return;
 		const summary = event.details as ApplyPatchSummary | undefined;
 		if (summary) {
-			await emitTauEvent(pi, "tau:file-mutation.applied", {
+			emitTauEvent(pi, "tau:file-mutation.applied", {
 				source: "patch",
 				toolCallId: event.toolCallId,
 				cwd: ctx.cwd,

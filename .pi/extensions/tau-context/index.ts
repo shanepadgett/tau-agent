@@ -83,7 +83,7 @@ async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void
 		display: false,
 		details: { source: "tau-context", title: "Tau context" },
 	});
-	await emitTauEvent(pi, "tau:autoread.requested", {
+	emitTauEvent(pi, "tau:autoread.requested", {
 		source: "tau-context",
 		title: "Tau context",
 		cwd: ctx.cwd,
