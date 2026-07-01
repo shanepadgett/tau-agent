@@ -22,6 +22,15 @@ describe("explore grep", () => {
 			await expect(
 				tool.execute(
 					"grep",
+					{ queries: [{ patterns: ["alpha"], paths: ["a.txt"], include: "*.ts" }] } as unknown as GrepParams,
+					undefined,
+					undefined,
+					extensionContext(workspace.dir),
+				),
+			).rejects.toThrow("queries[0].include must be an array of strings");
+			await expect(
+				tool.execute(
+					"grep",
 					{ queries: [{ patterns: ["[alpha"], paths: ["a.txt"], regex: true }] },
 					undefined,
 					undefined,

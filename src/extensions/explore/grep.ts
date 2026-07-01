@@ -19,10 +19,17 @@ import { createExploreTextResult, type ExploreTextDetails, expandedExploreText }
 
 const grepQueryParams = Type.Object(
 	{
-		patterns: Type.Array(Type.String(), { minItems: 1 }),
-		paths: Type.Optional(Type.Array(Type.String())),
-		include: Type.Optional(Type.Array(Type.String())),
-		exclude: Type.Optional(Type.Array(Type.String())),
+		patterns: Type.Array(Type.String(), {
+			minItems: 1,
+			description: "Search patterns. Use an array even for one pattern.",
+		}),
+		paths: Type.Optional(Type.Array(Type.String(), { description: "Search roots. Use an array even for one path." })),
+		include: Type.Optional(
+			Type.Array(Type.String(), { description: "Include globs. Use an array even for one glob." }),
+		),
+		exclude: Type.Optional(
+			Type.Array(Type.String(), { description: "Exclude globs. Use an array even for one glob." }),
+		),
 		regex: Type.Optional(Type.Boolean()),
 		case: Type.Optional(Type.Union([Type.Literal("smart"), Type.Literal("sensitive"), Type.Literal("insensitive")])),
 		word: Type.Optional(Type.Boolean()),
@@ -92,6 +99,19 @@ interface GrepQueryOutput {
 }
 
 const STDERR_LIMIT = 16_384;
+const PARAM_KEYS = new Set(["queries", "limit", "maxPerFile", "maxLineLength", "contextOnly", "stopAfterLimit"]);
+const QUERY_KEYS = new Set([
+	"patterns",
+	"paths",
+	"include",
+	"exclude",
+	"regex",
+	"case",
+	"word",
+	"context",
+	"hidden",
+	"noIgnore",
+]);
 const NOISE_PATH_NAMES = [
 	".git",
 	"node_modules",
@@ -114,9 +134,69 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function assertStructuredParams(value: unknown): asserts value is GrepParams {
-	if (!isRecord(value) || !Array.isArray(value.queries)) throw new Error("grep requires structured queries");
+	if (!isRecord(value)) throw new Error("grep requires structured parameters object");
+	assertKnownKeys(value, PARAM_KEYS, "params");
+	if (!Array.isArray(value.queries)) throw new Error("grep queries must be an array of query objects");
+	if (value.queries.length === 0) throw new Error("grep requires at least one query");
 	if (value.queries.some(Array.isArray)) {
 		throw new Error("grep queries must be structured objects; raw argv arrays are not supported");
+	}
+	assertOptionalNumber(value, "limit", "params.limit");
+	assertOptionalNumber(value, "maxPerFile", "params.maxPerFile");
+	assertOptionalNumber(value, "maxLineLength", "params.maxLineLength");
+	assertOptionalBoolean(value, "contextOnly", "params.contextOnly");
+	assertOptionalBoolean(value, "stopAfterLimit", "params.stopAfterLimit");
+
+	for (let index = 0; index < value.queries.length; index += 1) {
+		const query = value.queries[index];
+		const path = `queries[${index}]`;
+		if (!isRecord(query)) throw new Error(`grep ${path} must be an object`);
+		assertKnownKeys(query, QUERY_KEYS, path);
+		assertStringArray(query.patterns, `${path}.patterns`, true);
+		assertOptionalStringArray(query, "paths", `${path}.paths`);
+		assertOptionalStringArray(query, "include", `${path}.include`);
+		assertOptionalStringArray(query, "exclude", `${path}.exclude`);
+		assertOptionalBoolean(query, "regex", `${path}.regex`);
+		assertOptionalBoolean(query, "word", `${path}.word`);
+		assertOptionalBoolean(query, "hidden", `${path}.hidden`);
+		assertOptionalBoolean(query, "noIgnore", `${path}.noIgnore`);
+		assertOptionalNumber(query, "context", `${path}.context`);
+		if (
+			query.case !== undefined &&
+			query.case !== "smart" &&
+			query.case !== "sensitive" &&
+			query.case !== "insensitive"
+		) {
+			throw new Error(`${path}.case must be smart, sensitive, or insensitive`);
+		}
+	}
+}
+
+function assertKnownKeys(value: Record<string, unknown>, allowed: ReadonlySet<string>, path: string): void {
+	const extra = Object.keys(value).filter((key) => !allowed.has(key));
+	if (extra.length > 0) throw new Error(`grep ${path} has unknown key: ${extra[0]}`);
+}
+
+function assertStringArray(value: unknown, path: string, required: boolean): void {
+	if (value === undefined && !required) return;
+	if (!Array.isArray(value)) throw new Error(`grep ${path} must be an array of strings`);
+	if (value.length === 0 && required) throw new Error(`grep ${path} requires at least one string`);
+	if (value.some((item) => typeof item !== "string")) {
+		throw new Error(`grep ${path} must be an array of strings`);
+	}
+}
+
+function assertOptionalStringArray(value: Record<string, unknown>, key: string, path: string): void {
+	assertStringArray(value[key], path, false);
+}
+
+function assertOptionalBoolean(value: Record<string, unknown>, key: string, path: string): void {
+	if (value[key] !== undefined && typeof value[key] !== "boolean") throw new Error(`grep ${path} must be a boolean`);
+}
+
+function assertOptionalNumber(value: Record<string, unknown>, key: string, path: string): void {
+	if (value[key] !== undefined && (typeof value[key] !== "number" || !Number.isFinite(value[key]))) {
+		throw new Error(`grep ${path} must be a finite number`);
 	}
 }
 
@@ -539,28 +619,32 @@ async function createGrepFileGroup(
 	};
 }
 
-function renderCallSummary(args: GrepParams | undefined): string {
-	const queries = args?.queries ?? [];
-	const limit = normalizeCountLimit(args?.limit, 100);
-	const maxPerFile = normalizeCountLimit(args?.maxPerFile, 8);
-	const maxLineLength = normalizeMaxLineLength(args?.maxLineLength);
+function renderCallSummary(args: unknown): string {
+	if (!isRecord(args)) return "";
+	const queries = Array.isArray(args.queries) ? args.queries : [];
+	const limit = normalizeCountLimit(typeof args.limit === "number" ? args.limit : undefined, 100);
+	const maxPerFile = normalizeCountLimit(typeof args.maxPerFile === "number" ? args.maxPerFile : undefined, 8);
+	const maxLineLength = normalizeMaxLineLength(
+		typeof args.maxLineLength === "number" ? args.maxLineLength : undefined,
+	);
 	if (queries.length !== 1) {
 		return `${queries.length} queries limit=${limit} maxPerFile=${maxPerFile} maxLineLength=${maxLineLength}`;
 	}
-	const query = queries[0];
-	const patterns = query?.patterns?.join(",") ?? "";
-	const paths = query?.paths?.map(stripLeadingAt).join(" ") || ".";
-	const include = query?.include?.map(stripLeadingAt).join(",");
-	const exclude = query?.exclude?.map(stripLeadingAt).join(",");
-	const context = normalizeNonNegativeInteger(query?.context, 0);
+	const query = isRecord(queries[0]) ? queries[0] : undefined;
+	if (!query) return `invalid query limit=${limit} maxPerFile=${maxPerFile} maxLineLength=${maxLineLength}`;
+	const patterns = renderStringArray(query.patterns, ",");
+	const paths = renderStringArray(query.paths, " ", stripLeadingAt) || ".";
+	const include = renderStringArray(query.include, ",", stripLeadingAt);
+	const exclude = renderStringArray(query.exclude, ",", stripLeadingAt);
+	const context = normalizeNonNegativeInteger(typeof query.context === "number" ? query.context : undefined, 0);
 	const flags = [
-		query?.regex ? "regex" : "literal",
-		query?.case ?? "smart",
-		query?.word ? "word" : "",
-		query?.hidden ? "hidden" : "",
-		query?.noIgnore ? "noIgnore" : "",
-		args?.contextOnly ? "contextOnly" : "",
-		args?.stopAfterLimit ? "stopAfterLimit" : "",
+		query.regex === true ? "regex" : "literal",
+		typeof query.case === "string" ? query.case : "smart",
+		query.word === true ? "word" : "",
+		query.hidden === true ? "hidden" : "",
+		query.noIgnore === true ? "noIgnore" : "",
+		args.contextOnly === true ? "contextOnly" : "",
+		args.stopAfterLimit === true ? "stopAfterLimit" : "",
 	]
 		.filter(Boolean)
 		.join(" ");
@@ -579,13 +663,26 @@ function renderCallSummary(args: GrepParams | undefined): string {
 		.join(" ");
 }
 
+function renderStringArray(value: unknown, separator: string, map: (item: string) => string = (item) => item): string {
+	if (value === undefined) return "";
+	if (!Array.isArray(value)) return "<invalid-array>";
+	return value.map((item) => (typeof item === "string" ? map(item) : "<invalid-string>")).join(separator);
+}
+
+function prepareGrepArguments(args: unknown): GrepParams {
+	assertStructuredParams(args);
+	return args;
+}
+
 export function createGrepTool(rowState: ToolRowStateStore) {
 	return defineTool<typeof grepParams, ExploreTextDetails | undefined>({
 		name: "grep",
 		label: "grep",
 		description: "Search file contents with structured queries.",
-		promptSnippet: "Search file contents. Use stopAfterLimit for broad searches when first matches are enough.",
+		promptSnippet:
+			'Search file contents. patterns, paths, include, and exclude are arrays of strings even for one value, e.g. include: ["*.ts"]. Use stopAfterLimit for broad searches when first matches are enough.',
 		parameters: grepParams,
+		prepareArguments: prepareGrepArguments,
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			assertStructuredParams(params);
 			if (params.queries.length === 0) throw new Error("grep requires at least one query");
@@ -616,7 +713,8 @@ export function createGrepTool(rowState: ToolRowStateStore) {
 			rowState.watch(context.toolCallId, context.invalidate);
 			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
 			const title = formatToolRowTitle(rowState, context.toolCallId, "grep", theme);
-			text.setText(`${title} ${theme.fg("muted", renderCallSummary(args))}`);
+			const summary = renderCallSummary(args);
+			text.setText(summary ? `${title} ${theme.fg("muted", summary)}` : title);
 			return text;
 		},
 		renderResult(result, _options, _theme, context) {
