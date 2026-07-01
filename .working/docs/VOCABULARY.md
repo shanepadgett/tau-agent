@@ -33,3 +33,9 @@
 **TUI component:** Renderable terminal UI object from `@earendil-works/pi-tui`, such as `Text`, `Box`, or `Container`.
 
 **ToolExecutionComponent:** Pi's built-in UI component for a tool execution row. Uses `renderCall` and `renderResult` for custom slots.
+
+**Cursor:** The current row position in a picker or list. Usually shown with a highlight and/or leading pointer. Say “cursor” for the active row, not “selector.”
+
+**Pointer:** The visible marker next to the cursor row, often `>`.
+
+**Selection:** A chosen item state, usually shown separately from the cursor with a checkbox like `[x]`.
