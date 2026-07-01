@@ -24,7 +24,7 @@ Read these ranges first. Do not reread whole files unless the range is missing n
 - Add `src/shared/tui/tabs.ts`.
 - Add `src/shared/tui/multi-select-list.ts`.
 - Add `src/extensions/manage-sessions/index.ts`.
-- Add `src/extensions/manage-sessions/session-store.ts`.
+- Add `src/extensions/manage-sessions/sessions.ts`.
 - Add `src/extensions/manage-sessions/manager-ui.ts`.
 - Add `src/extensions/manage-sessions/README.md`.
 - Add `docs/tui-components.md`.
@@ -174,7 +174,7 @@ Implementation rules:
 
 ## manage-sessions extension
 
-### `src/extensions/manage-sessions/session-store.ts`
+### `src/extensions/manage-sessions/sessions.ts`
 
 Own session file discovery and mutation.
 

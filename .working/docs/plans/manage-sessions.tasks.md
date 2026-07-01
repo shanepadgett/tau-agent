@@ -65,10 +65,10 @@ Work:
 
 Done:
 
-- [ ] Docs mention Pi built-ins before custom panels.
-- [ ] Docs describe each shared component boundary.
-- [ ] Docs include one compact composition example.
-- [ ] Docs avoid implementation dump.
+- [x] Docs mention Pi built-ins before custom panels.
+- [x] Docs describe each shared component boundary.
+- [x] Docs include one compact composition example.
+- [x] Docs avoid implementation dump.
 
 ## Task 4: manage-sessions storage operations
 
@@ -76,7 +76,7 @@ Build session listing and file mutations behind a small feature-local boundary.
 
 Files:
 
-- `src/extensions/manage-sessions/session-store.ts`
+- `src/extensions/manage-sessions/sessions.ts`
 
 Work:
 
@@ -88,11 +88,11 @@ Work:
 
 Done:
 
-- [ ] Active current/all listing works through Pi session APIs.
-- [ ] Archive current/all listing works from `session-archive`.
-- [ ] Archive/unarchive rejects unsafe relative paths and refuses overwrite.
-- [ ] Delete uses trash first and unlink fallback.
-- [ ] Store code has no UI concerns.
+- [x] Active current/all listing works through Pi session APIs.
+- [x] Archive current/all listing works from `session-archive`.
+- [x] Archive/unarchive rejects unsafe relative paths and refuses overwrite.
+- [x] Delete uses trash first and unlink fallback.
+- [x] Store code has no UI concerns.
 
 ## Task 5: `/manage-sessions` panel
 

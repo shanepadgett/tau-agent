@@ -11,7 +11,7 @@
   "ignorePatterns": [
     "src/shared/description.ts",
     "src/shared/injected-context.ts",
-    "src/shared/tui/tabbed-multi-select.ts"
+		"src/shared/tui/tabbed-multi-select.ts"
   ],
   "ignoreExports": [
     {
