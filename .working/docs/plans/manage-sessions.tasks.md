@@ -42,11 +42,11 @@ Work:
 
 Done:
 
-- [ ] `Tabs` owns only tab state/rendering and key handling.
-- [ ] `MultiSelectList` supports current-or-selection actions.
-- [ ] `MultiSelectList` supports older-than-cursor actions.
-- [ ] `MultiSelectList` clears selection and exposes key hints.
-- [ ] No reuse of `TabbedMultiSelect`.
+- [x] `Tabs` owns only tab state/rendering and key handling.
+- [x] `MultiSelectList` supports current-or-selection actions.
+- [x] `MultiSelectList` supports older-than-cursor actions.
+- [x] `MultiSelectList` clears selection and exposes key hints.
+- [x] No reuse of `TabbedMultiSelect`.
 
 ## Task 3: shared TUI composition docs
 

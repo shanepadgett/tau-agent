@@ -8,6 +8,7 @@ import { framePreviewWidget } from "./widgets/layout.ts";
 import { createLsPreviewWidget } from "./widgets/ls.ts";
 import { createPatchPreviewWidget } from "./widgets/patch.ts";
 import { createReadPreviewWidget } from "./widgets/read.ts";
+import { createTabsListPreviewWidget } from "./widgets/tabs-list.ts";
 import { createToolPanelPreviewWidget } from "./widgets/tool-panel.ts";
 import { createTurnBudgetPreviewWidget } from "./widgets/turn-budget.ts";
 
@@ -19,6 +20,7 @@ const WIDGETS: Record<string, (tui: TUI, cwd: string, theme: Theme) => Component
 	ls: createLsPreviewWidget,
 	patch: createPatchPreviewWidget,
 	read: createReadPreviewWidget,
+	"tabs-list": createTabsListPreviewWidget,
 	"tool-panel": createToolPanelPreviewWidget,
 	"turn-budget": createTurnBudgetPreviewWidget,
 };
@@ -29,6 +31,7 @@ const ARGUMENTS = [
 	{ value: "ls", label: "ls", description: "Show ls row states" },
 	{ value: "patch", label: "patch", description: "Show patch row states" },
 	{ value: "read", label: "read", description: "Show read row states" },
+	{ value: "tabs-list", label: "tabs-list", description: "Show shared Tabs and MultiSelectList states" },
 	{ value: "tool-panel", label: "tool-panel", description: "Show shared ToolPanel states" },
 	{ value: "turn-budget", label: "turn-budget", description: "Show turn-budget hint states" },
 	{ value: "clear", label: "clear", description: "Hide the preview widget" },

@@ -26,14 +26,20 @@ export class ToolPanel implements Component {
 
 	render(width: number): string[] {
 		const renderWidth = Math.max(1, width);
+		const body = this.config.body.render(renderWidth).map((line) => truncateToWidth(line, renderWidth, ""));
+		const footer = this.renderFooter(renderWidth);
 		const lines: string[] = [];
 
-		lines.push(this.border(renderWidth));
+		lines.push(this.theme.fg("border", "─".repeat(renderWidth)));
 		lines.push(...this.renderTitle(renderWidth));
-		lines.push(...this.renderHeader(renderWidth));
-		lines.push(...this.renderBody(renderWidth));
-		lines.push(...this.renderFooter(renderWidth));
-		lines.push(this.border(renderWidth));
+		const header = this.renderHeader(renderWidth);
+		if (header.length > 0) lines.push("");
+		lines.push(...header);
+		if (body.length > 0) lines.push("");
+		lines.push(...body);
+		if (footer.length > 0) lines.push("");
+		lines.push(...footer);
+		lines.push(this.theme.fg("border", "─".repeat(renderWidth)));
 
 		return lines;
 	}
@@ -42,10 +48,6 @@ export class ToolPanel implements Component {
 		const header = this.config.header;
 		if (header && "render" in header) header.invalidate();
 		this.config.body.invalidate();
-	}
-
-	private border(width: number): string {
-		return this.theme.fg("border", "─".repeat(width));
 	}
 
 	private renderTitle(width: number): string[] {
@@ -72,10 +74,6 @@ export class ToolPanel implements Component {
 		return header.flatMap((line) =>
 			wrapTextWithAnsi(line, width).map((wrapped) => truncateToWidth(wrapped, width, "")),
 		);
-	}
-
-	private renderBody(width: number): string[] {
-		return this.config.body.render(width).map((line) => truncateToWidth(line, width, ""));
 	}
 
 	private renderFooter(width: number): string[] {
