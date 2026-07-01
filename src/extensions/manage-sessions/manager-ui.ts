@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { relative } from "node:path";
 import type { ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { errorText, formatAge, preview } from "../../shared/text.ts";
@@ -274,9 +276,13 @@ class SessionManagerPanel {
 	private renderRow(item: ManagedSession, active: boolean, selected: boolean, width: number): string[] {
 		const pointer = active ? this.theme.fg("accent", "› ") : "  ";
 		const box = selected ? "[x]" : "[ ]";
-		const age = this.theme.fg("dim", formatAge(item.modified.getTime()));
-		const count = item.messageCount > 0 ? this.theme.fg("dim", ` ${item.messageCount} msgs`) : "";
-		const suffix = visibleWidth(count) + visibleWidth(age) + 2 < width ? `${count}  ${age}` : age;
+		const path = this.scope === "all" && item.cwd ? shortenPath(item.cwd) : undefined;
+		const age = formatAge(item.modified.getTime());
+		const count = item.messageCount > 0 ? `${item.messageCount} msgs` : undefined;
+		const requiredSuffix = [path, age].filter((part) => part !== undefined).join("  ");
+		const fullSuffix = [path, count, age].filter((part) => part !== undefined).join("  ");
+		const fullSuffixFits = visibleWidth(`${pointer}${box} `) + visibleWidth(fullSuffix) + 9 <= width;
+		const suffix = this.theme.fg("dim", count && fullSuffixFits ? fullSuffix : requiredSuffix);
 		const nameWidth = Math.max(8, width - visibleWidth(`${pointer}${box}  `) - visibleWidth(suffix) - 1);
 		const name = this.theme.fg(active ? "accent" : "text", preview(item.name, nameWidth));
 		return [truncateToWidth(`${pointer}${box} ${name} ${suffix}`, width, "")];
@@ -304,4 +310,11 @@ class SessionManagerPanel {
 		const base = `${verb} ${count} session${count === 1 ? "" : "s"}.`;
 		return failures > 0 ? `${base} ${failures} failed.` : base;
 	}
+}
+
+function shortenPath(cwd: string): string {
+	const home = homedir();
+	if (cwd === home) return "~";
+	if (cwd.startsWith(`${home}/`)) return `~/${relative(home, cwd)}`;
+	return cwd;
 }
