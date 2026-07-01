@@ -99,6 +99,10 @@ export class MultiSelectList<T extends MultiSelectListItem> implements Component
 		this.clampCursor();
 	}
 
+	clearSelection(): void {
+		this.selected.clear();
+	}
+
 	getKeyHints(): ToolKeyHint[] {
 		return [
 			rawHint("↑/↓", "move"),

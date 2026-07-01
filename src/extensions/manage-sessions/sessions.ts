@@ -1,4 +1,3 @@
-// fallow-ignore-file unused-file -- wired by manage-sessions task 5
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, rename, unlink } from "node:fs/promises";
@@ -18,7 +17,7 @@ export interface ManagedSession {
 	location: SessionLocation;
 }
 
-export function getSessionsRoot(): string {
+function getSessionsRoot(): string {
 	return join(getAgentDir(), "sessions");
 }
 
