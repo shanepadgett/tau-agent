@@ -1,0 +1,95 @@
+# TUI
+
+Build TUI that mirrors Pi aesthetics.
+
+## Reach order
+
+1. Use Pi native UI when it fits:
+   - `ctx.ui.select()`
+   - `ctx.ui.confirm()`
+   - `ctx.ui.input()`
+   - `ctx.ui.editor()`
+   - `SelectList`
+   - `SettingsList`
+   - `BorderedLoader`
+2. Use Tau shared TUI when a tool needs a custom component flow:
+   - `src/shared/tui/tool-panel.ts`
+   - `src/shared/tui/tabs.ts`
+   - `src/shared/tui/multi-select-list.ts`
+3. If shared TUI lacks the needed behavior, decide if the missing piece should become a new shared component.
+4. Build feature-local custom UI only when reuse is unlikely.
+5. Custom components still use Pi TUI primitives from `@earendil-works/pi-tui`.
+
+No one-off visual language. Make it look like Pi.
+
+## Shared components
+
+### `ToolPanel`
+
+Baseline shell for focused custom flows. Use when Pi built-ins do not fit and the user needs a bordered panel with title, header, body, footer key hints, or acknowledgement.
+
+For footer hints, child components expose hints, the parent combines the visible hints, and `ToolPanel` renders them.
+
+### `Tabs`
+
+Use inside a `ToolPanel` when one focused flow has multiple related views. Keeps tab switching out of feature code.
+
+### `MultiSelectList`
+
+Use inside a `ToolPanel` when the user needs cursor movement, multi-select, optional filtering, and actions over current/selected/older rows.
+
+Shared components should stay generic. Feature behavior stays in the feature.
+
+## Composition shape
+
+Keep composition small:
+
+```ts
+const list = new MultiSelectList(theme, listConfig);
+const archiveList = new MultiSelectList(theme, archiveListConfig);
+
+const tabs = new Tabs(
+ theme,
+ [
+  { id: "active", label: "Sessions", count: activeCount, body: list },
+  { id: "archive", label: "Archive", count: archiveCount, body: archiveList },
+ ],
+ "active",
+);
+
+const panel = new ToolPanel(theme, {
+ title: "Manage sessions",
+ secondary: "scope: current",
+ body: tabs,
+ footer: { kind: "hints", hints: [...tabs.getKeyHints(), ...list.getKeyHints()] },
+});
+```
+
+## Key hints
+
+Use `ToolKeyHint` helpers. Use `bindingHint` for configurable Pi keybindings so remaps show correctly. Use `rawHint` only for fixed local keys.
+
+Do not hardcode key checks or rendered key labels for configurable actions. Keep key handling and key hints tied to the same binding.
+
+## Widgets
+
+Use `ctx.ui.setWidget(...)` for persistent, glanceable UI near the editor.
+
+Good fits:
+
+- persistent tool list
+- todo list
+- progress/status block that should not take focus
+
+Do not use a widget for a focused flow that needs input ownership. Use `ctx.ui.custom(...)` and a component.
+
+## Rules
+
+- Every `render(width)` line must fit `width`.
+- Use `truncateToWidth()` or `wrapTextWithAnsi()` for styled text.
+- Use `theme` from the TUI callback. Do not import theme globals.
+- Call `tui.requestRender()` after state changes.
+- Keep feature behavior outside shared components.
+- Keep storage and network outside TUI components.
+- Prefer one composed panel over one giant component.
+- If a helper has one caller and no useful name, inline it.

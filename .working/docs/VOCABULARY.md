@@ -32,6 +32,10 @@
 
 **TUI component:** Renderable terminal UI object from `@earendil-works/pi-tui`, such as `Text`, `Box`, or `Container`.
 
+**Custom component flow:** Interactive UI opened with `ctx.ui.custom(...)`. It takes focus and renders a `TUI component` for a focused flow, such as a picker, panel, loader, or multi-step action.
+
+**Widget:** Persistent UI registered with `ctx.ui.setWidget(...)`. Renders above or below the editor. Good for glanceable state like tool previews, active tool lists, todos, or progress blocks. Does not own a focused flow.
+
 **ToolExecutionComponent:** Pi's built-in UI component for a tool execution row. Uses `renderCall` and `renderResult` for custom slots.
 
 **Cursor:** The current row position in a picker or list. Usually shown with a highlight and/or leading pointer. Say “cursor” for the active row, not “selector.”
