@@ -1,4 +1,4 @@
-import type { Api, Message, Model, ThinkingLevel, Tool } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessage, Message, Model, ThinkingLevel, Tool } from "@earendil-works/pi-ai";
 import { completeSimple } from "@earendil-works/pi-ai/compat";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { loadTauExtensionSettings, updateTauExtensionSettings } from "../settings/load.ts";
@@ -157,15 +157,8 @@ async function requestValidated<T>(
 	const messages: Message[] = [userMessage];
 
 	for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-		const response = await completeSimple(
-			candidate.model,
-			{ messages },
-			{ apiKey: candidate.apiKey, headers: candidate.headers, signal: ctx.signal, reasoning: candidate.reasoning },
-		);
-
-		if (response.stopReason === "aborted") throw new Error("Cancelled.");
-
-		const text = response.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
+		const response = await completeCandidate(ctx, candidate, messages);
+		const text = responseText(response);
 		if (response.stopReason === "error") {
 			const error = new Error(response.errorMessage || "model returned an error");
 			if (attempt < MAX_ATTEMPTS && !shouldCooldownProvider(error)) continue;
@@ -201,15 +194,8 @@ async function requestToolValidated<T>(
 	const messages: Message[] = [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }];
 
 	for (let attempt = 1; attempt <= MAX_TOOL_ATTEMPTS; attempt++) {
-		const response = await completeSimple(
-			candidate.model,
-			{ messages, tools: [tool] },
-			{ apiKey: candidate.apiKey, headers: candidate.headers, signal: ctx.signal, reasoning: candidate.reasoning },
-		);
-
-		if (response.stopReason === "aborted") throw new Error("Cancelled.");
-
-		const text = response.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
+		const response = await completeCandidate(ctx, candidate, messages, [tool]);
+		const text = responseText(response);
 		const toolCalls = response.content.flatMap((part) => (part.type === "toolCall" ? [part] : []));
 		const output = text || formatToolCalls(toolCalls);
 		if (response.stopReason === "error") {
@@ -237,6 +223,25 @@ async function requestToolValidated<T>(
 	}
 
 	throw new Error("Model generation failed.");
+}
+
+function completeCandidate(
+	ctx: GenerationContext,
+	candidate: ModelCandidate,
+	messages: readonly Message[],
+	tools?: Tool[],
+): Promise<AssistantMessage> {
+	return completeSimple(candidate.model, tools ? { messages: [...messages], tools } : { messages: [...messages] }, {
+		apiKey: candidate.apiKey,
+		headers: candidate.headers,
+		signal: ctx.signal,
+		reasoning: candidate.reasoning,
+	});
+}
+
+function responseText(response: AssistantMessage): string {
+	if (response.stopReason === "aborted") throw new Error("Cancelled.");
+	return response.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
 }
 
 function formatToolCalls(toolCalls: readonly { name: string; arguments: unknown }[]): string {

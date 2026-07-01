@@ -6,6 +6,7 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
 import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.js";
+import { divideBudget, normalizeCountLimit, normalizeNonNegativeInteger } from "./limits.ts";
 import {
 	formatPathForDisplay,
 	isWithinPath,
@@ -103,29 +104,6 @@ const NOISE_PATH_NAMES = [
 	".parcel-cache",
 	"out",
 ];
-
-function normalizeNonNegativeInteger(value: number | undefined, fallback: number): number {
-	if (value === undefined) return fallback;
-	if (!Number.isFinite(value)) return fallback;
-	return Math.max(0, Math.floor(value));
-}
-
-function normalizeCountLimit(value: number | undefined, fallback: number): number {
-	if (value === undefined) return fallback;
-	if (!Number.isFinite(value)) return fallback;
-	return Math.max(1, Math.floor(value));
-}
-
-function divideBudget(limit: number, count: number): number[] {
-	if (count <= 0) return [];
-	const base = Math.max(1, Math.floor(limit / count));
-	let remainder = Math.max(0, limit - base * count);
-	return Array.from({ length: count }, () => {
-		const extra = remainder > 0 ? 1 : 0;
-		if (remainder > 0) remainder -= 1;
-		return base + extra;
-	});
-}
 
 function normalizeMaxLineLength(value: number | undefined): number {
 	return Math.max(20, normalizeCountLimit(value, 200));
@@ -465,16 +443,19 @@ function renderGrepOutput(output: GrepQueryOutput, maxLineLength: number): strin
 	return lines.length === 0 ? "No matches" : lines.join("\n");
 }
 
-async function executeQueryUntilLimit(
+async function executeGrepQuery(
 	cwd: string,
 	query: GrepQuery,
 	limit: number,
 	maxPerFile: number,
 	contextOnly: boolean,
 	signal: AbortSignal | undefined,
+	stopAfterLimit: boolean,
 ): Promise<GrepQueryOutput> {
 	if (query.patterns.length === 0) throw new Error("grep query requires at least one pattern");
 	const context = normalizeNonNegativeInteger(query.context, 0);
+	if (!stopAfterLimit) return executeQueryWithCounts(cwd, query, limit, maxPerFile, contextOnly, signal, context);
+
 	const searchPaths = await resolveSearchPaths(cwd, query);
 	const matchesByPath = new Map<string, RgMatch[]>();
 	const omittedInFileByPath = new Map<string, number>();
@@ -494,53 +475,68 @@ async function executeQueryUntilLimit(
 
 	const groups: GrepFileGroup[] = [];
 	for (const [absolutePath, matches] of matchesByPath) {
-		const sortedMatches = matches.sort((a, b) => a.lineNumber - b.lineNumber);
-		const firstMatch = sortedMatches[0];
-		if (!firstMatch) continue;
-		const fileLines = await readLines(absolutePath);
-		const renderedLines = buildRenderedLines(fileLines, sortedMatches, context, contextOnly);
-		if (renderedLines.length === 0) continue;
-		groups.push({
-			displayPath: firstMatch.displayPath,
-			lineCount: fileLines?.length,
-			lines: renderedLines,
-			omittedInFile: omittedInFileByPath.get(absolutePath) ?? 0,
-		});
+		const group = await createGrepFileGroup(
+			absolutePath,
+			matches[0]?.displayPath ?? absolutePath,
+			matches,
+			context,
+			contextOnly,
+			omittedInFileByPath.get(absolutePath) ?? 0,
+		);
+		if (group) groups.push(group);
 	}
 
 	return { groups, omittedByLimit: 0, limit, maxPerFile, stoppedAfterLimit: remaining === 0 };
 }
 
-async function executeQuery(
+async function executeQueryWithCounts(
 	cwd: string,
 	query: GrepQuery,
 	limit: number,
 	maxPerFile: number,
 	contextOnly: boolean,
 	signal: AbortSignal | undefined,
+	context: number,
 ): Promise<GrepQueryOutput> {
-	if (query.patterns.length === 0) throw new Error("grep query requires at least one pattern");
-	const context = normalizeNonNegativeInteger(query.context, 0);
 	const counts = await countMatches(cwd, query, signal);
 	const selection = selectFiles(counts, limit, maxPerFile);
 	const matchesByPath = await collectSelectedMatches(cwd, query, selection.selected, signal);
 	const groups: GrepFileGroup[] = [];
 
 	for (const file of selection.selected) {
-		const matches = (matchesByPath.get(file.absolutePath) ?? []).sort((a, b) => a.lineNumber - b.lineNumber);
-		if (matches.length === 0) continue;
-		const fileLines = await readLines(file.absolutePath);
-		const renderedLines = buildRenderedLines(fileLines, matches, context, contextOnly);
-		if (renderedLines.length === 0) continue;
-		groups.push({
-			displayPath: file.displayPath,
-			lineCount: fileLines?.length,
-			lines: renderedLines,
-			omittedInFile: file.omittedInFile,
-		});
+		const group = await createGrepFileGroup(
+			file.absolutePath,
+			file.displayPath,
+			matchesByPath.get(file.absolutePath) ?? [],
+			context,
+			contextOnly,
+			file.omittedInFile,
+		);
+		if (group) groups.push(group);
 	}
 
 	return { groups, omittedByLimit: selection.omittedByLimit, limit, maxPerFile, stoppedAfterLimit: false };
+}
+
+async function createGrepFileGroup(
+	absolutePath: string,
+	displayPath: string,
+	matches: readonly RgMatch[],
+	context: number,
+	contextOnly: boolean,
+	omittedInFile: number,
+): Promise<GrepFileGroup | undefined> {
+	const sortedMatches = [...matches].sort((a, b) => a.lineNumber - b.lineNumber);
+	if (sortedMatches.length === 0) return undefined;
+	const fileLines = await readLines(absolutePath);
+	const renderedLines = buildRenderedLines(fileLines, sortedMatches, context, contextOnly);
+	if (renderedLines.length === 0) return undefined;
+	return {
+		displayPath,
+		lineCount: fileLines?.length,
+		lines: renderedLines,
+		omittedInFile,
+	};
 }
 
 function renderCallSummary(args: GrepParams | undefined): string {
@@ -602,17 +598,15 @@ export function createGrepTool(rowState: ToolRowStateStore) {
 				const query = params.queries[i];
 				if (!query) continue;
 				const budget = budgets[i] ?? limit;
-				const output =
-					params.stopAfterLimit === true
-						? await executeQueryUntilLimit(
-								ctx.cwd,
-								query,
-								budget,
-								maxPerFile,
-								params.contextOnly === true,
-								signal,
-							)
-						: await executeQuery(ctx.cwd, query, budget, maxPerFile, params.contextOnly === true, signal);
+				const output = await executeGrepQuery(
+					ctx.cwd,
+					query,
+					budget,
+					maxPerFile,
+					params.contextOnly === true,
+					signal,
+					params.stopAfterLimit === true,
+				);
 				const rendered = renderGrepOutput(output, maxLineLength);
 				parts.push(params.queries.length === 1 ? rendered : `query ${i + 1}\n${rendered}`);
 			}

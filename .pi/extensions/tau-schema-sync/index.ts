@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import type { Dirent } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { promisify } from "node:util";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { listSettingsFiles } from "../../../src/shared/settings/files.ts";
 
 const execFileAsync = promisify(execFile);
 const SETTINGS_ROOT = join("src", "extensions");
@@ -81,23 +81,6 @@ async function hashSettingsFiles(cwd: string): Promise<Hashes> {
 	}
 
 	return hashes;
-}
-
-async function listSettingsFiles(root: string): Promise<string[]> {
-	let entries: Dirent<string>[];
-	try {
-		entries = await readdir(root, { withFileTypes: true });
-	} catch {
-		return [];
-	}
-
-	const files: string[] = [];
-	for (const entry of entries) {
-		const path = join(root, entry.name);
-		if (entry.isDirectory()) files.push(...(await listSettingsFiles(path)));
-		else if (entry.isFile() && entry.name === "settings.ts") files.push(path);
-	}
-	return files.sort();
 }
 
 function sameHashes(left: Hashes, right: Hashes): boolean {

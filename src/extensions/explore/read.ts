@@ -1,6 +1,7 @@
 import { createReadToolDefinition, type ReadToolInput } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.js";
+import { normalizeCountLimit } from "./limits.ts";
 import { stripLeadingAt } from "./path-display.ts";
 
 type ReadDefinition = ReturnType<typeof createReadToolDefinition>;
@@ -16,12 +17,6 @@ function readDefinitionForCwd(cwd: string): ReadDefinition {
 	const definition = createReadToolDefinition(cwd);
 	readDefinitionByCwd.set(cwd, definition);
 	return definition;
-}
-
-function normalizeCountLimit(value: number | undefined, fallback: number): number {
-	if (value === undefined) return fallback;
-	if (!Number.isFinite(value)) return fallback;
-	return Math.max(1, Math.floor(value));
 }
 
 function normalizeReadParams(params: ReadToolInput): ReadToolInput {

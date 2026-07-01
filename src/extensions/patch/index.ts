@@ -2,8 +2,9 @@ import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { emitTauEvent } from "../../shared/events.js";
 import { createToolRowStateStore } from "../../shared/tool-row-state.js";
-import { type ApplyPatchSummary, applyPatch, deriveStats } from "./executor.ts";
+import { type ApplyPatchSummary, applyPatch } from "./executor.ts";
 import { renderPatchCall, renderPatchResult } from "./render.ts";
+import { formatPatchSummary } from "./summary.ts";
 
 const SUPPRESSED_TOOLS = new Set(["edit", "write"]);
 
@@ -66,40 +67,6 @@ const patchParams = Type.Object({
 	}),
 });
 
-function formatSummary(summary: ApplyPatchSummary): string {
-	const s = deriveStats(summary);
-	const lines: string[] = [];
-	if (summary.status === "failed") {
-		lines.push("No changes applied.");
-	} else {
-		const parts: string[] = [];
-		if (s.linesAdded > 0) parts.push(`+${s.linesAdded}`);
-		if (s.linesRemoved > 0) parts.push(`-${s.linesRemoved}`);
-		const badge = parts.length > 0 ? ` [${parts.join(" ")}]` : "";
-		lines.push(`Applied ${s.completedOperations}/${summary.totalSections} sections.${badge}`);
-	}
-
-	for (const path of s.added) lines.push(`A ${path}`);
-	for (const path of s.replaced) lines.push(`M ${path}`);
-	for (const path of s.updated) lines.push(`M ${path}`);
-	for (const path of s.deleted) lines.push(`D ${path}`);
-	for (const move of s.moved) lines.push(`R ${move.from} -> ${move.to}`);
-
-	if (summary.failures.length > 0) {
-		lines.push("Failures:");
-		for (const failure of summary.failures) {
-			const kind = failure.kind ? `${failure.kind} ` : "";
-			const path = failure.path ?? "";
-			const chunk =
-				failure.chunkIndex && failure.totalChunks ? ` chunk ${failure.chunkIndex}/${failure.totalChunks}` : "";
-			const ctx = failure.contextHint ? ` (context: "${failure.contextHint}")` : "";
-			lines.push(`- ${kind}${path}${chunk}: ${failure.message}${ctx}`.trim());
-		}
-	}
-
-	return lines.join("\n");
-}
-
 function createPatchTool(rowState: ReturnType<typeof createToolRowStateStore>) {
 	return defineTool<typeof patchParams, ApplyPatchSummary>({
 		name: "patch",
@@ -127,13 +94,13 @@ function createPatchTool(rowState: ReturnType<typeof createToolRowStateStore>) {
 			const input = params.input.replace(/\r\n/g, "\n").trim();
 			const summary = await applyPatch(ctx.cwd, input, signal, async (progress) => {
 				await onUpdate?.({
-					content: [{ type: "text", text: formatSummary(progress) }],
+					content: [{ type: "text", text: formatPatchSummary(progress) }],
 					details: progress,
 				});
 			});
 
 			return {
-				content: [{ type: "text", text: formatSummary(summary) }],
+				content: [{ type: "text", text: formatPatchSummary(summary) }],
 				details: summary,
 			};
 		},

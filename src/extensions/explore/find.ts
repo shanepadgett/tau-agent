@@ -4,6 +4,7 @@ import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
 import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.js";
+import { divideBudget, normalizeCountLimit, normalizeNonNegativeInteger } from "./limits.ts";
 import {
 	formatPathForDisplay,
 	pathResolutionError,
@@ -38,29 +39,6 @@ const findParams = Type.Object(
 
 type FindParams = Static<typeof findParams>;
 type FindQuery = Static<typeof findQueryParams>;
-
-function normalizeNonNegativeInteger(value: number | undefined, fallback: number): number {
-	if (value === undefined) return fallback;
-	if (!Number.isFinite(value)) return fallback;
-	return Math.max(0, Math.floor(value));
-}
-
-function normalizeCountLimit(value: number | undefined, fallback: number): number {
-	if (value === undefined) return fallback;
-	if (!Number.isFinite(value)) return fallback;
-	return Math.max(1, Math.floor(value));
-}
-
-function divideBudget(limit: number, count: number): number[] {
-	if (count <= 0) return [];
-	const base = Math.max(1, Math.floor(limit / count));
-	let remainder = Math.max(0, limit - base * count);
-	return Array.from({ length: count }, () => {
-		const extra = remainder > 0 ? 1 : 0;
-		if (remainder > 0) remainder -= 1;
-		return base + extra;
-	});
-}
 
 function globMatches(pattern: string, value: string): boolean {
 	const normalizedValue = toSlashPath(value);

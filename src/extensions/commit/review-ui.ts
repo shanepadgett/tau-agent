@@ -116,7 +116,7 @@ async function editMessage(
 	plan: CommitPlanState,
 	groupId: string,
 ): Promise<Pick<ReviewState, "plan" | "selectedGroupId">> {
-	const group = plan.groups.find((item) => item.id === groupId);
+	const group = groupById(plan, groupId);
 	if (!group) return selectFirst(plan);
 	const edited = await ctx.ui.editor("Edit commit message", group.message);
 	if (!edited?.trim()) return { plan, selectedGroupId: groupId };
@@ -133,7 +133,7 @@ async function assignFiles(
 	plan: CommitPlanState,
 	groupId: string,
 ): Promise<Pick<ReviewState, "plan" | "selectedGroupId">> {
-	const group = plan.groups.find((item) => item.id === groupId);
+	const group = groupById(plan, groupId);
 	if (!group) return selectFirst(plan);
 	const files = await pickFiles(ctx, `Assign files to: ${subjectLine(group.message)}`, plan, group.id, group.files);
 	return files
@@ -231,17 +231,10 @@ function commitPlanReview(
 ): Component {
 	let cursor = Math.max(0, selectedGroupId ? plan.groups.findIndex((group) => group.id === selectedGroupId) : -1);
 	const fileByPath = new Map(plan.files.map((file) => [file.path, file]));
-	const moveCursor = (data: string): boolean => {
-		const delta = keybindings.matches(data, "tui.select.up")
-			? -1
-			: keybindings.matches(data, "tui.select.down")
-				? 1
-				: 0;
-		if (delta === 0) return false;
-		cursor = clamp(cursor + delta, 0, Math.max(0, plan.groups.length - 1));
-		tui.requestRender();
-		return true;
-	};
+	const moveCursor = (data: string): boolean =>
+		moveCursorByKey(data, keybindings, tui, cursor, plan.groups.length, (next) => {
+			cursor = next;
+		});
 	const finish = (action: ReviewAction): void => done(action);
 	return {
 		handleInput(data: string): void {
@@ -325,17 +318,10 @@ function commitFilePicker(
 				)
 			: [...files];
 	};
-	const moveCursor = (data: string): boolean => {
-		const delta = keybindings.matches(data, "tui.select.up")
-			? -1
-			: keybindings.matches(data, "tui.select.down")
-				? 1
-				: 0;
-		if (delta === 0) return false;
-		cursor = clamp(cursor + delta, 0, Math.max(0, filtered().length - 1));
-		tui.requestRender();
-		return true;
-	};
+	const moveCursor = (data: string): boolean =>
+		moveCursorByKey(data, keybindings, tui, cursor, filtered().length, (next) => {
+			cursor = next;
+		});
 	return {
 		get focused(): boolean {
 			return focused;
@@ -527,6 +513,25 @@ function moveGroup(plan: CommitPlanState, groupId: string, direction: -1 | 1): C
 	groups.splice(index, 1);
 	groups.splice(target, 0, moving);
 	return { ...plan, groups };
+}
+
+function groupById(plan: CommitPlanState, groupId: string): CommitGroup | undefined {
+	return plan.groups.find((item) => item.id === groupId);
+}
+
+function moveCursorByKey(
+	data: string,
+	keybindings: KeybindingsManager,
+	tui: TUI,
+	cursor: number,
+	itemCount: number,
+	setCursor: (cursor: number) => void,
+): boolean {
+	const delta = keybindings.matches(data, "tui.select.up") ? -1 : keybindings.matches(data, "tui.select.down") ? 1 : 0;
+	if (delta === 0) return false;
+	setCursor(clamp(cursor + delta, 0, Math.max(0, itemCount - 1)));
+	tui.requestRender();
+	return true;
 }
 
 function selectFirst(plan: CommitPlanState): Pick<ReviewState, "plan" | "selectedGroupId"> {
