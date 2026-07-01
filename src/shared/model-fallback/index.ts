@@ -28,7 +28,6 @@ const SMALL_PROMPT_MODELS: ReadonlyArray<{ provider: string; model: string; reas
 ];
 
 const MEDIUM_PROMPT_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
-	{ provider: "github-copilot", model: "gemini-3.5-flash", reasoning: "high" },
 	{ provider: "openai-codex", model: "gpt-5.4-mini", reasoning: "high" },
 	{ provider: "openai-codex", model: "gpt-5.5", reasoning: "high" },
 ];

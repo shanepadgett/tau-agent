@@ -65,6 +65,7 @@ export async function generatePlan(
 				`That commit plan failed validation: ${error.message}`,
 				`Call ${COMMIT_PLAN_TOOL.name} again with corrected arguments only.`,
 				"Use only numeric file IDs provided in the prompt.",
+				"Include every dirty file ID exactly once across the plan.",
 				"Set allFiles true only for a single all-files commit; then set files to an empty array.",
 				"Previous response:",
 				text,
@@ -128,6 +129,7 @@ function commitGroupsFromToolInput(input: unknown, files: readonly DirtyFile[]):
 		groupFromToolCommit(commit, input.commits.length, files, pathById, seen),
 	);
 	if (groups.length === 0) throw new Error("Commit plan produced no non-empty commits.");
+	assertAllFilesAssigned(files, seen);
 	return groups;
 }
 
@@ -156,12 +158,17 @@ function listedFiles(ids: readonly number[], pathById: ReadonlyMap<number, strin
 	for (const id of ids) {
 		const path = pathById.get(id);
 		if (!path) throw new Error(`Unknown dirty file ID in commit plan: ${id}`);
-		if (!seen.has(path)) {
-			seen.add(path);
-			paths.push(path);
-		}
+		if (seen.has(path)) throw new Error(`Dirty file ID is used more than once in commit plan: ${id}`);
+		seen.add(path);
+		paths.push(path);
 	}
 	return paths;
+}
+
+function assertAllFilesAssigned(files: readonly DirtyFile[], seen: ReadonlySet<string>): void {
+	const missing = files.filter((file) => !seen.has(file.path));
+	if (missing.length === 0) return;
+	throw new Error(`Commit plan omitted dirty file IDs: ${missing.map((file) => file.id).join(", ")}`);
 }
 
 function buildPlanPrompt(
@@ -171,8 +178,16 @@ function buildPlanPrompt(
 ): string {
 	return [
 		"Create the fewest useful commits for the dirty repository files.",
-		`Call ${COMMIT_PLAN_TOOL.name} exactly once with the final plan.`,
+		`You have exactly one job: call ${COMMIT_PLAN_TOOL.name} once with the final plan.`,
+		"Do not answer in text. Do not explain. Do not include markdown.",
+		`Any response except a single ${COMMIT_PLAN_TOOL.name} tool call is invalid.`,
 		"File references must be numeric IDs only, never paths.",
+		"Every dirty file ID from the File catalog must appear in exactly one commit.",
+		"If any dirty file ID is missing from the plan, validation fails.",
+		"Tool argument shape:",
+		"commits: [{ message: string, allFiles: boolean, files: number[] }]",
+		"For one commit containing all dirty files: { message, allFiles: true, files: [] }",
+		"Otherwise: { message, allFiles: false, files: [numeric IDs from File catalog] }",
 		"Commit ladder:",
 		"1. Can all dirty files be committed together with one honest conventional commit message a user would understand?",
 		"   If yes, return one commit.",
@@ -180,11 +195,11 @@ function buildPlanPrompt(
 		"3. If one message would be misleading, split off only files with a clearly different purpose.",
 		"4. Keep README/docs/tests/prompts/UI text with the code change they describe or verify.",
 		"5. Do not split by file type, directory, or conventional commit type alone.",
-		"6. Leave unrelated/random files out only when they do not belong to any coherent commit.",
+		"6. Every dirty file must belong to one of the commits.",
 		"7. Use the minimum number of commits that preserves meaning.",
 		"Rules:",
 		"- Prefer fewer coherent commits over tidy-looking categories.",
-		"- Use each dirty file at most once.",
+		"- Use each dirty file exactly once.",
 		"- Use only numeric file IDs listed below.",
 		"- Prefer conventional commit messages.",
 		`- Allowed conventional commit types: ${CONVENTIONAL_COMMIT_TYPES.join(", ")}.`,
