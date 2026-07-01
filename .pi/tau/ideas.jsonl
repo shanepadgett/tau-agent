@@ -11,3 +11,8 @@
 {"id":"0e365866-237d-41dc-9006-9264f26d3b3d","text":"we need whole file structural maps when agent tries to read whole file","createdAt":1782254899726}
 {"id":"518f507a-7b9a-4e0f-bc02-0056a202a5e7","text":"session cost should include subagent executions","createdAt":1782226656051}
 {"id":"47bef08f-6875-40c8-9c41-0e9a2636d964","text":"commit should only need to bundle together files and should probably do it in more performant way, like agent calls out files under one folder or something. also shouldnt need to provide reason for each commit split that is waste of tokens, user can interpret","createdAt":1782760027517}
+{"id":"57445ee0-8086-4c09-a12e-d13020e98925","text":"focus feature and goal setting","createdAt":1782851050070}
+{"id":"f3d51edc-2af2-4585-913f-0a0f5f8a390e","text":"doing a /plan-mode switch should offer a selection menu for simple or deep-structured plan","createdAt":1782851107499}
+{"id":"fb02db58-fb7d-45d1-a535-382571b07121","text":"Plans should always stay small. Update Sol so that it understands that no matter what, its output summaries should always be minimal. One word, one sentence, minimal updates, very conversational like, not lists. Only lists and longer plans when user asks for elaboration.","createdAt":1782852833848}
+{"id":"da521f65-0414-4ccb-9d07-92ed9ce4e68b","text":"Even when the user directly instructs the agent to do something, it should not. It should always verify with the user first what it will do, even in very short form, if short form can verify.","createdAt":1782864513526}
+{"id":"fa8187e3-ac19-4cca-97a0-441a49a38837","text":"a way to trim old sessions easily","createdAt":1782864912805}
