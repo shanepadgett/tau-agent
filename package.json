@@ -6,6 +6,7 @@
 	"description": "Tau is a custom agentic harness built with pi extensions",
 	"license": "MIT",
 	"scripts": {
+		"fallow:pi-scope": "node --experimental-strip-types .pi/extensions/.fallow-scope.ts",
 		"test:unit": "vitest --run --reporter=agent"
 	},
 	"pi": {
