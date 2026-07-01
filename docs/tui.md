@@ -91,6 +91,10 @@ Do not use a widget for a focused flow that needs input ownership. Use `ctx.ui.c
 
 - Every `render(width)` line must fit `width`.
 - Use `truncateToWidth()` or `wrapTextWithAnsi()` for styled text.
+- Plain text renderers should use Pi `Text` with `new Text("", 0, 0)` so tool rows keep native spacing and wrapping.
+- Custom components must never return raw unbounded content. Split lines and run each line through `truncateToWidth()` or `wrapTextWithAnsi()` before returning it.
+- Truncating styled text can insert resets that break row backgrounds. Prefer wrapping for styled text unless the component owns the whole line background.
+- Custom components must implement `invalidate()`, even if it is a no-op.
 - Use `theme` from the TUI callback. Do not import theme globals.
 - Call `tui.requestRender()` after state changes.
 - Keep feature behavior outside shared components.

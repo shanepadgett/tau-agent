@@ -54,18 +54,10 @@ export function registerAutoread(pi: ExtensionAPI, rowState: ToolRowStateStore):
 		);
 	});
 
-	pi.registerMessageRenderer<AutoreadDetails>(AUTOREAD_MESSAGE_TYPE, (message, options, theme) => {
+	pi.registerMessageRenderer<AutoreadDetails>(AUTOREAD_MESSAGE_TYPE, (message, _options, theme) => {
 		const details = readDetails(message.details);
 		if (!details) return undefined;
-		return new AutoreadMessageComponent(
-			rowState,
-			details.rowId,
-			details.path,
-			details.status,
-			message.content,
-			options.expanded,
-			theme,
-		);
+		return new AutoreadMessageComponent(rowState, details.rowId, details.path, details.status, theme);
 	});
 }
 
@@ -119,39 +111,25 @@ class AutoreadMessageComponent {
 	private readonly rowId: string;
 	private readonly path: string;
 	private readonly status: AutoreadStatus;
-	private readonly content: unknown;
-	private readonly expanded: boolean;
 	private readonly theme: Theme;
 
-	constructor(
-		rowState: ToolRowStateStore,
-		rowId: string,
-		path: string,
-		status: AutoreadStatus,
-		content: unknown,
-		expanded: boolean,
-		theme: Theme,
-	) {
+	constructor(rowState: ToolRowStateStore, rowId: string, path: string, status: AutoreadStatus, theme: Theme) {
 		this.rowState = rowState;
 		this.rowId = rowId;
 		this.path = path;
 		this.status = status;
-		this.content = content;
-		this.expanded = expanded;
 		this.theme = theme;
 	}
 
 	render(width: number): string[] {
 		const dotColor = this.status === "reading" ? "dim" : "success";
-		const lines = new LabeledDotLine({
+		return new LabeledDotLine({
 			theme: this.theme,
 			dotColor,
 			label: "autoread",
 			labelColor: this.rowState.get(this.rowId) === "pruned" ? "warning" : "toolTitle",
 			parts: [this.theme.fg("muted", this.path)],
 		}).render(width);
-		if (this.expanded && typeof this.content === "string") lines.push(this.theme.fg("muted", this.content));
-		return lines;
 	}
 
 	invalidate(): void {}
