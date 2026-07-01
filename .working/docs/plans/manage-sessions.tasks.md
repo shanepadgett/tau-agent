@@ -161,7 +161,7 @@ Work:
 
 Done:
 
-- [ ] README covers `/manage-sessions` and `/sweep`.
-- [ ] README lists core manager keys.
-- [ ] README avoids implementation internals.
-- [ ] No settings, schema edits, or event additions were introduced.
+- [x] README covers `/manage-sessions` and `/sweep`.
+- [x] README describes manager behavior without duplicating in-panel key hints.
+- [x] README avoids implementation internals.
+- [x] No settings, schema edits, or event additions were introduced.

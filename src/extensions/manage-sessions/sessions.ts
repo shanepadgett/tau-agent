@@ -5,7 +5,6 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { getAgentDir, type SessionInfo, SessionManager } from "@earendil-works/pi-coding-agent";
 
 export type SessionScope = "current" | "all";
-export type SessionLocation = "active" | "archive";
 
 export interface ManagedSession {
 	id: string;
@@ -14,7 +13,6 @@ export interface ManagedSession {
 	cwd: string;
 	modified: Date;
 	messageCount: number;
-	location: SessionLocation;
 }
 
 function getSessionsRoot(): string {
@@ -34,7 +32,7 @@ export async function listManagedSessions(
 	const activeSessions = scope === "current" ? await SessionManager.list(cwd) : await SessionManager.listAll();
 	const active = activeSessions
 		.filter((session) => resolve(session.path) !== currentSessionPath)
-		.map((session) => toManagedSession(session, "active"));
+		.map(toManagedSession);
 
 	if (scope === "current") {
 		// Mirrors Pi's default session dir encoding so archive paths match active paths.
@@ -44,9 +42,7 @@ export async function listManagedSessions(
 		const archiveProjectDir = join(getArchiveRoot(), safeCwd);
 		return {
 			active,
-			archive: (await SessionManager.list(cwd, archiveProjectDir)).map((session) =>
-				toManagedSession(session, "archive"),
-			),
+			archive: (await SessionManager.list(cwd, archiveProjectDir)).map(toManagedSession),
 		};
 	}
 
@@ -57,9 +53,7 @@ export async function listManagedSessions(
 			.map((entry) => join(getArchiveRoot(), entry.name));
 
 		for (const projectDir of projectDirs) {
-			archive = archive.concat(
-				(await SessionManager.listAll(projectDir)).map((session) => toManagedSession(session, "archive")),
-			);
+			archive = archive.concat((await SessionManager.listAll(projectDir)).map(toManagedSession));
 		}
 	} catch {
 		archive = [];
@@ -120,7 +114,7 @@ export async function deleteSessionFile(sessionPath: string): Promise<{ method: 
 	}
 }
 
-function toManagedSession(session: SessionInfo, location: SessionLocation): ManagedSession {
+function toManagedSession(session: SessionInfo): ManagedSession {
 	return {
 		id: session.path,
 		path: session.path,
@@ -128,6 +122,5 @@ function toManagedSession(session: SessionInfo, location: SessionLocation): Mana
 		cwd: session.cwd,
 		modified: session.modified,
 		messageCount: session.messageCount,
-		location,
 	};
 }
