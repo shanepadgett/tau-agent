@@ -1,11 +1,11 @@
 import { homedir } from "node:os";
 import { relative } from "node:path";
 import type { ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
-import { type Component, Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { type Component, getKeybindings, Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { errorText, formatAge, preview } from "../../shared/text.ts";
 import { type MultiSelectActionResult, MultiSelectList } from "../../shared/tui/multi-select-list.ts";
 import { Tabs } from "../../shared/tui/tabs.ts";
-import { rawHint, type ToolKeyHint, textHint } from "../../shared/tui/tool-key-hints.ts";
+import { bindingHint, rawHint, type ToolKeyHint } from "../../shared/tui/tool-key-hints.ts";
 import { ToolPanel, type ToolPanelConfig } from "../../shared/tui/tool-panel.ts";
 import {
 	archiveSession,
@@ -145,13 +145,14 @@ class SessionManagerPanel {
 
 	private handleInput(data: string): void {
 		if (this.executing) return;
+		const keybindings = getKeybindings();
 
 		if (this.pending) {
-			if (matchesKey(data, Key.enter)) {
+			if (keybindings.matches(data, "tui.select.confirm")) {
 				void this.confirmPending();
 				return;
 			}
-			if (matchesKey(data, Key.escape)) {
+			if (keybindings.matches(data, "tui.select.cancel")) {
 				this.pending = undefined;
 				this.syncPanel();
 				return;
@@ -164,16 +165,12 @@ class SessionManagerPanel {
 			this.done();
 			return;
 		}
-		if (data === "s") {
+		if (matchesKey(data, "s")) {
 			void this.toggleScope();
 			return;
 		}
-		if (this.tabs.handleKey(data)) {
-			this.syncPanel();
-			return;
-		}
 
-		(this.currentTab() === "active" ? this.activeList : this.archiveList).handleInput(data);
+		this.tabs.handleInput(data);
 		this.syncPanel();
 	}
 
@@ -250,7 +247,7 @@ class SessionManagerPanel {
 			? {
 					kind: "destructiveAck",
 					message: this.pendingMessage(this.pending),
-					hints: [rawHint("Enter", "confirm"), rawHint("Esc", "cancel")],
+					hints: [bindingHint("tui.select.confirm", "confirm"), bindingHint("tui.select.cancel", "cancel")],
 				}
 			: { kind: "hints", hints: this.footerHints() };
 		this.requestRender();
@@ -258,8 +255,20 @@ class SessionManagerPanel {
 
 	private tabItems() {
 		return [
-			{ id: "active", label: "Sessions", count: this.active.length, body: this.activeList },
-			{ id: "archive", label: "Archive", count: this.archive.length, body: this.archiveList },
+			{
+				id: "active",
+				label: "Sessions",
+				count: this.active.length,
+				body: this.activeList,
+				getKeyHints: () => this.activeList.getKeyHints(),
+			},
+			{
+				id: "archive",
+				label: "Archive",
+				count: this.archive.length,
+				body: this.archiveList,
+				getKeyHints: () => this.archiveList.getKeyHints(),
+			},
 		];
 	}
 
@@ -267,8 +276,6 @@ class SessionManagerPanel {
 		return [
 			...this.tabs.getKeyHints(),
 			rawHint("s", this.scope === "current" ? "all projects" : "current folder"),
-			...this.listFor(this.currentTab()).getKeyHints(),
-			textHint("Enter disabled"),
 			rawHint("Esc", "close"),
 		];
 	}
@@ -286,10 +293,6 @@ class SessionManagerPanel {
 		const nameWidth = Math.max(8, width - visibleWidth(`${pointer}${box}  `) - visibleWidth(suffix) - 1);
 		const name = this.theme.fg(active ? "accent" : "text", preview(item.name, nameWidth));
 		return [truncateToWidth(`${pointer}${box} ${name} ${suffix}`, width, "")];
-	}
-
-	private currentTab(): TabId {
-		return this.tabs.getActiveId() === "archive" ? "archive" : "active";
 	}
 
 	private listFor(tab: TabId): MultiSelectList<ManagedSession> {

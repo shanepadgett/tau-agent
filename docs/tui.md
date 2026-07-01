@@ -51,7 +51,7 @@ const archiveList = new MultiSelectList(theme, archiveListConfig);
 const tabs = new Tabs(
  theme,
  [
-  { id: "active", label: "Sessions", count: activeCount, body: list },
+  { id: "active", label: "Sessions", count: activeCount, body: list, getKeyHints: () => list.getKeyHints() },
   { id: "archive", label: "Archive", count: archiveCount, body: archiveList },
  ],
  "active",
@@ -61,13 +61,17 @@ const panel = new ToolPanel(theme, {
  title: "Manage sessions",
  secondary: "scope: current",
  body: tabs,
- footer: { kind: "hints", hints: [...tabs.getKeyHints(), ...list.getKeyHints()] },
+ footer: { kind: "hints", hints: tabs.getKeyHints() },
 });
 ```
 
 ## Key hints
 
-Use `ToolKeyHint` helpers. Use `bindingHint` for configurable Pi keybindings so remaps show correctly. Use `rawHint` only for fixed local keys.
+Use `ToolKeyHint` helpers. Use `bindingHint` for one configurable Pi keybinding and `bindingsHint` for grouped bindings like `tui.select.up` + `tui.select.down` rendering as one `move` hint. Use `rawHint` only for fixed local keys.
+
+Interactive shared components expose their own `getKeyHints()`. Composite components include visible child hints through explicit child providers such as `TabItem.getKeyHints`. Parents add only currently available domain/modal actions, then pass the final list to `ToolPanel`.
+
+Do not render disabled actions as key hints. Put non-action text in `secondary`, `header`, `body`, or an acknowledgement footer message.
 
 Do not hardcode key checks or rendered key labels for configurable actions. Keep key handling and key hints tied to the same binding.
 

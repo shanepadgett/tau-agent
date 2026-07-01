@@ -1,6 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Container, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
-import { bindingHint, rawHint, textHint } from "../../../../src/shared/tui/tool-key-hints.ts";
+import { bindingHint, rawHint } from "../../../../src/shared/tui/tool-key-hints.ts";
 import { ToolPanel, type ToolPanelFooter } from "../../../../src/shared/tui/tool-panel.ts";
 
 export function createToolPanelPreviewWidget(_tui: TUI, _cwd: string, theme: Theme): Container {
@@ -24,7 +24,7 @@ export function createToolPanelPreviewWidget(_tui: TUI, _cwd: string, theme: The
 			),
 			footer: {
 				kind: "hints",
-				hints: [rawHint("key", "footer action hint"), textHint("plain footer note")],
+				hints: [rawHint("key", "footer action hint")],
 			},
 		}),
 	);

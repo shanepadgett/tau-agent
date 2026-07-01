@@ -3,6 +3,7 @@ import {
 	type Component,
 	type Focusable,
 	fuzzyFilter,
+	getKeybindings,
 	Input,
 	Key,
 	type KeyId,
@@ -11,7 +12,7 @@ import {
 	visibleWidth,
 	wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
-import { rawHint, type ToolKeyHint } from "./tool-key-hints.ts";
+import { bindingsHint, rawHint, type ToolKeyHint } from "./tool-key-hints.ts";
 
 export interface MultiSelectListItem {
 	id: string;
@@ -105,7 +106,7 @@ export class MultiSelectList<T extends MultiSelectListItem> implements Component
 
 	getKeyHints(): ToolKeyHint[] {
 		return [
-			rawHint("↑/↓", "move"),
+			bindingsHint(["tui.select.up", "tui.select.down"], "move"),
 			rawHint("Space", "select"),
 			rawHint("c", "clear"),
 			...(this.config.enableFilter ? [rawHint("f", "filter")] : []),
@@ -181,12 +182,13 @@ export class MultiSelectList<T extends MultiSelectListItem> implements Component
 	}
 
 	private handleListKey(data: string): boolean {
-		if (matchesKey(data, Key.up)) {
+		const keybindings = getKeybindings();
+		if (keybindings.matches(data, "tui.select.up")) {
 			const filtered = this.filteredItems();
 			this.cursor = filtered.length === 0 ? 0 : Math.max(0, this.cursor - 1);
 			return true;
 		}
-		if (matchesKey(data, Key.down)) {
+		if (keybindings.matches(data, "tui.select.down")) {
 			const filtered = this.filteredItems();
 			this.cursor = filtered.length === 0 ? 0 : Math.min(this.cursor + 1, filtered.length - 1);
 			return true;

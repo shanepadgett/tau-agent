@@ -48,13 +48,13 @@ export function createTabsListPreviewWidget(_tui: TUI, _cwd: string, theme: Them
 	const tabs = new Tabs(
 		theme,
 		[
-			{ id: "active", label: "Sessions", count: 12, body: list },
+			{ id: "active", label: "Sessions", count: 12, body: list, getKeyHints: () => list.getKeyHints() },
 			{ id: "archive", label: "Archive", count: 48, body: archived },
 		],
 		"active",
 	);
 	tabs.setTabs([
-		{ id: "active", label: "Sessions", count: 12, body: list },
+		{ id: "active", label: "Sessions", count: 12, body: list, getKeyHints: () => list.getKeyHints() },
 		{ id: "archive", label: "Archive", count: 48, body: archived },
 	]);
 
@@ -63,7 +63,7 @@ export function createTabsListPreviewWidget(_tui: TUI, _cwd: string, theme: Them
 			title: "Shared list composition",
 			secondary: `active tab: ${tabs.getActiveId()}`,
 			body: tabs,
-			footer: { kind: "hints", hints: [...tabs.getKeyHints(), ...list.getKeyHints()] },
+			footer: { kind: "hints", hints: tabs.getKeyHints() },
 		}),
 	);
 	return container;

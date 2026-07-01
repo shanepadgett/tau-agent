@@ -7,6 +7,7 @@ export interface TabItem {
 	label: string;
 	count?: number;
 	body: Component;
+	getKeyHints?: () => readonly ToolKeyHint[];
 }
 
 export class Tabs implements Component {
@@ -47,11 +48,11 @@ export class Tabs implements Component {
 
 	handleInput(data: string): void {
 		if (this.handleKey(data)) return;
-		this.tabs.find((tab) => tab.id === this.activeId)?.body.handleInput?.(data);
+		this.activeBody()?.handleInput?.(data);
 	}
 
 	getKeyHints(): ToolKeyHint[] {
-		return [rawHint("Tab", "switch tabs"), rawHint("←/→", "switch tabs")];
+		return [rawHint("Tab/←/→", "switch tabs"), ...(this.activeTab()?.getKeyHints?.() ?? [])];
 	}
 
 	render(width: number): string[] {
@@ -66,7 +67,7 @@ export class Tabs implements Component {
 		const lines = wrapTextWithAnsi(parts.join(" "), renderWidth).map((line) =>
 			truncateToWidth(line, renderWidth, ""),
 		);
-		const activeBody = this.tabs.find((tab) => tab.id === this.activeId)?.body.render(renderWidth) ?? [];
+		const activeBody = this.activeBody()?.render(renderWidth) ?? [];
 		if (activeBody.length > 0) lines.push("");
 		lines.push(...activeBody.map((line) => truncateToWidth(line, renderWidth, "")));
 		return lines;
@@ -74,5 +75,13 @@ export class Tabs implements Component {
 
 	invalidate(): void {
 		for (const tab of this.tabs) tab.body.invalidate();
+	}
+
+	private activeBody(): Component | undefined {
+		return this.activeTab()?.body;
+	}
+
+	private activeTab(): TabItem | undefined {
+		return this.tabs.find((tab) => tab.id === this.activeId);
 	}
 }
