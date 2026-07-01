@@ -298,9 +298,7 @@ No resume behavior:
 Register commands:
 
 - `/manage-sessions`
-- `/archive-session`
-- `/delete-session`
-- `/clean-house`
+- `/sweep`
 
 For `/manage-sessions`:
 
@@ -308,30 +306,18 @@ For `/manage-sessions`:
 - Require `ctx.mode === "tui"`.
 - Call `showSessionManager(ctx)`.
 
-For current-session commands:
+For `/sweep`:
 
 - `await ctx.waitForIdle()`.
-- Require `ctx.hasUI` for confirmation.
+- Require `ctx.hasUI` for selection UI.
 - Read `const oldSessionFile = ctx.sessionManager.getSessionFile()` before switching.
 - If missing, notify that the current session is not persisted.
-- Confirm with native `ctx.ui.confirm()`.
+- Select archive/delete with native `ctx.ui.select()`.
+- Confirm the selected action with native `ctx.ui.confirm()` and message `Will launch a new session.`.
 - On confirm, call `ctx.newSession({ parentSession: oldSessionFile, withSession: async (newCtx) => { ... } })`.
 - Inside `withSession`, archive/delete `oldSessionFile` and notify with `newCtx.ui.notify()`.
 - Do not use the old command `ctx` after session replacement except checking the `result.cancelled` value.
 - Do not preserve editor text.
-
-For `/clean-house`:
-
-- `await ctx.waitForIdle()`.
-- Require `ctx.hasUI`.
-- Use native `ctx.ui.select()` with archive/delete choices.
-- Load current-folder active sessions only via `SessionManager.list(ctx.cwd)` or `listManagedSessions(ctx.cwd, "current", currentSessionFile).active`.
-- Filter `modified.getTime() < Date.now() - 7 * 24 * 60 * 60 * 1000`.
-- Exclude current session.
-- If count is zero, notify and stop.
-- Confirm with action + count.
-- Execute archive/delete across the filtered sessions.
-- Report success count and failure count.
 
 ## README
 
@@ -339,7 +325,7 @@ For `/clean-house`:
 
 - What it does: manage saved Pi sessions.
 - Why: bulk archive/delete/unarchive without using `/resume` as a cleanup tool.
-- Commands: `/manage-sessions`, `/archive-session`, `/delete-session`, `/clean-house`.
+- Commands: `/manage-sessions`, `/sweep`.
 - Core keys: Space, c, s, Tab/Shift+Tab, a/Shift+A, d/Shift+D, u/Shift+U, Enter/Esc for acknowledgement.
 - Archive location: `~/.pi/agent/session-archive/` conceptually; say it is next to Pi's sessions folder.
 

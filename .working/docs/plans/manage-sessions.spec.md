@@ -29,18 +29,13 @@
 - When a session action completes in the panel, Tau shall refresh the visible session lists and report failures without closing the panel.
 - When the user presses Escape in the session management panel with no pending acknowledgement, Tau shall close the panel.
 - When the user presses Enter in the session management panel with no pending acknowledgement, Tau shall not resume or open a session.
-- When the user runs `/archive-session`, Tau shall ask for confirmation with Pi's native confirmation UI.
-- When the user confirms `/archive-session`, Tau shall switch to a blank new session before moving the previous current session file to the archive root.
-- When the user cancels `/archive-session`, Tau shall not switch sessions and shall not move the current session file.
-- When the user runs `/delete-session`, Tau shall ask for confirmation with Pi's native confirmation UI.
-- When the user confirms `/delete-session`, Tau shall switch to a blank new session before deleting the previous current session file.
-- When the user cancels `/delete-session`, Tau shall not switch sessions and shall not delete the current session file.
-- If the current session is not persisted, Tau shall refuse `/archive-session` and `/delete-session`.
-- When the user runs `/clean-house`, Tau shall show a native Pi selection UI with archive and delete choices.
-- When the user chooses a `/clean-house` action, Tau shall ask for confirmation with Pi's native confirmation UI.
-- When the user confirms `/clean-house`, Tau shall apply the chosen action to current-folder active sessions older than seven days.
-- When `/clean-house` finds no current-folder active sessions older than seven days, Tau shall report that there is nothing to clean.
-- When `/clean-house` evaluates sessions, Tau shall exclude the currently active session.
+- When the user runs `/sweep`, Tau shall show a native Pi selection UI with archive and delete choices for the current session.
+- When the user chooses a `/sweep` action, Tau shall ask for confirmation with Pi's native confirmation UI.
+- When the user confirms `/sweep`, Tau shall switch to a blank new session before mutating the old current session file.
+- When the user confirms archive in `/sweep`, Tau shall move the old current session file to the archive root after the new session is active.
+- When the user confirms delete in `/sweep`, Tau shall delete the old current session file after the new session is active.
+- When the user cancels `/sweep`, Tau shall not switch sessions and shall not mutate the current session file.
+- If the current session is not persisted, Tau shall refuse `/sweep`.
 - When Tau archives sessions, Tau shall store archived files under `join(getAgentDir(), "session-archive")` and shall preserve Pi's encoded project folder and session filename.
 - When Tau unarchives sessions, Tau shall restore archived files to the matching relative path under `join(getAgentDir(), "sessions")`.
 - When Tau creates shared TUI components for this feature, Tau shall keep panel shell, tabs, and multiselect list behavior in separate composable components.

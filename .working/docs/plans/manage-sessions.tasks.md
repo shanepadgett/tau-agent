@@ -114,16 +114,16 @@ Work:
 
 Done:
 
-- [ ] Manager opens on `/manage-sessions` in TUI mode.
-- [ ] Active/archive tabs render correct scoped counts.
-- [ ] `s` toggles current/all and clears selections.
-- [ ] Bulk actions require footer acknowledgement.
-- [ ] Completed actions refresh lists and keep panel open.
-- [ ] Current active session is not shown in active list.
+- [x] Manager opens on `/manage-sessions` in TUI mode.
+- [x] Active/archive tabs render correct scoped counts.
+- [x] `s` toggles current/all and clears selections.
+- [x] Bulk actions require footer acknowledgement.
+- [x] Completed actions refresh lists and keep panel open.
+- [x] Current active session is not shown in active list.
 
-## Task 6: current-session commands and clean-house
+## Task 6: current-session sweep command
 
-Add the command-only flows that do not need the full manager panel.
+Add the command-only flow that does not need the full manager panel.
 
 Files:
 
@@ -131,20 +131,17 @@ Files:
 
 Work:
 
-- Register `/archive-session`.
-- Register `/delete-session`.
-- Register `/clean-house`.
-- Use native Pi confirmation/select UI.
-- For current-session archive/delete, switch to a blank new session before mutating the old session file.
-- For `/clean-house`, sweep current-folder active sessions older than seven days, excluding the active session.
+- Register `/sweep`.
+- Use native Pi select/confirmation UI.
+- Let the user choose archive or delete for the current session.
+- Switch to a blank new session before mutating the old session file.
 
 Done:
 
-- [ ] `/archive-session` confirms, switches sessions, then archives old session.
-- [ ] `/delete-session` confirms, switches sessions, then deletes old session.
-- [ ] Cancelled current-session commands do not switch or mutate files.
-- [ ] `/clean-house` selects archive/delete before confirmation.
-- [ ] `/clean-house` only targets current-folder sessions older than seven days.
+- [x] `/sweep` selects archive/delete before confirmation.
+- [x] `/sweep` confirms, switches sessions, then archives or deletes the old session.
+- [x] Cancelled `/sweep` does not switch or mutate files.
+- [x] `/sweep` refuses when the current session is not persisted.
 
 ## Task 7: extension README and cleanup pass
 
@@ -164,7 +161,7 @@ Work:
 
 Done:
 
-- [ ] README covers `/manage-sessions`, `/archive-session`, `/delete-session`, and `/clean-house`.
+- [ ] README covers `/manage-sessions` and `/sweep`.
 - [ ] README lists core manager keys.
 - [ ] README avoids implementation internals.
 - [ ] No settings, schema edits, or event additions were introduced.
