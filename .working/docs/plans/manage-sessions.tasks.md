@@ -1,0 +1,170 @@
+# manage-sessions tasks
+
+## Task 1: shared panel shell and key hints
+
+Build the base UI pieces that every tool panel can share.
+
+Files:
+
+- `src/shared/tui/tool-key-hints.ts`
+- `src/shared/tui/tool-panel.ts`
+
+Work:
+
+- Add structured key hint types and rendering helpers.
+- Add `ToolPanel` for title, optional secondary/header, body, footer hints, and footer acknowledgement.
+- Keep all Pi key hint rendering in the hint helper.
+- Do not add session-specific behavior.
+
+Done:
+
+- [x] `ToolKeyHint` helpers render binding, raw, and text hints.
+- [x] `ToolPanel` renders shell/header/body/footer without owning tool state.
+- [x] Footer can switch between normal hints and acknowledgement text.
+- [x] `/tool-preview tool-panel` renders basic `ToolPanel` states for validation.
+- [x] No production extension behavior changes.
+
+## Task 2: shared tabs and multiselect list
+
+Build focused reusable components for tab state and selectable row lists.
+
+Files:
+
+- `src/shared/tui/tabs.ts`
+- `src/shared/tui/multi-select-list.ts`
+
+Work:
+
+- Add `Tabs` for tab rendering and Tab/Shift+Tab/left/right navigation.
+- Add `MultiSelectList` for cursor movement, selection, optional filter, action dispatch, and visible windowing.
+- Make both components expose default key hints for parent panels.
+- Keep confirmation, file operations, and session behavior out.
+
+Done:
+
+- [ ] `Tabs` owns only tab state/rendering and key handling.
+- [ ] `MultiSelectList` supports current-or-selection actions.
+- [ ] `MultiSelectList` supports older-than-cursor actions.
+- [ ] `MultiSelectList` clears selection and exposes key hints.
+- [ ] No reuse of `TabbedMultiSelect`.
+
+## Task 3: shared TUI composition docs
+
+Document the component boundary once the UI pieces exist.
+
+Files:
+
+- `docs/tui-components.md`
+
+Work:
+
+- Explain when to use Pi native UI first.
+- Explain when to compose Tau `ToolPanel`, `Tabs`, and `MultiSelectList`.
+- Show the key-hint flow from child component to panel footer.
+- Include one short composition example.
+
+Done:
+
+- [ ] Docs mention Pi built-ins before custom panels.
+- [ ] Docs describe each shared component boundary.
+- [ ] Docs include one compact composition example.
+- [ ] Docs avoid implementation dump.
+
+## Task 4: manage-sessions storage operations
+
+Build session listing and file mutations behind a small feature-local boundary.
+
+Files:
+
+- `src/extensions/manage-sessions/session-store.ts`
+
+Work:
+
+- List active sessions for current/all scope.
+- List archived sessions for current/all scope.
+- Exclude the active session when a current session file is supplied.
+- Archive/unarchive by moving files between mirrored session/archive paths.
+- Delete using trash first, then unlink fallback.
+
+Done:
+
+- [ ] Active current/all listing works through Pi session APIs.
+- [ ] Archive current/all listing works from `session-archive`.
+- [ ] Archive/unarchive rejects unsafe relative paths and refuses overwrite.
+- [ ] Delete uses trash first and unlink fallback.
+- [ ] Store code has no UI concerns.
+
+## Task 5: `/manage-sessions` panel
+
+Compose the shared UI components into the bulk session manager.
+
+Files:
+
+- `src/extensions/manage-sessions/manager-ui.ts`
+- `src/extensions/manage-sessions/index.ts`
+
+Work:
+
+- Register `/manage-sessions`.
+- Open the manager only in TUI mode.
+- Compose `ToolPanel`, `Tabs`, and two `MultiSelectList` instances.
+- Support current/all scope with `s`.
+- Support archive/delete/unarchive and older-than-cursor actions with inline footer acknowledgement.
+- Keep Enter from resuming/opening sessions.
+
+Done:
+
+- [ ] Manager opens on `/manage-sessions` in TUI mode.
+- [ ] Active/archive tabs render correct scoped counts.
+- [ ] `s` toggles current/all and clears selections.
+- [ ] Bulk actions require footer acknowledgement.
+- [ ] Completed actions refresh lists and keep panel open.
+- [ ] Current active session is not shown in active list.
+
+## Task 6: current-session commands and clean-house
+
+Add the command-only flows that do not need the full manager panel.
+
+Files:
+
+- `src/extensions/manage-sessions/index.ts`
+
+Work:
+
+- Register `/archive-session`.
+- Register `/delete-session`.
+- Register `/clean-house`.
+- Use native Pi confirmation/select UI.
+- For current-session archive/delete, switch to a blank new session before mutating the old session file.
+- For `/clean-house`, sweep current-folder active sessions older than seven days, excluding the active session.
+
+Done:
+
+- [ ] `/archive-session` confirms, switches sessions, then archives old session.
+- [ ] `/delete-session` confirms, switches sessions, then deletes old session.
+- [ ] Cancelled current-session commands do not switch or mutate files.
+- [ ] `/clean-house` selects archive/delete before confirmation.
+- [ ] `/clean-house` only targets current-folder sessions older than seven days.
+
+## Task 7: extension README and cleanup pass
+
+Add user-facing docs and remove any accidental scaffolding.
+
+Files:
+
+- `src/extensions/manage-sessions/README.md`
+- Any files touched by earlier tasks if cleanup is needed.
+
+Work:
+
+- Document commands and core keys at product level.
+- Mention archive location conceptually.
+- Remove dead helpers, unused exports, and stale TODOs.
+- Do not add settings or Tau events.
+
+Done:
+
+- [ ] README covers `/manage-sessions`, `/archive-session`, `/delete-session`, and `/clean-house`.
+- [ ] README lists core manager keys.
+- [ ] README avoids implementation internals.
+- [ ] No settings, schema edits, or event additions were introduced.
