@@ -4,9 +4,11 @@ import { matchesKey } from "@earendil-works/pi-tui";
 import { createAutoreadPreviewWidget } from "./widgets/autoread.ts";
 import { createFindPreviewWidget } from "./widgets/find.ts";
 import { createGrepPreviewWidget } from "./widgets/grep.ts";
+import { framePreviewWidget } from "./widgets/layout.ts";
 import { createLsPreviewWidget } from "./widgets/ls.ts";
 import { createPatchPreviewWidget } from "./widgets/patch.ts";
 import { createReadPreviewWidget } from "./widgets/read.ts";
+import { createToolPanelPreviewWidget } from "./widgets/tool-panel.ts";
 import { createTurnBudgetPreviewWidget } from "./widgets/turn-budget.ts";
 
 const COMMAND = "tool-preview";
@@ -17,6 +19,7 @@ const WIDGETS: Record<string, (tui: TUI, cwd: string, theme: Theme) => Component
 	ls: createLsPreviewWidget,
 	patch: createPatchPreviewWidget,
 	read: createReadPreviewWidget,
+	"tool-panel": createToolPanelPreviewWidget,
 	"turn-budget": createTurnBudgetPreviewWidget,
 };
 const ARGUMENTS = [
@@ -26,6 +29,7 @@ const ARGUMENTS = [
 	{ value: "ls", label: "ls", description: "Show ls row states" },
 	{ value: "patch", label: "patch", description: "Show patch row states" },
 	{ value: "read", label: "read", description: "Show read row states" },
+	{ value: "tool-panel", label: "tool-panel", description: "Show shared ToolPanel states" },
 	{ value: "turn-budget", label: "turn-budget", description: "Show turn-budget hint states" },
 	{ value: "clear", label: "clear", description: "Hide the preview widget" },
 ] satisfies AutocompleteItem[];
@@ -68,7 +72,7 @@ export default function toolPreview(pi: ExtensionAPI): void {
 				return;
 			}
 
-			ctx.ui.setWidget(COMMAND, (tui, theme) => createWidget(tui, ctx.cwd, theme), {
+			ctx.ui.setWidget(COMMAND, (tui, theme) => framePreviewWidget(theme, createWidget(tui, ctx.cwd, theme)), {
 				placement: "aboveEditor",
 			});
 			clearOnEscape?.();

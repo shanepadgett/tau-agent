@@ -1,6 +1,7 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { Box, Container, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
+import { Container, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
 import { LabeledDotLine } from "../../../../src/shared/tui/labeled-dot-line.ts";
+import { addMessageBox, addSectionHeading } from "./layout.ts";
 
 interface TurnBudgetSample {
 	title: string;
@@ -38,11 +39,11 @@ const SAMPLES: TurnBudgetSample[] = [
 
 export function createTurnBudgetPreviewWidget(_tui: TUI, _cwd: string, theme: Theme): Container {
 	const container = new Container();
-	container.addChild(new Text(theme.fg("text", theme.bold("Turn Budget Hint Preview")), 1, 0));
+	container.addChild(new Text(theme.fg("text", theme.bold("Turn Budget Hint Preview")), 0, 0));
 	container.addChild(new Spacer(1));
 
 	for (const sample of SAMPLES) {
-		container.addChild(new Text(theme.fg("accent", theme.bold(sample.title)), 1, 0));
+		container.addChild(new Text(theme.fg("accent", theme.bold(sample.title)), 0, 0));
 		container.addChild(new Spacer(1));
 		addSteeringMessage(container, theme, sample.message);
 		addVisibleMarker(container, theme, sample);
@@ -53,16 +54,11 @@ export function createTurnBudgetPreviewWidget(_tui: TUI, _cwd: string, theme: Th
 }
 
 function addSteeringMessage(container: Container, theme: Theme, message: string): void {
-	container.addChild(new Text(theme.bold("Visible Steering Message"), 1, 0));
-	container.addChild(new Spacer(1));
-	const box = new Box(1, 1, (text) => theme.bg("customMessageBg", text));
-	box.addChild(new Text(theme.fg("customMessageText", message), 0, 0));
-	container.addChild(box);
-	container.addChild(new Spacer(1));
+	addMessageBox(container, theme, "Visible Steering Message", message);
 }
 
 function addVisibleMarker(container: Container, theme: Theme, sample: TurnBudgetSample): void {
-	container.addChild(new Text(theme.bold("Visible Marker"), 1, 0));
+	addSectionHeading(container, theme, "Visible Marker");
 	container.addChild(new Spacer(1));
 	container.addChild(new TurnBudgetMarker(theme, sample));
 }

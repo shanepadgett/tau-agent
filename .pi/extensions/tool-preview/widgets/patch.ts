@@ -1,9 +1,11 @@
 import { defineTool, type Theme, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
-import { Box, Container, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
+import { Container, type TUI } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { type ApplyPatchSummary, deriveStats } from "../../../../src/extensions/patch/executor.ts";
+import type { ApplyPatchSummary } from "../../../../src/extensions/patch/executor.ts";
 import { renderPatchCall, renderPatchResult } from "../../../../src/extensions/patch/render.ts";
+import { formatPatchSummary } from "../../../../src/extensions/patch/summary.ts";
 import type { ToolRowStateStore } from "../../../../src/shared/tool-row-state.ts";
+import { addMessageBox, addPageTitle, addSampleTitle, addSection } from "./layout.ts";
 
 interface PatchPreviewSpec {
 	title: string;
@@ -215,27 +217,27 @@ const patchSpecs: PatchPreviewSpec[] = [
 		input: mixedPatchInput,
 		summary: runningSummary,
 		isPartial: true,
-		agentPayload: ["[UI partial update; not final model input]", "", formatSummary(runningSummary)].join("\n"),
+		agentPayload: ["[UI partial update; not final model input]", "", formatPatchSummary(runningSummary)].join("\n"),
 	},
 	{
 		title: "Completed Result",
 		input: mixedPatchInput,
 		summary: completedSummary,
-		agentPayload: formatSummary(completedSummary),
+		agentPayload: formatPatchSummary(completedSummary),
 	},
 	{
 		title: "Partial Failure Result",
 		input: partialFailureInput,
 		summary: partialFailureSummary,
 		isError: true,
-		agentPayload: formatSummary(partialFailureSummary),
+		agentPayload: formatPatchSummary(partialFailureSummary),
 	},
 	{
 		title: "Failed Result",
 		input: failedInput,
 		summary: failedSummary,
 		isError: true,
-		agentPayload: formatSummary(failedSummary),
+		agentPayload: formatPatchSummary(failedSummary),
 	},
 ];
 
@@ -244,7 +246,7 @@ export function createPatchPreviewWidget(tui: TUI, cwd: string, theme: Theme): C
 	addPageTitle(container, theme, "Patch Row Preview");
 	for (const spec of patchSpecs) {
 		addSampleTitle(container, theme, spec.title);
-		addAgentPayload(container, theme, spec.agentPayload);
+		addMessageBox(container, theme, "Agent Payload", spec.agentPayload);
 		addSection(container, theme, "Collapsed Row", [createPatchRow(tui, cwd, spec, false)]);
 		addSection(container, theme, "Expanded Row", [createPatchRow(tui, cwd, spec, true)]);
 	}
@@ -309,67 +311,4 @@ function createPatchRow(
 	}
 	row.setExpanded(expanded);
 	return row;
-}
-
-function formatSummary(summary: ApplyPatchSummary): string {
-	const s = deriveStats(summary);
-	const lines: string[] = [];
-	if (summary.status === "failed") {
-		lines.push("No changes applied.");
-	} else {
-		const parts: string[] = [];
-		if (s.linesAdded > 0) parts.push(`+${s.linesAdded}`);
-		if (s.linesRemoved > 0) parts.push(`-${s.linesRemoved}`);
-		const badge = parts.length > 0 ? ` [${parts.join(" ")}]` : "";
-		lines.push(`Applied ${s.completedOperations}/${summary.totalSections} sections.${badge}`);
-	}
-
-	for (const path of s.added) lines.push(`A ${path}`);
-	for (const path of s.replaced) lines.push(`M ${path}`);
-	for (const path of s.updated) lines.push(`M ${path}`);
-	for (const path of s.deleted) lines.push(`D ${path}`);
-	for (const move of s.moved) lines.push(`R ${move.from} -> ${move.to}`);
-
-	if (summary.failures.length > 0) {
-		lines.push("Failures:");
-		for (const failure of summary.failures) {
-			const kind = failure.kind ? `${failure.kind} ` : "";
-			const path = failure.path ?? "";
-			const chunk =
-				failure.chunkIndex && failure.totalChunks ? ` chunk ${failure.chunkIndex}/${failure.totalChunks}` : "";
-			const ctx = failure.contextHint ? ` (context: "${failure.contextHint}")` : "";
-			lines.push(`- ${kind}${path}${chunk}: ${failure.message}${ctx}`.trim());
-		}
-	}
-
-	return lines.join("\n");
-}
-
-function addPageTitle(container: Container, theme: Theme, title: string): void {
-	container.addChild(new Text(theme.fg("text", theme.bold(title)), 1, 0));
-	container.addChild(new Spacer(1));
-}
-
-function addSampleTitle(container: Container, theme: Theme, title: string): void {
-	container.addChild(new Text(theme.fg("accent", theme.bold(title)), 1, 0));
-	container.addChild(new Spacer(1));
-}
-
-function addSection(container: Container, theme: Theme, title: string, rows: ToolExecutionComponent[]): void {
-	addSectionHeading(container, theme, title);
-	for (const row of rows) container.addChild(row);
-	container.addChild(new Spacer(1));
-}
-
-function addAgentPayload(container: Container, theme: Theme, payload: string): void {
-	addSectionHeading(container, theme, "Agent Payload");
-	container.addChild(new Spacer(1));
-	const box = new Box(1, 1, (text) => theme.bg("customMessageBg", text));
-	box.addChild(new Text(theme.fg("customMessageText", payload), 0, 0));
-	container.addChild(box);
-	container.addChild(new Spacer(1));
-}
-
-function addSectionHeading(container: Container, theme: Theme, title: string): void {
-	container.addChild(new Text(theme.bold(title), 1, 0));
 }

@@ -1,6 +1,7 @@
 import { type Theme, type ToolDefinition, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
-import { Box, Container, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
+import { Container, Text, type TUI } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { addMessageBox, addPageTitle, addSampleTitle, addSection } from "./layout.ts";
 
 export interface ToolPreviewSpec {
 	name: string;
@@ -37,33 +38,8 @@ export function createToolPreviewWidget(
 	return container;
 }
 
-function addPageTitle(container: Container, theme: Theme, title: string): void {
-	container.addChild(new Text(theme.fg("text", theme.bold(title)), 1, 0));
-	container.addChild(new Spacer(1));
-}
-
-function addSampleTitle(container: Container, theme: Theme, title: string): void {
-	container.addChild(new Text(theme.fg("accent", theme.bold(title)), 1, 0));
-	container.addChild(new Spacer(1));
-}
-
-function addSection(container: Container, theme: Theme, title: string, rows: ToolExecutionComponent[]): void {
-	addSectionHeading(container, theme, title);
-	for (const row of rows) container.addChild(row);
-	container.addChild(new Spacer(1));
-}
-
 function addAgentPreview(container: Container, theme: Theme, spec: ToolPreviewSpec): void {
-	addSectionHeading(container, theme, "Agent Payload");
-	container.addChild(new Spacer(1));
-	const box = new Box(1, 1, (text) => theme.bg("customMessageBg", text));
-	box.addChild(new Text(theme.fg("customMessageText", spec.agentResult ?? spec.result), 0, 0));
-	container.addChild(box);
-	container.addChild(new Spacer(1));
-}
-
-function addSectionHeading(container: Container, theme: Theme, title: string): void {
-	container.addChild(new Text(theme.bold(toTitleCase(title)), 1, 0));
+	addMessageBox(container, theme, "Agent Payload", spec.agentResult ?? spec.result);
 }
 
 function toolTitle(title: string): string {

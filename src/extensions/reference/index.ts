@@ -394,15 +394,35 @@ async function showReferencePanel(
 		function referencesToDelete(
 			refs: readonly ReferenceRow[],
 		): { items: ReferenceItem[]; label: string } | undefined {
-			const picked = rows
-				.filter((row): row is Extract<ReferenceRow, { kind: "reference" }> => row.kind === "reference")
-				.map((row) => row.item)
-				.filter((item) => selected.has(item.path));
+			const picked = selectedReferences();
 			if (picked.length > 0)
 				return { items: picked, label: `Delete ${picked.length} repo${picked.length === 1 ? "" : "s"}?` };
 
 			const row = refs[cursor];
 			return row?.kind === "reference" ? { items: [row.item], label: `Delete ${row.item.name}?` } : undefined;
+		}
+
+		function selectedReferences(): ReferenceItem[] {
+			return rows
+				.filter((row): row is Extract<ReferenceRow, { kind: "reference" }> => row.kind === "reference")
+				.map((row) => row.item)
+				.filter((item) => selected.has(item.path));
+		}
+
+		function moveCursor(data: string, refs: readonly ReferenceRow[]): boolean {
+			if (matchesKey(data, Key.up)) cursor = Math.max(0, cursor - 1);
+			else if (matchesKey(data, Key.down)) cursor = Math.min(Math.max(0, refs.length - 1), cursor + 1);
+			else return false;
+			tui.requestRender();
+			return true;
+		}
+
+		function toggleSelectedReference(data: string, refs: readonly ReferenceRow[]): boolean {
+			if (!matchesKey(data, Key.space)) return false;
+			const row = refs[cursor];
+			if (row?.kind === "reference" && !selected.delete(row.item.path)) selected.add(row.item.path);
+			tui.requestRender();
+			return true;
 		}
 
 		function startDeleteReferences(refs: readonly ReferenceRow[]): void {
@@ -630,22 +650,8 @@ async function showReferencePanel(
 				}
 
 				if (filterMode) {
-					if (matchesKey(data, Key.up)) {
-						cursor = Math.max(0, cursor - 1);
-						tui.requestRender();
-						return;
-					}
-					if (matchesKey(data, Key.down)) {
-						cursor = Math.min(Math.max(0, refs.length - 1), cursor + 1);
-						tui.requestRender();
-						return;
-					}
-					if (matchesKey(data, Key.space)) {
-						const row = refs[cursor];
-						if (row?.kind === "reference" && !selected.delete(row.item.path)) selected.add(row.item.path);
-						tui.requestRender();
-						return;
-					}
+					if (moveCursor(data, refs)) return;
+					if (toggleSelectedReference(data, refs)) return;
 
 					const previousFilter = filterInput.getValue();
 					filterInput.handleInput(data);
@@ -655,23 +661,8 @@ async function showReferencePanel(
 					return;
 				}
 
-				if (matchesKey(data, Key.up)) {
-					cursor = Math.max(0, cursor - 1);
-					tui.requestRender();
-					return;
-				}
-				if (matchesKey(data, Key.down)) {
-					cursor = Math.min(Math.max(0, refs.length - 1), cursor + 1);
-					tui.requestRender();
-					return;
-				}
-
-				if (matchesKey(data, Key.space)) {
-					const row = refs[cursor];
-					if (row?.kind === "reference" && !selected.delete(row.item.path)) selected.add(row.item.path);
-					tui.requestRender();
-					return;
-				}
+				if (moveCursor(data, refs)) return;
+				if (toggleSelectedReference(data, refs)) return;
 
 				if (data === "c" || data === "C") {
 					if (selected.size === 0) ctx.ui.notify("No references selected.", "info");
@@ -688,10 +679,7 @@ async function showReferencePanel(
 				}
 
 				if (matchesKey(data, Key.enter)) {
-					const picked = refs
-						.filter((row): row is Extract<ReferenceRow, { kind: "reference" }> => row.kind === "reference")
-						.map((row) => row.item)
-						.filter((item) => selected.has(item.path));
+					const picked = selectedReferences();
 					if (picked.length > 0) done(picked);
 					return;
 				}
