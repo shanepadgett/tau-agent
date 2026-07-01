@@ -9,31 +9,12 @@ import type { ModelCandidate } from "./types.ts";
 const MAX_ATTEMPTS = 5;
 const MAX_TOOL_ATTEMPTS = 2;
 const SEVEN_DAYS_MS = 604_800_000;
-const CHARS_PER_TOKEN_ESTIMATE = 4;
-const MEDIUM_PROMPT_TOKENS = 4_000;
-const LARGE_PROMPT_TOKENS = 16_000;
 
 const PREFERRED_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
 	{ provider: "openrouter", model: "cohere/north-mini-code:free", reasoning: "high" },
 	{ provider: "github-copilot", model: "gemini-3.5-flash", reasoning: "high" },
 	{ provider: "openai-codex", model: "gpt-5.4-mini", reasoning: "high" },
 	{ provider: "anthropic", model: "claude-haiku-4-5", reasoning: "high" },
-];
-
-const SMALL_PROMPT_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
-	{ provider: "openrouter", model: "cohere/north-mini-code:free", reasoning: "high" },
-	{ provider: "github-copilot", model: "gemini-3.5-flash", reasoning: "high" },
-	{ provider: "openai-codex", model: "gpt-5.4-mini", reasoning: "high" },
-	{ provider: "openai-codex", model: "gpt-5.5", reasoning: "high" },
-];
-
-const MEDIUM_PROMPT_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
-	{ provider: "openai-codex", model: "gpt-5.4-mini", reasoning: "high" },
-	{ provider: "openai-codex", model: "gpt-5.5", reasoning: "high" },
-];
-
-const LARGE_PROMPT_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
-	{ provider: "openai-codex", model: "gpt-5.5", reasoning: "medium" },
 ];
 
 interface GenerationContext {
@@ -70,22 +51,6 @@ export async function resolveCandidates(
 
 	if (candidates.length === 0) throw new Error("No authenticated model available for generation.");
 	return candidates;
-}
-
-export async function resolveCandidatesForPrompt(
-	ctx: Pick<ExtensionContext, "modelRegistry" | "model" | "cwd" | "isProjectTrusted">,
-	prompt: string,
-): Promise<ModelCandidate[]> {
-	return resolveCandidates(ctx, routedModelsForPrompt(prompt));
-}
-
-function routedModelsForPrompt(
-	prompt: string,
-): ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> {
-	const tokens = Math.ceil(prompt.length / CHARS_PER_TOKEN_ESTIMATE);
-	if (tokens < MEDIUM_PROMPT_TOKENS) return SMALL_PROMPT_MODELS;
-	if (tokens < LARGE_PROMPT_TOKENS) return MEDIUM_PROMPT_MODELS;
-	return LARGE_PROMPT_MODELS;
 }
 
 export async function generateValidated<T>(
