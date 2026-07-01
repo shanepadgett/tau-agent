@@ -20,3 +20,4 @@
 {"id":"7e761003-42e6-4800-9c39-2bf7bb6ac788","text":"should instruct agent when using patch to replace whole file is edit is liekly large enough to replace most of it as edit would be twice the token cost","createdAt":1782872465866}
 {"id":"972af447-b535-4484-bee7-84d643754c31","text":"we need to update tool-preview to take in a title properly to be composable so that we arent having to always do things like add a spacer after the title text and manually formatting the title","createdAt":1782877308578}
 {"id":"662c7083-9b90-4344-8e92-32542d6faa08","text":"seeing some grep calls that are showing no tool call args rendering, but only occasionally. like in the Reviewing task 5 scope for manage-sessions documentation session","createdAt":1782885527348}
+{"id":"4ce6e18f-d35d-4630-b0b0-efb6971e2c89","text":"issue with /commit and gemini model (Model failed (github-copilot/gemini-3.5-flash): Commit plan tool input is malformed.)","createdAt":1782888687680}
