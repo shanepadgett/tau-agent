@@ -23,3 +23,5 @@
 {"id":"4ce6e18f-d35d-4630-b0b0-efb6971e2c89","text":"issue with /commit and gemini model (Model failed (github-copilot/gemini-3.5-flash): Commit plan tool input is malformed.)","createdAt":1782888687680}
 {"id":"3f22699e-5ab7-4da9-91b5-06bc2ddc03ce","text":"want to get rok to stop acknoledging he didnt run checks in final assistant messages. I think he's being told in several places to not run checks and we need to just find a way to clarify to him to never acknowledge that, to just not do it.","createdAt":1782890297943}
 {"id":"bd8f5691-9128-40aa-b9d5-7a9bd9b66e5b","text":"auto-name should use temp custom tool like commit for getting model to give back formed name","createdAt":1782890424088}
+{"id":"777f9c88-f252-4039-86e8-5f15644309e7","text":"commit plugin still taking too long to run","createdAt":1782893122090}
+{"id":"c357c77a-3aed-4d52-a31f-01bca0bf4f8d","text":"we need to inject a baseline ls of . at depth 2 when agent starts. probably in soul","createdAt":1782894345330}
