@@ -73,10 +73,18 @@ export async function generateToolValidated<T>(
 	tool: Tool,
 	validate: (input: unknown) => T,
 	correctionPrompt?: (error: Error, output: string) => string,
-	options?: { statusKey?: string; notifyOnFallback?: boolean },
+	options?: { statusKey?: string; notifyOnFallback?: boolean; maxAttempts?: number },
 ): Promise<T> {
 	return withModelFallback(ctx, candidates, options, (candidate) =>
-		requestToolValidated(ctx, candidate, prompt, tool, validate, correctionPrompt),
+		requestToolValidated(
+			ctx,
+			candidate,
+			prompt,
+			tool,
+			validate,
+			correctionPrompt,
+			options?.maxAttempts ?? MAX_TOOL_ATTEMPTS,
+		),
 	);
 }
 
@@ -154,17 +162,18 @@ async function requestToolValidated<T>(
 	tool: Tool,
 	validate: (input: unknown) => T,
 	correctionPrompt?: (error: Error, output: string) => string,
+	maxAttempts = MAX_TOOL_ATTEMPTS,
 ): Promise<T> {
 	const messages: Message[] = [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }];
 
-	for (let attempt = 1; attempt <= MAX_TOOL_ATTEMPTS; attempt++) {
+	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		const response = await completeCandidate(ctx, candidate, messages, [tool]);
 		const text = responseText(response);
 		const toolCalls = response.content.flatMap((part) => (part.type === "toolCall" ? [part] : []));
 		const output = text || formatToolCalls(toolCalls);
 		if (response.stopReason === "error") {
 			const error = new Error(response.errorMessage || "model returned an error");
-			if (attempt < MAX_TOOL_ATTEMPTS && !shouldCooldownProvider(error)) continue;
+			if (attempt < maxAttempts && !shouldCooldownProvider(error)) continue;
 			throw error;
 		}
 
@@ -175,7 +184,7 @@ async function requestToolValidated<T>(
 			if (toolCall.name !== tool.name) throw new Error(`Model called ${toolCall.name}; expected ${tool.name}.`);
 			return validate(toolCall.arguments);
 		} catch (error) {
-			if (!(error instanceof Error) || attempt >= MAX_TOOL_ATTEMPTS) throw error;
+			if (!(error instanceof Error) || attempt >= maxAttempts) throw error;
 			if (!correctionPrompt) throw error;
 
 			messages.push({
