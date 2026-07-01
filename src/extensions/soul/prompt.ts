@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { type Dirent, existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -10,10 +11,17 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 const DEFAULT_TOOLS = ["read", "grep", "find", "ls", "bash", "edit", "write"];
+const ROOT_SNAPSHOT_MAX_PATHS = 300;
+
+interface SnapshotEntry {
+	dirent: Dirent;
+	path: string;
+}
 
 export interface RuntimeContext {
 	date: string;
 	cwd: string;
+	rootSnapshot: readonly string[];
 }
 
 const ROK_CORE_PROMPT = `You are Rok.
@@ -61,6 +69,8 @@ Never cut validation, data safety, security, accessibility, explicit user ask, h
 
 Question asked? Answer and stop. Simple question gets simple answer. If one sentence works, use one sentence. No plan, caveat list, or options unless needed. Change requested? Smallest correct change. Ambiguous? Ask one practical question.
 
+If instructed not to run checks or not to do something, obey silently. Do not report the omission in meta-speak.
+
 Final chat tiny. User saw tools and will inspect code. Do not tour work. Say only non-obvious thing human needs now. If nothing needs saying, one word.`;
 
 export function buildRokPrompt(options: BuildSystemPromptOptions, runtimeContext: RuntimeContext): string {
@@ -88,7 +98,7 @@ export function buildRokPrompt(options: BuildSystemPromptOptions, runtimeContext
 }
 
 export function freezeRuntimeContext(cwd: string): RuntimeContext {
-	return { date: formatDate(new Date()), cwd: cwd.replace(/\\/g, "/") };
+	return { date: formatDate(new Date()), cwd: cwd.replace(/\\/g, "/"), rootSnapshot: listRootSnapshot(cwd) };
 }
 
 function formatDate(date: Date): string {
@@ -99,7 +109,89 @@ function formatDate(date: Date): string {
 }
 
 function formatRuntimeContext(context: RuntimeContext): string {
-	return `Current date: ${context.date}\nCurrent working directory: ${context.cwd}`;
+	const rootSnapshot = context.rootSnapshot.length
+		? `\nRoot directory snapshot (depth 2):\n${context.rootSnapshot.map((path) => `- ${path}`).join("\n")}`
+		: "";
+	return `Current date: ${context.date}\nCurrent working directory: ${context.cwd}${rootSnapshot}`;
+}
+
+function listRootSnapshot(cwd: string): string[] {
+	const root = resolve(cwd);
+	const rootEntries = listSnapshotEntries(root, ".");
+	const ignoredRootPaths = gitIgnoredPaths(
+		root,
+		rootEntries.map((entry) => entry.path),
+	);
+	const visibleRootEntries = rootEntries.filter(
+		(entry) => !isAlwaysHiddenFromSnapshot(entry.dirent.name) && !ignoredRootPaths.has(entry.path),
+	);
+	const childEntriesByParent = new Map<string, SnapshotEntry[]>();
+	const childPaths: string[] = [];
+
+	for (const entry of visibleRootEntries) {
+		if (!entry.dirent.isDirectory()) continue;
+		const childEntries = listSnapshotEntries(root, entry.path).filter(
+			(childEntry) => !isAlwaysHiddenFromSnapshot(childEntry.dirent.name),
+		);
+		childEntriesByParent.set(entry.path, childEntries);
+		childPaths.push(...childEntries.map((childEntry) => childEntry.path));
+	}
+
+	const ignoredChildPaths = gitIgnoredPaths(root, childPaths);
+	const paths: string[] = [];
+
+	for (const entry of visibleRootEntries) {
+		pushSnapshotPath(paths, entry);
+		if (paths.length >= ROOT_SNAPSHOT_MAX_PATHS) break;
+
+		for (const childEntry of childEntriesByParent.get(entry.path) ?? []) {
+			if (ignoredChildPaths.has(childEntry.path)) continue;
+			pushSnapshotPath(paths, childEntry);
+			if (paths.length >= ROOT_SNAPSHOT_MAX_PATHS) break;
+		}
+	}
+
+	return paths.length === ROOT_SNAPSHOT_MAX_PATHS ? [...paths, "..."] : paths;
+}
+
+function listSnapshotEntries(root: string, relativePath: string): SnapshotEntry[] {
+	let entries: Dirent[];
+	try {
+		entries = readdirSync(join(root, relativePath), { withFileTypes: true });
+	} catch {
+		return [];
+	}
+
+	return entries
+		.sort((left, right) => left.name.localeCompare(right.name))
+		.map((dirent) => ({
+			dirent,
+			path: relativePath === "." ? dirent.name : `${relativePath}/${dirent.name}`,
+		}));
+}
+
+function gitIgnoredPaths(root: string, paths: readonly string[]): Set<string> {
+	if (paths.length === 0) return new Set();
+
+	const result = spawnSync("git", ["check-ignore", "-z", "--stdin"], {
+		cwd: root,
+		encoding: "utf8",
+		input: `${paths.join("\0")}\0`,
+	});
+
+	if (result.status === 0 || result.status === 1) {
+		return new Set(result.stdout.split("\0").filter(Boolean));
+	}
+	return new Set(paths.filter((path) => path.split("/").includes("node_modules")));
+}
+
+function isAlwaysHiddenFromSnapshot(name: string): boolean {
+	return name === ".git";
+}
+
+function pushSnapshotPath(paths: string[], entry: SnapshotEntry): void {
+	if (paths.length >= ROOT_SNAPSHOT_MAX_PATHS) return;
+	paths.push(entry.dirent.isDirectory() ? `${entry.path}/` : entry.path);
 }
 
 function formatToolList(tools: readonly string[], snippets: Record<string, string> | undefined): string {
