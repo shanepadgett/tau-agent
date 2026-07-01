@@ -48,6 +48,8 @@ const grepParams = Type.Object(
 		maxLineLength: Type.Optional(Type.Number()),
 		contextOnly: Type.Optional(Type.Boolean()),
 		stopAfterLimit: Type.Optional(Type.Boolean()),
+		hidden: Type.Optional(Type.Boolean()),
+		noIgnore: Type.Optional(Type.Boolean()),
 	},
 	{ additionalProperties: false },
 );
@@ -99,7 +101,16 @@ interface GrepQueryOutput {
 }
 
 const STDERR_LIMIT = 16_384;
-const PARAM_KEYS = new Set(["queries", "limit", "maxPerFile", "maxLineLength", "contextOnly", "stopAfterLimit"]);
+const PARAM_KEYS = new Set([
+	"queries",
+	"limit",
+	"maxPerFile",
+	"maxLineLength",
+	"contextOnly",
+	"stopAfterLimit",
+	"hidden",
+	"noIgnore",
+]);
 const QUERY_KEYS = new Set([
 	"patterns",
 	"paths",
@@ -146,6 +157,8 @@ function assertStructuredParams(value: unknown): asserts value is GrepParams {
 	assertOptionalNumber(value, "maxLineLength", "params.maxLineLength");
 	assertOptionalBoolean(value, "contextOnly", "params.contextOnly");
 	assertOptionalBoolean(value, "stopAfterLimit", "params.stopAfterLimit");
+	assertOptionalBoolean(value, "hidden", "params.hidden");
+	assertOptionalBoolean(value, "noIgnore", "params.noIgnore");
 
 	for (let index = 0; index < value.queries.length; index += 1) {
 		const query = value.queries[index];
@@ -637,12 +650,14 @@ function renderCallSummary(args: unknown): string {
 	const include = renderStringArray(query.include, ",", stripLeadingAt);
 	const exclude = renderStringArray(query.exclude, ",", stripLeadingAt);
 	const context = normalizeNonNegativeInteger(typeof query.context === "number" ? query.context : undefined, 0);
+	const hidden = query.hidden === true || (query.hidden === undefined && args.hidden === true);
+	const noIgnore = query.noIgnore === true || (query.noIgnore === undefined && args.noIgnore === true);
 	const flags = [
 		query.regex === true ? "regex" : "literal",
 		typeof query.case === "string" ? query.case : "smart",
 		query.word === true ? "word" : "",
-		query.hidden === true ? "hidden" : "",
-		query.noIgnore === true ? "noIgnore" : "",
+		hidden ? "hidden" : "",
+		noIgnore ? "noIgnore" : "",
 		args.contextOnly === true ? "contextOnly" : "",
 		args.stopAfterLimit === true ? "stopAfterLimit" : "",
 	]
@@ -671,7 +686,15 @@ function renderStringArray(value: unknown, separator: string, map: (item: string
 
 function prepareGrepArguments(args: unknown): GrepParams {
 	assertStructuredParams(args);
-	return args;
+	const { hidden, noIgnore, ...params } = args;
+	return {
+		...params,
+		queries: args.queries.map((query) => ({
+			...query,
+			hidden: query.hidden ?? hidden,
+			noIgnore: query.noIgnore ?? noIgnore,
+		})),
+	};
 }
 
 export function createGrepTool(rowState: ToolRowStateStore) {
@@ -680,11 +703,11 @@ export function createGrepTool(rowState: ToolRowStateStore) {
 		label: "grep",
 		description: "Search file contents with structured queries.",
 		promptSnippet:
-			'Search file contents. patterns, paths, include, and exclude are arrays of strings even for one value, e.g. include: ["*.ts"]. Use stopAfterLimit for broad searches when first matches are enough.',
+			'Search file contents. patterns, paths, include, and exclude are arrays of strings even for one value, e.g. include: ["*.ts"]. Use top-level hidden/noIgnore to apply them to all queries. Use stopAfterLimit for broad searches when first matches are enough.',
 		parameters: grepParams,
 		prepareArguments: prepareGrepArguments,
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-			assertStructuredParams(params);
+			params = prepareGrepArguments(params);
 			if (params.queries.length === 0) throw new Error("grep requires at least one query");
 			const limit = normalizeCountLimit(params.limit, 100);
 			const maxPerFile = normalizeCountLimit(params.maxPerFile, 8);
