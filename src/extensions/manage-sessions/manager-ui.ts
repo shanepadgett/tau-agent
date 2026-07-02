@@ -3,9 +3,9 @@ import { relative } from "node:path";
 import type { ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, getKeybindings, Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { errorText, formatAge, preview } from "../../shared/text.ts";
+import { bindingHint, rawHint, type ToolKeyHint } from "../../shared/tui/key-hints.ts";
 import { type MultiSelectActionResult, MultiSelectList } from "../../shared/tui/multi-select-list.ts";
 import { Tabs } from "../../shared/tui/tabs.ts";
-import { bindingHint, rawHint, type ToolKeyHint } from "../../shared/tui/tool-key-hints.ts";
 import { ToolPanel, type ToolPanelConfig } from "../../shared/tui/tool-panel.ts";
 import {
 	archiveSession,
@@ -137,7 +137,7 @@ class SessionManagerPanel {
 								target: "olderThanCursor",
 							},
 						],
-			renderItem: (item, state, width) => this.renderRow(item, state.active, state.selected, width),
+			renderItem: (item, state, width) => this.renderRow(item, state.active, width),
 			searchText: (item) => `${item.name} ${item.cwd}`,
 			onAction: (result) => this.prepareAction(tab, result),
 		});
@@ -280,19 +280,17 @@ class SessionManagerPanel {
 		];
 	}
 
-	private renderRow(item: ManagedSession, active: boolean, selected: boolean, width: number): string[] {
-		const pointer = active ? this.theme.fg("accent", "› ") : "  ";
-		const box = selected ? "[x]" : "[ ]";
+	private renderRow(item: ManagedSession, active: boolean, width: number): string[] {
 		const path = this.scope === "all" && item.cwd ? shortenPath(item.cwd) : undefined;
 		const age = formatAge(item.modified.getTime());
 		const count = item.messageCount > 0 ? `${item.messageCount} msgs` : undefined;
 		const requiredSuffix = [path, age].filter((part) => part !== undefined).join("  ");
 		const fullSuffix = [path, count, age].filter((part) => part !== undefined).join("  ");
-		const fullSuffixFits = visibleWidth(`${pointer}${box} `) + visibleWidth(fullSuffix) + 9 <= width;
+		const fullSuffixFits = visibleWidth(fullSuffix) + 9 <= width;
 		const suffix = this.theme.fg("dim", count && fullSuffixFits ? fullSuffix : requiredSuffix);
-		const nameWidth = Math.max(8, width - visibleWidth(`${pointer}${box}  `) - visibleWidth(suffix) - 1);
+		const nameWidth = Math.max(8, width - visibleWidth(suffix) - 1);
 		const name = this.theme.fg(active ? "accent" : "text", preview(item.name, nameWidth));
-		return [truncateToWidth(`${pointer}${box} ${name} ${suffix}`, width, "")];
+		return [truncateToWidth(`${name} ${suffix}`, width, "")];
 	}
 
 	private listFor(tab: TabId): MultiSelectList<ManagedSession> {

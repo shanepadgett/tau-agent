@@ -1,8 +1,8 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Container, Key, Spacer, Text, type TUI, truncateToWidth } from "@earendil-works/pi-tui";
+import { rawHint } from "../../../../src/shared/tui/key-hints.ts";
 import { MultiSelectList, type MultiSelectListItem } from "../../../../src/shared/tui/multi-select-list.ts";
 import { Tabs } from "../../../../src/shared/tui/tabs.ts";
-import { rawHint } from "../../../../src/shared/tui/tool-key-hints.ts";
 import { ToolPanel } from "../../../../src/shared/tui/tool-panel.ts";
 
 interface PreviewSession extends MultiSelectListItem {
@@ -31,11 +31,9 @@ export function createTabsListPreviewWidget(_tui: TUI, _cwd: string, theme: Them
 			{ id: "archiveOlder", key: Key.shift("a"), hint: rawHint("A", "archive older"), target: "olderThanCursor" },
 		],
 		renderItem(item, state, width) {
-			const pointer = state.active ? theme.fg("accent", "→ ") : "  ";
-			const box = state.selected ? theme.fg("success", "[x]") : theme.fg("dim", "[ ]");
 			const name = theme.fg(state.active ? "accent" : "text", state.active ? theme.bold(item.name) : item.name);
 			const age = theme.fg("dim", ` ${item.age}`);
-			return [truncateToWidth(`${pointer}${box} ${name}${age}`, width, "")];
+			return [truncateToWidth(`${name}${age}`, width, "")];
 		},
 		searchText(item) {
 			return item.name;
@@ -53,10 +51,6 @@ export function createTabsListPreviewWidget(_tui: TUI, _cwd: string, theme: Them
 		],
 		"active",
 	);
-	tabs.setTabs([
-		{ id: "active", label: "Sessions", count: 12, body: list, getKeyHints: () => list.getKeyHints() },
-		{ id: "archive", label: "Archive", count: 48, body: archived },
-	]);
 
 	container.addChild(
 		new ToolPanel(theme, {

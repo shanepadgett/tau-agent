@@ -12,7 +12,9 @@ import {
 	visibleWidth,
 	wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
-import { bindingsHint, rawHint, type ToolKeyHint } from "./tool-key-hints.ts";
+import { renderFilterRow } from "./filter-row.ts";
+import { bindingsHint, rawHint, type ToolKeyHint } from "./key-hints.ts";
+import { clampIndex, visibleWindow } from "./viewport.ts";
 
 export interface MultiSelectListItem {
 	id: string;
@@ -47,6 +49,7 @@ export interface MultiSelectListConfig<T extends MultiSelectListItem> {
 	actions: readonly MultiSelectAction[];
 	enableFilter: boolean;
 	maxVisible: number;
+	// Render row content only. MultiSelectList owns cursor and selection chrome.
 	renderItem(item: T, state: MultiSelectRowState, width: number): string[];
 	searchText(item: T): string;
 	onAction(result: MultiSelectActionResult<T>): void;
@@ -151,18 +154,11 @@ export class MultiSelectList<T extends MultiSelectListItem> implements Component
 			return lines;
 		}
 
-		const maxVisible = Math.max(1, this.config.maxVisible);
-		const start = Math.max(0, Math.min(this.cursor - Math.floor(maxVisible / 2), filtered.length - maxVisible));
-		const end = Math.min(filtered.length, start + maxVisible);
+		const { start, end } = visibleWindow(this.cursor, filtered.length, this.config.maxVisible);
 		for (let index = start; index < end; index++) {
 			const item = filtered[index];
 			if (!item) continue;
-			const rowLines = this.config.renderItem(
-				item,
-				{ active: index === this.cursor, selected: this.selected.has(item.id), index },
-				renderWidth,
-			);
-			lines.push(...rowLines.map((line) => truncateToWidth(line, renderWidth, "")));
+			lines.push(...this.renderRow(item, index, renderWidth));
 		}
 		if (start > 0 || end < filtered.length) {
 			lines.push(this.theme.fg("dim", `  (${this.cursor + 1}/${filtered.length})`));
@@ -203,10 +199,20 @@ export class MultiSelectList<T extends MultiSelectListItem> implements Component
 	}
 
 	private renderFilter(width: number): string[] {
-		const label = this.theme.fg("muted", "filter: ");
-		const bodyWidth = Math.max(1, width - visibleWidth("filter: "));
-		const body = this.filterInput.render(bodyWidth)[0] ?? "";
-		return [truncateToWidth(`${label}${body}`, width, "")];
+		return [renderFilterRow(this.theme, this.filterInput, width)];
+	}
+
+	private renderRow(item: T, index: number, width: number): string[] {
+		const state = { active: index === this.cursor, selected: this.selected.has(item.id), index };
+		const marker = state.active ? this.theme.fg("accent", "› ") : "  ";
+		const box = state.selected ? this.theme.fg("success", "[x]") : this.theme.fg("dim", "[ ]");
+		const prefix = `${marker}${box} `;
+		const prefixWidth = visibleWidth("› [ ] ");
+		const content = this.config.renderItem(item, state, Math.max(1, width - prefixWidth));
+		const indent = " ".repeat(prefixWidth);
+		return content.map((line, lineIndex) =>
+			truncateToWidth(`${lineIndex === 0 ? prefix : indent}${line}`, width, ""),
+		);
 	}
 
 	private filteredItems(): readonly T[] {
@@ -240,6 +246,6 @@ export class MultiSelectList<T extends MultiSelectListItem> implements Component
 	}
 
 	private clampCursor(): void {
-		this.cursor = Math.min(this.cursor, Math.max(0, this.filteredItems().length - 1));
+		this.cursor = clampIndex(this.cursor, this.filteredItems().length);
 	}
 }

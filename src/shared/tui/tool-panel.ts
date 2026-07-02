@@ -1,6 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { renderToolKeyHints, type ToolKeyHint } from "./tool-key-hints.ts";
+import { renderToolKeyHints, type ToolKeyHint } from "./key-hints.ts";
 
 export type ToolPanelFooter =
 	| { kind: "hints"; hints: readonly ToolKeyHint[] }

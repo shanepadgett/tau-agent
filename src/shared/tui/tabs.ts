@@ -1,6 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, Key, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { rawHint, type ToolKeyHint } from "./tool-key-hints.ts";
+import { rawHint, type ToolKeyHint } from "./key-hints.ts";
 
 export interface TabItem {
 	id: string;
@@ -52,7 +52,7 @@ export class Tabs implements Component {
 	}
 
 	getKeyHints(): ToolKeyHint[] {
-		return [rawHint("Tab/←/→", "switch tabs"), ...(this.activeTab()?.getKeyHints?.() ?? [])];
+		return [rawHint("Tab/←/→", "switch tab"), ...(this.activeTab()?.getKeyHints?.() ?? [])];
 	}
 
 	render(width: number): string[] {
