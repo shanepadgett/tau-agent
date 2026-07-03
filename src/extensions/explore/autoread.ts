@@ -20,7 +20,7 @@ interface AutoreadDetails {
 }
 
 export function registerAutoread(pi: ExtensionAPI, rowState: ToolRowStateStore): void {
-	onTauEvent(pi, "tau:autoread.requested", async (data) => {
+	onTauEvent(pi, "explore.autoread", "tau:autoread.requested", async (data) => {
 		const event = readAutoreadRequestedEvent(data);
 		if (!event) return;
 		await Promise.all(

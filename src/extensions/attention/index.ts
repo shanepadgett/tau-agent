@@ -62,7 +62,7 @@ export default function attentionExtension(pi: ExtensionAPI): void {
 		playMacOSSound(pi);
 	}
 
-	onTauEvent(pi, "tau:agent.blocked", notify);
+	onTauEvent(pi, "attention.agent-blocked", "tau:agent.blocked", notify);
 
 	pi.on("agent_end", () => {
 		notify({ title: DEFAULT_TITLE, body: DEFAULT_BODY });

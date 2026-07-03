@@ -7,7 +7,7 @@ import { createLsTool } from "./ls.ts";
 import { createExploreReadTool } from "./read.ts";
 
 export default function exploreExtension(pi: ExtensionAPI): void {
-	const rowState = createToolRowStateStore(pi);
+	const rowState = createToolRowStateStore(pi, "explore.tool-row-state");
 	registerAutoread(pi, rowState);
 	pi.registerTool(createLsTool(rowState));
 	pi.registerTool(createFindTool(rowState));

@@ -12,14 +12,21 @@ const theme = {
 	},
 } as unknown as Theme;
 
-function eventApi(): Pick<ExtensionAPI, "events"> {
-	return { events: createEventBus() };
+interface TestEventAPI extends Pick<ExtensionAPI, "events"> {
+	on(event: "session_shutdown", handler: () => void): void;
+}
+
+function eventApi(): TestEventAPI {
+	return {
+		events: createEventBus(),
+		on: () => {},
+	};
 }
 
 describe("tool row state", () => {
 	it("colors normal and pruned titles without status words", async () => {
 		const pi = eventApi();
-		const store = createToolRowStateStore(pi);
+		const store = createToolRowStateStore(pi, "test.tool-row-state");
 		let invalidations = 0;
 		store.watch("call-1", () => {
 			invalidations += 1;

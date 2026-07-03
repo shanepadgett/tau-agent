@@ -149,7 +149,7 @@ export default function footerExtension(pi: ExtensionAPI): void {
 		footerInstalled = false;
 	}
 
-	unsubscribeFooterItems = onTauEvent(pi, "tau:footer-item", (item) => {
+	unsubscribeFooterItems = onTauEvent(pi, "footer.items", "tau:footer-item", (item) => {
 		if (!item.id.trim()) return;
 		const text = item.text?.trim();
 		const existing = items.get(item.id);

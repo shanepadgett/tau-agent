@@ -45,11 +45,25 @@ export interface TauFooterItem {
 	priority?: number;
 }
 
-type EventAPI = Pick<ExtensionAPI, "events">;
+type EmitEventAPI = Pick<ExtensionAPI, "events">;
+
+interface TauEventAPI extends EmitEventAPI {
+	on(event: "session_shutdown", handler: () => void): void;
+}
+
 type TauEventHandler<Name extends keyof TauAgentEvents> = (data: TauAgentEvents[Name]) => void | Promise<void>;
 
+interface TauEventSubscription {
+	stop(): void;
+}
+
+const tauEventSubscriptions = new WeakMap<
+	ExtensionAPI["events"],
+	Map<string, Map<keyof TauAgentEvents, TauEventSubscription>>
+>();
+
 export function emitTauEvent<Name extends keyof TauAgentEvents>(
-	pi: EventAPI,
+	pi: EmitEventAPI,
 	name: Name,
 	data: TauAgentEvents[Name],
 ): void {
@@ -57,13 +71,50 @@ export function emitTauEvent<Name extends keyof TauAgentEvents>(
 }
 
 export function onTauEvent<Name extends keyof TauAgentEvents>(
-	pi: EventAPI,
+	pi: TauEventAPI,
+	owner: string,
 	name: Name,
 	handler: TauEventHandler<Name>,
 ): () => void {
-	return pi.events.on(name, handler as (data: unknown) => void);
+	if (owner.length === 0) throw new Error("Tau event owner is required.");
+
+	const subscriptions = getOwnerSubscriptions(pi.events, owner);
+	subscriptions.get(name)?.stop();
+
+	const unsubscribe = pi.events.on(name, handler as (data: unknown) => void);
+	let active = true;
+	const subscription: TauEventSubscription = { stop: () => {} };
+	subscription.stop = () => {
+		if (!active) return;
+		active = false;
+		unsubscribe();
+		if (subscriptions.get(name) === subscription) subscriptions.delete(name);
+	};
+
+	subscriptions.set(name, subscription);
+	pi.on("session_shutdown", subscription.stop);
+	return subscription.stop;
 }
 
-export function setTauFooterItem(pi: EventAPI, item: TauFooterItem): void {
+export function setTauFooterItem(pi: EmitEventAPI, item: TauFooterItem): void {
 	emitTauEvent(pi, "tau:footer-item", item);
+}
+
+function getOwnerSubscriptions(
+	events: ExtensionAPI["events"],
+	owner: string,
+): Map<keyof TauAgentEvents, TauEventSubscription> {
+	let busSubscriptions = tauEventSubscriptions.get(events);
+	if (!busSubscriptions) {
+		busSubscriptions = new Map();
+		tauEventSubscriptions.set(events, busSubscriptions);
+	}
+
+	let ownerSubscriptions = busSubscriptions.get(owner);
+	if (!ownerSubscriptions) {
+		ownerSubscriptions = new Map();
+		busSubscriptions.set(owner, ownerSubscriptions);
+	}
+
+	return ownerSubscriptions;
 }

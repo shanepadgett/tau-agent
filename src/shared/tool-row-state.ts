@@ -3,7 +3,9 @@ import { onTauEvent } from "./events.js";
 
 export type ToolRowVisualState = "pruned";
 
-type EventAPI = Pick<ExtensionAPI, "events">;
+interface EventAPI extends Pick<ExtensionAPI, "events"> {
+	on(event: "session_shutdown", handler: () => void): void;
+}
 
 export interface ToolRowStateStore {
 	get(rowId: string): ToolRowVisualState | undefined;
@@ -11,10 +13,10 @@ export interface ToolRowStateStore {
 	clear(): void;
 }
 
-export function createToolRowStateStore(pi: EventAPI): ToolRowStateStore {
+export function createToolRowStateStore(pi: EventAPI, owner: string): ToolRowStateStore {
 	const states = new Map<string, ToolRowVisualState>();
 	const invalidators = new Map<string, () => void>();
-	onTauEvent(pi, "tau:tool-row-state.set", ({ rowId, state }) => {
+	onTauEvent(pi, owner, "tau:tool-row-state.set", ({ rowId, state }) => {
 		if (state === undefined) states.delete(rowId);
 		else states.set(rowId, state);
 		invalidators.get(rowId)?.();

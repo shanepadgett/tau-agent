@@ -131,7 +131,7 @@ function createPatchTool(rowState: ReturnType<typeof createToolRowStateStore>) {
 }
 
 export default function patchExtension(pi: ExtensionAPI): void {
-	const rowState = createToolRowStateStore(pi);
+	const rowState = createToolRowStateStore(pi, "patch.tool-row-state");
 	pi.registerTool(createPatchTool(rowState));
 
 	// AgentToolResult has no isError field, so execute returns are always treated as success.
