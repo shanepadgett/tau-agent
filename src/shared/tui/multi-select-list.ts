@@ -20,7 +20,7 @@ export interface MultiSelectListItem {
 	id: string;
 }
 
-export type MultiSelectActionTarget = "currentOrSelection" | "olderThanCursor";
+export type MultiSelectActionTarget = "current" | "currentOrSelection" | "visible" | "olderThanCursor";
 
 export interface MultiSelectAction {
 	id: string;
@@ -29,7 +29,7 @@ export interface MultiSelectAction {
 	target: MultiSelectActionTarget;
 }
 
-export type MultiSelectResolvedTarget = "cursor" | "selection" | "olderThanCursor";
+export type MultiSelectResolvedTarget = "cursor" | "selection" | "visible" | "olderThanCursor";
 
 export interface MultiSelectActionResult<T extends MultiSelectListItem> {
 	actionId: string;
@@ -108,6 +108,23 @@ export class MultiSelectList<T extends MultiSelectListItem> implements Component
 	clearSelection(): void {
 		this.selected.clear();
 		this.emitSelectionChange();
+	}
+
+	setSelectedIds(ids: readonly string[]): void {
+		const validIds = new Set(this.items.map((item) => item.id));
+		this.selected.clear();
+		for (const id of ids) {
+			if (validIds.has(id)) this.selected.add(id);
+		}
+		this.emitSelectionChange();
+	}
+
+	getCurrentItem(): T | undefined {
+		return this.filteredItems()[this.cursor];
+	}
+
+	isFiltering(): boolean {
+		return this.filterMode;
 	}
 
 	getKeyHints(): ToolKeyHint[] {
@@ -228,6 +245,17 @@ export class MultiSelectList<T extends MultiSelectListItem> implements Component
 
 	private runAction(action: MultiSelectAction): void {
 		const filtered = this.filteredItems();
+		if (action.target === "current") {
+			const current = filtered[this.cursor];
+			this.config.onAction({ actionId: action.id, items: current ? [current] : [], target: "cursor" });
+			return;
+		}
+
+		if (action.target === "visible") {
+			this.config.onAction({ actionId: action.id, items: filtered, target: "visible" });
+			return;
+		}
+
 		if (action.target === "olderThanCursor") {
 			this.config.onAction({
 				actionId: action.id,

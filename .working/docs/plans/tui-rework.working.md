@@ -276,7 +276,7 @@ task depends on shared component behavior.
 
   Delete `search-list.ts` after no callers remain.
 
-- [ ] **14. `reference` flow**
+- [x] **14. `reference` flow**
 
   File: `src/extensions/reference/index.ts`.
 
@@ -298,7 +298,7 @@ task depends on shared component behavior.
 
   Keep git, filesystem, process spawning, and storage outside TUI components.
 
-- [ ] **15. `commit` review flow**
+- [x] **15. `commit` review flow**
 
   Files: `src/extensions/commit/index.ts`,
   `src/extensions/commit/review-ui.ts`.

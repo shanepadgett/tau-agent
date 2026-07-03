@@ -1,23 +1,24 @@
 import { randomUUID } from "node:crypto";
-import {
-	type ExtensionCommandContext,
-	type KeybindingsManager,
-	keyHint,
-	rawKeyHint,
-	type Theme,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
 import {
 	type Component,
+	Editor,
+	type EditorTheme,
 	type Focusable,
+	getKeybindings,
 	Input,
 	Key,
 	matchesKey,
 	type TUI,
 	truncateToWidth,
-	wrapTextWithAnsi,
+	visibleWidth,
 } from "@earendil-works/pi-tui";
 import type { GitRunner } from "../../shared/git.ts";
 import { errorText } from "../../shared/text.ts";
+import { ActionSelectList, type ActionSelectListResult } from "../../shared/tui/action-select-list.ts";
+import { bindingHint, bindingsHint, rawHint, type ToolKeyHint } from "../../shared/tui/key-hints.ts";
+import { MultiSelectList, type MultiSelectListItem } from "../../shared/tui/multi-select-list.ts";
+import { ToolPanel, type ToolPanelConfig } from "../../shared/tui/tool-panel.ts";
 import {
 	type CommitGroup,
 	type CommitPlanState,
@@ -34,25 +35,38 @@ import {
 } from "./git-change-set.ts";
 
 const MAX_GROUPS = 10;
-const MAX_ACTIVE_FILES = 8;
 const MAX_PICKER_FILES = 14;
 
-type ReviewAction =
-	| { kind: "cancel" }
-	| { kind: "execute" }
-	| { kind: "editMessage"; groupId: string }
-	| { kind: "assignFiles"; groupId: string }
-	| { kind: "newGroup" }
-	| { kind: "deleteGroup"; groupId: string }
-	| { kind: "moveGroup"; groupId: string; direction: -1 | 1 }
-	| { kind: "regenerateMessage"; groupId: string }
-	| { kind: "regeneratePlan" };
+type ReviewMode = { kind: "groups" } | FileMode | MessageMode | NoteMode;
 
-type PickerResult = { kind: "cancel" } | { kind: "save"; files: string[] };
-interface ReviewState {
-	evidence: CommitEvidence;
-	plan: CommitPlanState;
-	selectedGroupId: string | undefined;
+type FileMode =
+	| {
+			kind: "files";
+			purpose: "assign";
+			groupId: string;
+			list: MultiSelectList<CommitFileItem>;
+			selectedPaths: string[];
+	  }
+	| {
+			kind: "files";
+			purpose: "new";
+			list: MultiSelectList<CommitFileItem>;
+			selectedPaths: string[];
+	  };
+
+type MessageMode =
+	| { kind: "message"; purpose: "edit"; groupId: string; editor: Editor }
+	| { kind: "message"; purpose: "new"; editor: Editor };
+
+type NoteMode =
+	| { kind: "note"; target: "message"; groupId: string; input: Input }
+	| { kind: "note"; target: "plan"; input: Input };
+
+interface CommitFileItem extends MultiSelectListItem {
+	path: string;
+	status: string;
+	ownerId?: string;
+	ownerSubject?: string;
 }
 
 export async function reviewPlan(
@@ -64,417 +78,610 @@ export async function reviewPlan(
 	initialSelectedGroupId: string | undefined,
 	markerType: string,
 ): Promise<CommitPlanState | undefined> {
-	let state: ReviewState = { evidence, plan: initialPlan, selectedGroupId: initialSelectedGroupId };
-	while (true) {
-		const action = await ctx.ui.custom<ReviewAction>((tui, theme, keybindings, done) =>
-			commitPlanReview(tui, theme, keybindings, state.plan, state.selectedGroupId, done),
-		);
-		if (action.kind === "cancel") {
-			ctx.ui.notify("Commit cancelled.", "info");
-			return undefined;
+	return ctx.ui.custom<CommitPlanState | undefined>(
+		(tui, theme, _keybindings, done) =>
+			new CommitReviewPanel(
+				ctx,
+				tui,
+				theme,
+				git,
+				root,
+				evidence,
+				initialPlan,
+				initialSelectedGroupId,
+				markerType,
+				done,
+			),
+	);
+}
+
+class CommitReviewPanel implements Component, Focusable {
+	private readonly ctx: ExtensionCommandContext;
+	private readonly tui: TUI;
+	private readonly theme: Theme;
+	private readonly git: GitRunner;
+	private readonly root: string;
+	private readonly markerType: string;
+	private readonly done: (state: CommitPlanState | undefined) => void;
+	private readonly panelConfig: ToolPanelConfig;
+	private readonly panel: ToolPanel;
+	private readonly body: Component;
+	private evidence: CommitEvidence;
+	private plan: CommitPlanState;
+	private selectedGroupId: string | undefined;
+	private mode: ReviewMode = { kind: "groups" };
+	private groupList: ActionSelectList<CommitGroup>;
+	private pendingDelete: CommitGroup | undefined;
+	private busyMessage: string | undefined;
+	private _focused = false;
+
+	constructor(
+		ctx: ExtensionCommandContext,
+		tui: TUI,
+		theme: Theme,
+		git: GitRunner,
+		root: string,
+		evidence: CommitEvidence,
+		initialPlan: CommitPlanState,
+		initialSelectedGroupId: string | undefined,
+		markerType: string,
+		done: (state: CommitPlanState | undefined) => void,
+	) {
+		this.ctx = ctx;
+		this.tui = tui;
+		this.theme = theme;
+		this.git = git;
+		this.root = root;
+		this.evidence = evidence;
+		this.plan = initialPlan;
+		this.selectedGroupId = initialSelectedGroupId;
+		this.markerType = markerType;
+		this.done = done;
+		this.groupList = this.createGroupList(initialPlan.groups);
+		this.groupList.setItems(initialPlan.groups, initialSelectedGroupId);
+		this.body = {
+			render: (width) => this.renderBody(width),
+			invalidate: () => this.activeBody().invalidate(),
+		};
+		this.panelConfig = {
+			title: this.titleText(),
+			secondary: this.secondaryText(),
+			header: this.headerLines(),
+			body: this.body,
+			footer: this.footer(),
+		};
+		this.panel = new ToolPanel(theme, this.panelConfig);
+	}
+
+	get focused(): boolean {
+		return this._focused;
+	}
+
+	set focused(value: boolean) {
+		this._focused = value;
+		this.syncFocus();
+	}
+
+	render(width: number): string[] {
+		return this.panel.render(width);
+	}
+
+	invalidate(): void {
+		this.panel.invalidate();
+	}
+
+	handleInput(data: string): void {
+		if (this.busyMessage) return;
+		if (this.pendingDelete) {
+			this.handleDeleteAck(data);
+			return;
 		}
-		if (action.kind === "execute") return state.plan;
-		state = await applyReviewAction(ctx, git, root, state, action, markerType);
+
+		if (this.mode.kind === "groups") this.handleGroupsInput(data);
+		else if (this.mode.kind === "files") this.handleFilesInput(data, this.mode);
+		else if (this.mode.kind === "message") this.handleMessageInput(data, this.mode);
+		else this.handleNoteInput(data, this.mode);
 	}
-}
 
-async function applyReviewAction(
-	ctx: ExtensionCommandContext,
-	git: GitRunner,
-	root: string,
-	state: ReviewState,
-	action: Exclude<ReviewAction, { kind: "cancel" } | { kind: "execute" }>,
-	markerType: string,
-): Promise<ReviewState> {
-	switch (action.kind) {
-		case "editMessage":
-			return { ...state, ...(await editMessage(ctx, state.plan, action.groupId)) };
-		case "assignFiles":
-			return { ...state, ...(await assignFiles(ctx, state.plan, action.groupId)) };
-		case "newGroup":
-			return { ...state, ...(await newGroup(ctx, state.evidence, state.plan)) };
-		case "deleteGroup":
-			return {
-				...state,
-				...selectFirst({ ...state.plan, groups: state.plan.groups.filter((group) => group.id !== action.groupId) }),
-			};
-		case "moveGroup":
-			return {
-				...state,
-				plan: moveGroup(state.plan, action.groupId, action.direction),
-				selectedGroupId: action.groupId,
-			};
-		case "regenerateMessage":
-			return { ...state, ...(await regenerateSelectedMessage(ctx, state.evidence, state.plan, action.groupId)) };
-		case "regeneratePlan":
-			return regenerateWholePlan(ctx, git, root, state, markerType);
-	}
-}
-
-async function editMessage(
-	ctx: ExtensionCommandContext,
-	plan: CommitPlanState,
-	groupId: string,
-): Promise<Pick<ReviewState, "plan" | "selectedGroupId">> {
-	const group = groupById(plan, groupId);
-	if (!group) return selectFirst(plan);
-	const edited = await ctx.ui.editor("Edit commit message", group.message);
-	if (!edited?.trim()) return { plan, selectedGroupId: groupId };
-	try {
-		return { plan: setMessage(plan, groupId, requireCommitMessage(edited)), selectedGroupId: groupId };
-	} catch (error) {
-		ctx.ui.notify(`Invalid commit message: ${errorText(error)}`, "error");
-		return { plan, selectedGroupId: groupId };
-	}
-}
-
-async function assignFiles(
-	ctx: ExtensionCommandContext,
-	plan: CommitPlanState,
-	groupId: string,
-): Promise<Pick<ReviewState, "plan" | "selectedGroupId">> {
-	const group = groupById(plan, groupId);
-	if (!group) return selectFirst(plan);
-	const files = await pickFiles(ctx, `Assign files to: ${subjectLine(group.message)}`, plan, group.id, group.files);
-	return files
-		? { plan: assignSelectedFiles(plan, group.id, files), selectedGroupId: group.id }
-		: { plan, selectedGroupId: group.id };
-}
-
-async function newGroup(
-	ctx: ExtensionCommandContext,
-	evidence: CommitEvidence,
-	plan: CommitPlanState,
-): Promise<Pick<ReviewState, "plan" | "selectedGroupId">> {
-	const files = await pickFiles(ctx, "New commit: select files", plan, undefined, unassignedFiles(plan));
-	if (!files) return selectFirst(plan);
-	if (files.length === 0) {
-		ctx.ui.notify("No files selected.", "info");
-		return selectFirst(plan);
-	}
-	const edited = await ctx.ui.editor("New commit message (empty = auto-generate)", "");
-	if (edited === undefined) return selectFirst(plan);
-	const message = await commitMessageForSelection(ctx, evidence, files, edited);
-	if (!message) return selectFirst(plan);
-	const group = { id: randomUUID(), message, files };
-	return { plan: addGroup(plan, group), selectedGroupId: group.id };
-}
-
-async function commitMessageForSelection(
-	ctx: ExtensionCommandContext,
-	evidence: CommitEvidence,
-	files: readonly string[],
-	edited: string,
-): Promise<string | undefined> {
-	if (!edited.trim()) return regenerateMessage(ctx, evidence, files);
-	try {
-		return requireCommitMessage(edited);
-	} catch (error) {
-		ctx.ui.notify(`Invalid commit message: ${errorText(error)}`, "error");
-		return undefined;
-	}
-}
-
-async function regenerateSelectedMessage(
-	ctx: ExtensionCommandContext,
-	evidence: CommitEvidence,
-	plan: CommitPlanState,
-	groupId: string,
-): Promise<Pick<ReviewState, "plan" | "selectedGroupId">> {
-	const group = plan.groups.find((item) => item.id === groupId);
-	if (!group) return selectFirst(plan);
-	const note = await ctx.ui.editor("Regeneration note (optional)", "");
-	if (note === undefined) return { plan, selectedGroupId: group.id };
-	const message = await regenerateMessage(ctx, evidence, group.files, plan.groups, group.id, note);
-	return { plan: setMessage(plan, group.id, message), selectedGroupId: group.id };
-}
-
-async function regenerateWholePlan(
-	ctx: ExtensionCommandContext,
-	git: GitRunner,
-	root: string,
-	state: ReviewState,
-	markerType: string,
-): Promise<ReviewState> {
-	const note = await ctx.ui.editor("Regeneration note (optional)", "");
-	if (note === undefined) return state;
-	const evidence = await loadChangeSet(git, root, ctx.sessionManager.getBranch(), markerType);
-	assertCommittableState(evidence.files);
-	const plan = {
-		files: evidence.files,
-		worktreeSignature: await computeWorktreeSignature(git, root, evidence.files),
-		groups: await generatePlan(ctx, evidence, state.plan.groups, note),
-	};
-	return { evidence, plan, selectedGroupId: plan.groups[0]?.id };
-}
-
-async function pickFiles(
-	ctx: ExtensionCommandContext,
-	title: string,
-	plan: CommitPlanState,
-	targetGroupId: string | undefined,
-	initialFiles: readonly string[],
-): Promise<string[] | undefined> {
-	const result = await ctx.ui.custom<PickerResult>((tui, theme, keybindings, done) =>
-		commitFilePicker(tui, theme, keybindings, title, plan, targetGroupId, initialFiles, done),
-	);
-	return result.kind === "save" ? result.files : undefined;
-}
-
-function commitPlanReview(
-	tui: TUI,
-	theme: Theme,
-	keybindings: KeybindingsManager,
-	plan: CommitPlanState,
-	selectedGroupId: string | undefined,
-	done: (action: ReviewAction) => void,
-): Component {
-	let cursor = Math.max(0, selectedGroupId ? plan.groups.findIndex((group) => group.id === selectedGroupId) : -1);
-	const fileByPath = new Map(plan.files.map((file) => [file.path, file]));
-	const moveCursor = (data: string): boolean =>
-		moveCursorByKey(data, keybindings, tui, cursor, plan.groups.length, (next) => {
-			cursor = next;
+	private createGroupList(groups: readonly CommitGroup[]): ActionSelectList<CommitGroup> {
+		return new ActionSelectList(this.theme, {
+			items: groups,
+			emptyMessage: "No commit groups. Press n to create one.",
+			primaryLabel: "commit",
+			actions: [
+				{ id: "edit", key: "e", hint: rawHint("e", "edit") },
+				{ id: "files", key: "f", hint: rawHint("f", "files") },
+				{ id: "regenMessage", key: "r", hint: rawHint("r", "regen") },
+				{ id: "delete", key: Key.delete, hint: rawHint("delete", "delete") },
+			],
+			maxVisible: MAX_GROUPS,
+			renderItem: (group, state, width) => this.renderGroup(group, state.active, width),
+			searchText: (group) => `${group.message} ${group.files.join(" ")}`,
+			onResult: (result) => this.handleGroupResult(result),
 		});
-	const finish = (action: ReviewAction): void => done(action);
-	return {
-		handleInput(data: string): void {
-			if (keybindings.matches(data, "tui.select.confirm")) {
-				finish({ kind: "execute" });
-				return;
-			}
-			if (keybindings.matches(data, "tui.select.cancel")) {
-				finish({ kind: "cancel" });
-				return;
-			}
-			if (moveCursor(data)) return;
-			if (data === "n") {
-				finish({ kind: "newGroup" });
-				return;
-			}
-			if (data === "R") {
-				finish({ kind: "regeneratePlan" });
-				return;
-			}
-			const group = plan.groups[cursor];
-			if (!group) return;
-			if (data === "e") finish({ kind: "editMessage", groupId: group.id });
-			else if (data === "a") finish({ kind: "assignFiles", groupId: group.id });
-			else if (data === "r") finish({ kind: "regenerateMessage", groupId: group.id });
-			else if (data === "[") finish({ kind: "moveGroup", groupId: group.id, direction: -1 });
-			else if (data === "]") finish({ kind: "moveGroup", groupId: group.id, direction: 1 });
-			else if (matchesKey(data, Key.delete) || matchesKey(data, Key.backspace))
-				finish({ kind: "deleteGroup", groupId: group.id });
-		},
-		render(width: number): string[] {
-			const renderWidth = Math.max(1, width);
-			const visible = visibleWindow(plan.groups, cursor, MAX_GROUPS);
-			return [
-				theme.fg("border", "─".repeat(renderWidth)),
-				truncateToWidth(
-					`${theme.bold("Commit plan")}  ${theme.fg("dim", `${plan.groups.length} commits · ${plan.files.length} files`)}`,
-					renderWidth,
-					"",
-				),
-				"",
-				...visible.items.flatMap(({ item, index }) =>
-					renderGroup(theme, fileByPath, item, index, index === cursor, renderWidth),
-				),
-				...positionLine(theme, visible.start, visible.items.length, plan.groups.length),
-				...unassignedLine(theme, plan),
-				"",
-				...reviewHelp(theme, renderWidth),
-				theme.fg("border", "─".repeat(renderWidth)),
-			];
-		},
-		invalidate(): void {},
-	};
-}
+	}
 
-function commitFilePicker(
-	tui: TUI,
-	theme: Theme,
-	keybindings: KeybindingsManager,
-	title: string,
-	plan: CommitPlanState,
-	targetGroupId: string | undefined,
-	initialFiles: readonly string[],
-	done: (result: PickerResult) => void,
-): Component & Focusable {
-	const files = orderPickerFiles(plan, targetGroupId, initialFiles);
-	const ownerByPath = new Map(plan.groups.flatMap((group) => group.files.map((file) => [file, group] as const)));
-	const selected = new Set(initialFiles);
-	const search = new Input();
-	let cursor = 0;
-	let focused = false;
-	search.focused = true;
+	private handleGroupsInput(data: string): void {
+		const keybindings = getKeybindings();
+		if (keybindings.matches(data, "tui.select.confirm")) {
+			this.done(this.plan);
+			return;
+		}
+		if (keybindings.matches(data, "tui.select.cancel")) {
+			this.ctx.ui.notify("Commit cancelled.", "info");
+			this.done(undefined);
+			return;
+		}
+		if (data === "n") {
+			this.openNewGroupFiles();
+			return;
+		}
+		if (data === "R" || matchesKey(data, Key.shift("r"))) {
+			this.openPlanRegenerationNote();
+			return;
+		}
 
-	const filtered = (): DirtyFile[] => {
-		const query = search.getValue().trim().toLowerCase();
-		return query
-			? files.filter((file) =>
-					`${file.path} ${file.status} ${ownerByPath.get(file.path)?.message ?? "unassigned"}`
-						.toLowerCase()
-						.includes(query),
-				)
-			: [...files];
-	};
-	const moveCursor = (data: string): boolean =>
-		moveCursorByKey(data, keybindings, tui, cursor, filtered().length, (next) => {
-			cursor = next;
+		this.groupList.handleInput(data);
+		this.syncSelectedGroupFromCursor();
+		this.syncPanel();
+	}
+
+	private handleGroupResult(result: ActionSelectListResult<CommitGroup>): void {
+		if (result.kind === "cancel") {
+			this.ctx.ui.notify("Commit cancelled.", "info");
+			this.done(undefined);
+			return;
+		}
+		if (result.kind === "primary") {
+			this.done(this.plan);
+			return;
+		}
+
+		this.selectedGroupId = result.item.id;
+		switch (result.actionId) {
+			case "edit":
+				this.openEditMessage(result.item);
+				return;
+			case "files":
+				this.openAssignFiles(result.item);
+				return;
+			case "regenMessage":
+				this.openMessageRegenerationNote(result.item);
+				return;
+			case "delete":
+				this.pendingDelete = result.item;
+				this.syncPanel();
+				return;
+		}
+	}
+
+	private handleDeleteAck(data: string): void {
+		const keybindings = getKeybindings();
+		if (keybindings.matches(data, "tui.select.confirm")) {
+			this.confirmDeleteGroup();
+			return;
+		}
+		if (keybindings.matches(data, "tui.select.cancel")) {
+			this.pendingDelete = undefined;
+			this.syncPanel();
+		}
+	}
+
+	private handleFilesInput(data: string, mode: FileMode): void {
+		const keybindings = getKeybindings();
+		if (mode.list.isFiltering()) {
+			mode.list.handleInput(data);
+			this.syncPanel();
+			return;
+		}
+		if (keybindings.matches(data, "tui.select.confirm")) {
+			this.saveFileSelection(mode);
+			return;
+		}
+		if (keybindings.matches(data, "tui.select.cancel")) {
+			this.showGroups(mode.purpose === "assign" ? mode.groupId : this.selectedGroupId);
+			return;
+		}
+
+		mode.list.handleInput(data);
+		this.syncPanel();
+	}
+
+	private handleMessageInput(data: string, mode: MessageMode): void {
+		if (getKeybindings().matches(data, "tui.select.cancel")) {
+			this.showGroups(mode.purpose === "edit" ? mode.groupId : this.selectedGroupId);
+			return;
+		}
+		mode.editor.handleInput(data);
+		this.syncPanel();
+	}
+
+	private handleNoteInput(data: string, mode: NoteMode): void {
+		if (getKeybindings().matches(data, "tui.select.cancel")) {
+			this.showGroups(mode.target === "message" ? mode.groupId : this.selectedGroupId);
+			return;
+		}
+		mode.input.handleInput(data);
+		this.syncPanel();
+	}
+
+	private openAssignFiles(group: CommitGroup): void {
+		const { list, selectedPaths } = this.createFileList(group.id, group.files);
+		this.mode = { kind: "files", purpose: "assign", groupId: group.id, list, selectedPaths };
+		this.pendingDelete = undefined;
+		this.syncFocus();
+		this.syncPanel();
+	}
+
+	private openNewGroupFiles(): void {
+		const { list, selectedPaths } = this.createFileList(undefined, unassignedFiles(this.plan));
+		this.mode = { kind: "files", purpose: "new", list, selectedPaths };
+		this.pendingDelete = undefined;
+		this.syncFocus();
+		this.syncPanel();
+	}
+
+	private saveFileSelection(mode: FileMode): void {
+		if (mode.purpose === "assign") {
+			const group = groupById(this.plan, mode.groupId);
+			if (!group) {
+				this.showGroups(this.plan.groups[0]?.id);
+				return;
+			}
+			this.plan = assignSelectedFiles(this.plan, group.id, mode.selectedPaths);
+			this.showGroups(group.id);
+			return;
+		}
+
+		if (mode.selectedPaths.length === 0) {
+			this.ctx.ui.notify("No files selected.", "info");
+			this.showGroups(this.selectedGroupId);
+			return;
+		}
+
+		this.openNewMessage(mode.selectedPaths);
+	}
+
+	private openEditMessage(group: CommitGroup): void {
+		const editor = this.createMessageEditor(group.message);
+		editor.onSubmit = (value) => this.saveEditedMessage(group.id, value);
+		this.mode = { kind: "message", purpose: "edit", groupId: group.id, editor };
+		this.pendingDelete = undefined;
+		this.syncFocus();
+		this.syncPanel();
+	}
+
+	private openNewMessage(files: readonly string[]): void {
+		const editor = this.createMessageEditor("");
+		editor.onSubmit = (value) => void this.saveNewMessage(files, value);
+		this.mode = { kind: "message", purpose: "new", editor };
+		this.pendingDelete = undefined;
+		this.syncFocus();
+		this.syncPanel();
+	}
+
+	private saveEditedMessage(groupId: string, value: string): void {
+		if (!value.trim()) {
+			this.showGroups(groupId);
+			return;
+		}
+		try {
+			this.plan = setMessage(this.plan, groupId, requireCommitMessage(value));
+			this.showGroups(groupId);
+		} catch (error) {
+			const mode = this.mode;
+			if (mode.kind === "message") mode.editor.setText(value);
+			this.ctx.ui.notify(`Invalid commit message: ${errorText(error)}`, "error");
+			this.syncPanel();
+		}
+	}
+
+	private async saveNewMessage(files: readonly string[], value: string): Promise<void> {
+		const trimmed = value.trim();
+		if (trimmed) {
+			try {
+				const group = { id: randomUUID(), message: requireCommitMessage(trimmed), files: [...files] };
+				this.plan = addGroup(this.plan, group);
+				this.showGroups(group.id);
+			} catch (error) {
+				const mode = this.mode;
+				if (mode.kind === "message") mode.editor.setText(value);
+				this.ctx.ui.notify(`Invalid commit message: ${errorText(error)}`, "error");
+				this.syncPanel();
+			}
+			return;
+		}
+
+		await this.runBusy("Generating commit message", async () => {
+			const message = await regenerateMessage(this.ctx, this.evidence, files, this.plan.groups);
+			const group = { id: randomUUID(), message, files: [...files] };
+			this.plan = addGroup(this.plan, group);
+			this.showGroups(group.id);
 		});
-	return {
-		get focused(): boolean {
-			return focused;
-		},
-		set focused(value: boolean) {
-			focused = value;
-			search.focused = value;
-		},
-		handleInput(data: string): void {
-			if (keybindings.matches(data, "tui.select.confirm")) {
-				done({ kind: "save", files: files.map((file) => file.path).filter((path) => selected.has(path)) });
-				return;
-			}
-			if (keybindings.matches(data, "tui.select.cancel")) {
-				done({ kind: "cancel" });
-				return;
-			}
-			if (moveCursor(data)) return;
-			if (matchesKey(data, Key.space)) {
-				const file = filtered()[cursor];
-				if (file && selected.has(file.path)) selected.delete(file.path);
-				else if (file) selected.add(file.path);
-				tui.requestRender();
-				return;
-			}
-			search.handleInput(data);
-			cursor = Math.min(cursor, Math.max(0, filtered().length - 1));
-			tui.requestRender();
-		},
-		render(width: number): string[] {
-			const renderWidth = Math.max(1, width);
-			const current = filtered();
-			const visible = visibleWindow(current, cursor, MAX_PICKER_FILES);
+	}
+
+	private openMessageRegenerationNote(group: CommitGroup): void {
+		const input = this.createNoteInput((note) => void this.regenerateSelectedMessage(group.id, note));
+		this.mode = { kind: "note", target: "message", groupId: group.id, input };
+		this.pendingDelete = undefined;
+		this.syncFocus();
+		this.syncPanel();
+	}
+
+	private openPlanRegenerationNote(): void {
+		const input = this.createNoteInput((note) => void this.regenerateWholePlan(note));
+		this.mode = { kind: "note", target: "plan", input };
+		this.pendingDelete = undefined;
+		this.syncFocus();
+		this.syncPanel();
+	}
+
+	private async regenerateSelectedMessage(groupId: string, note: string): Promise<void> {
+		const group = groupById(this.plan, groupId);
+		if (!group) {
+			this.showGroups(this.plan.groups[0]?.id);
+			return;
+		}
+
+		await this.runBusy(`Regenerating ${subjectLine(group.message)}`, async () => {
+			const message = await regenerateMessage(
+				this.ctx,
+				this.evidence,
+				group.files,
+				this.plan.groups,
+				group.id,
+				note,
+			);
+			this.plan = setMessage(this.plan, group.id, message);
+			this.showGroups(group.id);
+		});
+	}
+
+	private async regenerateWholePlan(note: string): Promise<void> {
+		await this.runBusy("Regenerating commit plan", async () => {
+			const evidence = await loadChangeSet(
+				this.git,
+				this.root,
+				this.ctx.sessionManager.getBranch(),
+				this.markerType,
+			);
+			assertCommittableState(evidence.files);
+			const plan = {
+				files: evidence.files,
+				worktreeSignature: await computeWorktreeSignature(this.git, this.root, evidence.files),
+				groups: await generatePlan(this.ctx, evidence, this.plan.groups, note),
+			};
+			this.evidence = evidence;
+			this.plan = plan;
+			this.showGroups(plan.groups[0]?.id);
+		});
+	}
+
+	private createFileList(
+		targetGroupId: string | undefined,
+		initialFiles: readonly string[],
+	): { list: MultiSelectList<CommitFileItem>; selectedPaths: string[] } {
+		const ownerByPath = new Map(
+			this.plan.groups.flatMap((group) => group.files.map((file) => [file, group] as const)),
+		);
+		const initial = new Set(initialFiles);
+		const items = orderPickerFiles(this.plan, targetGroupId, initialFiles).map((file) =>
+			toCommitFileItem(file, ownerByPath.get(file.path)),
+		);
+		const selectedPaths = items.filter((item) => initial.has(item.path)).map((item) => item.path);
+		const list = new MultiSelectList(this.theme, {
+			items,
+			emptyMessage: "No dirty files.",
+			actions: [],
+			enableFilter: true,
+			maxVisible: MAX_PICKER_FILES,
+			renderItem: (item, state, width) => this.renderFile(item, targetGroupId, state.active, width),
+			searchText: (item) => `${item.path} ${item.status} ${item.ownerSubject ?? "unassigned"}`,
+			onAction: () => {},
+			onSelectionChange: (selected) => {
+				const mode = this.mode;
+				if (mode.kind !== "files") return;
+				mode.selectedPaths = selected.map((item) => item.path);
+				this.syncPanel();
+			},
+		});
+		list.setSelectedIds(initialFiles);
+		return { list, selectedPaths };
+	}
+
+	private createMessageEditor(value: string): Editor {
+		const editor = new Editor(this.tui, editorTheme(this.theme));
+		editor.setText(value);
+		editor.focused = this._focused;
+		return editor;
+	}
+
+	private createNoteInput(onSubmit: (value: string) => void): Input {
+		const input = new Input();
+		input.focused = this._focused;
+		input.onSubmit = onSubmit;
+		input.onEscape = () => this.showGroups(this.selectedGroupId);
+		return input;
+	}
+
+	private confirmDeleteGroup(): void {
+		const pending = this.pendingDelete;
+		if (!pending) return;
+		const oldIndex = this.plan.groups.findIndex((group) => group.id === pending.id);
+		const groups = this.plan.groups.filter((group) => group.id !== pending.id);
+		this.plan = { ...this.plan, groups };
+		this.pendingDelete = undefined;
+		this.showGroups(groups[Math.min(oldIndex, Math.max(0, groups.length - 1))]?.id);
+	}
+
+	private async runBusy(message: string, task: () => Promise<void>): Promise<void> {
+		if (this.busyMessage) return;
+		this.busyMessage = message;
+		this.syncPanel();
+		try {
+			await task();
+		} catch (error) {
+			this.ctx.ui.notify(`${message} failed: ${errorText(error)}`, "error");
+		} finally {
+			this.busyMessage = undefined;
+			this.syncPanel();
+		}
+	}
+
+	private showGroups(activeId: string | undefined): void {
+		this.mode = { kind: "groups" };
+		this.pendingDelete = undefined;
+		this.selectedGroupId = this.plan.groups.some((group) => group.id === activeId)
+			? activeId
+			: (this.plan.groups[0]?.id ?? undefined);
+		this.groupList.setItems(this.plan.groups, this.selectedGroupId);
+		this.syncFocus();
+		this.syncPanel();
+	}
+
+	private syncSelectedGroupFromCursor(): void {
+		this.selectedGroupId = this.groupList.getCurrentItem()?.id;
+	}
+
+	private syncPanel(): void {
+		this.panelConfig.title = this.titleText();
+		this.panelConfig.secondary = this.secondaryText();
+		this.panelConfig.header = this.headerLines();
+		this.panelConfig.footer = this.footer();
+		this.tui.requestRender();
+	}
+
+	private syncFocus(): void {
+		this.groupList.focused = this._focused && this.mode.kind === "groups";
+		if (this.mode.kind === "files") this.mode.list.focused = this._focused;
+		if (this.mode.kind === "message") this.mode.editor.focused = this._focused;
+		if (this.mode.kind === "note") this.mode.input.focused = this._focused;
+	}
+
+	private activeBody(): Component {
+		if (this.mode.kind === "files") return this.mode.list;
+		if (this.mode.kind === "message") return this.mode.editor;
+		if (this.mode.kind === "note") return this.mode.input;
+		return this.groupList;
+	}
+
+	private renderBody(width: number): string[] {
+		if (this.mode.kind === "message") return this.renderMessageEditor(this.mode, width);
+		if (this.mode.kind === "note") return this.renderNoteInput(this.mode, width);
+		return this.activeBody().render(width);
+	}
+
+	private renderMessageEditor(mode: MessageMode, width: number): string[] {
+		const renderWidth = Math.max(1, width);
+		const label = mode.purpose === "new" ? "Commit message (empty = auto-generate)" : "Commit message";
+		return [
+			truncateToWidth(this.theme.fg("accent", this.theme.bold(label)), renderWidth, ""),
+			...mode.editor.render(renderWidth),
+		];
+	}
+
+	private renderNoteInput(mode: NoteMode, width: number): string[] {
+		const renderWidth = Math.max(1, width);
+		const label = mode.target === "plan" ? "Regeneration note for plan" : "Regeneration note for message";
+		return [
+			truncateToWidth(this.theme.fg("accent", this.theme.bold(`${label} (optional)`)), renderWidth, ""),
+			...mode.input.render(renderWidth),
+		];
+	}
+
+	private renderGroup(group: CommitGroup, active: boolean, width: number): string[] {
+		const subject = subjectLine(group.message);
+		const count = `${group.files.length} file${group.files.length === 1 ? "" : "s"}`;
+		const suffix = this.theme.fg(group.files.length === 0 ? "warning" : "dim", `  ${count}`);
+		const titleWidth = Math.max(8, width - visibleWidth(count) - 2);
+		const title = this.theme.fg(active ? "accent" : "text", truncateToWidth(subject, titleWidth, ""));
+		return [truncateToWidth(`${title}${suffix}`, width, "")];
+	}
+
+	private renderFile(
+		item: CommitFileItem,
+		targetGroupId: string | undefined,
+		active: boolean,
+		width: number,
+	): string[] {
+		const owner = item.ownerId
+			? item.ownerId === targetGroupId
+				? "current"
+				: `currently: ${item.ownerSubject ?? item.ownerId}`
+			: "";
+		const hint = owner ? this.theme.fg(item.ownerId === targetGroupId ? "success" : "muted", `  ${owner}`) : "";
+		const pathWidth = Math.max(8, width - visibleWidth(item.status) - visibleWidth(owner) - 4);
+		const path = this.theme.fg(active ? "accent" : "text", truncateToWidth(item.path, pathWidth, ""));
+		return [truncateToWidth(`${this.theme.fg("muted", item.status)} ${path}${hint}`, width, "")];
+	}
+
+	private titleText(): string {
+		if (this.mode.kind === "files") return this.mode.purpose === "new" ? "New commit files" : "Assign files";
+		if (this.mode.kind === "message") return this.mode.purpose === "new" ? "New commit" : "Edit commit";
+		if (this.mode.kind === "note") return "Regenerate";
+		return "Commit plan";
+	}
+
+	private secondaryText(): string {
+		if (this.mode.kind === "files") {
+			return `${this.mode.selectedPaths.length} selected · ${this.plan.files.length} files`;
+		}
+		return `${this.plan.groups.length} commit${this.plan.groups.length === 1 ? "" : "s"} · ${this.plan.files.length} files`;
+	}
+
+	private headerLines(): readonly string[] {
+		const lines: string[] = [];
+		if (this.busyMessage) lines.push(this.theme.fg("muted", this.busyMessage));
+		if (this.mode.kind === "groups") {
+			const count = unassignedFiles(this.plan).length;
+			if (count > 0) lines.push(this.theme.fg("warning", `${count} unassigned file(s)`));
+		}
+		return lines;
+	}
+
+	private footer(): ToolPanelConfig["footer"] {
+		if (this.pendingDelete) {
+			return {
+				kind: "destructiveAck",
+				message: `Remove commit group: ${subjectLine(this.pendingDelete.message)}?`,
+				hints: [bindingHint("tui.select.confirm", "confirm"), bindingHint("tui.select.cancel", "cancel")],
+			};
+		}
+		return { kind: "hints", hints: this.footerHints() };
+	}
+
+	private footerHints(): readonly ToolKeyHint[] {
+		if (this.busyMessage) return [];
+		if (this.mode.kind === "files") {
 			return [
-				theme.fg("border", "─".repeat(renderWidth)),
-				truncateToWidth(
-					`${theme.bold(title)}  ${theme.fg("dim", `${selected.size} selected · ${files.length} files`)}`,
-					renderWidth,
-					"",
-				),
-				...renderSearch(theme, search, renderWidth),
-				"",
-				...(current.length === 0
-					? [theme.fg("muted", "  No matching files")]
-					: visible.items.map(({ item, index }) =>
-							renderPickerItem(theme, ownerByPath, targetGroupId, selected, item, index === cursor, renderWidth),
-						)),
-				...positionLine(theme, visible.start, visible.items.length, current.length),
-				"",
-				...pickerHelp(theme, renderWidth),
-				theme.fg("border", "─".repeat(renderWidth)),
+				...this.mode.list.getKeyHints(),
+				bindingHint("tui.select.confirm", "save"),
+				bindingHint("tui.select.cancel", "cancel"),
 			];
-		},
-		invalidate(): void {},
-	};
-}
+		}
+		if (this.mode.kind === "message") {
+			return [
+				bindingHint("tui.input.submit", this.mode.purpose === "new" ? "save/auto" : "save"),
+				bindingHint("tui.input.newLine", "newline"),
+				bindingHint("tui.select.cancel", "cancel"),
+			];
+		}
+		if (this.mode.kind === "note") {
+			return [bindingHint("tui.input.submit", "generate"), bindingHint("tui.select.cancel", "cancel")];
+		}
 
-function renderGroup(
-	theme: Theme,
-	fileByPath: ReadonlyMap<string, DirtyFile>,
-	group: CommitGroup,
-	index: number,
-	active: boolean,
-	width: number,
-): string[] {
-	const pointer = active ? theme.fg("accent", "> ") : "  ";
-	const title = active ? theme.bold(subjectLine(group.message)) : subjectLine(group.message);
-	const lines = [
-		truncateToWidth(`${pointer}${index + 1}  ${title}${theme.fg("dim", `  ${group.files.length} files`)}`, width, ""),
-	];
-	if (!active) return lines;
-	for (const path of group.files.slice(0, MAX_ACTIVE_FILES))
-		lines.push(truncateToWidth(`     ${theme.fg("muted", fileByPath.get(path)?.status ?? "??")} ${path}`, width, ""));
-	if (group.files.length > MAX_ACTIVE_FILES)
-		lines.push(theme.fg("dim", `     … ${group.files.length - MAX_ACTIVE_FILES} more`));
-	return lines;
-}
-
-function renderPickerItem(
-	theme: Theme,
-	ownerByPath: ReadonlyMap<string, CommitGroup>,
-	targetGroupId: string | undefined,
-	selected: ReadonlySet<string>,
-	file: DirtyFile,
-	active: boolean,
-	width: number,
-): string {
-	const pointer = active ? theme.fg("accent", "> ") : "  ";
-	const box = selected.has(file.path) ? theme.fg("success", "[x]") : theme.fg("dim", "[ ]");
-	const path = active ? theme.bold(file.path) : file.path;
-	return truncateToWidth(
-		`${pointer}${box} ${theme.fg("muted", file.status)} ${path}${ownerHint(theme, ownerByPath.get(file.path), targetGroupId)}`,
-		width,
-		"",
-	);
-}
-
-function ownerHint(theme: Theme, owner: CommitGroup | undefined, targetGroupId: string | undefined): string {
-	if (!owner) return "";
-	const text = owner.id === targetGroupId ? "current" : `currently: ${subjectLine(owner.message)}`;
-	return theme.fg(owner.id === targetGroupId ? "success" : "muted", `  ${text}`);
-}
-
-function renderSearch(theme: Theme, search: Input, width: number): string[] {
-	const body = search.render(Math.max(1, width - "search: ".length));
-	return [truncateToWidth(`${theme.fg("muted", "search: ")}${body[0] ?? ""}`, width, "")];
-}
-
-function positionLine(theme: Theme, start: number, count: number, total: number): string[] {
-	return total > count ? [theme.fg("dim", `  (${start + 1}-${start + count}/${total})`)] : [];
-}
-
-function unassignedLine(theme: Theme, plan: CommitPlanState): string[] {
-	const count = unassignedFiles(plan).length;
-	return count > 0 ? ["", theme.fg("warning", `  ${count} unassigned file(s)`)] : [];
-}
-
-function reviewHelp(theme: Theme, width: number): string[] {
-	return wrapTextWithAnsi(
-		theme.fg(
-			"dim",
-			[
-				keyHint("tui.select.up", "move"),
-				rawKeyHint("e", "edit"),
-				rawKeyHint("a", "assign"),
-				rawKeyHint("n", "new"),
-				rawKeyHint("r", "regen"),
-				rawKeyHint("shift+r", "regen plan"),
-				rawKeyHint("[", "up"),
-				rawKeyHint("]", "down"),
-				rawKeyHint("delete", "delete"),
-				keyHint("tui.select.confirm", "commit"),
-				keyHint("tui.select.cancel", "cancel"),
-			].join(" · "),
-		),
-		width,
-	);
-}
-
-function pickerHelp(theme: Theme, width: number): string[] {
-	return wrapTextWithAnsi(
-		theme.fg(
-			"dim",
-			[
-				"type to filter",
-				keyHint("tui.select.up", "move"),
-				rawKeyHint("space", "toggle"),
-				keyHint("tui.select.confirm", "save"),
-				keyHint("tui.select.cancel", "cancel"),
-			].join(" · "),
-		),
-		width,
-	);
+		return [
+			bindingsHint(["tui.select.up", "tui.select.down"], "move"),
+			bindingHint("tui.select.confirm", "commit"),
+			rawHint("e", "edit"),
+			rawHint("f", "files"),
+			rawHint("n", "new"),
+			rawHint("r", "regen"),
+			rawHint("R", "regen plan"),
+			rawHint("delete", "delete"),
+			bindingHint("tui.select.cancel", "cancel"),
+		];
+	}
 }
 
 function setMessage(plan: CommitPlanState, groupId: string, message: string): CommitPlanState {
@@ -504,38 +711,8 @@ function addGroup(plan: CommitPlanState, group: CommitGroup): CommitPlanState {
 	};
 }
 
-function moveGroup(plan: CommitPlanState, groupId: string, direction: -1 | 1): CommitPlanState {
-	const groups = [...plan.groups];
-	const index = groups.findIndex((group) => group.id === groupId);
-	const target = index + direction;
-	const moving = groups[index];
-	if (!moving || target < 0 || target >= groups.length) return plan;
-	groups.splice(index, 1);
-	groups.splice(target, 0, moving);
-	return { ...plan, groups };
-}
-
 function groupById(plan: CommitPlanState, groupId: string): CommitGroup | undefined {
 	return plan.groups.find((item) => item.id === groupId);
-}
-
-function moveCursorByKey(
-	data: string,
-	keybindings: KeybindingsManager,
-	tui: TUI,
-	cursor: number,
-	itemCount: number,
-	setCursor: (cursor: number) => void,
-): boolean {
-	const delta = keybindings.matches(data, "tui.select.up") ? -1 : keybindings.matches(data, "tui.select.down") ? 1 : 0;
-	if (delta === 0) return false;
-	setCursor(clamp(cursor + delta, 0, Math.max(0, itemCount - 1)));
-	tui.requestRender();
-	return true;
-}
-
-function selectFirst(plan: CommitPlanState): Pick<ReviewState, "plan" | "selectedGroupId"> {
-	return { plan, selectedGroupId: plan.groups[0]?.id };
 }
 
 function unassignedFiles(plan: CommitPlanState): string[] {
@@ -568,15 +745,12 @@ function rankPickerFile(
 	return 2;
 }
 
-function visibleWindow<T>(
-	items: readonly T[],
-	cursor: number,
-	maxVisible: number,
-): { start: number; items: { item: T; index: number }[] } {
-	const start = Math.max(0, Math.min(cursor - Math.floor(maxVisible / 2), items.length - maxVisible));
+function toCommitFileItem(file: DirtyFile, owner: CommitGroup | undefined): CommitFileItem {
 	return {
-		start,
-		items: items.slice(start, start + maxVisible).map((item, offset) => ({ item, index: start + offset })),
+		id: file.path,
+		path: file.path,
+		status: file.status,
+		...(owner ? { ownerId: owner.id, ownerSubject: subjectLine(owner.message) } : {}),
 	};
 }
 
@@ -584,6 +758,15 @@ function subjectLine(message: string): string {
 	return message.split("\n")[0] ?? message;
 }
 
-function clamp(value: number, min: number, max: number): number {
-	return Math.max(min, Math.min(value, max));
+function editorTheme(theme: Theme): EditorTheme {
+	return {
+		borderColor: (text) => theme.fg("accent", text),
+		selectList: {
+			selectedPrefix: (text) => theme.fg("accent", text),
+			selectedText: (text) => theme.fg("accent", text),
+			description: (text) => theme.fg("muted", text),
+			scrollInfo: (text) => theme.fg("dim", text),
+			noMatch: (text) => theme.fg("warning", text),
+		},
+	};
 }

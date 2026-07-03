@@ -11,7 +11,7 @@ import {
 	wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 import { renderFilterRow } from "./filter-row.ts";
-import { bindingHint, bindingsHint, rawHint, type ToolKeyHint } from "./key-hints.ts";
+import { bindingHint, bindingsHint, type ToolKeyHint } from "./key-hints.ts";
 import { clampIndex, visibleWindow } from "./viewport.ts";
 
 export interface ActionSelectListItem {
@@ -68,9 +68,21 @@ export class ActionSelectList<T extends ActionSelectListItem> implements Compone
 		this.filterInput.focused = value;
 	}
 
+	setItems(items: readonly T[], activeId: string | undefined): void {
+		this.config.items = items;
+		if (activeId !== undefined) {
+			const index = this.filteredItems().findIndex((item) => item.id === activeId);
+			if (index >= 0) this.cursor = index;
+		}
+		this.clampCursor();
+	}
+
+	getCurrentItem(): T | undefined {
+		return this.filteredItems()[this.cursor];
+	}
+
 	getKeyHints(): ToolKeyHint[] {
 		return [
-			rawHint("type", "filter"),
 			bindingsHint(["tui.select.up", "tui.select.down"], "move"),
 			bindingHint("tui.select.confirm", this.config.primaryLabel),
 			...this.config.actions.map((action) => action.hint),
