@@ -2,27 +2,29 @@ import type { Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { formatAge, preview } from "../text.ts";
 import {
-	ActionSelectList,
-	type ActionSelectListAction,
-	type ActionSelectListItem,
-	type ActionSelectListResult,
-	type ActionSelectRowState,
-} from "./action-select-list.ts";
+	SelectableList,
+	type SelectableListAction,
+	type SelectableListItem,
+	type SelectableListRowState,
+} from "./selectable-list.ts";
 import { ToolPanel } from "./tool-panel.ts";
 
-export interface TextRecordSelectItem extends ActionSelectListItem {
+export interface TextRecordSelectItem extends SelectableListItem {
 	text: string;
 	createdAt?: number;
 }
 
-export type TextRecordSelectResult<T extends TextRecordSelectItem> = ActionSelectListResult<T>;
+export type TextRecordSelectResult<T extends TextRecordSelectItem> =
+	| { kind: "cancel" }
+	| { kind: "primary"; item: T }
+	| { kind: "action"; actionId: string; item: T };
 
 export interface TextRecordSelectPanelConfig {
 	title: string;
 	path: string;
 	emptyMessage: string;
 	primaryLabel: string;
-	actions: readonly ActionSelectListAction[];
+	actions: readonly SelectableListAction[];
 	expandActiveItem: boolean;
 }
 
@@ -32,15 +34,26 @@ export function createTextRecordSelectPanel<T extends TextRecordSelectItem>(
 	config: TextRecordSelectPanelConfig,
 	done: (result: TextRecordSelectResult<T>) => void,
 ): Component {
-	const list = new ActionSelectList(theme, {
+	const list = new SelectableList(theme, {
 		items,
 		emptyMessage: config.emptyMessage,
-		primaryLabel: config.primaryLabel,
+		selection: { kind: "single", primaryLabel: config.primaryLabel },
+		filter: { searchText: (item) => item.text },
 		actions: config.actions,
+		cancelLabel: "cancel",
 		maxVisible: 12,
 		renderItem: (item, state, width) => renderTextRecord(theme, item, state, config.expandActiveItem, width),
-		searchText: (item) => item.text,
-		onResult: done,
+		onResult: (result) => {
+			if (result.kind === "cancel") {
+				done(result);
+				return;
+			}
+			const item = result.items[0];
+			if (!item) return;
+			done(
+				result.kind === "primary" ? { kind: "primary", item } : { kind: "action", actionId: result.actionId, item },
+			);
+		},
 	});
 	const panel = new ToolPanel(theme, {
 		title: config.title,
@@ -59,7 +72,7 @@ export function createTextRecordSelectPanel<T extends TextRecordSelectItem>(
 function renderTextRecord(
 	theme: Theme,
 	item: TextRecordSelectItem,
-	state: ActionSelectRowState,
+	state: SelectableListRowState,
 	expandActiveItem: boolean,
 	width: number,
 ): string[] {

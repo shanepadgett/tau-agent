@@ -4,7 +4,7 @@ import type { ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-a
 import { type Component, getKeybindings, Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { errorText, formatAge, preview } from "../../shared/text.ts";
 import { bindingHint, rawHint, type ToolKeyHint } from "../../shared/tui/key-hints.ts";
-import { type MultiSelectActionResult, MultiSelectList } from "../../shared/tui/multi-select-list.ts";
+import { type SelectableListActionResult, SelectableList } from "../../shared/tui/selectable-list.ts";
 import { Tabs } from "../../shared/tui/tabs.ts";
 import { ToolPanel, type ToolPanelConfig } from "../../shared/tui/tool-panel.ts";
 import {
@@ -60,8 +60,8 @@ class SessionManagerPanel {
 	private readonly currentSessionFile: string | undefined;
 	private readonly done: () => void;
 	private readonly requestRender: () => void;
-	private readonly activeList: MultiSelectList<ManagedSession>;
-	private readonly archiveList: MultiSelectList<ManagedSession>;
+	private readonly activeList: SelectableList<ManagedSession>;
+	private readonly archiveList: SelectableList<ManagedSession>;
 	private readonly tabs: Tabs;
 	private readonly panelConfig: ToolPanelConfig;
 
@@ -97,11 +97,11 @@ class SessionManagerPanel {
 		};
 	}
 
-	private createList(tab: TabId, items: readonly ManagedSession[]): MultiSelectList<ManagedSession> {
-		return new MultiSelectList(this.theme, {
+	private createList(tab: TabId, items: readonly ManagedSession[]): SelectableList<ManagedSession> {
+		return new SelectableList(this.theme, {
 			items,
 			emptyMessage: tab === "active" ? "No saved sessions." : "No archived sessions.",
-			enableFilter: false,
+			selection: { kind: "multi" },
 			maxVisible: 14,
 			actions:
 				tab === "active"
@@ -138,8 +138,9 @@ class SessionManagerPanel {
 							},
 						],
 			renderItem: (item, state, width) => this.renderRow(item, state.active, width),
-			searchText: (item) => `${item.name} ${item.cwd}`,
-			onAction: (result) => this.prepareAction(tab, result),
+			onResult: (result) => {
+				if (result.kind === "action") this.prepareAction(tab, result);
+			},
 			onSelectionChange: () => {},
 		});
 	}
@@ -175,7 +176,7 @@ class SessionManagerPanel {
 		this.syncPanel();
 	}
 
-	private prepareAction(tab: TabId, result: MultiSelectActionResult<ManagedSession>): void {
+	private prepareAction(tab: TabId, result: SelectableListActionResult<ManagedSession>): void {
 		if (result.items.length === 0) {
 			this.ctx.ui.notify(
 				result.target === "olderThanCursor" ? "No older sessions." : "No sessions selected.",
@@ -294,7 +295,7 @@ class SessionManagerPanel {
 		return [truncateToWidth(`${name} ${suffix}`, width, "")];
 	}
 
-	private listFor(tab: TabId): MultiSelectList<ManagedSession> {
+	private listFor(tab: TabId): SelectableList<ManagedSession> {
 		return tab === "active" ? this.activeList : this.archiveList;
 	}
 

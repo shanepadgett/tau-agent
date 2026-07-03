@@ -15,7 +15,7 @@ Build TUI that mirrors Pi aesthetics.
 2. Use Tau shared TUI when a tool needs a custom component flow:
    - `src/shared/tui/tool-panel.ts`
    - `src/shared/tui/tabs.ts`
-   - `src/shared/tui/multi-select-list.ts`
+   - `src/shared/tui/selectable-list.ts`
 3. If shared TUI lacks the needed behavior, decide if the missing piece should become a new shared component.
 4. Build feature-local custom UI only when reuse is unlikely.
 5. Custom components still use Pi TUI primitives from `@earendil-works/pi-tui`.
@@ -34,9 +34,11 @@ For footer hints, child components expose hints, the parent combines the visible
 
 Use inside a `ToolPanel` when one focused flow has multiple related views. Keeps tab switching out of feature code.
 
-### `MultiSelectList`
+### `SelectableList`
 
-Use inside a `ToolPanel` when the user needs cursor movement, multi-select, optional filtering, and actions over current/selected/older rows.
+Use inside a `ToolPanel` when the user needs cursor movement, single-select or multi-select behavior, optional inline filtering, and actions over current/selected/visible/older rows.
+
+Filtering is configured with `filter: { searchText }`. Filtered single-select lists focus the filter immediately, so plain typing goes into the filter and action keys must use modified keys like `ctrl+n` or non-printable keys like `delete`. Filtered multi-select lists keep list focus until `/` focuses the filter; `Enter` applies the filter focus, and `Escape` clears it.
 
 Shared components should stay generic. Feature behavior stays in the feature.
 
@@ -45,8 +47,8 @@ Shared components should stay generic. Feature behavior stays in the feature.
 Keep composition small:
 
 ```ts
-const list = new MultiSelectList(theme, listConfig);
-const archiveList = new MultiSelectList(theme, archiveListConfig);
+const list = new SelectableList(theme, listConfig);
+const archiveList = new SelectableList(theme, archiveListConfig);
 
 const tabs = new Tabs(
  theme,

@@ -3,23 +3,16 @@ import { access, mkdir, readdir, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
-import {
-	type Component,
-	getKeybindings,
-	Input,
-	Key,
-	matchesKey,
-	type TUI,
-	truncateToWidth,
-} from "@earendil-works/pi-tui";
+import { type Component, getKeybindings, Input, Key, type TUI, truncateToWidth } from "@earendil-works/pi-tui";
 import type { GitRunner } from "../../shared/git.ts";
 import { formatAge } from "../../shared/text.ts";
 import { bindingHint, rawHint } from "../../shared/tui/key-hints.ts";
 import {
-	type MultiSelectActionResult,
-	MultiSelectList,
-	type MultiSelectListItem,
-} from "../../shared/tui/multi-select-list.ts";
+	type SelectableListActionResult,
+	SelectableList,
+	type SelectableListItem,
+	type SelectableListResult,
+} from "../../shared/tui/selectable-list.ts";
 import { ToolPanel, type ToolPanelConfig } from "../../shared/tui/tool-panel.ts";
 import { visibleWindow } from "../../shared/tui/viewport.ts";
 import type { ReferenceEditor } from "./settings.ts";
@@ -39,7 +32,7 @@ export interface ReferenceItem {
 	branch: string;
 }
 
-interface ReferenceListItem extends ReferenceItem, MultiSelectListItem {
+interface ReferenceListItem extends ReferenceItem, SelectableListItem {
 	state?: "updating" | "updated" | "failed" | "switching";
 }
 
@@ -126,7 +119,7 @@ class ReferencePanel implements Component {
 	private readonly branchCache = new Map<string, ReferenceBranch[]>();
 	private refs: ReferenceListItem[];
 	private selected: readonly ReferenceListItem[] = [];
-	private list: MultiSelectList<ReferenceListItem>;
+	private list: SelectableList<ReferenceListItem>;
 	private deleteConfirm: DeleteConfirm | undefined;
 	private cloneInput: Input | undefined;
 	private cloneStatus: CloneStatus | undefined;
@@ -188,51 +181,27 @@ class ReferencePanel implements Component {
 			this.handleDeleteConfirmInput(data);
 			return;
 		}
-		if (this.list.isFiltering()) {
-			this.list.handleInput(data);
-			this.syncPanel();
-			return;
-		}
-
-		const keybindings = getKeybindings();
-		if (keybindings.matches(data, "tui.select.cancel")) {
-			this.done(undefined);
-			return;
-		}
-		if (keybindings.matches(data, "tui.select.confirm")) {
-			if (this.selected.length > 0) this.done(this.selected.map(toReferenceItem));
-			return;
-		}
-		if (data === "n" || data === "N") {
-			this.startCloneInput();
-			return;
-		}
-		if (matchesKey(data, Key.delete)) {
-			this.startDeleteReferences(
-				this.selected.length > 0 ? this.selected : compactCurrent(this.list.getCurrentItem()),
-			);
-			return;
-		}
-
-		this.list.handleInput(/^[A-Z]$/.test(data) ? data.toLowerCase() : data);
+		this.list.handleInput(data);
 		this.syncPanel();
 	}
 
-	private createList(items: readonly ReferenceListItem[]): MultiSelectList<ReferenceListItem> {
-		return new MultiSelectList(this.theme, {
+	private createList(items: readonly ReferenceListItem[]): SelectableList<ReferenceListItem> {
+		return new SelectableList(this.theme, {
 			items,
-			emptyMessage: "No references. Press n for new.",
+			emptyMessage: "No references. Press ctrl+n for new.",
+			selection: { kind: "multi", primaryLabel: "attach" },
+			filter: { searchText: (item) => `${item.name} ${item.branch} ${item.path}` },
 			actions: [
-				{ id: "open", key: "o", hint: rawHint("o", "open"), target: "current" },
-				{ id: "branch", key: "b", hint: rawHint("b", "branch"), target: "current" },
-				{ id: "delete", key: "d", hint: rawHint("d/delete", "delete"), target: "currentOrSelection" },
-				{ id: "updateVisible", key: "u", hint: rawHint("u", "update"), target: "visible" },
+				{ id: "new", key: Key.ctrl("n"), hint: rawHint("ctrl+n", "new") },
+				{ id: "open", key: Key.ctrl("o"), hint: rawHint("ctrl+o", "open"), target: "current" },
+				{ id: "branch", key: Key.ctrl("b"), hint: rawHint("ctrl+b", "branch"), target: "current" },
+				{ id: "delete", key: Key.ctrl("d"), hint: rawHint("ctrl+d", "delete"), target: "currentOrSelection" },
+				{ id: "updateVisible", key: Key.ctrl("u"), hint: rawHint("ctrl+u", "update"), target: "visible" },
 			],
-			enableFilter: true,
+			cancelLabel: "cancel",
 			maxVisible: REFERENCE_VISIBLE_ROWS,
 			renderItem: (item, state, width) => this.renderReferenceRow(item, state.active, width),
-			searchText: (item) => `${item.name} ${item.branch} ${item.path}`,
-			onAction: (result) => this.handleListAction(result),
+			onResult: (result) => this.handleListResult(result),
 			onSelectionChange: (selected) => {
 				this.selected = selected;
 				this.syncPanel();
@@ -240,7 +209,23 @@ class ReferencePanel implements Component {
 		});
 	}
 
-	private handleListAction(result: MultiSelectActionResult<ReferenceListItem>): void {
+	private handleListResult(result: SelectableListResult<ReferenceListItem>): void {
+		if (result.kind === "cancel") {
+			this.done(undefined);
+			return;
+		}
+		if (result.kind === "primary") {
+			if (result.items.length > 0) this.done(result.items.map(toReferenceItem));
+			return;
+		}
+		this.handleListAction(result);
+	}
+
+	private handleListAction(result: SelectableListActionResult<ReferenceListItem>): void {
+		if (result.actionId === "new") {
+			this.startCloneInput();
+			return;
+		}
 		if (result.actionId === "updateVisible") {
 			void this.updateVisibleReferences(result.items);
 			return;
@@ -630,17 +615,8 @@ class ReferencePanel implements Component {
 		if (this.cloneInput) {
 			return [bindingHint("tui.select.confirm", "clone default branch"), bindingHint("tui.select.cancel", "cancel")];
 		}
-		return [
-			...this.list.getKeyHints(),
-			rawHint("n", "new"),
-			bindingHint("tui.select.confirm", "attach"),
-			bindingHint("tui.select.cancel", "cancel"),
-		];
+		return this.list.getKeyHints();
 	}
-}
-
-function compactCurrent(item: ReferenceListItem | undefined): readonly ReferenceListItem[] {
-	return item ? [item] : [];
 }
 
 function toListItem(item: ReferenceItem, state?: ReferenceListItem["state"]): ReferenceListItem {

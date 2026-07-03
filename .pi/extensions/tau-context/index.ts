@@ -6,7 +6,7 @@ import { type Component, getKeybindings, truncateToWidth } from "@earendil-works
 import { emitTauEvent } from "../../../src/shared/events.ts";
 import { INJECTED_CONTEXT_TYPE } from "../../../src/shared/injected-context.ts";
 import { bindingHint } from "../../../src/shared/tui/key-hints.ts";
-import { MultiSelectList } from "../../../src/shared/tui/multi-select-list.ts";
+import { SelectableList } from "../../../src/shared/tui/selectable-list.ts";
 import { Tabs } from "../../../src/shared/tui/tabs.ts";
 import { ToolPanel, type ToolPanelConfig } from "../../../src/shared/tui/tool-panel.ts";
 
@@ -230,7 +230,9 @@ function errorCode(error: unknown): string | undefined {
 class TauContextPanel implements Component {
 	private readonly tabs: Tabs;
 	private readonly panel: ToolPanel;
+	private readonly panelConfig: ToolPanelConfig;
 	private readonly done: (result: Resource[] | undefined) => void;
+	private readonly listByKind = new Map<ResourceKind, SelectableList<Resource>>();
 	private readonly selectedByKind = new Map<ResourceKind, readonly Resource[]>();
 
 	constructor(theme: Theme, resources: readonly Resource[], done: (result: Resource[] | undefined) => void) {
@@ -242,19 +244,20 @@ class TauContextPanel implements Component {
 			theme,
 			RESOURCE_KINDS.map((kind) => {
 				const items = itemsByKind.get(kind) ?? [];
-				const list = new MultiSelectList(theme, {
+				const list = new SelectableList(theme, {
 					items,
 					emptyMessage: "No items",
+					selection: { kind: "multi" },
+					filter: { searchText: (resource) => `${resource.name} ${resource.path}` },
 					actions: [],
-					enableFilter: true,
 					maxVisible: 12,
 					renderItem: (resource, state, width) => [
 						truncateToWidth(state.active ? theme.bold(resource.name) : resource.name, width, ""),
 					],
-					searchText: (resource) => `${resource.name} ${resource.path}`,
-					onAction: () => {},
+					onResult: () => {},
 					onSelectionChange: (selected) => this.selectedByKind.set(kind, selected),
 				});
+				this.listByKind.set(kind, list);
 				return {
 					id: kind,
 					label: TAB_LABELS[kind],
@@ -265,23 +268,23 @@ class TauContextPanel implements Component {
 			}),
 			"local-extension",
 		);
-		const panelConfig: ToolPanelConfig = {
+		this.panelConfig = {
 			title: "Tau context",
 			secondary: "Select Tau resources to inject as autoread context.",
 			body: this.tabs,
-			footer: {
-				kind: "hints",
-				hints: [
-					...this.tabs.getKeyHints(),
-					bindingHint("tui.select.confirm", "submit"),
-					bindingHint("tui.select.cancel", "cancel"),
-				],
-			},
+			footer: { kind: "hints", hints: this.footerHints() },
 		};
-		this.panel = new ToolPanel(theme, panelConfig);
+		this.panel = new ToolPanel(theme, this.panelConfig);
 	}
 
 	handleInput(data: string): void {
+		const activeList = this.activeList();
+		if (activeList?.isFilterFocused()) {
+			this.tabs.handleInput(data);
+			this.syncFooter();
+			return;
+		}
+
 		const keybindings = getKeybindings();
 		if (keybindings.matches(data, "tui.select.confirm")) {
 			this.done(RESOURCE_KINDS.flatMap((kind) => [...(this.selectedByKind.get(kind) ?? [])]));
@@ -292,6 +295,7 @@ class TauContextPanel implements Component {
 			return;
 		}
 		this.tabs.handleInput(data);
+		this.syncFooter();
 	}
 
 	render(width: number): string[] {
@@ -300,5 +304,23 @@ class TauContextPanel implements Component {
 
 	invalidate(): void {
 		this.panel.invalidate();
+	}
+
+	private syncFooter(): void {
+		this.panelConfig.footer = { kind: "hints", hints: this.footerHints() };
+	}
+
+	private footerHints() {
+		const activeList = this.activeList();
+		if (activeList?.isFilterFocused()) return activeList.getKeyHints();
+		return [
+			...this.tabs.getKeyHints(),
+			bindingHint("tui.select.confirm", "submit"),
+			bindingHint("tui.select.cancel", "cancel"),
+		];
+	}
+
+	private activeList(): SelectableList<Resource> | undefined {
+		return this.listByKind.get(this.tabs.getActiveId() as ResourceKind);
 	}
 }

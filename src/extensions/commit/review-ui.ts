@@ -7,17 +7,19 @@ import {
 	getKeybindings,
 	Input,
 	Key,
-	matchesKey,
 	type TUI,
 	truncateToWidth,
 	visibleWidth,
 } from "@earendil-works/pi-tui";
 import type { GitRunner } from "../../shared/git.ts";
 import { errorText } from "../../shared/text.ts";
-import { ActionSelectList, type ActionSelectListResult } from "../../shared/tui/action-select-list.ts";
 import { editorTheme } from "../../shared/tui/editor-theme.ts";
-import { bindingHint, bindingsHint, rawHint, type ToolKeyHint } from "../../shared/tui/key-hints.ts";
-import { MultiSelectList, type MultiSelectListItem } from "../../shared/tui/multi-select-list.ts";
+import { bindingHint, rawHint, type ToolKeyHint } from "../../shared/tui/key-hints.ts";
+import {
+	SelectableList,
+	type SelectableListItem,
+	type SelectableListResult,
+} from "../../shared/tui/selectable-list.ts";
 import { ToolPanel, type ToolPanelConfig } from "../../shared/tui/tool-panel.ts";
 import {
 	type CommitGroup,
@@ -44,13 +46,13 @@ type FileMode =
 			kind: "files";
 			purpose: "assign";
 			groupId: string;
-			list: MultiSelectList<CommitFileItem>;
+			list: SelectableList<CommitFileItem>;
 			selectedPaths: string[];
 	  }
 	| {
 			kind: "files";
 			purpose: "new";
-			list: MultiSelectList<CommitFileItem>;
+			list: SelectableList<CommitFileItem>;
 			selectedPaths: string[];
 	  };
 
@@ -62,7 +64,7 @@ type NoteMode =
 	| { kind: "note"; target: "message"; groupId: string; input: Input }
 	| { kind: "note"; target: "plan"; input: Input };
 
-interface CommitFileItem extends MultiSelectListItem {
+interface CommitFileItem extends SelectableListItem {
 	path: string;
 	status: string;
 	ownerId?: string;
@@ -110,7 +112,7 @@ class CommitReviewPanel implements Component, Focusable {
 	private plan: CommitPlanState;
 	private selectedGroupId: string | undefined;
 	private mode: ReviewMode = { kind: "groups" };
-	private groupList: ActionSelectList<CommitGroup>;
+	private groupList: SelectableList<CommitGroup>;
 	private pendingDelete: CommitGroup | undefined;
 	private busyMessage: string | undefined;
 	private _focused = false;
@@ -183,50 +185,33 @@ class CommitReviewPanel implements Component, Focusable {
 		else this.handleNoteInput(data, this.mode);
 	}
 
-	private createGroupList(groups: readonly CommitGroup[]): ActionSelectList<CommitGroup> {
-		return new ActionSelectList(this.theme, {
+	private createGroupList(groups: readonly CommitGroup[]): SelectableList<CommitGroup> {
+		return new SelectableList(this.theme, {
 			items: groups,
 			emptyMessage: "No commit groups. Press n to create one.",
-			primaryLabel: "commit",
+			selection: { kind: "single", primaryLabel: "commit" },
 			actions: [
 				{ id: "edit", key: "e", hint: rawHint("e", "edit") },
 				{ id: "files", key: "f", hint: rawHint("f", "files") },
 				{ id: "regenMessage", key: "r", hint: rawHint("r", "regen") },
 				{ id: "delete", key: Key.delete, hint: rawHint("delete", "delete") },
+				{ id: "new", key: "n", hint: rawHint("n", "new") },
+				{ id: "regenPlan", key: Key.shift("r"), hint: rawHint("R", "regen plan") },
 			],
+			cancelLabel: "cancel",
 			maxVisible: MAX_GROUPS,
 			renderItem: (group, state, width) => this.renderGroup(group, state.active, width),
-			searchText: (group) => `${group.message} ${group.files.join(" ")}`,
 			onResult: (result) => this.handleGroupResult(result),
 		});
 	}
 
 	private handleGroupsInput(data: string): void {
-		const keybindings = getKeybindings();
-		if (keybindings.matches(data, "tui.select.confirm")) {
-			this.done(this.plan);
-			return;
-		}
-		if (keybindings.matches(data, "tui.select.cancel")) {
-			this.ctx.ui.notify("Commit cancelled.", "info");
-			this.done(undefined);
-			return;
-		}
-		if (data === "n") {
-			this.openNewGroupFiles();
-			return;
-		}
-		if (data === "R" || matchesKey(data, Key.shift("r"))) {
-			this.openPlanRegenerationNote();
-			return;
-		}
-
 		this.groupList.handleInput(data);
 		this.syncSelectedGroupFromCursor();
 		this.syncPanel();
 	}
 
-	private handleGroupResult(result: ActionSelectListResult<CommitGroup>): void {
+	private handleGroupResult(result: SelectableListResult<CommitGroup>): void {
 		if (result.kind === "cancel") {
 			this.ctx.ui.notify("Commit cancelled.", "info");
 			this.done(undefined);
@@ -237,19 +222,30 @@ class CommitReviewPanel implements Component, Focusable {
 			return;
 		}
 
-		this.selectedGroupId = result.item.id;
+		switch (result.actionId) {
+			case "new":
+				this.openNewGroupFiles();
+				return;
+			case "regenPlan":
+				this.openPlanRegenerationNote();
+				return;
+		}
+
+		const item = result.items[0];
+		if (!item) return;
+		this.selectedGroupId = item.id;
 		switch (result.actionId) {
 			case "edit":
-				this.openEditMessage(result.item);
+				this.openEditMessage(item);
 				return;
 			case "files":
-				this.openAssignFiles(result.item);
+				this.openAssignFiles(item);
 				return;
 			case "regenMessage":
-				this.openMessageRegenerationNote(result.item);
+				this.openMessageRegenerationNote(item);
 				return;
 			case "delete":
-				this.pendingDelete = result.item;
+				this.pendingDelete = item;
 				this.syncPanel();
 				return;
 		}
@@ -268,12 +264,13 @@ class CommitReviewPanel implements Component, Focusable {
 	}
 
 	private handleFilesInput(data: string, mode: FileMode): void {
-		const keybindings = getKeybindings();
-		if (mode.list.isFiltering()) {
+		if (mode.list.isFilterFocused()) {
 			mode.list.handleInput(data);
 			this.syncPanel();
 			return;
 		}
+
+		const keybindings = getKeybindings();
 		if (keybindings.matches(data, "tui.select.confirm")) {
 			this.saveFileSelection(mode);
 			return;
@@ -454,7 +451,7 @@ class CommitReviewPanel implements Component, Focusable {
 	private createFileList(
 		targetGroupId: string | undefined,
 		initialFiles: readonly string[],
-	): { list: MultiSelectList<CommitFileItem>; selectedPaths: string[] } {
+	): { list: SelectableList<CommitFileItem>; selectedPaths: string[] } {
 		const ownerByPath = new Map(
 			this.plan.groups.flatMap((group) => group.files.map((file) => [file, group] as const)),
 		);
@@ -463,15 +460,15 @@ class CommitReviewPanel implements Component, Focusable {
 			toCommitFileItem(file, ownerByPath.get(file.path)),
 		);
 		const selectedPaths = items.filter((item) => initial.has(item.path)).map((item) => item.path);
-		const list = new MultiSelectList(this.theme, {
+		const list = new SelectableList(this.theme, {
 			items,
 			emptyMessage: "No dirty files.",
+			selection: { kind: "multi" },
+			filter: { searchText: (item) => `${item.path} ${item.status} ${item.ownerSubject ?? "unassigned"}` },
 			actions: [],
-			enableFilter: true,
 			maxVisible: MAX_PICKER_FILES,
 			renderItem: (item, state, width) => this.renderFile(item, targetGroupId, state.active, width),
-			searchText: (item) => `${item.path} ${item.status} ${item.ownerSubject ?? "unassigned"}`,
-			onAction: () => {},
+			onResult: () => {},
 			onSelectionChange: (selected) => {
 				const mode = this.mode;
 				if (mode.kind !== "files") return;
@@ -655,6 +652,7 @@ class CommitReviewPanel implements Component, Focusable {
 	private footerHints(): readonly ToolKeyHint[] {
 		if (this.busyMessage) return [];
 		if (this.mode.kind === "files") {
+			if (this.mode.list.isFilterFocused()) return this.mode.list.getKeyHints();
 			return [
 				...this.mode.list.getKeyHints(),
 				bindingHint("tui.select.confirm", "save"),
@@ -672,17 +670,7 @@ class CommitReviewPanel implements Component, Focusable {
 			return [bindingHint("tui.input.submit", "generate"), bindingHint("tui.select.cancel", "cancel")];
 		}
 
-		return [
-			bindingsHint(["tui.select.up", "tui.select.down"], "move"),
-			bindingHint("tui.select.confirm", "commit"),
-			rawHint("e", "edit"),
-			rawHint("f", "files"),
-			rawHint("n", "new"),
-			rawHint("r", "regen"),
-			rawHint("R", "regen plan"),
-			rawHint("delete", "delete"),
-			bindingHint("tui.select.cancel", "cancel"),
-		];
+		return this.groupList.getKeyHints();
 	}
 }
 

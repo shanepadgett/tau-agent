@@ -26,7 +26,7 @@ const STORIES: readonly PreviewStory[] = [
 	{ label: "ls — row states", createWidget: createLsPreviewWidget },
 	{ label: "patch — row states", createWidget: createPatchPreviewWidget },
 	{ label: "read — row states", createWidget: createReadPreviewWidget },
-	{ label: "tabs-list — Tabs and MultiSelectList", createWidget: createTabsListPreviewWidget },
+	{ label: "tabs-list — Tabs and SelectableList", createWidget: createTabsListPreviewWidget },
 	{ label: "tool-panel — shell states", createWidget: createToolPanelPreviewWidget },
 	{ label: "turn-budget — marker states", createWidget: createTurnBudgetPreviewWidget },
 ];
