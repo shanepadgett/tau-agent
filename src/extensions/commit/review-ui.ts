@@ -3,7 +3,6 @@ import type { ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-a
 import {
 	type Component,
 	Editor,
-	type EditorTheme,
 	type Focusable,
 	getKeybindings,
 	Input,
@@ -16,6 +15,7 @@ import {
 import type { GitRunner } from "../../shared/git.ts";
 import { errorText } from "../../shared/text.ts";
 import { ActionSelectList, type ActionSelectListResult } from "../../shared/tui/action-select-list.ts";
+import { editorTheme } from "../../shared/tui/editor-theme.ts";
 import { bindingHint, bindingsHint, rawHint, type ToolKeyHint } from "../../shared/tui/key-hints.ts";
 import { MultiSelectList, type MultiSelectListItem } from "../../shared/tui/multi-select-list.ts";
 import { ToolPanel, type ToolPanelConfig } from "../../shared/tui/tool-panel.ts";
@@ -162,13 +162,13 @@ class CommitReviewPanel implements Component, Focusable {
 		this.syncFocus();
 	}
 
-	render(width: number): string[] {
+	render = (width: number): string[] => {
 		return this.panel.render(width);
-	}
+	};
 
-	invalidate(): void {
+	invalidate = (): void => {
 		this.panel.invalidate();
-	}
+	};
 
 	handleInput(data: string): void {
 		if (this.busyMessage) return;
@@ -369,10 +369,7 @@ class CommitReviewPanel implements Component, Focusable {
 			this.plan = setMessage(this.plan, groupId, requireCommitMessage(value));
 			this.showGroups(groupId);
 		} catch (error) {
-			const mode = this.mode;
-			if (mode.kind === "message") mode.editor.setText(value);
-			this.ctx.ui.notify(`Invalid commit message: ${errorText(error)}`, "error");
-			this.syncPanel();
+			this.showInvalidCommitMessage(value, error);
 		}
 	}
 
@@ -384,10 +381,7 @@ class CommitReviewPanel implements Component, Focusable {
 				this.plan = addGroup(this.plan, group);
 				this.showGroups(group.id);
 			} catch (error) {
-				const mode = this.mode;
-				if (mode.kind === "message") mode.editor.setText(value);
-				this.ctx.ui.notify(`Invalid commit message: ${errorText(error)}`, "error");
-				this.syncPanel();
+				this.showInvalidCommitMessage(value, error);
 			}
 			return;
 		}
@@ -494,6 +488,13 @@ class CommitReviewPanel implements Component, Focusable {
 		editor.setText(value);
 		editor.focused = this._focused;
 		return editor;
+	}
+
+	private showInvalidCommitMessage(value: string, error: unknown): void {
+		const mode = this.mode;
+		if (mode.kind === "message") mode.editor.setText(value);
+		this.ctx.ui.notify(`Invalid commit message: ${errorText(error)}`, "error");
+		this.syncPanel();
 	}
 
 	private createNoteInput(onSubmit: (value: string) => void): Input {
@@ -626,7 +627,8 @@ class CommitReviewPanel implements Component, Focusable {
 		if (this.mode.kind === "files") {
 			return `${this.mode.selectedPaths.length} selected · ${this.plan.files.length} files`;
 		}
-		return `${this.plan.groups.length} commit${this.plan.groups.length === 1 ? "" : "s"} · ${this.plan.files.length} files`;
+		const groupCount = this.plan.groups.length;
+		return `${groupCount} commit${groupCount === 1 ? "" : "s"} · ${this.plan.files.length} files`;
 	}
 
 	private headerLines(): readonly string[] {
@@ -756,17 +758,4 @@ function toCommitFileItem(file: DirtyFile, owner: CommitGroup | undefined): Comm
 
 function subjectLine(message: string): string {
 	return message.split("\n")[0] ?? message;
-}
-
-function editorTheme(theme: Theme): EditorTheme {
-	return {
-		borderColor: (text) => theme.fg("accent", text),
-		selectList: {
-			selectedPrefix: (text) => theme.fg("accent", text),
-			selectedText: (text) => theme.fg("accent", text),
-			description: (text) => theme.fg("muted", text),
-			scrollInfo: (text) => theme.fg("dim", text),
-			noMatch: (text) => theme.fg("warning", text),
-		},
-	};
 }

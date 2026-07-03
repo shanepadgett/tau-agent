@@ -25,6 +25,10 @@ export class Tabs implements Component {
 		return this.activeId;
 	}
 
+	setActiveId(id: string): void {
+		if (this.tabs.some((tab) => tab.id === id)) this.activeId = id;
+	}
+
 	setTabs(tabs: readonly TabItem[]): void {
 		this.tabs = tabs;
 		if (!tabs.some((tab) => tab.id === this.activeId)) this.activeId = tabs[0]?.id ?? "";

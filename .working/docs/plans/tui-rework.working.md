@@ -327,14 +327,13 @@ task depends on shared component behavior.
   Commit message editing needs `Editor` because breaking commit messages can be
   multiline; regeneration notes can use `Input`.
 
-  Keep main actions: enter commit, `e` edit message, `f` files, `n` new commit,
-  `r` regen message, `R` regen plan, `[`/`]` move, delete remove commit, esc
-  cancel.
+ Keep main actions: enter commit, `e` edit message, `f` files, `n` new commit,
+ `r` regen message, `R` regen plan, delete remove commit, esc cancel.
 
   Delete commit group should use `ToolPanel` ack. It does not delete files, but
   it is still easy to fat-finger.
 
-- [ ] **16. `qna` flow**
+- [x] **16. `qna` flow**
 
   Files: `src/extensions/qna/index.ts`, `src/extensions/qna/ui.ts`.
 

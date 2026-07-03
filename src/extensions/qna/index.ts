@@ -13,7 +13,6 @@ const TOOL_INTERVIEW_END = "interview_end";
 const optionSchema = Type.Object({
 	value: Type.String({ description: "Stable option value returned in result" }),
 	label: Type.String({ description: "Short user-facing option label" }),
-	description: Type.Optional(Type.String({ description: "When this option makes sense" })),
 });
 
 const recommendationSchema = Type.Object({
@@ -78,7 +77,6 @@ function createAskQuestionTool(pi: ExtensionAPI) {
 			"If one path is clearly correct, do not use ask_question. Proceed and state assumption briefly.",
 			"When using ask_question choices, every option must be real, valid, and defensible. No filler, strawmen, joke options, bad decoys, or preferred answer plus junk.",
 			"When using ask_question choices, cover realistic decision space. Custom answer is safety valve, not excuse for weak options.",
-			"For non-trivial ask_question options, include concise description explaining when option makes sense.",
 			"For ask_question select, multi-select, confirm, and recommended input: write options or suggested answer first, then recommendation values, then recommendation reason.",
 			"ask_question recommendation reason must explain tradeoff honestly. Do not manipulate user toward fake-obvious answer.",
 			"Use ask_question multi-select only when combining options is valid. Use select for one path. Use confirm for yes/no. Use input when choices would be fake; include an input recommendation only when you have a real suggested answer.",

@@ -16,7 +16,6 @@ export interface QnaQuestionParam {
 export interface QnaOption {
 	value: string;
 	label: string;
-	description?: string;
 }
 
 export interface QnaRecommendation {
@@ -252,7 +251,7 @@ function normalizeOptions(id: string, kind: QuestionKind, options: QnaOption[] |
 		values.add(value);
 		const label = clean(option.label);
 		if (!label) throw new Error(`ask_question question ${id} option ${value} needs label`);
-		return dropUndefined({ value, label, description: clean(option.description) });
+		return { value, label };
 	});
 }
 

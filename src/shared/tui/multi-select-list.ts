@@ -8,13 +8,12 @@ import {
 	Key,
 	type KeyId,
 	matchesKey,
-	truncateToWidth,
 	visibleWidth,
-	wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 import { renderFilterRow } from "./filter-row.ts";
 import { bindingsHint, rawHint, type ToolKeyHint } from "./key-hints.ts";
-import { clampIndex, visibleWindow } from "./viewport.ts";
+import { renderPrefixedLines, renderWindowedRows } from "./list-render.ts";
+import { clampIndex } from "./viewport.ts";
 
 export interface MultiSelectListItem {
 	id: string;
@@ -170,20 +169,17 @@ export class MultiSelectList<T extends MultiSelectListItem> implements Component
 		const lines: string[] = [];
 		if (this.config.enableFilter && this.filterMode) lines.push(...this.renderFilter(renderWidth));
 
-		if (filtered.length === 0) {
-			lines.push(...wrapTextWithAnsi(this.theme.fg("muted", this.config.emptyMessage), renderWidth));
-			return lines;
-		}
-
-		const { start, end } = visibleWindow(this.cursor, filtered.length, this.config.maxVisible);
-		for (let index = start; index < end; index++) {
-			const item = filtered[index];
-			if (!item) continue;
-			lines.push(...this.renderRow(item, index, renderWidth));
-		}
-		if (start > 0 || end < filtered.length) {
-			lines.push(this.theme.fg("dim", `  (${this.cursor + 1}/${filtered.length})`));
-		}
+		lines.push(
+			...renderWindowedRows(
+				this.theme,
+				filtered,
+				this.cursor,
+				this.config.maxVisible,
+				this.config.emptyMessage,
+				renderWidth,
+				(item, index) => this.renderRow(item, index, renderWidth),
+			),
+		);
 		return lines;
 	}
 
@@ -231,10 +227,7 @@ export class MultiSelectList<T extends MultiSelectListItem> implements Component
 		const prefix = `${marker}${box} `;
 		const prefixWidth = visibleWidth("› [ ] ");
 		const content = this.config.renderItem(item, state, Math.max(1, width - prefixWidth));
-		const indent = " ".repeat(prefixWidth);
-		return content.map((line, lineIndex) =>
-			truncateToWidth(`${lineIndex === 0 ? prefix : indent}${line}`, width, ""),
-		);
+		return renderPrefixedLines(prefix, prefixWidth, content, width);
 	}
 
 	private filteredItems(): readonly T[] {
