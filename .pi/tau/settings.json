@@ -15,12 +15,17 @@
 				{
 					"name": "ts-check",
 					"command": "mise run check:ts",
-					"details": "Runs Tau schema drift check, Biome formatting/lint, TypeScript (tsc) checks, unit tests, and Fallow dead-code/duplication checks.",
+					"details": "Runs Tau schema drift check, Oxfmt formatting, Oxlint lint fixes, TypeScript (tsgo) checks, unit tests, and Fallow dead-code/duplication checks.",
 					"includeGlobs": [
 						"src/**/*.ts",
 						".pi/extensions/**/*.ts",
+						"test/**/*.ts",
 						"scripts/**/*.ts",
-						"biome.json",
+						".oxfmtrc.jsonc",
+						".oxlintrc.jsonc",
+						"mise.toml",
+						"package.json",
+						"package-lock.json",
 						"tsconfig.json"
 					]
 				},

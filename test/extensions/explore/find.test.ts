@@ -86,7 +86,13 @@ describe("explore find", () => {
 			expect(firstText(shallow)).toContain("a.ts");
 			expect(firstText(shallow)).not.toContain("c.ts");
 
-			const defaults = await tool.execute("find", { queries: [{ patterns: ["*.ts"], type: "file" }] }, undefined, undefined, extensionContext(workspace.dir));
+			const defaults = await tool.execute(
+				"find",
+				{ queries: [{ patterns: ["*.ts"], type: "file" }] },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			);
 			expect(firstText(defaults)).not.toContain(".hidden.ts");
 			expect(firstText(defaults)).not.toContain("ignored.ts");
 			expect(firstText(defaults)).not.toContain("node_modules");
@@ -104,7 +110,12 @@ describe("explore find", () => {
 
 			const multi = await tool.execute(
 				"find",
-				{ queries: [{ path: "src", patterns: ["a.ts"] }, { path: "src", patterns: ["missing"] }] },
+				{
+					queries: [
+						{ path: "src", patterns: ["a.ts"] },
+						{ path: "src", patterns: ["missing"] },
+					],
+				},
 				undefined,
 				undefined,
 				extensionContext(workspace.dir),
@@ -113,11 +124,23 @@ describe("explore find", () => {
 			expect(firstText(multi)).toContain("q2");
 			expect(firstText(multi)).toContain("No matches");
 
-			const limited = await tool.execute("find", { queries: [{ patterns: ["*.ts"] }], limit: 1 }, undefined, undefined, extensionContext(workspace.dir));
-			expect(firstText(limited)).toContain("… omitted");
-			await expect(tool.execute("find", { queries: [{ path: "missing" }] }, undefined, undefined, extensionContext(workspace.dir))).rejects.toThrow(
-				"Path not found: missing",
+			const limited = await tool.execute(
+				"find",
+				{ queries: [{ patterns: ["*.ts"] }], limit: 1 },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
 			);
+			expect(firstText(limited)).toContain("… omitted");
+			await expect(
+				tool.execute(
+					"find",
+					{ queries: [{ path: "missing" }] },
+					undefined,
+					undefined,
+					extensionContext(workspace.dir),
+				),
+			).rejects.toThrow("Path not found: missing");
 		} finally {
 			await workspace.cleanup();
 		}

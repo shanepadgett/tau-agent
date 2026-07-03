@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { createLsTool } from "../../../src/extensions/explore/ls.ts";
-import { createWorkspace, extensionContext, firstText, renderedText, renderContext, testRowState, testTheme } from "./helpers.ts";
+import {
+	createWorkspace,
+	extensionContext,
+	firstText,
+	renderedText,
+	renderContext,
+	testRowState,
+	testTheme,
+} from "./helpers.ts";
 
 describe("explore ls", () => {
 	it("lists default paths with sorting and default filtering", async () => {
@@ -44,13 +52,31 @@ describe("explore ls", () => {
 			await workspace.write(".gitignore", "ignored.txt\n");
 			const tool = createLsTool(testRowState);
 
-			const atPath = await tool.execute("ls", { paths: ["@dir"] }, undefined, undefined, extensionContext(workspace.dir));
+			const atPath = await tool.execute(
+				"ls",
+				{ paths: ["@dir"] },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			);
 			expect(firstText(atPath)).toContain("dir/");
 
-			const file = await tool.execute("ls", { paths: ["dir/file.txt"] }, undefined, undefined, extensionContext(workspace.dir));
+			const file = await tool.execute(
+				"ls",
+				{ paths: ["dir/file.txt"] },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			);
 			expect(firstText(file)).toBe("dir/file.txt");
 
-			const empty = await tool.execute("ls", { paths: ["empty"] }, undefined, undefined, extensionContext(workspace.dir));
+			const empty = await tool.execute(
+				"ls",
+				{ paths: ["empty"] },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			);
 			expect(empty.details?.humanText ?? firstText(empty)).toContain("[empty]");
 
 			const all = await tool.execute("ls", { all: true }, undefined, undefined, extensionContext(workspace.dir));
@@ -58,7 +84,13 @@ describe("explore ls", () => {
 			expect(firstText(all)).toContain("node_modules");
 			expect(firstText(all)).toContain("ignored.txt");
 
-			const long = await tool.execute("ls", { paths: ["dir/file.txt"], long: true }, undefined, undefined, extensionContext(workspace.dir));
+			const long = await tool.execute(
+				"ls",
+				{ paths: ["dir/file.txt"], long: true },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			);
 			expect(firstText(long)).toMatch(/dir\/file\.txt .*\d{4}-\d{2}-\d{2}/);
 
 			const limited = await tool.execute("ls", { limit: 1 }, undefined, undefined, extensionContext(workspace.dir));
@@ -84,9 +116,9 @@ describe("explore ls", () => {
 			const text = firstText(result);
 			expect(text).toContain("one/");
 			expect(text).toContain("two/");
-			await expect(tool.execute("ls", { paths: ["missing"] }, undefined, undefined, extensionContext(workspace.dir))).rejects.toThrow(
-				"Path not found: missing",
-			);
+			await expect(
+				tool.execute("ls", { paths: ["missing"] }, undefined, undefined, extensionContext(workspace.dir)),
+			).rejects.toThrow("Path not found: missing");
 		} finally {
 			await workspace.cleanup();
 		}
@@ -128,9 +160,20 @@ describe("explore ls", () => {
 	it("renders collapsed errors command-only and expanded errors with body", () => {
 		const tool = createLsTool(testRowState);
 		const result = { content: [{ type: "text" as const, text: "Path not found: missing" }], details: undefined };
-		expect(renderedText(tool.renderResult?.(result, { expanded: false, isPartial: false }, testTheme, renderContext({}, false, true)))).toBe("");
-		expect(renderedText(tool.renderResult?.(result, { expanded: true, isPartial: false }, testTheme, renderContext({}, true, true)))).toContain(
-			"Path not found: missing",
-		);
+		expect(
+			renderedText(
+				tool.renderResult?.(
+					result,
+					{ expanded: false, isPartial: false },
+					testTheme,
+					renderContext({}, false, true),
+				),
+			),
+		).toBe("");
+		expect(
+			renderedText(
+				tool.renderResult?.(result, { expanded: true, isPartial: false }, testTheme, renderContext({}, true, true)),
+			),
+		).toContain("Path not found: missing");
 	});
 });

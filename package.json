@@ -35,6 +35,8 @@
 		"@earendil-works/pi-tui": "0.80.2",
 		"@types/node": "22.19.19",
 		"@typescript/native-preview": "7.0.0-dev.20260120.1",
+		"oxfmt": "0.57.0",
+		"oxlint": "1.72.0",
 		"typebox": "1.1.38",
 		"typescript": "5.9.3",
 		"vitest": "4.1.9"

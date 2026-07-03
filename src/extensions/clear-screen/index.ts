@@ -28,10 +28,10 @@ function supportsAnsiClear(): boolean {
 
 	return Boolean(
 		process.env.WT_SESSION ||
-			process.env.TERM_PROGRAM === "vscode" ||
-			process.env.TERM?.includes("xterm") ||
-			process.env.ANSICON ||
-			process.env.ConEmuANSI === "ON",
+		process.env.TERM_PROGRAM === "vscode" ||
+		process.env.TERM?.includes("xterm") ||
+		process.env.ANSICON ||
+		process.env.ConEmuANSI === "ON",
 	);
 }
 

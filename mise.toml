@@ -1,6 +1,7 @@
 [tools]
 node = "22.19.0"
-"npm:@biomejs/biome" = "2.3.5"
+"npm:oxfmt" = "0.57.0"
+"npm:oxlint" = "1.72.0"
 "npm:markdownlint-cli2" = "0.22.1"
 "npm:fallow" = "2.100.0"
 
@@ -10,7 +11,7 @@ task_output = "quiet"
 
 [tasks."check:ts"]
 description = "TS and config checks"
-depends = ["check:schema", "check:biome", "check:types", "test:unit", "check:deadcode"]
+depends = ["check:schema", "check:style", "check:types", "test:unit", "check:deadcode"]
 
 [tasks."check:md"]
 description = "Markdown checks"
@@ -24,9 +25,9 @@ run = "node --experimental-strip-types scripts/generate-tau-schema.ts --write"
 description = "Check Tau settings schema drift"
 run = "node --experimental-strip-types scripts/generate-tau-schema.ts --check"
 
-[tasks."check:biome"]
-description = "Run Biome checks"
-run = "biome check --write --error-on-warnings --no-errors-on-unmatched src .pi/extensions"
+[tasks."check:style"]
+description = "Run Oxfmt and Oxlint fixes"
+run = "oxfmt --write 'src/**/*.ts' '.pi/extensions/**/*.ts' 'test/**/*.ts' 'scripts/**/*.ts' && oxlint --fix --format=agent src .pi/extensions test scripts"
 
 [tasks."check:markdown"]
 description = "Run Markdown checks"

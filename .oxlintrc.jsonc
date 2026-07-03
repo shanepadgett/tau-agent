@@ -1,0 +1,44 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"env": {
+		"node": true,
+		"es2024": true,
+	},
+	"categories": {
+		"correctness": "error",
+		"suspicious": "error",
+	},
+	"options": {
+		"reportUnusedDisableDirectives": "error",
+	},
+	"rules": {
+		"prefer-const": "error",
+		"no-shadow": "off",
+		"no-underscore-dangle": ["error", { "allow": ["_focused"] }],
+		"preserve-caught-error": "off",
+		"typescript/no-explicit-any": "error",
+		"typescript/no-non-null-assertion": "error",
+		"unicorn/consistent-function-scoping": "off",
+		"unicorn/no-array-reverse": "off",
+		"unicorn/no-array-sort": "off",
+		"unicorn/no-useless-fallback-in-spread": "off",
+		"unicorn/prefer-node-protocol": "off",
+		"unicorn/require-module-specifiers": "off",
+		"no-restricted-properties": [
+			"error",
+			{
+				"object": "pi",
+				"property": "events",
+				"message": "Use src/shared/events.ts so Tau owns event cleanup and dedupe."
+			},
+		],
+	},
+	"overrides": [
+		{
+			"files": ["src/shared/events.ts", "test/**/*.ts"],
+			"rules": {
+				"no-restricted-properties": "off",
+			},
+		},
+	],
+}

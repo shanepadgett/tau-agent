@@ -189,7 +189,7 @@ function docs(subject: Subject): string {
 function rules(subject: Subject, name: string): string[] {
 	if (!name) return ["Do not create files until the user confirms a name."];
 	if (subject.kind === "extension") {
-		const path = targets(subject, name)[0]!;
+		const [path] = targets(subject, name);
 		return [
 			`Create ${path}/index.ts.`,
 			placementRule(subject, path),

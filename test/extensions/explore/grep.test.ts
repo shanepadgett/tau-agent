@@ -17,7 +17,13 @@ describe("explore grep", () => {
 			await workspace.write("a.txt", "alpha\n");
 			const tool = createGrepTool(testRowState);
 			await expect(
-				tool.execute("grep", { queries: [["-n", "alpha"]] } as unknown as GrepParams, undefined, undefined, extensionContext(workspace.dir)),
+				tool.execute(
+					"grep",
+					{ queries: [["-n", "alpha"]] } as unknown as GrepParams,
+					undefined,
+					undefined,
+					extensionContext(workspace.dir),
+				),
 			).rejects.toThrow("raw argv arrays");
 			await expect(
 				tool.execute(
@@ -49,7 +55,13 @@ describe("explore grep", () => {
 			await workspace.write("b.md", "alpha in markdown\n");
 			const tool = createGrepTool(testRowState);
 
-			const smart = await tool.execute("grep", { queries: [{ patterns: ["alpha"], paths: ["@a.txt"] }] }, undefined, undefined, extensionContext(workspace.dir));
+			const smart = await tool.execute(
+				"grep",
+				{ queries: [{ patterns: ["alpha"], paths: ["@a.txt"] }] },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			);
 			expect(firstText(smart)).toContain("1: Alpha");
 
 			const sensitive = await tool.execute(
@@ -61,11 +73,23 @@ describe("explore grep", () => {
 			);
 			expect(firstText(sensitive)).not.toContain("1: Alpha");
 
-			const word = await tool.execute("grep", { queries: [{ patterns: ["alpha"], paths: ["a.txt"], word: true }] }, undefined, undefined, extensionContext(workspace.dir));
+			const word = await tool.execute(
+				"grep",
+				{ queries: [{ patterns: ["alpha"], paths: ["a.txt"], word: true }] },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			);
 			expect(firstText(word)).toContain("2: alpha beta");
 			expect(firstText(word)).not.toContain("alphabet");
 
-			const regex = await tool.execute("grep", { queries: [{ patterns: ["Alp.a"], paths: ["a.txt"], regex: true }] }, undefined, undefined, extensionContext(workspace.dir));
+			const regex = await tool.execute(
+				"grep",
+				{ queries: [{ patterns: ["Alp.a"], paths: ["a.txt"], regex: true }] },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			);
 			expect(firstText(regex)).toContain("1: Alpha");
 
 			const included = await tool.execute(
@@ -91,7 +115,13 @@ describe("explore grep", () => {
 			await workspace.write(".gitignore", "ignored.txt\n");
 			const tool = createGrepTool(testRowState);
 
-			const defaults = await tool.execute("grep", { queries: [{ patterns: ["needle"] }] }, undefined, undefined, extensionContext(workspace.dir));
+			const defaults = await tool.execute(
+				"grep",
+				{ queries: [{ patterns: ["needle"] }] },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			);
 			expect(firstText(defaults)).not.toContain(".hidden.txt");
 			expect(firstText(defaults)).not.toContain("ignored.txt");
 
@@ -127,7 +157,12 @@ describe("explore grep", () => {
 
 			const multi = await tool.execute(
 				"grep",
-				{ queries: [{ patterns: ["needle hit"], paths: ["a.txt"] }, { patterns: ["tail"], paths: ["a.txt"] }] },
+				{
+					queries: [
+						{ patterns: ["needle hit"], paths: ["a.txt"] },
+						{ patterns: ["tail"], paths: ["a.txt"] },
+					],
+				},
 				undefined,
 				undefined,
 				extensionContext(workspace.dir),
@@ -135,7 +170,13 @@ describe("explore grep", () => {
 			expect(firstText(multi)).toContain("query 1");
 			expect(firstText(multi)).toContain("query 2");
 
-			const limited = await tool.execute("grep", { queries: [{ patterns: ["needle"], paths: ["a.txt"] }], limit: 1 }, undefined, undefined, extensionContext(workspace.dir));
+			const limited = await tool.execute(
+				"grep",
+				{ queries: [{ patterns: ["needle"], paths: ["a.txt"] }], limit: 1 },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			);
 			expect(firstText(limited)).toContain("… omitted 1 matches (limit 1)");
 
 			const maxPerFile = await tool.execute(
@@ -157,11 +198,23 @@ describe("explore grep", () => {
 			);
 			expect(firstText(truncated)).toContain("…");
 
-			const none = await tool.execute("grep", { queries: [{ patterns: ["missing"], paths: ["a.txt"] }] }, undefined, undefined, extensionContext(workspace.dir));
-			expect(firstText(none)).toBe("No matches");
-			await expect(tool.execute("grep", { queries: [{ patterns: ["needle"], paths: ["missing"] }] }, undefined, undefined, extensionContext(workspace.dir))).rejects.toThrow(
-				"Path not found: missing",
+			const none = await tool.execute(
+				"grep",
+				{ queries: [{ patterns: ["missing"], paths: ["a.txt"] }] },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
 			);
+			expect(firstText(none)).toBe("No matches");
+			await expect(
+				tool.execute(
+					"grep",
+					{ queries: [{ patterns: ["needle"], paths: ["missing"] }] },
+					undefined,
+					undefined,
+					extensionContext(workspace.dir),
+				),
+			).rejects.toThrow("Path not found: missing");
 		} finally {
 			await workspace.cleanup();
 		}
@@ -172,7 +225,13 @@ describe("explore grep", () => {
 		try {
 			for (let i = 0; i < 40; i += 1) await workspace.write(`f${i}.txt`, "needle\nneedle\n");
 			const tool = createGrepTool(testRowState);
-			const result = await tool.execute("grep", { queries: [{ patterns: ["needle"] }], limit: 5 }, undefined, undefined, extensionContext(workspace.dir));
+			const result = await tool.execute(
+				"grep",
+				{ queries: [{ patterns: ["needle"] }], limit: 5 },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			);
 			expect(firstText(result).length).toBeLessThan(2000);
 			expect(firstText(result)).toContain("… omitted");
 		} finally {
@@ -189,7 +248,11 @@ describe("explore grep", () => {
 
 			const result = await tool.execute(
 				"grep",
-				{ queries: [{ patterns: ["needle"], paths: [outside.path("file.txt")], context: 0.9 }], limit: 0, maxLineLength: 5 },
+				{
+					queries: [{ patterns: ["needle"], paths: [outside.path("file.txt")], context: 0.9 }],
+					limit: 0,
+					maxLineLength: 5,
+				},
 				undefined,
 				undefined,
 				extensionContext(workspace.dir),

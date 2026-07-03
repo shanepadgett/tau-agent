@@ -22,4 +22,3 @@ if (mode === "--write") {
 		throw new Error("schemas/tau.schema.json is stale. Run mise run generate-schema.");
 	}
 }
-
