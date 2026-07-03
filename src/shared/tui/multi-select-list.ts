@@ -8,11 +8,10 @@ import {
 	Key,
 	type KeyId,
 	matchesKey,
-	visibleWidth,
 } from "@earendil-works/pi-tui";
 import { renderFilterRow } from "./filter-row.ts";
 import { bindingsHint, rawHint, type ToolKeyHint } from "./key-hints.ts";
-import { renderPrefixedLines, renderWindowedRows } from "./list-render.ts";
+import { renderPrefixedRow, renderWindowedList } from "./list-render.ts";
 import { clampIndex } from "./viewport.ts";
 
 export interface MultiSelectListItem {
@@ -164,23 +163,19 @@ export class MultiSelectList<T extends MultiSelectListItem> implements Component
 	}
 
 	render(width: number): string[] {
-		const renderWidth = Math.max(1, width);
-		const filtered = this.filteredItems();
-		const lines: string[] = [];
-		if (this.config.enableFilter && this.filterMode) lines.push(...this.renderFilter(renderWidth));
-
-		lines.push(
-			...renderWindowedRows(
-				this.theme,
-				filtered,
-				this.cursor,
-				this.config.maxVisible,
-				this.config.emptyMessage,
-				renderWidth,
-				(item, index) => this.renderRow(item, index, renderWidth),
-			),
+		return renderWindowedList(
+			this.theme,
+			this.filteredItems(),
+			this.cursor,
+			this.config.maxVisible,
+			this.config.emptyMessage,
+			width,
+			(renderWidth) =>
+				this.config.enableFilter && this.filterMode
+					? [renderFilterRow(this.theme, this.filterInput, renderWidth)]
+					: [],
+			(item, index, renderWidth) => this.renderRow(item, index, renderWidth),
 		);
-		return lines;
 	}
 
 	invalidate(): void {}
@@ -216,18 +211,12 @@ export class MultiSelectList<T extends MultiSelectListItem> implements Component
 		return false;
 	}
 
-	private renderFilter(width: number): string[] {
-		return [renderFilterRow(this.theme, this.filterInput, width)];
-	}
-
 	private renderRow(item: T, index: number, width: number): string[] {
 		const state = { active: index === this.cursor, selected: this.selected.has(item.id), index };
 		const marker = state.active ? this.theme.fg("accent", "› ") : "  ";
 		const box = state.selected ? this.theme.fg("success", "[x]") : this.theme.fg("dim", "[ ]");
 		const prefix = `${marker}${box} `;
-		const prefixWidth = visibleWidth("› [ ] ");
-		const content = this.config.renderItem(item, state, Math.max(1, width - prefixWidth));
-		return renderPrefixedLines(prefix, prefixWidth, content, width);
+		return renderPrefixedRow(item, state, width, prefix, "› [ ] ", this.config.renderItem);
 	}
 
 	private filteredItems(): readonly T[] {

@@ -1,16 +1,8 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import {
-	type Component,
-	type Focusable,
-	getKeybindings,
-	Input,
-	type KeyId,
-	matchesKey,
-	visibleWidth,
-} from "@earendil-works/pi-tui";
+import { type Component, type Focusable, getKeybindings, Input, type KeyId, matchesKey } from "@earendil-works/pi-tui";
 import { renderFilterRow } from "./filter-row.ts";
 import { bindingHint, bindingsHint, type ToolKeyHint } from "./key-hints.ts";
-import { renderPrefixedLines, renderWindowedRows } from "./list-render.ts";
+import { renderPrefixedRow, renderWindowedList } from "./list-render.ts";
 import { clampIndex } from "./viewport.ts";
 
 export interface ActionSelectListItem {
@@ -123,23 +115,16 @@ export class ActionSelectList<T extends ActionSelectListItem> implements Compone
 	}
 
 	render(width: number): string[] {
-		const renderWidth = Math.max(1, width);
-		const filtered = this.filteredItems();
-		const lines = [renderFilterRow(this.theme, this.filterInput, renderWidth)];
-		lines.push("");
-
-		lines.push(
-			...renderWindowedRows(
-				this.theme,
-				filtered,
-				this.cursor,
-				this.config.maxVisible,
-				this.config.emptyMessage,
-				renderWidth,
-				(item, index) => this.renderRow(item, index, renderWidth),
-			),
+		return renderWindowedList(
+			this.theme,
+			this.filteredItems(),
+			this.cursor,
+			this.config.maxVisible,
+			this.config.emptyMessage,
+			width,
+			(renderWidth) => [renderFilterRow(this.theme, this.filterInput, renderWidth), ""],
+			(item, index, renderWidth) => this.renderRow(item, index, renderWidth),
 		);
-		return lines;
 	}
 
 	invalidate(): void {}
@@ -147,9 +132,7 @@ export class ActionSelectList<T extends ActionSelectListItem> implements Compone
 	private renderRow(item: T, index: number, width: number): string[] {
 		const state = { active: index === this.cursor, index };
 		const prefix = state.active ? this.theme.fg("accent", "› ") : "  ";
-		const prefixWidth = visibleWidth("› ");
-		const content = this.config.renderItem(item, state, Math.max(1, width - prefixWidth));
-		return renderPrefixedLines(prefix, prefixWidth, content, width);
+		return renderPrefixedRow(item, state, width, prefix, "› ", this.config.renderItem);
 	}
 
 	private filteredItems(): readonly T[] {
