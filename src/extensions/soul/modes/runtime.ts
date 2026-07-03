@@ -4,7 +4,7 @@ import type {
 	ExtensionCommandContext,
 	SessionEntry,
 } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth } from "@earendil-works/pi-tui";
+import { Marker } from "../../../shared/tui/marker.ts";
 
 const ROK_MODE_CONTEXT_TYPE = "tau:soul.mode-context";
 const LEGACY_ROK_MODE_MESSAGE_TYPE = "tau:soul.mode";
@@ -34,10 +34,7 @@ export function registerModeMessageRenderers(pi: ExtensionAPI): void {
 	pi.registerMessageRenderer(ROK_MODE_MARKER_TYPE, (message, _options, theme) => {
 		if (typeof message.content !== "string") return undefined;
 		const label = `${message.content.slice(0, 1).toUpperCase()}${message.content.slice(1)}`;
-		return {
-			render: (width) => [truncateToWidth(theme.bold(label), width)],
-			invalidate: () => {},
-		};
+		return new Marker({ theme, state: "muted", label, parts: [] });
 	});
 }
 

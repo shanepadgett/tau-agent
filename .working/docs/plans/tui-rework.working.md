@@ -62,8 +62,7 @@ task depends on shared component behavior.
   - `viewport.ts`
   - `key-hints.ts`
   - maybe `key-actions.ts` after migrations prove repeated handler/hint wiring
-  - marker/message line primitive, likely replacing or extending
-    `labeled-dot-line.ts`
+  - marker/message primitive, replacing `labeled-dot-line.ts`
 
   `tool-key-hints.ts` is now `key-hints.ts`. Collapse pieces always edited
   together. Split only when future work can touch one focused concept.
@@ -136,10 +135,12 @@ task depends on shared component behavior.
   Keep data loading and destructive work outside the component. Add a visible
   filtered-items action target if `reference` still needs update-visible.
 
-- [ ] **07. `ActionSelectList`**
+- [x] **07. `ActionSelectList`**
 
   Files: `src/shared/tui/action-select-list.ts`, plus stories in
-  `.pi/extensions/tool-preview`.
+  `.pi/extensions/tool-preview`. Do not stage it unused. Build it in task 13
+  with the `ideas`/`stash` migration, unless that slice gets too large and needs
+  a small preparatory slice with a local Fallow suppression.
 
   Build a narrow filtered single-select list for flows that need row actions and
   footer hints. Pi `SelectList` remains the default for plain pick-one flows.
@@ -148,27 +149,37 @@ task depends on shared component behavior.
   optional filtering, cursor movement, primary enter action, per-row action
   dispatch, and `getKeyHints()`.
 
+  Include only the actions needed by first consumers: primary enter/select and
+  per-row key actions. Do not add multi-select, destructive confirmation,
+  inline editing, or data reload behavior.
+
   It does not own title, frame, footer, or feature effects. Wrap it in
   `ToolPanel`. Feature callers provide row content/search text and perform
   edit/delete/discard/insert/pop after the list returns an action.
 
-- [ ] **08. Shared compact marker/message primitives**
+- [x] **08. Shared compact marker/message primitives**
 
-  Files: `src/shared/tui/labeled-dot-line.ts` or focused replacement such as
-  `src/shared/tui/marker-line.ts`, plus `.pi/extensions/tool-preview` stories.
+  Files: `src/shared/tui/marker.ts`, plus `.pi/extensions/tool-preview`
+  stories.
 
   Standardize dot + label + parts rendering for turn budget, soul/mode markers,
   silent command runner status, planning/mode inserts, and similar compact
   messages.
 
-  Support solid final-state dots for transcript messages. Support optional
-  animated/blinking dots only for live widgets/status components where the
-  caller owns a timer and `requestRender()`.
+  The composer must pass an explicit marker state. Start with `busy` and
+  `complete`, and include concrete visual states when current callers need them:
+  `muted`, `warning`, and `error`. State owns marker/label color. Callers do not
+  pass color overrides. `busy` blinks only in live widgets/status components
+  where the caller owns a timer and `requestRender()`. Static transcript
+  messages render a stable non-animated marker for their final state.
+
+  Keep parts plain strings. `Marker` owns standard dim detail styling. Add rich
+  styled parts only when a real migrated caller needs them.
 
   Add a shared custom-message box/snapshot shape only if it removes duplicate
   `Box`/`Text` title/body rendering without creating a message framework.
 
-- [ ] **09. `.pi/extensions/tool-preview` storybook refresh**
+- [x] **09. `.pi/extensions/tool-preview` storybook refresh**
 
   Files: `.pi/extensions/tool-preview/index.ts`,
   `.pi/extensions/tool-preview/README.md`,
@@ -204,7 +215,7 @@ task depends on shared component behavior.
   Do not add full interactivity unless a bug needs focus, IME cursor placement,
   keybinding remaps, tab/list event delegation, or ack lifecycle testing.
 
-- [ ] **10. `manage-sessions` reference migration**
+- [x] **10. `manage-sessions` reference migration**
 
   Files: `src/extensions/manage-sessions/index.ts`,
   `src/extensions/manage-sessions/manager-ui.ts`.
@@ -223,7 +234,7 @@ task depends on shared component behavior.
   messages, session row content, or pending action meaning. Consider sharing
   `shortenPath` only if reference/commit need the same home-path display.
 
-- [ ] **11. `.pi/extensions/tau-context` migration**
+- [x] **11. `.pi/extensions/tau-context` migration**
 
   File: `.pi/extensions/tau-context/index.ts`.
 
@@ -236,7 +247,7 @@ task depends on shared component behavior.
   `ToolPanel + Tabs + MultiSelectList`. Delete `tabbed-multi-select.ts` after no
   callers remain.
 
-- [ ] **12. `.pi/extensions/tau-new` and description prompt simplification**
+- [x] **12. `.pi/extensions/tau-new` and description prompt simplification**
 
   Files: `.pi/extensions/tau-new/index.ts`, `src/shared/description.ts`.
 
@@ -249,7 +260,7 @@ task depends on shared component behavior.
   Remove `DescriptionPromptResult.source` and ideas/stash imports if no callers
   remain.
 
-- [ ] **13. `ideas` and `stash` browsers**
+- [x] **13. `ideas` and `stash` browsers**
 
   Files: `src/extensions/ideas/index.ts`, `src/extensions/ideas/browser.ts`,
   `src/extensions/stash/index.ts`, `src/extensions/stash/browser.ts`,

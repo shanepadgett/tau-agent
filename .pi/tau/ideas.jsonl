@@ -19,3 +19,4 @@
 {"id":"b67194a9-2a37-4a3b-816d-83b07f692fdc","text":"subagents scout mode needs to provide files and ranges for targeted lookup to save context.","createdAt":1782311302907}
 {"id":"0e365866-237d-41dc-9006-9264f26d3b3d","text":"we need whole file structural maps when agent tries to read whole file","createdAt":1782254899726}
 {"id":"518f507a-7b9a-4e0f-bc02-0056a202a5e7","text":"session cost should include subagent executions","createdAt":1782226656051}
+{"id":"e4414b3d-ac1b-447f-80e1-1867c80ad1a2","text":"a way to fire off small command like run cli and give answer. like a fire forget system thats outside of context","createdAt":1783022035135}

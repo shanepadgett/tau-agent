@@ -1,6 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Container, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
-import { LabeledDotLine } from "../../../../src/shared/tui/labeled-dot-line.ts";
+import { Marker, type MarkerState } from "../../../../src/shared/tui/marker.ts";
 import { addMessageBox } from "./layout.ts";
 
 interface AutoreadLine {
@@ -40,15 +40,14 @@ function addAgentPreview(container: Container, theme: Theme): void {
 }
 
 class AutoreadLineComponent {
-	private readonly line: LabeledDotLine;
+	private readonly line: Marker;
 
 	constructor(theme: Theme, line: AutoreadLine) {
-		this.line = new LabeledDotLine({
+		this.line = new Marker({
 			theme,
-			dotColor: line.state === "reading" ? "dim" : "success",
+			state: markerState(line.state),
 			label: "autoread",
-			labelColor: line.state === "pruned" ? "warning" : "toolTitle",
-			parts: [theme.fg("muted", line.path)],
+			parts: [line.path],
 		});
 	}
 
@@ -57,4 +56,9 @@ class AutoreadLineComponent {
 	}
 
 	invalidate(): void {}
+}
+
+function markerState(state: AutoreadLine["state"]): MarkerState {
+	if (state === "pruned") return "warning";
+	return state === "reading" ? "busy" : "complete";
 }

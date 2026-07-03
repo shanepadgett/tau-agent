@@ -1,13 +1,19 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { Key } from "@earendil-works/pi-tui";
-import { SearchList, type SearchListConfig, type SearchListResult } from "../../shared/tui/search-list.ts";
+import { rawHint } from "../../shared/tui/key-hints.ts";
+import {
+	createTextRecordSelectPanel,
+	type TextRecordSelectPanelConfig,
+	type TextRecordSelectResult,
+} from "../../shared/tui/text-record-select-panel.ts";
 import { loadStashes, removeStash, type Stash, stashFilePath } from "./store.ts";
 
-const CONFIG: Omit<SearchListConfig, "path"> = {
+const CONFIG: Omit<TextRecordSelectPanelConfig, "path"> = {
 	title: "Stash",
 	emptyMessage: "No stashed prompts. Use the stash shortcut while typing to stash.",
 	primaryLabel: "pop",
-	actions: [{ id: "discard", key: Key.ctrl("d"), label: "ctrl+d discard" }],
+	actions: [{ id: "discard", key: Key.ctrl("d"), hint: rawHint("ctrl+d", "discard") }],
+	expandActiveItem: false,
 };
 
 export async function browseStash(ctx: ExtensionCommandContext): Promise<Stash | undefined> {
@@ -38,8 +44,8 @@ async function show(
 	ctx: ExtensionCommandContext,
 	stashes: readonly Stash[],
 	path: string,
-): Promise<SearchListResult<Stash>> {
-	return ctx.ui.custom<SearchListResult<Stash>>(
-		(tui, theme, _keybindings, done) => new SearchList(tui, theme, stashes, { ...CONFIG, path }, done),
+): Promise<TextRecordSelectResult<Stash>> {
+	return ctx.ui.custom<TextRecordSelectResult<Stash>>((_tui, theme, _keybindings, done) =>
+		createTextRecordSelectPanel(theme, stashes, { ...CONFIG, path }, done),
 	);
 }

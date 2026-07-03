@@ -51,16 +51,11 @@ async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext, args: string)
 		}
 	}
 
-	const descriptionTitle = name ? `Describe ${label(subject)} ${name}` : `Describe ${label(subject)}`;
-	const descriptionRequired = name
-		? `Description required: describe ${label(subject)} ${name}`
-		: `Description required: describe ${label(subject)}`;
-	const description = await promptForDescription(ctx, descriptionTitle, descriptionRequired);
+	const description = await promptForDescription(ctx);
 	if (!description) return;
 
 	const message = buildMessage(subject, name, description.text, description.source === "idea");
-	if (ctx.isIdle()) pi.sendUserMessage(message);
-	else pi.sendUserMessage(message, { deliverAs: "followUp" });
+	ctx.ui.setEditorText(message);
 }
 
 async function getKind(ctx: ExtensionCommandContext, args: string): Promise<Kind | null> {
@@ -165,9 +160,6 @@ function buildMessage(subject: Subject, name: string, description: string, fromI
 			? ["Target path(s):", ...targets(subject, name).map((target) => `- ${target}`)]
 			: ["Target path(s): work out after naming"]),
 		"",
-		"Description:",
-		description,
-		"",
 		"Read relevant Pi docs first:",
 		`- ${docs(subject)}`,
 		"",
@@ -181,6 +173,9 @@ function buildMessage(subject: Subject, name: string, description: string, fromI
 					"- No name was provided. Propose a few kebab-case names from the description, help the user choose one, then use that name consistently.",
 				]),
 		"- Ask concise clarifying questions before editing when scope, naming, files, UX, or acceptance criteria are unclear.",
+		"",
+		"Description:",
+		description,
 	].join("\n");
 }
 

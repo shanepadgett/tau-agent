@@ -1,5 +1,5 @@
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
-import type { AutocompleteItem, Component, TUI } from "@earendil-works/pi-tui";
+import type { Component, TUI } from "@earendil-works/pi-tui";
 import { matchesKey } from "@earendil-works/pi-tui";
 import { createAutoreadPreviewWidget } from "./widgets/autoread.ts";
 import { createFindPreviewWidget } from "./widgets/find.ts";
@@ -13,29 +13,23 @@ import { createToolPanelPreviewWidget } from "./widgets/tool-panel.ts";
 import { createTurnBudgetPreviewWidget } from "./widgets/turn-budget.ts";
 
 const COMMAND = "tool-preview";
-const WIDGETS: Record<string, (tui: TUI, cwd: string, theme: Theme) => Component> = {
-	autoread: createAutoreadPreviewWidget,
-	find: createFindPreviewWidget,
-	grep: createGrepPreviewWidget,
-	ls: createLsPreviewWidget,
-	patch: createPatchPreviewWidget,
-	read: createReadPreviewWidget,
-	"tabs-list": createTabsListPreviewWidget,
-	"tool-panel": createToolPanelPreviewWidget,
-	"turn-budget": createTurnBudgetPreviewWidget,
-};
-const ARGUMENTS = [
-	{ value: "autoread", label: "autoread", description: "Show autoread line states" },
-	{ value: "grep", label: "grep", description: "Show grep row states" },
-	{ value: "find", label: "find", description: "Show find row states" },
-	{ value: "ls", label: "ls", description: "Show ls row states" },
-	{ value: "patch", label: "patch", description: "Show patch row states" },
-	{ value: "read", label: "read", description: "Show read row states" },
-	{ value: "tabs-list", label: "tabs-list", description: "Show shared Tabs and MultiSelectList states" },
-	{ value: "tool-panel", label: "tool-panel", description: "Show shared ToolPanel states" },
-	{ value: "turn-budget", label: "turn-budget", description: "Show turn-budget hint states" },
-	{ value: "clear", label: "clear", description: "Hide the preview widget" },
-] satisfies AutocompleteItem[];
+
+interface PreviewStory {
+	label: string;
+	createWidget(tui: TUI, cwd: string, theme: Theme): Component;
+}
+
+const STORIES: readonly PreviewStory[] = [
+	{ label: "autoread — line states", createWidget: createAutoreadPreviewWidget },
+	{ label: "grep — row states", createWidget: createGrepPreviewWidget },
+	{ label: "find — row states", createWidget: createFindPreviewWidget },
+	{ label: "ls — row states", createWidget: createLsPreviewWidget },
+	{ label: "patch — row states", createWidget: createPatchPreviewWidget },
+	{ label: "read — row states", createWidget: createReadPreviewWidget },
+	{ label: "tabs-list — Tabs and MultiSelectList", createWidget: createTabsListPreviewWidget },
+	{ label: "tool-panel — shell states", createWidget: createToolPanelPreviewWidget },
+	{ label: "turn-budget — marker states", createWidget: createTurnBudgetPreviewWidget },
+];
 
 export default function toolPreview(pi: ExtensionAPI): void {
 	let clearOnEscape: (() => void) | undefined;
@@ -46,11 +40,6 @@ export default function toolPreview(pi: ExtensionAPI): void {
 
 	pi.registerCommand(COMMAND, {
 		description: "Preview custom tool UI widgets",
-		getArgumentCompletions(prefix) {
-			const query = prefix.trim();
-			const items = ARGUMENTS.filter((item) => item.value.startsWith(query));
-			return items.length > 0 ? items : null;
-		},
 		handler: async (args, ctx) => {
 			const clearPreview = () => {
 				ctx.ui.setWidget(COMMAND, undefined);
@@ -63,19 +52,21 @@ export default function toolPreview(pi: ExtensionAPI): void {
 				return;
 			}
 
-			const command = args.trim();
-			if (command === "" || command === "clear") {
-				clearPreview();
+			clearPreview();
+
+			if (args.trim()) {
+				ctx.ui.notify("Use /tool-preview with no arguments and pick a story.", "info");
 				return;
 			}
 
-			const createWidget = WIDGETS[command];
-			if (!createWidget) {
-				ctx.ui.notify(`Unknown tool preview: ${command}`, "error");
-				return;
-			}
+			const label = await ctx.ui.select(
+				"Tool preview",
+				STORIES.map((story) => story.label),
+			);
+			const story = STORIES.find((item) => item.label === label);
+			if (!story) return;
 
-			ctx.ui.setWidget(COMMAND, (tui, theme) => framePreviewWidget(theme, createWidget(tui, ctx.cwd, theme)), {
+			ctx.ui.setWidget(COMMAND, (tui, theme) => framePreviewWidget(theme, story.createWidget(tui, ctx.cwd, theme)), {
 				placement: "aboveEditor",
 			});
 			clearOnEscape?.();

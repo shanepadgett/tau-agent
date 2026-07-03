@@ -1,16 +1,21 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { Key } from "@earendil-works/pi-tui";
-import { SearchList, type SearchListConfig, type SearchListResult } from "../../shared/tui/search-list.ts";
+import { rawHint } from "../../shared/tui/key-hints.ts";
+import {
+	createTextRecordSelectPanel,
+	type TextRecordSelectPanelConfig,
+	type TextRecordSelectResult,
+} from "../../shared/tui/text-record-select-panel.ts";
 import { deleteIdea, type Idea, ideasFilePath, loadIdeas, updateIdea } from "./store.ts";
 
-const CONFIG: Omit<SearchListConfig, "path"> = {
+const CONFIG: Omit<TextRecordSelectPanelConfig, "path"> = {
 	title: "Ideas",
 	emptyMessage: "No ideas yet. Use /ideas <text> to log one.",
 	primaryLabel: "insert",
 	expandActiveItem: true,
 	actions: [
-		{ id: "edit", key: Key.ctrl("e"), label: "ctrl+e edit" },
-		{ id: "delete", key: Key.ctrl("d"), label: "ctrl+d delete" },
+		{ id: "edit", key: Key.ctrl("e"), hint: rawHint("ctrl+e", "edit") },
+		{ id: "delete", key: Key.ctrl("d"), hint: rawHint("ctrl+d", "delete") },
 	],
 };
 
@@ -54,8 +59,8 @@ async function show(
 	ctx: ExtensionCommandContext,
 	ideas: readonly Idea[],
 	path: string,
-): Promise<SearchListResult<Idea>> {
-	return ctx.ui.custom<SearchListResult<Idea>>(
-		(tui, theme, _keybindings, done) => new SearchList(tui, theme, ideas, { ...CONFIG, path }, done),
+): Promise<TextRecordSelectResult<Idea>> {
+	return ctx.ui.custom<TextRecordSelectResult<Idea>>((_tui, theme, _keybindings, done) =>
+		createTextRecordSelectPanel(theme, ideas, { ...CONFIG, path }, done),
 	);
 }

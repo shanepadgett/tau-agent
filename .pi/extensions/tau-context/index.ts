@@ -1,19 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { readdir, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
+import { type Component, getKeybindings, truncateToWidth } from "@earendil-works/pi-tui";
 import { emitTauEvent } from "../../../src/shared/events.ts";
 import { INJECTED_CONTEXT_TYPE } from "../../../src/shared/injected-context.ts";
-import {
-	TabbedMultiSelect,
-	type TabbedMultiSelectItem,
-	type TabbedMultiSelectSelection,
-	type TabbedMultiSelectTab,
-} from "../../../src/shared/tui/tabbed-multi-select.ts";
+import { bindingHint } from "../../../src/shared/tui/key-hints.ts";
+import { MultiSelectList } from "../../../src/shared/tui/multi-select-list.ts";
+import { Tabs } from "../../../src/shared/tui/tabs.ts";
+import { ToolPanel, type ToolPanelConfig } from "../../../src/shared/tui/tool-panel.ts";
 
 type ResourceKind = "local-extension" | "tau-extension" | "prompt" | "theme" | "skill";
 
 interface Resource {
+	id: string;
 	kind: ResourceKind;
 	name: string;
 	path: string;
@@ -35,6 +35,7 @@ const TAB_LABELS: Record<ResourceKind, string> = {
 	theme: "Themes",
 	skill: "Skills",
 };
+const RESOURCE_KINDS = Object.keys(TAB_LABELS) as ResourceKind[];
 
 export default function tauContext(pi: ExtensionAPI): void {
 	pi.registerCommand("tau-context", {
@@ -54,26 +55,19 @@ async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void
 	}
 
 	const resources = await discoverResources(ctx.cwd);
-	const tabs = makeTabs(resources);
-	if (!tabs.some((tab) => tab.items.length > 0)) {
+	if (resources.length === 0) {
 		ctx.ui.notify("No Tau resources found.", "warning");
 		return;
 	}
 
-	const selections = await ctx.ui.custom<TabbedMultiSelectSelection[] | undefined>(
-		(_tui, theme, _keybindings, done) => new TabbedMultiSelect("Tau context", tabs, theme, done),
+	const selected = await ctx.ui.custom<Resource[] | undefined>(
+		(_tui, theme, _keybindings, done) => new TauContextPanel(theme, resources, done),
 	);
-	if (!selections) return;
-	if (selections.length === 0) {
+	if (!selected) return;
+	if (selected.length === 0) {
 		ctx.ui.notify("Select at least one resource.", "warning");
 		return;
 	}
-
-	const byPath = new Map(resources.map((resource) => [resource.path, resource]));
-	const selected = selections.flatMap((selection) => {
-		const resource = byPath.get(selection.itemId);
-		return resource ? [resource] : [];
-	});
 
 	const context = await buildContext(ctx.cwd, selected);
 	const batchId = randomUUID();
@@ -107,6 +101,7 @@ async function discoverExtensionEntries(cwd: string, root: string, kind: Resourc
 	return entries
 		.filter((entry) => (entry.isDirectory() || entry.name.endsWith(".ts")) && !entry.name.startsWith("."))
 		.map((entry) => ({
+			id: `${root}/${entry.name}`,
 			kind,
 			name: entry.isDirectory() ? entry.name : entry.name.slice(0, -extname(entry.name).length),
 			path: `${root}/${entry.name}`,
@@ -118,7 +113,7 @@ async function discoverFiles(cwd: string, roots: string[], suffix: string, kind:
 	for (const root of roots) {
 		for (const path of await listFiles(cwd, root)) {
 			if (!path.endsWith(suffix)) continue;
-			resources.push({ kind, name: basename(path, suffix), path });
+			resources.push({ id: path, kind, name: basename(path, suffix), path });
 		}
 	}
 	return resources;
@@ -132,24 +127,12 @@ async function discoverSkills(cwd: string, roots: string[]): Promise<Resource[]>
 			if (entry.name.startsWith(".")) continue;
 			const path = `${root}/${entry.name}`;
 			if (entry.isDirectory() && (await exists(join(cwd, path, "SKILL.md"))))
-				resources.push({ kind: "skill", name: entry.name, path });
+				resources.push({ id: path, kind: "skill", name: entry.name, path });
 			else if (entry.isFile() && entry.name.endsWith(".md"))
-				resources.push({ kind: "skill", name: basename(entry.name, ".md"), path });
+				resources.push({ id: path, kind: "skill", name: basename(entry.name, ".md"), path });
 		}
 	}
 	return resources;
-}
-
-function makeTabs(resources: Resource[]): TabbedMultiSelectTab[] {
-	return (Object.keys(TAB_LABELS) as ResourceKind[]).map((kind) => ({
-		id: kind,
-		label: TAB_LABELS[kind],
-		items: resources.filter((resource) => resource.kind === kind).map(resourceToItem),
-	}));
-}
-
-function resourceToItem(resource: Resource): TabbedMultiSelectItem {
-	return { id: resource.path, label: resource.name };
 }
 
 async function buildContext(cwd: string, resources: Resource[]): Promise<ResourceContext> {
@@ -242,4 +225,80 @@ function errorCode(error: unknown): string | undefined {
 	return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
 		? error.code
 		: undefined;
+}
+
+class TauContextPanel implements Component {
+	private readonly tabs: Tabs;
+	private readonly panel: ToolPanel;
+	private readonly done: (result: Resource[] | undefined) => void;
+	private readonly selectedByKind = new Map<ResourceKind, readonly Resource[]>();
+
+	constructor(theme: Theme, resources: readonly Resource[], done: (result: Resource[] | undefined) => void) {
+		this.done = done;
+		const itemsByKind = new Map(
+			RESOURCE_KINDS.map((kind) => [kind, resources.filter((resource) => resource.kind === kind)]),
+		);
+		this.tabs = new Tabs(
+			theme,
+			RESOURCE_KINDS.map((kind) => {
+				const items = itemsByKind.get(kind) ?? [];
+				const list = new MultiSelectList(theme, {
+					items,
+					emptyMessage: "No items",
+					actions: [],
+					enableFilter: true,
+					maxVisible: 12,
+					renderItem: (resource, state, width) => [
+						truncateToWidth(state.active ? theme.bold(resource.name) : resource.name, width, ""),
+					],
+					searchText: (resource) => `${resource.name} ${resource.path}`,
+					onAction: () => {},
+					onSelectionChange: (selected) => this.selectedByKind.set(kind, selected),
+				});
+				return {
+					id: kind,
+					label: TAB_LABELS[kind],
+					count: items.length,
+					body: list,
+					getKeyHints: () => list.getKeyHints(),
+				};
+			}),
+			"local-extension",
+		);
+		const panelConfig: ToolPanelConfig = {
+			title: "Tau context",
+			secondary: "Select Tau resources to inject as autoread context.",
+			body: this.tabs,
+			footer: {
+				kind: "hints",
+				hints: [
+					...this.tabs.getKeyHints(),
+					bindingHint("tui.select.confirm", "submit"),
+					bindingHint("tui.select.cancel", "cancel"),
+				],
+			},
+		};
+		this.panel = new ToolPanel(theme, panelConfig);
+	}
+
+	handleInput(data: string): void {
+		const keybindings = getKeybindings();
+		if (keybindings.matches(data, "tui.select.confirm")) {
+			this.done(RESOURCE_KINDS.flatMap((kind) => [...(this.selectedByKind.get(kind) ?? [])]));
+			return;
+		}
+		if (keybindings.matches(data, "tui.select.cancel")) {
+			this.done(undefined);
+			return;
+		}
+		this.tabs.handleInput(data);
+	}
+
+	render(width: number): string[] {
+		return this.panel.render(width);
+	}
+
+	invalidate(): void {
+		this.panel.invalidate();
+	}
 }

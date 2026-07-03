@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import { onTauEvent, type TauAgentEvents } from "../../shared/events.js";
 import type { ToolRowStateStore } from "../../shared/tool-row-state.js";
-import { LabeledDotLine } from "../../shared/tui/labeled-dot-line.ts";
+import { Marker, type MarkerState } from "../../shared/tui/marker.ts";
 
 const AUTOREAD_MESSAGE_TYPE = "tau.autoread";
 
@@ -122,15 +122,19 @@ class AutoreadMessageComponent {
 	}
 
 	render(width: number): string[] {
-		const dotColor = this.status === "reading" ? "dim" : "success";
-		return new LabeledDotLine({
+		return new Marker({
 			theme: this.theme,
-			dotColor,
+			state: this.markerState(),
 			label: "autoread",
-			labelColor: this.rowState.get(this.rowId) === "pruned" ? "warning" : "toolTitle",
-			parts: [this.theme.fg("muted", this.path)],
+			parts: [this.path],
 		}).render(width);
 	}
 
 	invalidate(): void {}
+
+	private markerState(): MarkerState {
+		if (this.rowState.get(this.rowId) === "pruned") return "warning";
+		if (this.status === "failed") return "error";
+		return this.status === "reading" ? "busy" : "complete";
+	}
 }

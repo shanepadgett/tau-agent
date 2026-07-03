@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
-import { LabeledDotLine } from "../../shared/tui/labeled-dot-line.ts";
+import { Marker } from "../../shared/tui/marker.ts";
 import turnBudgetSettings from "./settings.ts";
 
 const MARKER_TYPE = "tau.turn-budget.marker";
@@ -33,15 +33,11 @@ export default function turnBudgetExtension(pi: ExtensionAPI): void {
 	pi.registerMessageRenderer<MarkerDetails>(MARKER_TYPE, (message, _options, theme) => {
 		const details = readMarkerDetails(message.details);
 		if (!details) return undefined;
-		return new LabeledDotLine({
+		return new Marker({
 			theme,
-			dotColor: "dim",
+			state: "muted",
 			label: "Turn Budget:",
-			labelColor: "toolTitle",
-			parts: [
-				theme.fg("muted", `${details.used}/${details.cap}`),
-				...(details.extended ? [theme.fg("muted", "Soft cap extended.")] : []),
-			],
+			parts: [`${details.used}/${details.cap}`, ...(details.extended ? ["Soft cap extended."] : [])],
 		});
 	});
 

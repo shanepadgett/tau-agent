@@ -39,6 +39,7 @@ export function createTabsListPreviewWidget(_tui: TUI, _cwd: string, theme: Them
 			return item.name;
 		},
 		onAction() {},
+		onSelectionChange() {},
 	});
 	list.setItems(ITEMS);
 

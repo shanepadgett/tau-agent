@@ -1,6 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Container, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
-import { LabeledDotLine } from "../../../../src/shared/tui/labeled-dot-line.ts";
+import { Marker } from "../../../../src/shared/tui/marker.ts";
 import { addMessageBox, addSectionHeading } from "./layout.ts";
 
 interface TurnBudgetSample {
@@ -64,18 +64,14 @@ function addVisibleMarker(container: Container, theme: Theme, sample: TurnBudget
 }
 
 class TurnBudgetMarker {
-	private readonly line: LabeledDotLine;
+	private readonly line: Marker;
 
 	constructor(theme: Theme, sample: TurnBudgetSample) {
-		this.line = new LabeledDotLine({
+		this.line = new Marker({
 			theme,
-			dotColor: "dim",
+			state: "muted",
 			label: "Turn Budget:",
-			labelColor: "toolTitle",
-			parts: [
-				theme.fg("muted", `${sample.used}/${sample.cap}`),
-				...(sample.extended ? [theme.fg("muted", "Soft cap extended.")] : []),
-			],
+			parts: [`${sample.used}/${sample.cap}`, ...(sample.extended ? ["Soft cap extended."] : [])],
 		});
 	}
 

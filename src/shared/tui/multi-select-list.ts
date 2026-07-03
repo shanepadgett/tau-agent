@@ -53,6 +53,7 @@ export interface MultiSelectListConfig<T extends MultiSelectListItem> {
 	renderItem(item: T, state: MultiSelectRowState, width: number): string[];
 	searchText(item: T): string;
 	onAction(result: MultiSelectActionResult<T>): void;
+	onSelectionChange(items: readonly T[]): void;
 }
 
 export class MultiSelectList<T extends MultiSelectListItem> implements Component, Focusable {
@@ -101,10 +102,12 @@ export class MultiSelectList<T extends MultiSelectListItem> implements Component
 			if (!ids.has(id)) this.selected.delete(id);
 		}
 		this.clampCursor();
+		this.emitSelectionChange();
 	}
 
 	clearSelection(): void {
 		this.selected.clear();
+		this.emitSelectionChange();
 	}
 
 	getKeyHints(): ToolKeyHint[] {
@@ -126,6 +129,7 @@ export class MultiSelectList<T extends MultiSelectListItem> implements Component
 		if (this.handleListKey(data)) return;
 		if (data === "c") {
 			this.selected.clear();
+			this.emitSelectionChange();
 			return;
 		}
 		if (this.config.enableFilter && data === "f") {
@@ -193,6 +197,7 @@ export class MultiSelectList<T extends MultiSelectListItem> implements Component
 			const item = this.filteredItems()[this.cursor];
 			if (item && this.selected.has(item.id)) this.selected.delete(item.id);
 			else if (item) this.selected.add(item.id);
+			this.emitSelectionChange();
 			return true;
 		}
 		return false;
@@ -247,5 +252,9 @@ export class MultiSelectList<T extends MultiSelectListItem> implements Component
 
 	private clampCursor(): void {
 		this.cursor = clampIndex(this.cursor, this.filteredItems().length);
+	}
+
+	private emitSelectionChange(): void {
+		this.config.onSelectionChange(this.items.filter((item) => this.selected.has(item.id)));
 	}
 }

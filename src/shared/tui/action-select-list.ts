@@ -1,0 +1,159 @@
+import type { Theme } from "@earendil-works/pi-coding-agent";
+import {
+	type Component,
+	type Focusable,
+	getKeybindings,
+	Input,
+	type KeyId,
+	matchesKey,
+	truncateToWidth,
+	visibleWidth,
+	wrapTextWithAnsi,
+} from "@earendil-works/pi-tui";
+import { renderFilterRow } from "./filter-row.ts";
+import { bindingHint, bindingsHint, rawHint, type ToolKeyHint } from "./key-hints.ts";
+import { clampIndex, visibleWindow } from "./viewport.ts";
+
+export interface ActionSelectListItem {
+	id: string;
+}
+
+export interface ActionSelectListAction {
+	id: string;
+	key: KeyId;
+	hint: ToolKeyHint;
+}
+
+export type ActionSelectListResult<T extends ActionSelectListItem> =
+	| { kind: "cancel" }
+	| { kind: "primary"; item: T }
+	| { kind: "action"; actionId: string; item: T };
+
+export interface ActionSelectRowState {
+	active: boolean;
+	index: number;
+}
+
+export interface ActionSelectListConfig<T extends ActionSelectListItem> {
+	items: readonly T[];
+	emptyMessage: string;
+	primaryLabel: string;
+	actions: readonly ActionSelectListAction[];
+	maxVisible: number;
+	// Render row content only. ActionSelectList owns cursor and filter chrome.
+	renderItem(item: T, state: ActionSelectRowState, width: number): string[];
+	searchText(item: T): string;
+	onResult(result: ActionSelectListResult<T>): void;
+}
+
+export class ActionSelectList<T extends ActionSelectListItem> implements Component, Focusable {
+	private readonly theme: Theme;
+	private readonly config: ActionSelectListConfig<T>;
+	private readonly filterInput = new Input();
+	private cursor = 0;
+	private _focused = false;
+
+	constructor(theme: Theme, config: ActionSelectListConfig<T>) {
+		this.theme = theme;
+		this.config = config;
+		this.filterInput.focused = true;
+	}
+
+	get focused(): boolean {
+		return this._focused;
+	}
+
+	set focused(value: boolean) {
+		this._focused = value;
+		this.filterInput.focused = value;
+	}
+
+	getKeyHints(): ToolKeyHint[] {
+		return [
+			rawHint("type", "filter"),
+			bindingsHint(["tui.select.up", "tui.select.down"], "move"),
+			bindingHint("tui.select.confirm", this.config.primaryLabel),
+			...this.config.actions.map((action) => action.hint),
+			bindingHint("tui.select.cancel", "cancel"),
+		];
+	}
+
+	handleInput(data: string): void {
+		const keybindings = getKeybindings();
+		if (keybindings.matches(data, "tui.select.cancel")) {
+			this.config.onResult({ kind: "cancel" });
+			return;
+		}
+
+		const current = this.filteredItems()[this.cursor];
+		if (keybindings.matches(data, "tui.select.confirm")) {
+			if (current) this.config.onResult({ kind: "primary", item: current });
+			return;
+		}
+
+		for (const action of this.config.actions) {
+			if (matchesKey(data, action.key)) {
+				if (current) this.config.onResult({ kind: "action", actionId: action.id, item: current });
+				return;
+			}
+		}
+
+		if (keybindings.matches(data, "tui.select.up")) {
+			this.cursor = Math.max(0, this.cursor - 1);
+			return;
+		}
+		if (keybindings.matches(data, "tui.select.down")) {
+			this.cursor = clampIndex(this.cursor + 1, this.filteredItems().length);
+			return;
+		}
+
+		this.filterInput.handleInput(data);
+		this.clampCursor();
+	}
+
+	render(width: number): string[] {
+		const renderWidth = Math.max(1, width);
+		const filtered = this.filteredItems();
+		const lines = [renderFilterRow(this.theme, this.filterInput, renderWidth)];
+		lines.push("");
+
+		if (filtered.length === 0) {
+			lines.push(...wrapTextWithAnsi(this.theme.fg("muted", this.config.emptyMessage), renderWidth));
+			return lines;
+		}
+
+		const { start, end } = visibleWindow(this.cursor, filtered.length, this.config.maxVisible);
+		for (let index = start; index < end; index++) {
+			const item = filtered[index];
+			if (!item) continue;
+			lines.push(...this.renderRow(item, index, renderWidth));
+		}
+		if (start > 0 || end < filtered.length) {
+			lines.push(this.theme.fg("dim", `  (${this.cursor + 1}/${filtered.length})`));
+		}
+		return lines;
+	}
+
+	invalidate(): void {}
+
+	private renderRow(item: T, index: number, width: number): string[] {
+		const state = { active: index === this.cursor, index };
+		const prefix = state.active ? this.theme.fg("accent", "› ") : "  ";
+		const prefixWidth = visibleWidth("› ");
+		const content = this.config.renderItem(item, state, Math.max(1, width - prefixWidth));
+		const indent = " ".repeat(prefixWidth);
+		return content.map((line, lineIndex) =>
+			truncateToWidth(`${lineIndex === 0 ? prefix : indent}${line}`, width, ""),
+		);
+	}
+
+	private filteredItems(): readonly T[] {
+		const query = this.filterInput.getValue().trim().toLowerCase();
+		if (!query) return this.config.items;
+		return this.config.items.filter((item) => this.config.searchText(item).toLowerCase().includes(query));
+	}
+
+	private clampCursor(): void {
+		this.cursor = clampIndex(this.cursor, this.filteredItems().length);
+	}
+}

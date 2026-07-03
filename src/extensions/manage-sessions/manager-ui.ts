@@ -140,6 +140,7 @@ class SessionManagerPanel {
 			renderItem: (item, state, width) => this.renderRow(item, state.active, width),
 			searchText: (item) => `${item.name} ${item.cwd}`,
 			onAction: (result) => this.prepareAction(tab, result),
+			onSelectionChange: () => {},
 		});
 	}
 
@@ -276,7 +277,7 @@ class SessionManagerPanel {
 		return [
 			...this.tabs.getKeyHints(),
 			rawHint("s", this.scope === "current" ? "all projects" : "current folder"),
-			rawHint("Esc", "close"),
+			bindingHint("tui.select.cancel", "close"),
 		];
 	}
 
