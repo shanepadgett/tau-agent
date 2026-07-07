@@ -4,6 +4,7 @@ import { onTauEvent } from "./events.js";
 export type ToolRowVisualState = "pruned";
 
 interface EventAPI extends Pick<ExtensionAPI, "events"> {
+	on(event: "session_start", handler: () => void): void;
 	on(event: "session_shutdown", handler: () => void): void;
 }
 

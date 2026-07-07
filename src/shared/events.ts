@@ -48,6 +48,7 @@ export interface TauFooterItem {
 type EmitEventAPI = Pick<ExtensionAPI, "events">;
 
 interface TauEventAPI extends EmitEventAPI {
+	on(event: "session_start", handler: () => void): void;
 	on(event: "session_shutdown", handler: () => void): void;
 }
 
@@ -81,18 +82,32 @@ export function onTauEvent<Name extends keyof TauAgentEvents>(
 	const subscriptions = getOwnerSubscriptions(pi.events, owner);
 	subscriptions.get(name)?.stop();
 
-	const unsubscribe = pi.events.on(name, handler as (data: unknown) => void);
-	let active = true;
-	const subscription: TauEventSubscription = { stop: () => {} };
-	subscription.stop = () => {
-		if (!active) return;
-		active = false;
-		unsubscribe();
-		if (subscriptions.get(name) === subscription) subscriptions.delete(name);
+	let unsubscribe: (() => void) | undefined;
+	let disposed = false;
+
+	function detach(): void {
+		unsubscribe?.();
+		unsubscribe = undefined;
+	}
+
+	const subscription: TauEventSubscription = {
+		stop() {
+			if (disposed) return;
+			disposed = true;
+			detach();
+			if (subscriptions.get(name) === subscription) subscriptions.delete(name);
+		},
 	};
 
+	function attach(): void {
+		if (disposed) return;
+		detach();
+		unsubscribe = pi.events.on(name, handler as (data: unknown) => void);
+	}
+
 	subscriptions.set(name, subscription);
-	pi.on("session_shutdown", subscription.stop);
+	pi.on("session_start", attach);
+	pi.on("session_shutdown", detach);
 	return subscription.stop;
 }
 

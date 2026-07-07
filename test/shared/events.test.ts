@@ -3,16 +3,23 @@ import { describe, expect, it } from "vitest";
 import { emitTauEvent, onTauEvent, type TauAgentEvents } from "../../src/shared/events.ts";
 
 interface TestEventAPI extends Pick<ExtensionAPI, "events"> {
+	on(event: "session_start", handler: () => void): void;
 	on(event: "session_shutdown", handler: () => void): void;
+	start(): void;
 	shutdown(): void;
 }
 
 function eventApi(): TestEventAPI {
+	const startHandlers: Array<() => void> = [];
 	const shutdownHandlers: Array<() => void> = [];
 	return {
 		events: createEventBus(),
-		on: (_event, handler) => {
-			shutdownHandlers.push(handler);
+		on: (event: "session_start" | "session_shutdown", handler: () => void) => {
+			if (event === "session_start") startHandlers.push(handler);
+			else shutdownHandlers.push(handler);
+		},
+		start: () => {
+			for (const handler of startHandlers) handler();
 		},
 		shutdown: () => {
 			for (const handler of shutdownHandlers) handler();
@@ -35,6 +42,7 @@ describe("Tau events", () => {
 		onTauEvent(pi, "test.autoread", "tau:autoread.requested", (event) => {
 			received.push(event);
 		});
+		pi.start();
 
 		emitTauEvent(pi, "tau:autoread.requested", payload);
 
@@ -47,6 +55,7 @@ describe("Tau events", () => {
 		onTauEvent(pi, "test.autoread", "tau:autoread.requested", (event) => {
 			received.push(event);
 		});
+		pi.start();
 
 		pi.events.emit("tau:autoread.requested", payload);
 
@@ -59,6 +68,7 @@ describe("Tau events", () => {
 		const unsubscribe = onTauEvent(pi, "test.autoread", "tau:autoread.requested", () => {
 			count += 1;
 		});
+		pi.start();
 
 		emitTauEvent(pi, "tau:autoread.requested", payload);
 		unsubscribe();
@@ -77,6 +87,7 @@ describe("Tau events", () => {
 		onTauEvent(pi, "test.autoread", "tau:autoread.requested", () => {
 			secondCount += 1;
 		});
+		pi.start();
 
 		emitTauEvent(pi, "tau:autoread.requested", payload);
 
@@ -90,6 +101,7 @@ describe("Tau events", () => {
 		onTauEvent(pi, "test.autoread", "tau:autoread.requested", () => {
 			count += 1;
 		});
+		pi.start();
 
 		pi.shutdown();
 		emitTauEvent(pi, "tau:autoread.requested", payload);

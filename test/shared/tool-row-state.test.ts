@@ -13,13 +13,21 @@ const theme = {
 } as unknown as Theme;
 
 interface TestEventAPI extends Pick<ExtensionAPI, "events"> {
+	on(event: "session_start", handler: () => void): void;
 	on(event: "session_shutdown", handler: () => void): void;
+	start(): void;
 }
 
 function eventApi(): TestEventAPI {
+	const startHandlers: Array<() => void> = [];
 	return {
 		events: createEventBus(),
-		on: () => {},
+		on: (event: "session_start" | "session_shutdown", handler: () => void) => {
+			if (event === "session_start") startHandlers.push(handler);
+		},
+		start: () => {
+			for (const handler of startHandlers) handler();
+		},
 	};
 }
 
@@ -27,6 +35,7 @@ describe("tool row state", () => {
 	it("colors normal and pruned titles without status words", async () => {
 		const pi = eventApi();
 		const store = createToolRowStateStore(pi, "test.tool-row-state");
+		pi.start();
 		let invalidations = 0;
 		store.watch("call-1", () => {
 			invalidations += 1;
