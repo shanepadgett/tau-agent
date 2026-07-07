@@ -10,7 +10,7 @@ Malformed patch envelopes fail without changing files. Section-level failures â€
 
 ## How to use
 
-The model calls `patch` automatically when it needs to change files. Patch marker lines may have leading/trailing whitespace.
+Patch marker lines may have leading/trailing whitespace.
 
 Tool arguments must put the patch in the `input` string. Do not use the patch body as a JSON object key.
 

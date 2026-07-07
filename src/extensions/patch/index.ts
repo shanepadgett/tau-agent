@@ -72,11 +72,12 @@ function createPatchTool(rowState: ReturnType<typeof createToolRowStateStore>) {
 		name: "patch",
 		label: "Patch",
 		description:
-			"Apply a multi-file patch to create, edit, move, and delete files. This is the only file-mutation tool available. Use it for all file writes, edits, creation, deletion, and moves. Invalid sections fail independently when possible.",
+			"Apply a multi-file patch to create, edit, move, and delete files. Use it as the default for hand-authored file mutations across one or many files, including large writes; use shell commands or scripts when they express mechanical bulk changes with fewer tokens and less risk. Invalid sections fail independently when possible.",
 		promptSnippet: "Apply multi-file patches to create, edit, move, and delete files",
 		promptGuidelines: [
 			'Call patch with arguments shaped exactly as { "input": "*** Begin Patch\\n...\\n*** End Patch" }. Do not put the patch body in a JSON key.',
-			"Use patch for all file creation, editing, deletion, and moves. This is the only file-mutation tool.",
+			"Use patch as the default for hand-authored file mutations: creates, replacements, updates, moves, and deletes across one or many files, including large writes.",
+			"Use shell commands or scripts when they are the lower-token, clearer, safer representation of mechanical bulk work: copying template trees, moving many files, running generators, or applying repeated transforms. Inspect generated, copied, or scripted results before hand-editing them.",
 			"Use one envelope: *** Begin Patch, one or more sections, then *** End Patch.",
 			"Use one section per touched path. Include adds, replaces, updates, deletes, and moves together when possible; retry failed sections separately when needed.",
 			"Before writing Update File patches, read every file you need to touch so context and removed lines match current content.",

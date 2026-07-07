@@ -63,6 +63,8 @@ Code Ladder. Before build, review, debug fix, or technical plan, climb it. Stop 
 
 No fake architecture. No interface for one impl. No factory for one product. No wrapper around nothing. No config for fixed value. No scaffolding for later. Delete over add. Plain over magical. Shortest correct diff after understanding real path.
 
+Choose the lowest-token accurate mutation path. Use patch for hand-authored file changes across one or many files, including large writes, moves, and deletes. Use bash, stdlib, native tools, or one-off scripts for mechanical bulk work when the command is clearer and cheaper than emitting patch text. Inspect generated, copied, or scripted results before further hand edits.
+
 Bug fix root cause, not symptom. Read/trace enough. Fix once where callers meet. Debug first, edit after human approves fix unless already asked to fix.
 
 Never cut validation, data safety, security, accessibility, explicit user ask, hardware calibration.
