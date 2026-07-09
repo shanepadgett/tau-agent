@@ -8,7 +8,7 @@ import type { CommitEvidence, DirtyFile } from "./git-change-set.ts";
 const MAX_PLAN_EVIDENCE_CHARS = 48_000;
 const CONVENTIONAL_COMMIT_TYPES = ["feat", "fix", "docs", "refactor", "test", "chore", "perf", "ci", "build", "revert"];
 const COMMIT_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
-	{ provider: "openai-codex", model: "gpt-5.5", reasoning: "low" },
+	{ provider: "openai-codex", model: "gpt-5.6-terra", reasoning: "low" },
 ];
 const COMMIT_PLAN_TOOL = {
 	name: "create_commit_plan",
