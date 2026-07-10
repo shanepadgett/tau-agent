@@ -1,12 +1,17 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { createGitRunner, type GitRunner } from "../../shared/git.ts";
 import { errorText } from "../../shared/text.ts";
+import { type BranchChoice, showBranchPanel } from "./panel.ts";
 
 const GIT_FETCH_TIMEOUT_MS = 120_000;
 
-type BranchChoice =
-	| { kind: "local"; label: string; name: string; updatedAt: number }
-	| { kind: "remote"; label: string; name: string; upstream: string; updatedAt: number };
+const LIST_BRANCH_REFS_ARGS = [
+	"for-each-ref",
+	"--sort=-committerdate",
+	"--format=%(refname)%00%(committerdate:unix)%00%(HEAD)%00%(symref)",
+	"refs/heads",
+	"refs/remotes",
+];
 
 export function normalizeBranchName(name: string): string {
 	return name
@@ -30,6 +35,10 @@ export default function branchExtension(pi: ExtensionAPI): void {
 			if (!ctx.hasUI) {
 				const operation = action === "new" ? "creation" : "switching";
 				ctx.ui.notify(`Branch ${operation} requires interactive UI.`, "error");
+				return;
+			}
+			if (action !== "new" && ctx.mode !== "tui") {
+				ctx.ui.notify("Branch switching requires interactive TUI.", "error");
 				return;
 			}
 
@@ -76,35 +85,19 @@ async function chooseBranch(git: GitRunner, ctx: ExtensionCommandContext): Promi
 		return;
 	}
 
-	await git.run(["fetch", "--all"], { cwd: root, timeout: GIT_FETCH_TIMEOUT_MS });
-	const refs = await git.run(
-		[
-			"for-each-ref",
-			"--sort=-committerdate",
-			"--format=%(refname)%00%(committerdate:unix)%00%(HEAD)%00%(symref)",
-			"refs/heads",
-			"refs/remotes",
-		],
-		{ cwd: root },
-	);
-	const choices = parseBranchChoices(refs);
-	if (choices.length === 0) {
-		ctx.ui.notify("No other branches available.", "info");
-		return;
-	}
-
-	const selected = await ctx.ui.select(
-		"Switch branch",
-		choices.map((choice) => choice.label),
-	);
-	if (!selected) return;
-
-	const choice = choices.find((candidate) => candidate.label === selected);
+	const choice = await showBranchPanel(ctx, await loadBranchChoices(git, root), async () => {
+		await git.run(["fetch", "--all"], { cwd: root, timeout: GIT_FETCH_TIMEOUT_MS });
+		return loadBranchChoices(git, root);
+	});
 	if (!choice) return;
 
 	if (choice.kind === "local") await git.run(["switch", choice.name], { cwd: root });
 	else await git.run(["switch", "--track", "-c", choice.name, choice.upstream], { cwd: root });
 	ctx.ui.notify(`Switched to ${choice.name}.`, "info");
+}
+
+async function loadBranchChoices(git: GitRunner, root: string): Promise<BranchChoice[]> {
+	return parseBranchChoices(await git.run(LIST_BRANCH_REFS_ARGS, { cwd: root }));
 }
 
 function parseBranchChoices(output: string): BranchChoice[] {
@@ -125,7 +118,8 @@ function parseBranchChoices(output: string): BranchChoice[] {
 	for (const ref of refs) {
 		if (ref.ref.startsWith(localPrefix)) {
 			const name = ref.ref.slice(localPrefix.length);
-			if (name && !ref.current) choices.push({ kind: "local", label: name, name, updatedAt: ref.updatedAt });
+			if (name && !ref.current)
+				choices.push({ id: `local:${name}`, kind: "local", label: name, name, updatedAt: ref.updatedAt });
 			continue;
 		}
 		if (!ref.ref.startsWith(remotePrefix) || ref.symbolic) continue;
@@ -136,7 +130,7 @@ function parseBranchChoices(output: string): BranchChoice[] {
 		const name = upstream.slice(separator + 1);
 		if (!name || name === "HEAD" || localNames.has(name)) continue;
 		const label = localNames.has(upstream) ? `${upstream} (remote)` : upstream;
-		choices.push({ kind: "remote", label, name, upstream, updatedAt: ref.updatedAt });
+		choices.push({ id: `remote:${upstream}`, kind: "remote", label, name, upstream, updatedAt: ref.updatedAt });
 	}
 
 	return choices.sort((left, right) => right.updatedAt - left.updatedAt || left.label.localeCompare(right.label));
