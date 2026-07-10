@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import { createGitRunner, type GitRunner } from "../../shared/git.ts";
 import { errorText } from "../../shared/text.ts";
 import { type BranchChoice, showBranchPanel } from "./panel.ts";
@@ -23,6 +24,13 @@ export function normalizeBranchName(name: string): string {
 export default function branchExtension(pi: ExtensionAPI): void {
 	pi.registerCommand("branch", {
 		description: "Switch branches, or create one with /branch new",
+		getArgumentCompletions(prefix: string): AutocompleteItem[] | null {
+			const value = prefix.trimStart();
+			if (/\s/.test(value)) return null;
+
+			const item = { value: "new", label: "new", description: "Create a new branch" };
+			return item.value.startsWith(value) ? [item] : null;
+		},
 		handler: async (args, ctx) => {
 			await ctx.waitForIdle();
 
