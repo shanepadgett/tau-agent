@@ -6,9 +6,7 @@ export default defineTauExtensionSettings({
 	defaults: { enabled: true as boolean },
 	schema: Type.Object(
 		{
-			enabled: Type.Optional(
-				Type.Boolean({ default: true, description: "Enable Tau's Rok system prompt and slash-command modes." }),
-			),
+			enabled: Type.Optional(Type.Boolean({ default: true, description: "Enable Tau's Rok system prompt." })),
 		},
 		{ additionalProperties: false },
 	),

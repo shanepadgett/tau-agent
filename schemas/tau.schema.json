@@ -162,7 +162,7 @@
 						"enabled": {
 							"type": "boolean",
 							"default": true,
-							"description": "Enable Tau's Rok system prompt and slash-command modes."
+							"description": "Enable Tau's Rok system prompt."
 						}
 					},
 					"additionalProperties": false
