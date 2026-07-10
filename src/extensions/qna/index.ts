@@ -1,5 +1,3 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { StringEnum, Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
@@ -8,7 +6,6 @@ import { normalizeParams, type QnaParams, type QnaResult } from "./model.ts";
 import { runQnaUi } from "./ui.ts";
 
 const TOOL_ASK_QUESTION = "ask_question";
-const TOOL_INTERVIEW_END = "interview_end";
 
 const optionSchema = Type.Object({
 	value: Type.String({ description: "Stable option value returned in result" }),
@@ -60,8 +57,6 @@ function buildQnaPrompt(context: string): string {
 Additional user context for framing the question:
 ${trimmed}`;
 }
-
-const interviewEndParamsSchema = Type.Object({});
 
 function createAskQuestionTool(pi: ExtensionAPI) {
 	return defineTool<typeof askQuestionParamsSchema, QnaResult>({
@@ -141,53 +136,18 @@ function createAskQuestionTool(pi: ExtensionAPI) {
 
 export default function qnaExtension(pi: ExtensionAPI): void {
 	let qnaActive = false;
-	let interviewPath: string | undefined;
 
 	function syncQnaTools(): void {
 		const active = new Set(pi.getActiveTools());
-		if (qnaActive || interviewPath) active.add(TOOL_ASK_QUESTION);
+		if (qnaActive) active.add(TOOL_ASK_QUESTION);
 		else active.delete(TOOL_ASK_QUESTION);
-		if (interviewPath) active.add(TOOL_INTERVIEW_END);
-		else active.delete(TOOL_INTERVIEW_END);
 		pi.setActiveTools([...active]);
 	}
 
-	const interviewEndTool = defineTool<typeof interviewEndParamsSchema, { path: string }>({
-		name: TOOL_INTERVIEW_END,
-		label: "End Interview",
-		description:
-			"End the active interview after the user confirms the exit condition is satisfied. Update the decisions file before calling this tool.",
-		promptSnippet: "End active interview only after user confirmation and final decisions file update.",
-		promptGuidelines: [
-			"Call interview_end only after the user confirms the interview goal and exit condition are satisfied.",
-			"Before calling interview_end, update the interview decisions file with final coherent decisions, assumptions, and open questions.",
-		],
-		parameters: interviewEndParamsSchema,
-		executionMode: "sequential",
-
-		async execute() {
-			if (!interviewPath) throw new Error("No active interview");
-			const path = interviewPath;
-			interviewPath = undefined;
-			qnaActive = false;
-			syncQnaTools();
-			return {
-				content: [{ type: "text", text: `Interview ended. Decisions file: ${path}` }],
-				details: { path },
-			};
-		},
-
-		renderCall(_args, theme) {
-			return new Text(theme.fg("toolTitle", theme.bold(TOOL_INTERVIEW_END)), 0, 0);
-		},
-	});
-
 	pi.registerTool(createAskQuestionTool(pi));
-	pi.registerTool(interviewEndTool);
 
 	pi.on("session_start", () => {
 		qnaActive = false;
-		interviewPath = undefined;
 		syncQnaTools();
 	});
 	pi.on("tool_result", (event) => {
@@ -213,27 +173,6 @@ export default function qnaExtension(pi: ExtensionAPI): void {
 			syncQnaTools();
 			pi.sendMessage(
 				{ customType: "tau.qna", content: buildQnaPrompt(args), display: false },
-				{ triggerTurn: true },
-			);
-		},
-	});
-
-	pi.registerCommand("interview", {
-		description: "Start a structured interview and create a decisions file",
-		handler: async (args, ctx) => {
-			if (!ctx.isIdle()) {
-				ctx.ui.notify("Agent is busy", "warning");
-				return;
-			}
-
-			const topic = args.trim();
-			const path = await createInterviewFile(ctx.cwd, topic);
-			interviewPath = path;
-			qnaActive = false;
-			syncQnaTools();
-			ctx.ui.notify(`Interview decisions: ${path}`, "info");
-			pi.sendMessage(
-				{ customType: "tau.interview", content: buildInterviewPrompt(path, topic), display: false },
 				{ triggerTurn: true },
 			);
 		},
@@ -303,64 +242,4 @@ function formatNotes(answer: QnaResult["answers"][string], indent: string, value
 			: []
 		: Object.values(answer.optionNotes ?? {});
 	return notes.flatMap((note) => note.split("\n").map((line) => `${indent}└─ ${line}`));
-}
-
-async function createInterviewFile(cwd: string, topic: string): Promise<string> {
-	const dir = join(".working", "interviews", dateTimeStamp());
-	await mkdir(join(cwd, dir), { recursive: true });
-	const path = join(dir, "decisions.md");
-	await writeFile(join(cwd, path), interviewTemplate(topic), { encoding: "utf8", flag: "wx" });
-	return path;
-}
-
-function interviewTemplate(topic: string): string {
-	return `# ${topic || "Interview"}
-
-## Goal
-
-_To confirm._
-
-## Exit Condition
-
-_To confirm._
-
-## Assumptions
-
-- None yet.
-
-## Decisions
-
-- None yet.
-
-## Open Questions
-
-- Confirm interview goal and exit condition.
-`;
-}
-
-function buildInterviewPrompt(path: string, topic: string): string {
-	return `Run a structured interview.${topic ? ` Topic: ${topic}.` : ""}
-
-Decisions file: ${path}
-
-Rules:
-- Treat the decisions file as source of truth for this interview.
-- First confirm the shared goal and exit condition with the user.
-- Always use ask_question for interview questions, including freeform and yes/no.
-- Default to one question at a time.
-- Batch 2-3 questions only when answers are independent and one answer would not change how you ask the others.
-- If unsure whether questions are independent, ask one.
-- If a question can be answered by inspecting repo files, inspect instead of asking.
-- After each user answer, update the decisions file before asking the next question.
-- Prefer focused edits to the relevant section.
-- Do not rewrite the whole decisions file unless coherence requires it: goal shift, contradiction, duplicate cleanup, stale assumptions, or major reorganization.
-- Keep the file coherent over time: remove stale assumptions, duplicates, and contradictions when you touch related sections.
-- If the user contradicts the file and the correct update is unclear, use ask_question before editing.
-- When the exit condition appears satisfied, ask the user to confirm completion with ask_question.
-- After confirmation, update the final decisions file, then call interview_end.
-- Do not call interview_end before user confirmation.`;
-}
-
-function dateTimeStamp(): string {
-	return new Date().toISOString().replace(/[:.]/g, "-");
 }
