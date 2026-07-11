@@ -6,7 +6,7 @@ import { emitTauEvent } from "../../shared/events.ts";
 import { createInjectedContext } from "../../shared/injected-context.ts";
 import { discoverAgents } from "../subagent/agents.ts";
 import { runSubagent } from "../subagent/run.ts";
-import { ContextPanel, ContextPreview, ProposalPanel } from "./panel.ts";
+import { ContextPanel, ProposalPanel } from "./panel.ts";
 import {
 	findProjectRoot,
 	loadContextEntries,
@@ -121,38 +121,19 @@ export default function contextExtension(pi: ExtensionAPI): void {
 				ctx.ui.notify(`No context entries found in ${join(root, ".pi", "contexts")}`, "warning");
 				return;
 			}
-			let previewComponent: ContextPreview | undefined;
-			let closePreview: (() => void) | undefined;
-			const previewOverlay = ctx.ui.custom<void>(
-				(_tui, theme, _keys, done) => {
-					closePreview = () => done(undefined);
-					previewComponent = new ContextPreview(theme, firstEntry);
-					return previewComponent;
-				},
+			const selected = await ctx.ui.custom<ContextEntry[] | undefined>(
+				(tui, theme, _keys, done) => new ContextPanel(tui, theme, entries, done),
 				{
 					overlay: true,
 					overlayOptions: {
 						anchor: "top-center",
-						width: "45%",
-						minWidth: 48,
+						width: "70%",
+						minWidth: 64,
 						maxHeight: "80%",
 						margin: 2,
 					},
-					onHandle: (handle) => handle.unfocus({ target: null }),
 				},
 			);
-			let selected: ContextEntry[] | undefined;
-			try {
-				selected = await ctx.ui.custom(
-					(tui, theme, _keys, done) =>
-						new ContextPanel(tui, theme, entries, done, (entry) => {
-							if (entry) previewComponent?.setEntry(entry);
-						}),
-				);
-			} finally {
-				closePreview?.();
-				await previewOverlay;
-			}
 			if (!selected?.length) return;
 			active = selected;
 			pi.appendEntry("tau.context-selection", { ids: selected.map((entry) => entry.id) });

@@ -1,102 +1,33 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import {
-	type Component,
-	getKeybindings,
-	truncateToWidth,
-	type TUI,
-	visibleWidth,
-	wrapTextWithAnsi,
-} from "@earendil-works/pi-tui";
-import { bindingHint, SelectableList, Tabs, ToolPanel, type ToolPanelConfig } from "@shanepadgett/tau-tui";
+import { type Component, getKeybindings, Key, matchesKey, truncateToWidth, type TUI } from "@earendil-works/pi-tui";
+import { bindingHint, rawHint, SelectableList, Tabs, ToolPanel, type ToolPanelConfig } from "@shanepadgett/tau-tui";
 import type { ContextEntry, ContextProposal } from "./definitions.ts";
 
 type SelectableEntry = ContextEntry & { id: string };
 
-export class ContextPreview implements Component {
-	private readonly theme: Theme;
-	private entry: ContextEntry;
-
-	constructor(theme: Theme, entry: ContextEntry) {
-		this.theme = theme;
-		this.entry = entry;
-	}
-
-	setEntry(entry: ContextEntry): void {
-		this.entry = entry;
-	}
-
-	render(width: number): string[] {
-		const renderWidth = Math.max(1, width);
-		if (renderWidth < 5) return [];
-		const innerWidth = renderWidth - 4;
-		const title = " Context preview ";
-		const breadcrumb = [
-			this.theme.fg("muted", this.entry.tab),
-			this.theme.fg("dim", " / "),
-			this.theme.fg("muted", this.entry.concept),
-			this.theme.fg("dim", " / "),
-			this.theme.fg("accent", this.entry.name),
-		].join("");
-		const content = [
-			...wrapTextWithAnsi(breadcrumb, innerWidth),
-			"",
-			...this.labeledText("Description: ", this.entry.description, innerWidth),
-			"",
-			this.theme.bold("Files:"),
-			...this.entry.files.flatMap((file) => this.fileLines(file, innerWidth)),
-		];
-		const border = (text: string) => this.theme.fg("borderAccent", text);
-		const background = (text: string) => this.theme.bg("customMessageBg", text);
-		const topFill = Math.max(0, renderWidth - title.length - 2);
-		const topLeft = Math.floor(topFill / 2);
-		const topRight = topFill - topLeft;
-		return [
-			background(
-				`${border(`╭${"─".repeat(topLeft)}`)}${this.theme.bold(title)}${border(`${"─".repeat(topRight)}╮`)}`,
-			),
-			...content.map((line) => {
-				const rendered = truncateToWidth(line, innerWidth, "", true);
-				return background(
-					`${border("│")} ${rendered}${" ".repeat(Math.max(0, innerWidth - visibleWidth(rendered)))} ${border("│")}`,
-				);
-			}),
-			background(border(`╰${"─".repeat(renderWidth - 2)}╯`)),
-		];
-	}
-
-	invalidate(): void {}
-
-	private labeledText(label: string, value: string, width: number): string[] {
-		const lines = wrapTextWithAnsi(value, Math.max(1, width - label.length));
-		return lines.map((line, index) => `${index === 0 ? this.theme.bold(label) : " ".repeat(label.length)}${line}`);
-	}
-
-	private fileLines(file: string, width: number): string[] {
-		const lines = wrapTextWithAnsi(file, Math.max(1, width - 2));
-		return lines.map((line, index) => `${index === 0 ? `${this.theme.fg("muted", "•")} ` : "  "}${line}`);
-	}
-}
-
 export class ContextPanel implements Component {
 	private readonly tui: TUI;
+	private readonly theme: Theme;
 	private readonly tabs: Tabs;
 	private readonly panel: ToolPanel;
 	private readonly config: ToolPanelConfig;
 	private readonly lists = new Map<string, SelectableList<SelectableEntry>>();
 	private readonly selected = new Map<string, readonly SelectableEntry[]>();
 	private readonly done: (result: ContextEntry[] | undefined) => void;
-	private readonly onCurrent: (entry: ContextEntry | undefined) => void;
+	private current: ContextEntry;
 
 	constructor(
 		tui: TUI,
 		theme: Theme,
 		entries: readonly ContextEntry[],
 		done: (result: ContextEntry[] | undefined) => void,
-		onCurrent: (entry: ContextEntry | undefined) => void,
 	) {
+		const firstEntry = entries[0];
+		if (!firstEntry) throw new Error("Context panel requires at least one entry");
 		this.tui = tui;
+		this.theme = theme;
 		this.done = done;
-		this.onCurrent = onCurrent;
+		this.current = firstEntry;
 		const tabNames = [...new Set(entries.map((entry) => entry.tab))].sort();
 		this.tabs = new Tabs(
 			theme,
@@ -130,17 +61,25 @@ export class ContextPanel implements Component {
 		this.config = {
 			title: "Project context",
 			secondary: this.secondary(),
-			body: this.tabs,
+			body: this.body(),
 			footer: { kind: "hints", hints: this.hints() },
+			border: "box",
 		};
 		this.panel = new ToolPanel(theme, this.config);
-		this.publishCurrent();
 	}
 
 	handleInput(data: string): void {
 		const list = this.activeList();
 		if (!list?.isFilterFocused()) {
 			const keys = getKeybindings();
+			if (matchesKey(data, Key.ctrl("c"))) {
+				for (const [tab, tabList] of this.lists) {
+					tabList.setSelectedIds([]);
+					this.selected.set(tab, []);
+				}
+				this.sync();
+				return;
+			}
 			if (keys.matches(data, "tui.select.confirm")) {
 				this.done([...this.selected.values()].flatMap((items) => [...items]));
 				return;
@@ -151,7 +90,7 @@ export class ContextPanel implements Component {
 			}
 		}
 		this.tabs.handleInput(data);
-		this.publishCurrent();
+		this.current = this.activeList()?.getCurrentItem() ?? this.current;
 		this.sync();
 	}
 
@@ -165,8 +104,15 @@ export class ContextPanel implements Component {
 	private activeList(): SelectableList<SelectableEntry> | undefined {
 		return this.lists.get(this.tabs.getActiveId());
 	}
-	private publishCurrent(): void {
-		this.onCurrent(this.activeList()?.getCurrentItem());
+	private body(): Component {
+		return {
+			render: (width) => [
+				...this.tabs.render(width),
+				"",
+				...this.current.files.map((file) => truncateToWidth(this.theme.fg("muted", `• ${file}`), width, "…")),
+			],
+			invalidate: () => this.tabs.invalidate(),
+		};
 	}
 	private secondary(): string {
 		return `${[...this.selected.values()].reduce((sum, items) => sum + items.length, 0)} selected`;
@@ -177,6 +123,7 @@ export class ContextPanel implements Component {
 			? list.getKeyHints()
 			: [
 					...this.tabs.getKeyHints(),
+					rawHint("ctrl+c", "clear all"),
 					bindingHint("tui.select.confirm", "inject"),
 					bindingHint("tui.select.cancel", "cancel"),
 				];

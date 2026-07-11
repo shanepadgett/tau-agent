@@ -2,7 +2,7 @@ import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, TUI } from "@earendil-works/pi-tui";
 import { matchesKey } from "@earendil-works/pi-tui";
 import { createAutoreadPreviewWidget } from "./widgets/autoread.ts";
-import { createContextPreviewWidget } from "./widgets/context.ts";
+import { createContextPreviewOverlay } from "./widgets/context.ts";
 import { createFindPreviewWidget } from "./widgets/find.ts";
 import { createGrepPreviewWidget } from "./widgets/grep.ts";
 import { framePreviewWidget } from "./widgets/layout.ts";
@@ -23,7 +23,6 @@ interface PreviewStory {
 
 const STORIES: readonly PreviewStory[] = [
 	{ label: "autoread — line states", createWidget: createAutoreadPreviewWidget },
-	{ label: "context — hover preview", createWidget: createContextPreviewWidget },
 	{ label: "grep — row states", createWidget: createGrepPreviewWidget },
 	{ label: "find — row states", createWidget: createFindPreviewWidget },
 	{ label: "ls — row states", createWidget: createLsPreviewWidget },
@@ -63,11 +62,18 @@ export default function toolPreview(pi: ExtensionAPI): void {
 				return;
 			}
 
-			const label = await ctx.ui.select(
-				"Tool preview",
-				STORIES.map((story) => story.label),
-			);
+			const label = await ctx.ui.select("Tool preview", [
+				"context — selection overlay",
+				...STORIES.map((story) => story.label),
+			]);
 			const story = STORIES.find((item) => item.label === label);
+			if (label === "context — selection overlay") {
+				await ctx.ui.custom((tui, theme, _keys, done) => createContextPreviewOverlay(tui, theme, done), {
+					overlay: true,
+					overlayOptions: { anchor: "center", width: "70%", minWidth: 64, maxHeight: "80%", margin: 2 },
+				});
+				return;
+			}
 			if (!story) return;
 
 			ctx.ui.setWidget(COMMAND, (tui, theme) => framePreviewWidget(theme, story.createWidget(tui, ctx.cwd, theme)), {

@@ -1,5 +1,5 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { type Component, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { type Component, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { renderToolKeyHints, type ToolKeyHint } from "./key-hints.ts";
 
 export type ToolPanelFooter =
@@ -13,6 +13,7 @@ export interface ToolPanelConfig {
 	header?: Component | readonly string[];
 	body: Component;
 	footer: ToolPanelFooter;
+	border?: "horizontal" | "box";
 }
 
 export class ToolPanel implements Component {
@@ -26,22 +27,35 @@ export class ToolPanel implements Component {
 
 	render(width: number): string[] {
 		const renderWidth = Math.max(1, width);
-		const body = this.config.body.render(renderWidth).map((line) => truncateToWidth(line, renderWidth, ""));
-		const footer = this.renderFooter(renderWidth);
+		const boxed = this.config.border === "box" && renderWidth >= 5;
+		const contentWidth = boxed ? renderWidth - 4 : renderWidth;
+		const body = this.config.body.render(contentWidth).map((line) => truncateToWidth(line, contentWidth, ""));
+		const footer = this.renderFooter(contentWidth);
 		const lines: string[] = [];
 
-		lines.push(this.theme.fg("border", "─".repeat(renderWidth)));
-		lines.push(...this.renderTitle(renderWidth));
-		const header = this.renderHeader(renderWidth);
+		if (!boxed) lines.push(this.theme.fg("border", "─".repeat(renderWidth)));
+		lines.push(...this.renderTitle(contentWidth));
+		const header = this.renderHeader(contentWidth);
 		if (header.length > 0) lines.push("");
 		lines.push(...header);
 		if (body.length > 0) lines.push("");
 		lines.push(...body);
 		if (footer.length > 0) lines.push("");
 		lines.push(...footer);
-		lines.push(this.theme.fg("border", "─".repeat(renderWidth)));
+		if (!boxed) {
+			lines.push(this.theme.fg("border", "─".repeat(renderWidth)));
+			return lines;
+		}
 
-		return lines;
+		const border = (text: string) => this.theme.fg("border", text);
+		return [
+			border(`╭${"─".repeat(renderWidth - 2)}╮`),
+			...lines.map((line) => {
+				const content = truncateToWidth(line, contentWidth, "");
+				return `${border("│")} ${content}${" ".repeat(Math.max(0, contentWidth - visibleWidth(content)))} ${border("│")}`;
+			}),
+			border(`╰${"─".repeat(renderWidth - 2)}╯`),
+		];
 	}
 
 	invalidate(): void {
