@@ -13,10 +13,12 @@ export function createPublishPreviewWidget(_tui: TUI, _cwd: string, theme: Theme
 			header: [theme.fg("muted", "GitHub Actions publishes through npm trusted publishing.")],
 			body: new Text(
 				[
-					theme.fg("success", "✓ Release plan confirmed"),
-					theme.fg("success", "✓ Version files updated"),
-					theme.fg("success", "✓ Packages packed"),
-					theme.fg("success", "✓ Tag v0.1.1 pushed"),
+					theme.fg("success", "✓ Release confirmed"),
+					theme.fg("success", "✓ write package versions"),
+					theme.fg("success", "✓ npm pack --dry-run @shanepadgett/tau-tui"),
+					theme.fg("success", "✓ npm pack --dry-run @shanepadgett/tau-agent"),
+					theme.fg("success", "✓ git commit chore(release): v0.1.1"),
+					theme.fg("success", "✓ git push origin v0.1.1"),
 					theme.fg("accent", "… GitHub Actions: publishing"),
 					theme.fg("muted", "  @shanepadgett/tau-tui"),
 					theme.fg("muted", "  @shanepadgett/tau-agent"),

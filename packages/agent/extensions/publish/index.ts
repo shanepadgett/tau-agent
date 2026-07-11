@@ -109,21 +109,25 @@ async function completePublish(
 	progress: PublishProgress | undefined = undefined,
 ): Promise<void> {
 	if (tag) {
-		progress?.update("Updating version files");
+		progress?.update("write package versions");
 		await writeReleaseVersion(root, manifests, version);
 	}
-	progress?.update("Packing packages");
+	progress?.update("npm pack --dry-run @shanepadgett/tau-tui");
 	await run(pi, ctx, "npm", ["pack", "--dry-run", "--workspace", "@shanepadgett/tau-tui"], root);
+	progress?.update("npm pack --dry-run @shanepadgett/tau-agent");
 	await run(pi, ctx, "npm", ["pack", "--dry-run", "--workspace", "@shanepadgett/tau-agent"], root);
 
 	if (tag) {
-		progress?.update("Committing release version");
+		progress?.update("git add release files");
 		await git.run(["add", ...PACKAGE_PATHS, LOCKFILE_PATH], { cwd: root });
+		progress?.update(`git commit chore(release): ${releaseTag}`);
 		await git.run(["commit", "-m", `chore(release): ${releaseTag}`], { cwd: root });
 	}
-	progress?.update(`Pushing ${releaseTag}`);
+	progress?.update(`git tag ${releaseTag}`);
 	await git.run(["tag", releaseTag], { cwd: root });
+	progress?.update("git push origin HEAD");
 	await git.run(["push", "origin", "HEAD"], { cwd: root, timeout: 120_000 });
+	progress?.update(`git push origin ${releaseTag}`);
 	await git.run(["push", "origin", releaseTag], { cwd: root, timeout: 120_000 });
 	progress?.update("Waiting for GitHub Actions");
 	await monitorWorkflow(pi, ctx, root, await git.run(["rev-parse", "HEAD"], { cwd: root }), releaseTag, progress);
