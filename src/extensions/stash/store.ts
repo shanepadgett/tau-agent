@@ -1,16 +1,23 @@
-import { appendRecord, type DatedRecord, loadRecords, recordFilePath, saveRecords } from "../../shared/jsonl-store.ts";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import {
+	appendRecordAtPath,
+	loadRecordsAtPath,
+	saveRecordsAtPath,
+	type DatedRecord,
+} from "../../shared/jsonl-store.ts";
 
 export type Stash = DatedRecord;
 
 const STASH_FILENAME = "stash.jsonl";
 const LABEL = "stash";
 
-export function stashFilePath(cwd: string): Promise<string> {
-	return recordFilePath(cwd, STASH_FILENAME);
+export function stashFilePath(_cwd: string): Promise<string> {
+	return Promise.resolve(join(homedir(), ".pi", "tau", STASH_FILENAME));
 }
 
-export function loadStashes(cwd: string): Promise<Stash[]> {
-	return loadRecords(cwd, STASH_FILENAME, LABEL);
+export async function loadStashes(cwd: string): Promise<Stash[]> {
+	return loadRecordsAtPath(await stashFilePath(cwd), LABEL);
 }
 
 // Returns null when identical text already exists (dedupe), so callers can
@@ -18,12 +25,12 @@ export function loadStashes(cwd: string): Promise<Stash[]> {
 export async function addStash(cwd: string, text: string): Promise<Stash | null> {
 	const trimmed = text.trim();
 	if ((await loadStashes(cwd)).some((stash) => stash.text === trimmed)) return null;
-	return appendRecord(cwd, STASH_FILENAME, trimmed);
+	return appendRecordAtPath(await stashFilePath(cwd), trimmed);
 }
 
 export async function removeStash(cwd: string, id: string): Promise<Stash[]> {
 	const stashes = await loadStashes(cwd);
 	const next = stashes.filter((stash) => stash.id !== id);
-	await saveRecords(cwd, STASH_FILENAME, next);
+	await saveRecordsAtPath(await stashFilePath(cwd), next);
 	return next;
 }

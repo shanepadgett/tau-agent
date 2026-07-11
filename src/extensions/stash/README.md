@@ -13,9 +13,8 @@ stash shortcut  Stash whatever is in the prompt editor (TUI only; check Pi keybi
 
 ## Behavior
 
-- Stashed prompts are stored per repo at `.pi/tau/stash.jsonl`, resolved from
-  the project root (via git toplevel or `.pi/tau/`), so the file is stable
-  regardless of the cwd pi was launched from.
+- Stashed prompts are stored for the user at `~/.pi/tau/stash.jsonl`, shared
+  across repos and pi sessions.
 - The stash shortcut reads the current editor text, trims it, and appends a
   record `{ id, text, createdAt }`. It then clears the editor so you can type a
   different prompt. Nothing happens if the editor is empty.
@@ -43,7 +42,7 @@ restored rather than leaving them to accumulate.
 
 - The stash keybinding and `/pop` browser are TUI-only; there is no print/JSON/
   RPC path (the whole point is interacting with the prompt editor mid-type).
-- The store file lives in the repo. Gitignore `.pi/tau/stash.jsonl` (or `.pi/`)
-  if you do not want stashed drafts committed or shared.
+- The store file lives in the user's home directory and is not part of the
+  repo.
 - Mutations rewrite the whole file (atomic temp + rename); safe for single-user
   TUI use, not designed for concurrent writers.

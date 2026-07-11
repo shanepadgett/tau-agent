@@ -3,9 +3,7 @@ import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises
 import { dirname, join } from "node:path";
 import { resolveProjectRoot } from "./settings/paths.ts";
 
-// Shared storage for per-repo JSONL lists of `{ id, text, createdAt }` records.
-// Backs `ideas` and `stash`; both differ only in filename, error label, and the
-// mutation semantics that live in their own modules.
+// Shared storage for JSONL lists of `{ id, text, createdAt }` records.
 
 export interface DatedRecord {
 	id: string;
@@ -13,9 +11,6 @@ export interface DatedRecord {
 	createdAt: number;
 }
 
-// Per-repo, under `.pi/tau/` so the file is resolved from the project root
-// (stable regardless of the cwd pi was launched from) and lives alongside tau
-// settings.
 export async function recordFilePath(cwd: string, filename: string): Promise<string> {
 	const root = await resolveProjectRoot(cwd);
 	return join(root, ".pi", "tau", filename);
@@ -23,6 +18,10 @@ export async function recordFilePath(cwd: string, filename: string): Promise<str
 
 export async function loadRecords(cwd: string, filename: string, label: string): Promise<DatedRecord[]> {
 	const path = await recordFilePath(cwd, filename);
+	return loadRecordsAtPath(path, label);
+}
+
+export async function loadRecordsAtPath(path: string, label: string): Promise<DatedRecord[]> {
 	let raw: string;
 	try {
 		raw = await readFile(path, "utf8");
@@ -36,6 +35,10 @@ export async function loadRecords(cwd: string, filename: string, label: string):
 
 export async function appendRecord(cwd: string, filename: string, text: string): Promise<DatedRecord> {
 	const path = await recordFilePath(cwd, filename);
+	return appendRecordAtPath(path, text);
+}
+
+export async function appendRecordAtPath(path: string, text: string): Promise<DatedRecord> {
 	const record: DatedRecord = { id: randomUUID(), text: text.trim(), createdAt: Date.now() };
 	await mkdir(dirname(path), { recursive: true });
 	await appendFile(path, `${JSON.stringify(record)}\n`, "utf8");
@@ -46,6 +49,10 @@ export async function appendRecord(cwd: string, filename: string, text: string):
 // over the target. Keeps on-disk order matching display (newest first).
 export async function saveRecords(cwd: string, filename: string, records: readonly DatedRecord[]): Promise<void> {
 	const path = await recordFilePath(cwd, filename);
+	return saveRecordsAtPath(path, records);
+}
+
+export async function saveRecordsAtPath(path: string, records: readonly DatedRecord[]): Promise<void> {
 	await mkdir(dirname(path), { recursive: true });
 	const content = sortByNewest([...records])
 		.map((record) => JSON.stringify(record))
