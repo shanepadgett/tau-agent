@@ -85,10 +85,11 @@ async function runAutoName(
 	myGen: number,
 	prompt: string,
 ): Promise<void> {
+	const ui = ctx.ui;
 	try {
 		const candidates = await resolveCandidates(ctx, AUTO_NAME_MODELS);
 		const result = await generateToolValidated(
-			{ ui: ctx.ui, signal: controller.signal },
+			{ ui, signal: controller.signal },
 			candidates,
 			`${NAMING_PROMPT}\n\n${prompt}`,
 			NAME_SESSION_TOOL,
@@ -108,15 +109,15 @@ async function runAutoName(
 		if (pi.getSessionName()) return;
 
 		pi.setSessionName(result.name);
-		ctx.ui.notify(`Session named: ${result.name}`, "info");
+		ui.notify(`Session named: ${result.name}`, "info");
 	} catch (error) {
 		if (!controller.signal.aborted && myGen === generation) {
-			ctx.ui.notify(`Session naming failed: ${errorText(error)}`, "error");
+			ui.notify(`Session naming failed: ${errorText(error)}`, "error");
 		}
 	} finally {
 		if (activeController === controller) {
 			activeController = undefined;
-			ctx.ui.setStatus(STATUS_KEY, undefined);
+			ui.setStatus(STATUS_KEY, undefined);
 		}
 	}
 }
