@@ -24,6 +24,9 @@
 		"url": "git+https://github.com/shanepadgett/tau-agent.git",
 		"directory": "packages/tui"
 	},
+	"publishConfig": {
+		"access": "public"
+	},
 	"peerDependencies": {
 		"@earendil-works/pi-coding-agent": "*",
 		"@earendil-works/pi-tui": "*"
