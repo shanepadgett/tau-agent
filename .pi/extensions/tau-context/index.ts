@@ -89,10 +89,10 @@ async function run(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void
 async function discoverResources(cwd: string): Promise<Resource[]> {
 	return [
 		...(await discoverExtensionEntries(cwd, ".pi/extensions", "local-extension")),
-		...(await discoverExtensionEntries(cwd, "src/extensions", "tau-extension")),
-		...(await discoverFiles(cwd, ["prompts", ".pi/prompts"], ".md", "prompt")),
-		...(await discoverFiles(cwd, ["themes", ".pi/themes"], ".json", "theme")),
-		...(await discoverSkills(cwd, ["skills", ".pi/skills"])),
+		...(await discoverExtensionEntries(cwd, "packages/agent/extensions", "tau-extension")),
+		...(await discoverFiles(cwd, ["packages/agent/prompts", ".pi/prompts"], ".md", "prompt")),
+		...(await discoverFiles(cwd, ["packages/agent/themes", ".pi/themes"], ".json", "theme")),
+		...(await discoverSkills(cwd, ["packages/agent/skills", ".pi/skills"])),
 	].sort((a, b) => TAB_LABELS[a.kind].localeCompare(TAB_LABELS[b.kind]) || a.name.localeCompare(b.name));
 }
 
@@ -138,7 +138,7 @@ async function discoverSkills(cwd: string, roots: string[]): Promise<Resource[]>
 async function buildContext(cwd: string, resources: Resource[]): Promise<ResourceContext> {
 	const rootFiles = await listRootFiles(cwd);
 	const sharedFiles = resources.some((resource) => resource.kind.endsWith("extension"))
-		? await listFiles(cwd, "src/shared")
+		? await listFiles(cwd, "packages/agent/shared")
 		: [];
 	const resourcesContext = await Promise.all(resources.map((resource) => renderResource(cwd, resource)));
 	const filesByPath = new Map<string, ContextFile>();
