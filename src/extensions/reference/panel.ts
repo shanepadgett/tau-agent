@@ -415,10 +415,22 @@ class ReferencePanel implements Component {
 		this.updating = true;
 		let updated = 0;
 		const failures: string[] = [];
-		for (const item of items) item.state = "updating";
-		this.syncPanel();
-
 		try {
+			const [authenticationReference] = items;
+			if (!authenticationReference) return;
+			try {
+				await this.git.run(["ls-remote", "origin"], {
+					cwd: authenticationReference.path,
+					timeout: UPDATE_TIMEOUT_MS,
+				});
+			} catch (error) {
+				this.ctx.ui.notify(`Reference authentication failed: ${errorText(error)}`, "error");
+				return;
+			}
+
+			for (const item of items) item.state = "updating";
+			this.syncPanel();
+
 			await Promise.all(
 				items.map(async (item) => {
 					try {
