@@ -1,56 +1,11 @@
 {
   "packages": [
+    "../packages/agent",
     {
-      "source": "git:github.com/shanepadgett/tau-agent",
+      "source": "npm:@shanepadgett/tau-agent",
       "extensions": [],
       "skills": [],
-      "prompts": [],
-      "themes": []
-    },
-    {
-      "source": "../packages/agent",
-      "extensions": [
-        "+extensions/appshot/index.ts",
-        "+extensions/attention/index.ts",
-        "+extensions/auto-name/index.ts",
-        "+extensions/branch/index.ts",
-        "+extensions/commit/index.ts",
-        "+extensions/clear-screen/index.ts",
-        "+extensions/explore/index.ts",
-        "+extensions/footer/index.ts",
-        "+extensions/ideas/index.ts",
-        "+extensions/manage-sessions/index.ts",
-        "+extensions/patch/index.ts",
-        "+extensions/qna/index.ts",
-        "+extensions/reference/index.ts",
-        "+extensions/run-summary/index.ts",
-        "+extensions/silent-command-runner/index.ts",
-        "+extensions/soul/index.ts",
-        "+extensions/stash/index.ts",
-        "+extensions/subagent/index.ts",
-        "+extensions/tau/index.ts",
-        "+extensions/turn-budget/index.ts",
-        "+extensions/web/index.ts"
-      ],
-      "skills": [
-        "+skills/writing-preferences/SKILL.md"
-      ],
-      "prompts": [
-        "+prompts/cavemanify.md",
-        "+prompts/implement.md",
-        "+prompts/interview.md",
-        "+prompts/plan-feature.md",
-        "+prompts/plan-implementation.md"
-      ]
+      "prompts": []
     }
-  ],
-  "extensions": [
-    "+extensions/bash-toggle/index.ts",
-    "+extensions/glm-xhigh/index.ts",
-    "+extensions/system-prompt-viewer/index.ts",
-    "+extensions/tau-context/index.ts",
-    "+extensions/tau-new/index.ts",
-    "+extensions/tau-schema-sync/index.ts",
-    "+extensions/tool-preview/index.ts"
   ]
 }
