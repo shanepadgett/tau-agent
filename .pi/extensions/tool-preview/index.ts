@@ -7,6 +7,7 @@ import { createGrepPreviewWidget } from "./widgets/grep.ts";
 import { framePreviewWidget } from "./widgets/layout.ts";
 import { createLsPreviewWidget } from "./widgets/ls.ts";
 import { createPatchPreviewWidget } from "./widgets/patch.ts";
+import { createPublishPreviewWidget } from "./widgets/publish.ts";
 import { createReadPreviewWidget } from "./widgets/read.ts";
 import { createTabsListPreviewWidget } from "./widgets/tabs-list.ts";
 import { createToolPanelPreviewWidget } from "./widgets/tool-panel.ts";
@@ -25,6 +26,7 @@ const STORIES: readonly PreviewStory[] = [
 	{ label: "find — row states", createWidget: createFindPreviewWidget },
 	{ label: "ls — row states", createWidget: createLsPreviewWidget },
 	{ label: "patch — row states", createWidget: createPatchPreviewWidget },
+	{ label: "publish — activity panel", createWidget: createPublishPreviewWidget },
 	{ label: "read — row states", createWidget: createReadPreviewWidget },
 	{ label: "tabs-list — Tabs and SelectableList", createWidget: createTabsListPreviewWidget },
 	{ label: "tool-panel — shell states", createWidget: createToolPanelPreviewWidget },
