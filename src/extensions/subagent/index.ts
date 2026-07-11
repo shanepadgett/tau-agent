@@ -178,9 +178,13 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 		warn(discovery, ctx);
 		const lines = [...discovery.agents.values()]
 			.sort((a, b) => a.name.localeCompare(b.name))
-			.map((agent) => `- ${agent.name}: ${agent.description} (tools: ${agent.tools.join(", ")})`);
+			.map((agent) => `- ${agent.name}: ${agent.description}`);
+		const prompt = `## Subagents\nUse \`subagent\` when an available agent matches a focused part of the task.\n\nAvailable agents for this turn:\n${lines.join("\n")}\n\nDelegate one focused task per call. Children do not inherit parent messages. Include exact absolute reference paths when a child must inspect a repository outside the current working directory.`;
+		event.systemPromptOptions.appendSystemPrompt = event.systemPromptOptions.appendSystemPrompt
+			? `${event.systemPromptOptions.appendSystemPrompt}\n\n${prompt}`
+			: prompt;
 		return {
-			systemPrompt: `${event.systemPrompt}\n\n## Subagents\n${lines.join("\n")}\nDelegate one focused task per call. Children do not inherit parent messages. Include exact absolute reference paths when a child must inspect a repository outside the current working directory.`,
+			systemPrompt: `${event.systemPrompt}\n\n${prompt}`,
 		};
 	});
 	pi.on("tool_result", (event) => {
