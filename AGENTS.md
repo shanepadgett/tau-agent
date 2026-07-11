@@ -52,6 +52,10 @@
 
 - Creating Tau extension, prompt, theme, or skill? Recommend `/tau-new <extension|prompt|theme|skill>`. Do not enforce.
 
+## Tau Help Maintenance
+
+- When adding, removing, renaming, or changing the basic usage of a Tau extension or prompt, update `src/extensions/tau-help/help.md` in the same change.
+
 ## Commands
 
 - Never commit or open PRs.
