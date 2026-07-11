@@ -96,6 +96,24 @@ describe("explore read", () => {
 		}
 	});
 
+	it("optionally returns source line numbers without duplicating content", async () => {
+		const workspace = await createWorkspace();
+		try {
+			await workspace.write("file.txt", "one\ntwo\nthree\nfour");
+			const tool = createExploreReadTool(testRowState);
+			const result = await tool.execute(
+				"read",
+				{ path: "file.txt", offset: 2, limit: 2, lineNumbers: true },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			);
+			expect(firstText(result)).toBe("2: two\n3: three\n\n[1 more lines in file. Use offset=4 to continue.]");
+		} finally {
+			await workspace.cleanup();
+		}
+	});
+
 	it("renders collapsed errors command-only and expanded errors with body", () => {
 		const tool = createExploreReadTool(testRowState);
 		const result = {

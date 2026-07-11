@@ -98,16 +98,17 @@ export default function footerExtension(pi: ExtensionAPI): void {
 
 	async function refreshGit(ctx: ExtensionContext): Promise<void> {
 		if (gitRefresh) return gitRefresh;
+		const cwd = ctx.cwd;
 		gitRefresh = (async () => {
 			const result = await pi.exec(
 				"git",
 				["--no-optional-locks", "status", "--porcelain=v1", "--branch", "--untracked-files=normal"],
-				{ cwd: ctx.cwd, timeout: 1_000 },
+				{ cwd, timeout: 1_000 },
 			);
-			gitByCwd.set(ctx.cwd, result.code === 0 ? parseGitStatus(result.stdout) : undefined);
+			gitByCwd.set(cwd, result.code === 0 ? parseGitStatus(result.stdout) : undefined);
 		})()
 			.catch(() => {
-				gitByCwd.set(ctx.cwd, undefined);
+				gitByCwd.set(cwd, undefined);
 			})
 			.finally(() => {
 				gitRefresh = undefined;
@@ -280,8 +281,14 @@ function isConflict(x: string | undefined, y: string | undefined): boolean {
 function sessionCost(ctx: ExtensionContext): UsageSummary {
 	let usage = zeroUsage();
 	for (const entry of ctx.sessionManager.getBranch()) {
-		if (entry.type !== "message" || entry.message.role !== "assistant") continue;
-		usage = addUsage(usage, normalizeUsage((entry.message as AssistantMessage).usage));
+		if (entry.type !== "message") continue;
+		if (entry.message.role === "assistant") {
+			usage = addUsage(usage, normalizeUsage((entry.message as AssistantMessage).usage));
+			continue;
+		}
+		if (entry.message.role !== "toolResult" || entry.message.toolName !== "subagent") continue;
+		const childUsage = subagentUsage(entry.message.details);
+		if (childUsage) usage = addUsage(usage, childUsage);
 	}
 	return usage;
 }
@@ -336,13 +343,22 @@ async function scanDailyCost(): Promise<number> {
 				const entry = parseRecord(line);
 				if (!entry || entry.type !== "message") continue;
 				const message = asRecord(entry.message);
-				if (message?.role !== "assistant") continue;
+				if (!message) continue;
 				const timestamp = timestampMs(message.timestamp, entry.timestamp);
 				if (timestamp < range.startMs || timestamp >= range.endMs) continue;
-				const usage = normalizeUsage(message.usage);
+				let usage: UsageSummary;
+				let identity: unknown[];
+				if (message.role === "assistant") {
+					usage = normalizeUsage(message.usage);
+					identity = [message.provider, message.model];
+				} else if (message.role === "toolResult" && message.toolName === "subagent") {
+					const childUsage = subagentUsage(message.details);
+					if (!childUsage) continue;
+					usage = childUsage;
+					identity = ["subagent", message.toolCallId];
+				} else continue;
 				const key = [
-					message.provider,
-					message.model,
+					...identity,
 					timestamp,
 					usage.input,
 					usage.output,
@@ -410,6 +426,24 @@ function normalizeUsage(value: unknown): UsageSummary {
 		cacheWrite,
 		latestCacheHitRate: promptTokens > 0 ? (cacheRead / promptTokens) * 100 : undefined,
 		cost: costTotal,
+	};
+}
+
+function subagentUsage(details: unknown): UsageSummary | undefined {
+	const usage = asRecord(asRecord(details)?.usage);
+	if (!usage) return undefined;
+	const input = numberOrZero(usage.input);
+	const output = numberOrZero(usage.output);
+	const cacheRead = numberOrZero(usage.cacheRead);
+	const cacheWrite = numberOrZero(usage.cacheWrite);
+	const promptTokens = input + cacheRead + cacheWrite;
+	return {
+		input,
+		output,
+		cacheRead,
+		cacheWrite,
+		latestCacheHitRate: promptTokens > 0 ? (cacheRead / promptTokens) * 100 : undefined,
+		cost: numberOrZero(usage.cost),
 	};
 }
 

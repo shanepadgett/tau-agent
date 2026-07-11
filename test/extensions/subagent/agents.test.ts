@@ -1,0 +1,66 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { discoverAgents, findProjectAgentsDir } from "../../../src/extensions/subagent/agents.ts";
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+	await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+});
+
+async function project(): Promise<{ root: string; cwd: string; agents: string }> {
+	const root = await mkdtemp(join(tmpdir(), "tau-subagent-agents-"));
+	temporaryDirectories.push(root);
+	const cwd = join(root, "nested", "cwd");
+	const agents = join(root, ".pi", "tau", "agents");
+	await Promise.all([mkdir(cwd, { recursive: true }), mkdir(agents, { recursive: true })]);
+	return { root, cwd, agents };
+}
+
+describe("subagent discovery", () => {
+	it("loads built-ins and uses the nearest trusted project override", async () => {
+		const paths = await project();
+		await writeFile(
+			join(paths.agents, "scout.md"),
+			"---\nname: scout\ndescription: Project scout\ntools:\n  - read\n---\n\nProject-only prompt.\n",
+		);
+
+		expect(await findProjectAgentsDir(paths.cwd)).toBe(paths.agents);
+		const trusted = await discoverAgents(paths.cwd, true);
+		expect(trusted.agents.get("scout")?.description).toBe("Project scout");
+		expect(trusted.agents.has("web-research")).toBe(true);
+
+		const untrusted = await discoverAgents(paths.cwd, false);
+		expect(untrusted.agents.get("scout")?.description).not.toBe("Project scout");
+	});
+
+	it("blocks a malformed higher-precedence definition without blocking unrelated agents", async () => {
+		const paths = await project();
+		await writeFile(
+			join(paths.agents, "scout.md"),
+			"---\nname: scout\ndescription: Broken\ntools:\n  - subagent\nextra: nope\n---\n\nprompt\n",
+		);
+
+		const discovery = await discoverAgents(paths.cwd, true);
+		expect(discovery.agents.has("scout")).toBe(false);
+		expect(discovery.invalid.get("scout")?.[0]?.reason).toContain("unsupported field");
+		expect(discovery.invalid.get("scout")?.[0]?.reason).toContain("forbidden");
+		expect(discovery.agents.has("web-research")).toBe(true);
+	});
+
+	it("invalidates duplicate names within one scope", async () => {
+		const paths = await project();
+		const definition = (description: string) =>
+			`---\nname: duplicate\ndescription: ${description}\ntools:\n  - read\n---\n\nprompt\n`;
+		await Promise.all([
+			writeFile(join(paths.agents, "one.md"), definition("One")),
+			writeFile(join(paths.agents, "two.md"), definition("Two")),
+		]);
+
+		const discovery = await discoverAgents(paths.cwd, true);
+		expect(discovery.agents.has("duplicate")).toBe(false);
+		expect(discovery.invalid.get("duplicate")).toHaveLength(2);
+	});
+});

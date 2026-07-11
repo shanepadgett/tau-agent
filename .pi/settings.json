@@ -15,11 +15,14 @@
         "-src/extensions/patch/index.ts",
         "-src/extensions/qna/index.ts",
         "-src/extensions/reference/index.ts",
+        "-src/extensions/run-summary/index.ts",
         "-src/extensions/silent-command-runner/index.ts",
         "-src/extensions/soul/index.ts",
         "-src/extensions/stash/index.ts",
+        "-src/extensions/subagent/index.ts",
         "-src/extensions/tau/index.ts",
-        "-src/extensions/turn-budget/index.ts"
+        "-src/extensions/turn-budget/index.ts",
+        "-src/extensions/web/index.ts"
       ],
       "skills": [
         "-skills/writing-preferences/SKILL.md"
