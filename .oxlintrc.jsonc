@@ -29,13 +29,13 @@
 			{
 				"object": "pi",
 				"property": "events",
-				"message": "Use src/shared/events.ts so Tau owns event cleanup and dedupe."
+				"message": "Use packages/agent/shared/events.ts so Tau owns event cleanup and dedupe."
 			},
 		],
 	},
 	"overrides": [
 		{
-			"files": ["src/shared/events.ts", "test/**/*.ts"],
+			"files": ["packages/agent/shared/events.ts", "packages/agent/test/**/*.ts"],
 			"rules": {
 				"no-restricted-properties": "off",
 			},

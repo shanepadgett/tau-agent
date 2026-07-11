@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { setTauFooterItem } from "../../../src/shared/events.ts";
+import { setTauFooterItem } from "../../../packages/agent/shared/events.ts";
 
 const COMMAND = "bash";
 const FOOTER_ID = "bash-toggle";

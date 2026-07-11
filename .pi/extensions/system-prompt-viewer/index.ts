@@ -1,6 +1,6 @@
 import { type ExtensionAPI, keyText, type Theme, type ToolInfo } from "@earendil-works/pi-coding-agent";
 import { Box, Text } from "@earendil-works/pi-tui";
-import { setTauFooterItem } from "../../../src/shared/events.ts";
+import { setTauFooterItem } from "../../../packages/agent/shared/events.ts";
 
 const COMMAND = "system-prompt-viewer";
 const MESSAGE_TYPE = "tau.system-prompt-viewer.snapshot";

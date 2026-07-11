@@ -4,18 +4,18 @@
 {
   "entry": [
     ".pi/extensions/*/index.ts",
-    "src/extensions/*/index.ts",
-    "scripts/generate-tau-schema.ts"
+    "packages/agent/extensions/*/index.ts",
+    "packages/tui/src/index.ts",
+    "packages/agent/scripts/generate-tau-schema.ts"
   ],
   "includeEntryExports": true,
   "ignorePatterns": [
-    "src/shared/description.ts",
-    "src/shared/injected-context.ts",
-		"src/shared/tui/tabbed-multi-select.ts"
+    "packages/agent/shared/description.ts",
+    "packages/agent/shared/injected-context.ts"
   ],
   "ignoreExports": [
     {
-      "file": "src/extensions/*/index.ts",
+      "file": "packages/agent/extensions/*/index.ts",
       "exports": ["default"]
     },
     {

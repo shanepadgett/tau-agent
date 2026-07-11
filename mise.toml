@@ -19,15 +19,15 @@ depends = ["check:markdown"]
 
 [tasks.generate-schema]
 description = "Generate Tau settings schema"
-run = "node --experimental-strip-types scripts/generate-tau-schema.ts --write"
+run = "node --experimental-strip-types packages/agent/scripts/generate-tau-schema.ts --write"
 
 [tasks."check:schema"]
 description = "Check Tau settings schema drift"
-run = "node --experimental-strip-types scripts/generate-tau-schema.ts --check"
+run = "node --experimental-strip-types packages/agent/scripts/generate-tau-schema.ts --check"
 
 [tasks."check:style"]
 description = "Run Oxfmt and Oxlint fixes"
-run = "oxfmt --write 'src/**/*.ts' '.pi/extensions/**/*.ts' 'test/**/*.ts' 'scripts/**/*.ts' && oxlint --fix --format=agent src .pi/extensions test scripts"
+run = "oxfmt --write 'packages/**/*.ts' '.pi/extensions/**/*.ts' && oxlint --fix --format=agent packages .pi/extensions"
 
 [tasks."check:markdown"]
 description = "Run Markdown checks"

@@ -110,3 +110,6 @@ recordings/
 *.local.*
 TODO.local.md
 scratch/
+
+# Pi session HTML dumps
+pi-session-*.html

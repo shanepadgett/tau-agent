@@ -15,6 +15,10 @@
 		"rewriteRelativeImportExtensions": true,
 		"types": ["node"]
 	},
-	"include": ["src/**/*.ts", ".pi/extensions/**/*.ts", "test/**/*.ts"],
+	"include": [
+		"packages/agent/**/*.ts",
+		"packages/tui/**/*.ts",
+		".pi/extensions/**/*.ts"
+	],
 	"exclude": ["node_modules", "dist"]
 }

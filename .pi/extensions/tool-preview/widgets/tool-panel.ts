@@ -1,7 +1,7 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Container, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
-import { bindingHint, rawHint } from "../../../../src/shared/tui/key-hints.ts";
-import { ToolPanel, type ToolPanelFooter } from "../../../../src/shared/tui/tool-panel.ts";
+import { bindingHint, rawHint } from "@shanepadgett/tau-tui";
+import { ToolPanel, type ToolPanelFooter } from "@shanepadgett/tau-tui";
 
 export function createToolPanelPreviewWidget(_tui: TUI, _cwd: string, theme: Theme): Container {
 	const container = new Container();

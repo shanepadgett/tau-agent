@@ -3,12 +3,12 @@ import { readdir, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, getKeybindings, truncateToWidth } from "@earendil-works/pi-tui";
-import { emitTauEvent } from "../../../src/shared/events.ts";
-import { INJECTED_CONTEXT_TYPE } from "../../../src/shared/injected-context.ts";
-import { bindingHint } from "../../../src/shared/tui/key-hints.ts";
-import { SelectableList } from "../../../src/shared/tui/selectable-list.ts";
-import { Tabs } from "../../../src/shared/tui/tabs.ts";
-import { ToolPanel, type ToolPanelConfig } from "../../../src/shared/tui/tool-panel.ts";
+import { emitTauEvent } from "../../../packages/agent/shared/events.ts";
+import { INJECTED_CONTEXT_TYPE } from "../../../packages/agent/shared/injected-context.ts";
+import { bindingHint } from "@shanepadgett/tau-tui";
+import { SelectableList } from "@shanepadgett/tau-tui";
+import { Tabs } from "@shanepadgett/tau-tui";
+import { ToolPanel, type ToolPanelConfig } from "@shanepadgett/tau-tui";
 
 type ResourceKind = "local-extension" | "tau-extension" | "prompt" | "theme" | "skill";
 

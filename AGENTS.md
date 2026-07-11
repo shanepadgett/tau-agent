@@ -3,7 +3,7 @@
 ## General
 
 - Extension tool changes need user `/reload` before testing.
-- Keep active work files under `.working/`. Tracked dir. Use `docs/` only for Tau Agent user docs.
+- Keep active work files under `.working/`. Tracked dir. Use `packages/agent/docs/` only for Tau Agent user docs.
 
 ## Scope and Behavior
 
@@ -39,7 +39,7 @@
 
 ## TUI
 
-- Before creating or updating TUI components here, read `docs/tui.md`.
+- Before creating or updating TUI components here, read `packages/agent/docs/tui.md`.
 - Never hardcode keybinding hints in TUI components. Use `keyText`/`keyHint` from `@earendil-works/pi-coding-agent` so remaps work.
 
 ## Tool Use
@@ -54,7 +54,7 @@
 
 ## Tau Help Maintenance
 
-- When adding, removing, renaming, or changing the basic usage of a Tau extension or prompt, update `src/extensions/tau-help/help.md` in the same change.
+- When adding, removing, renaming, or changing the basic usage of a Tau extension or prompt, update `packages/agent/extensions/tau-help/help.md` in the same change.
 
 ## Commands
 

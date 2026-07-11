@@ -1,9 +1,9 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Container, Key, Spacer, Text, type TUI, truncateToWidth } from "@earendil-works/pi-tui";
-import { rawHint } from "../../../../src/shared/tui/key-hints.ts";
-import { SelectableList, type SelectableListItem } from "../../../../src/shared/tui/selectable-list.ts";
-import { Tabs } from "../../../../src/shared/tui/tabs.ts";
-import { ToolPanel } from "../../../../src/shared/tui/tool-panel.ts";
+import { rawHint } from "@shanepadgett/tau-tui";
+import { SelectableList, type SelectableListItem } from "@shanepadgett/tau-tui";
+import { Tabs } from "@shanepadgett/tau-tui";
+import { ToolPanel } from "@shanepadgett/tau-tui";
 
 interface PreviewSession extends SelectableListItem {
 	name: string;

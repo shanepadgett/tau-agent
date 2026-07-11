@@ -1,36 +1,30 @@
 {
-	"name": "tau-agent",
+	"name": "tau-agent-monorepo",
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"description": "Tau is a custom agentic harness built with pi extensions",
+	"description": "Tau Agent monorepo",
 	"license": "MIT",
-	"dependencies": {
-		"@toon-format/toon": "2.3.0"
-	},
+	"workspaces": [
+		"packages/*"
+	],
 	"scripts": {
 		"fallow:pi-scope": "node --experimental-strip-types .pi/extensions/.fallow-scope.ts",
 		"test:unit": "vitest --run --reporter=agent"
 	},
 	"pi": {
 		"extensions": [
-			"./src/extensions/*/index.ts"
+			"./packages/agent/extensions/*/index.ts"
 		],
 		"skills": [
-			"./skills"
+			"./packages/agent/skills"
 		],
 		"prompts": [
-			"./prompts"
+			"./packages/agent/prompts"
 		],
 		"themes": [
-			"./themes"
+			"./packages/agent/themes"
 		]
-	},
-	"peerDependencies": {
-		"@earendil-works/pi-ai": "^0.80.6",
-		"@earendil-works/pi-coding-agent": "^0.80.6",
-		"@earendil-works/pi-tui": "^0.80.6",
-		"typebox": "^1.1.38"
 	},
 	"devDependencies": {
 		"@earendil-works/pi-ai": "0.80.6",

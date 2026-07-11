@@ -1,10 +1,10 @@
 import { defineTool, type Theme, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
 import { Container, type TUI } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import type { ApplyPatchSummary } from "../../../../src/extensions/patch/executor.ts";
-import { renderPatchCall, renderPatchResult } from "../../../../src/extensions/patch/render.ts";
-import { formatPatchSummary } from "../../../../src/extensions/patch/summary.ts";
-import type { ToolRowStateStore } from "../../../../src/shared/tool-row-state.ts";
+import type { ApplyPatchSummary } from "../../../../packages/agent/extensions/patch/executor.ts";
+import { renderPatchCall, renderPatchResult } from "../../../../packages/agent/extensions/patch/render.ts";
+import { formatPatchSummary } from "../../../../packages/agent/extensions/patch/summary.ts";
+import type { ToolRowStateStore } from "../../../../packages/agent/shared/tool-row-state.ts";
 import { addMessageBox, addPageTitle, addSampleTitle, addSection } from "./layout.ts";
 
 interface PatchPreviewSpec {

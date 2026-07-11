@@ -1,6 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Container, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
-import { Marker } from "../../../../src/shared/tui/marker.ts";
+import { Marker } from "@shanepadgett/tau-tui";
 import { addMessageBox, addSectionHeading } from "./layout.ts";
 
 interface TurnBudgetSample {

@@ -1,0 +1,54 @@
+{
+	"name": "@shanepadgett/tau-agent",
+	"version": "0.1.0",
+	"description": "Tau is a custom agentic harness built with pi extensions",
+	"type": "module",
+	"license": "MIT",
+	"keywords": [
+		"pi-package",
+		"tau",
+		"coding-agent"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/shanepadgett/tau-agent.git",
+		"directory": "packages/agent"
+	},
+	"files": [
+		"extensions/**/*",
+		"shared/**/*",
+		"prompts/**/*",
+		"skills/**/*",
+		"themes/**/*",
+		"docs/**/*",
+		"schemas/**/*",
+		"README.md"
+	],
+	"dependencies": {
+		"@shanepadgett/tau-tui": "0.1.0",
+		"@toon-format/toon": "2.3.0"
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-ai": "*",
+		"@earendil-works/pi-coding-agent": "*",
+		"@earendil-works/pi-tui": "*",
+		"typebox": "*"
+	},
+	"pi": {
+		"extensions": [
+			"./extensions/*/index.ts"
+		],
+		"skills": [
+			"./skills"
+		],
+		"prompts": [
+			"./prompts"
+		],
+		"themes": [
+			"./themes"
+		]
+	},
+	"engines": {
+		"node": ">=22.19.0"
+	}
+}

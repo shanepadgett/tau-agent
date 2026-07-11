@@ -1,5 +1,5 @@
 {
-	"$schema": "../../schemas/tau.schema.json",
+	"$schema": "../../packages/agent/schemas/tau.schema.json",
 	"extensions": {
 		"soul": {
 			"enabled": true
@@ -17,16 +17,14 @@
 					"command": "mise run check:ts",
 					"details": "Runs Tau schema drift check, Oxfmt formatting, Oxlint lint fixes, TypeScript (tsgo) checks, unit tests, and Fallow dead-code/duplication checks.",
 					"includeGlobs": [
-						"src/**/*.ts",
+						"packages/**/*.ts",
 						".pi/extensions/**/*.ts",
-						"test/**/*.ts",
-						"scripts/**/*.ts",
-						".oxfmtrc.jsonc",
-						".oxlintrc.jsonc",
-						"mise.toml",
 						"package.json",
 						"package-lock.json",
-						"tsconfig.json"
+						"tsconfig.json",
+						"mise.toml",
+						".oxfmtrc.jsonc",
+						".oxlintrc.jsonc"
 					]
 				},
 				{

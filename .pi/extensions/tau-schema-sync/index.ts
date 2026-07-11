@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { promisify } from "node:util";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { listSettingsFiles } from "../../../src/shared/settings/files.ts";
+import { listSettingsFiles } from "../../../packages/agent/shared/settings/files.ts";
 
 const execFileAsync = promisify(execFile);
 const SETTINGS_ROOT = join("src", "extensions");

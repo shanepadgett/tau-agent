@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, SlashCommandSource } from "@earendil-works/pi-coding-agent";
-import { promptForDescription } from "../../../src/shared/description.ts";
+import { promptForDescription } from "../../../packages/agent/shared/description.ts";
 
 const KINDS = ["extension", "prompt", "theme", "skill"] as const;
 const PLACEMENTS = ["tau", "local"] as const;
