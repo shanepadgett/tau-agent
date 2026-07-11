@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { createGitRunner, type GitRunner, loadRepoStatus } from "../../shared/git.ts";
 import { errorText } from "../../shared/text.ts";
+import { PublishActivityPanel, type PublishProgress } from "./publish-ui.ts";
 
 const PACKAGE_PATHS = ["packages/tui/package.json", "packages/agent/package.json"] as const;
 const LOCKFILE_PATH = "package-lock.json";
@@ -38,14 +39,10 @@ export default function publishExtension(pi: ExtensionAPI): void {
 				ctx.ui.notify("Publishing requires interactive confirmation.", "error");
 				return;
 			}
-			ctx.ui.setStatus("publish", "preparing release");
 			try {
 				await publish(pi, ctx);
 			} catch (error) {
 				ctx.ui.notify(`Publish failed: ${errorText(error)}`, "error");
-			} finally {
-				ctx.ui.setStatus("publish", undefined);
-				ctx.ui.setWidget("publish", undefined);
 			}
 		},
 	});
@@ -86,19 +83,50 @@ async function publish(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<
 	);
 	if (!confirmed) return;
 
-	if (tag) await writeReleaseVersion(repo.root, manifests, finalVersion);
-	ctx.ui.setStatus("publish", "packing packages");
-	await run(pi, ctx, "npm", ["pack", "--dry-run", "--workspace", "@shanepadgett/tau-tui"], repo.root);
-	await run(pi, ctx, "npm", ["pack", "--dry-run", "--workspace", "@shanepadgett/tau-agent"], repo.root);
+	if (ctx.mode !== "tui") {
+		await completePublish(pi, ctx, git, repo.root, manifests, tag, finalVersion, releaseTag);
+		return;
+	}
+	const failure = await ctx.ui.custom<Error | undefined>((tui, theme, _keybindings, done) => {
+		const progress = new PublishActivityPanel(tui, theme, releaseTag);
+		void completePublish(pi, ctx, git, repo.root, manifests, tag, finalVersion, releaseTag, progress)
+			.then(() => done(undefined))
+			.catch((error) => done(error instanceof Error ? error : new Error(errorText(error))));
+		return progress;
+	});
+	if (failure) throw failure;
+}
+
+async function completePublish(
+	pi: ExtensionAPI,
+	ctx: ExtensionCommandContext,
+	git: GitRunner,
+	root: string,
+	manifests: readonly PackageManifest[],
+	tag: string | undefined,
+	version: string,
+	releaseTag: string,
+	progress: PublishProgress | undefined = undefined,
+): Promise<void> {
+	if (tag) {
+		progress?.update("Updating version files");
+		await writeReleaseVersion(root, manifests, version);
+	}
+	progress?.update("Packing packages");
+	await run(pi, ctx, "npm", ["pack", "--dry-run", "--workspace", "@shanepadgett/tau-tui"], root);
+	await run(pi, ctx, "npm", ["pack", "--dry-run", "--workspace", "@shanepadgett/tau-agent"], root);
 
 	if (tag) {
-		await git.run(["add", ...PACKAGE_PATHS, LOCKFILE_PATH], { cwd: repo.root });
-		await git.run(["commit", "-m", `chore(release): ${releaseTag}`], { cwd: repo.root });
+		progress?.update("Committing release version");
+		await git.run(["add", ...PACKAGE_PATHS, LOCKFILE_PATH], { cwd: root });
+		await git.run(["commit", "-m", `chore(release): ${releaseTag}`], { cwd: root });
 	}
-	await git.run(["tag", releaseTag], { cwd: repo.root });
-	await git.run(["push", "origin", "HEAD"], { cwd: repo.root, timeout: 120_000 });
-	await git.run(["push", "origin", releaseTag], { cwd: repo.root, timeout: 120_000 });
-	await monitorWorkflow(pi, ctx, repo.root, await git.run(["rev-parse", "HEAD"], { cwd: repo.root }), releaseTag);
+	progress?.update(`Pushing ${releaseTag}`);
+	await git.run(["tag", releaseTag], { cwd: root });
+	await git.run(["push", "origin", "HEAD"], { cwd: root, timeout: 120_000 });
+	await git.run(["push", "origin", releaseTag], { cwd: root, timeout: 120_000 });
+	progress?.update("Waiting for GitHub Actions");
+	await monitorWorkflow(pi, ctx, root, await git.run(["rev-parse", "HEAD"], { cwd: root }), releaseTag, progress);
 }
 
 async function loadManifests(root: string): Promise<PackageManifest[]> {
@@ -188,6 +216,7 @@ async function monitorWorkflow(
 	root: string,
 	sha: string,
 	tag: string,
+	progress: PublishProgress | undefined = undefined,
 ): Promise<void> {
 	const deadline = Date.now() + WORKFLOW_WAIT_MS;
 	while (Date.now() < deadline) {
@@ -211,10 +240,19 @@ async function monitorWorkflow(
 		);
 		const workflowRun = (JSON.parse(output) as WorkflowRun[])[0];
 		if (workflowRun) {
-			ctx.ui.setWidget("publish", [`Release ${tag}`, `GitHub Actions: ${workflowRun.status}`, workflowRun.url]);
+			progress?.update(`GitHub Actions: ${workflowRun.status}`, workflowRun.url);
 			if (workflowRun.status === "completed") {
 				if (workflowRun.conclusion === "success") {
-					ctx.ui.notify(`Published ${tag}: ${workflowRun.url}`, "info");
+					const version = tag.slice(1);
+					ctx.ui.notify(
+						[
+							`Published ${tag}`,
+							`GitHub Actions: ${workflowRun.url}`,
+							`npm TUI: https://www.npmjs.com/package/@shanepadgett/tau-tui/v/${version}`,
+							`npm Agent: https://www.npmjs.com/package/@shanepadgett/tau-agent/v/${version}`,
+						].join("\n"),
+						"info",
+					);
 					return;
 				}
 				throw new Error(`GitHub Actions ${workflowRun.conclusion ?? "failed"}: ${workflowRun.url}`);
