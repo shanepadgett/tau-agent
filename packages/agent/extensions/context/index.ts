@@ -140,13 +140,7 @@ export default function contextExtension(pi: ExtensionAPI): void {
 			const files = [...new Set(selected.flatMap((entry) => entry.files))].sort();
 			pi.sendMessage(
 				createInjectedContext(
-					[
-						"# Project context",
-						"",
-						...selected.map(
-							(entry) => `- ${entry.tab} / ${entry.conceptName} / ${entry.name}: ${entry.description}`,
-						),
-					].join("\n"),
+					"Treat the autoread files as the authoritative project context and current snapshots. Do not reread them or search for coverage around them. Start work from them immediately. Explore outside them only when the user's request or concrete evidence in those files requires missing code or information.",
 					{ source: "context", title: "Project context" },
 				),
 			);
@@ -336,7 +330,7 @@ export default function contextExtension(pi: ExtensionAPI): void {
 	pi.on("before_agent_start", (event) =>
 		active.length
 			? {
-					systemPrompt: `${event.systemPrompt}\n\nThe user selected repository context entries: ${active.map((entry) => entry.id).join(", ")}. Their files were injected through Tau autoread. Start there. Search outside them only when the request, code references, or validation requires it.`,
+					systemPrompt: `${event.systemPrompt}\n\nTreat the autoread files as the authoritative project context and current snapshots. Do not reread them or search for coverage around them. Start work from them immediately. Explore outside them only when the user's request or concrete evidence in those files requires missing code or information.`,
 				}
 			: undefined,
 	);
