@@ -42,6 +42,7 @@ export interface SubagentDetails {
 	response?: string;
 	error?: string;
 	currentActivity?: string;
+	toolCalls: number;
 	actions: SubagentAction[];
 	omittedActions: number;
 	omittedErrors: number;
@@ -129,10 +130,36 @@ export async function runSubagent(options: {
 	thinkingLevel: string;
 	signal: AbortSignal;
 	onUpdate?: (details: SubagentDetails) => void | Promise<void>;
+	onWarning?: (warning: string) => void;
 }): Promise<{ content: string; details: SubagentDetails }> {
-	const { definition, task, ctx, thinkingLevel, signal, onUpdate } = options;
+	const { definition, task, ctx, thinkingLevel: parentThinkingLevel, signal, onUpdate, onWarning } = options;
 	const started = Date.now();
-	const modelName = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "unavailable";
+	let model = ctx.model;
+	let thinkingLevel = parentThinkingLevel;
+	if (definition.model) {
+		const separator = definition.model.indexOf("/");
+		const configured = ctx.modelRegistry.find(
+			definition.model.slice(0, separator),
+			definition.model.slice(separator + 1),
+		);
+		if (!configured) onWarning?.(`model ${definition.model} is unavailable; using parent model`);
+		else {
+			const auth = await ctx.modelRegistry.getApiKeyAndHeaders(configured);
+			if (!auth.ok) onWarning?.(`model ${definition.model} is unavailable: ${auth.error}; using parent model`);
+			else model = configured;
+		}
+	}
+	if (definition.thinking) {
+		const mapped = model?.thinkingLevelMap?.[definition.thinking];
+		const unsupported =
+			!model?.reasoning ||
+			mapped === null ||
+			((definition.thinking === "xhigh" || definition.thinking === "max") && mapped === undefined);
+		if (unsupported)
+			onWarning?.(`thinking ${definition.thinking} is unavailable for the selected model; using parent thinking`);
+		else thinkingLevel = definition.thinking;
+	}
+	const modelName = model ? `${model.provider}/${model.id}` : "unavailable";
 	const usage: SubagentUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 0 };
 	const details: SubagentDetails = {
 		agent: definition.name,
@@ -141,6 +168,7 @@ export async function runSubagent(options: {
 		task,
 		model: modelName,
 		thinkingLevel,
+		toolCalls: 0,
 		actions: [],
 		omittedActions: 0,
 		omittedErrors: 0,
@@ -161,13 +189,13 @@ export async function runSubagent(options: {
 		updateChain = updateChain.then(() => onUpdate?.(snapshot)).catch(() => undefined);
 	};
 	try {
-		if (!ctx.model) throw new Error(`Agent ${definition.name} startup failed: parent has no model`);
-		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
+		if (!model) throw new Error(`Agent ${definition.name} startup failed: parent has no model`);
+		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 		if (!auth.ok) throw new Error(`Agent ${definition.name} startup failed: ${auth.error}`);
 		if (signal.aborted) throw new Error(`Agent ${definition.name} startup aborted`);
 		const created = await createAgentSession({
 			cwd: ctx.cwd,
-			model: ctx.model,
+			model,
 			thinkingLevel: thinkingLevel as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
 			modelRegistry: ctx.modelRegistry,
 			tools: definition.tools,
@@ -191,6 +219,7 @@ export async function runSubagent(options: {
 				details.response = capped(textOf(event.message), PREVIEW_LIMIT);
 				publish();
 			} else if (event.type === "tool_execution_start") {
+				details.toolCalls += 1;
 				const summary = `${event.toolName} ${capped(event.args)}`.trim();
 				actionById.set(event.toolCallId, summary);
 				details.currentActivity = summary;

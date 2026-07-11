@@ -63,4 +63,16 @@ describe("subagent discovery", () => {
 		expect(discovery.agents.has("duplicate")).toBe(false);
 		expect(discovery.invalid.get("duplicate")).toHaveLength(2);
 	});
+
+	it("loads model and thinking overrides", async () => {
+		const paths = await project();
+		await writeFile(
+			join(paths.agents, "custom.md"),
+			"---\nname: custom\ndescription: Custom\ntools:\n  - read\nmodel: openai-codex/gpt-5.6-sol\nthinking: medium\n---\n\nprompt\n",
+		);
+
+		const definition = (await discoverAgents(paths.cwd, true)).agents.get("custom");
+		expect(definition?.model).toBe("openai-codex/gpt-5.6-sol");
+		expect(definition?.thinking).toBe("medium");
+	});
 });

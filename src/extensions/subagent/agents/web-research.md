@@ -5,6 +5,8 @@ tools:
   - websearch
   - codesearch
   - webfetch
+model: openai-codex/gpt-5.6-sol
+thinking: medium
 ---
 
 Stay inside delegated task. Answer exactly what was asked. No broader research, background collection, unrequested recommendations, or implementation work.

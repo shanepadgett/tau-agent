@@ -14,6 +14,7 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 	const gate = new FifoGate(4);
 	const controllers = new Set<AbortController>();
 	const fingerprints = new Map<string, string>();
+	const runtimeWarnings = new Set<string>();
 	const rowState = createToolRowStateStore(pi, "subagent.tool-row-state");
 	const warn = (discovery: AgentDiscovery, ctx: ExtensionContext) => {
 		const current = new Set<string>();
@@ -55,6 +56,7 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 							phase: "queue",
 							model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "unavailable",
 							thinkingLevel,
+							toolCalls: 0,
 							actions: [],
 							omittedActions: 0,
 							omittedErrors: 0,
@@ -80,6 +82,7 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 							phase: "discovery",
 							model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "unavailable",
 							thinkingLevel,
+							toolCalls: 0,
 							actions: [],
 							omittedActions: 0,
 							omittedErrors: 0,
@@ -103,6 +106,7 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 							phase: "queue",
 							model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "unavailable",
 							thinkingLevel,
+							toolCalls: 0,
 							actions: [],
 							omittedActions: 0,
 							omittedErrors: 0,
@@ -121,6 +125,7 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 							phase: "queue",
 							model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "unavailable",
 							thinkingLevel,
+							toolCalls: 0,
 							actions: [],
 							omittedActions: 0,
 							omittedErrors: 0,
@@ -136,6 +141,12 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 						ctx,
 						thinkingLevel,
 						signal: combined,
+						onWarning: (warning) => {
+							const message = `Subagent definition ${definition.path}: ${warning}`;
+							if (runtimeWarnings.has(message)) return;
+							runtimeWarnings.add(message);
+							ctx.ui.notify(message, "warning");
+						},
 						onUpdate: (details) =>
 							onUpdate?.({
 								content: [
@@ -192,7 +203,10 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 		const details = event.details as SubagentDetails | undefined;
 		if (details?.status === "failed" || details?.status === "aborted") return { isError: true };
 	});
-	pi.on("session_start", () => rowState.clear());
+	pi.on("session_start", () => {
+		rowState.clear();
+		runtimeWarnings.clear();
+	});
 	pi.on("session_shutdown", () => {
 		for (const controller of controllers) controller.abort();
 		controllers.clear();

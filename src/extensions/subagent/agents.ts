@@ -8,9 +8,13 @@ export interface AgentDefinition {
 	name: string;
 	description: string;
 	tools: string[];
+	model?: string;
+	thinking?: ThinkingLevel;
 	prompt: string;
 	path: string;
 }
+
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 export interface AgentDiagnostic {
 	path: string;
@@ -60,7 +64,8 @@ function parseDefinition(
 		const name = typeof rawName === "string" && rawName.trim() ? rawName.trim() : fallbackName;
 		const reasons: string[] = [];
 		for (const field of fields) {
-			if (!new Set(["name", "description", "tools"]).has(field)) reasons.push(`unsupported field "${field}"`);
+			if (!new Set(["name", "description", "tools", "model", "thinking"]).has(field))
+				reasons.push(`unsupported field "${field}"`);
 		}
 		if (typeof rawName !== "string" || !rawName.trim()) reasons.push("name must be a non-empty string");
 		const rawDescription = parsed.frontmatter.description;
@@ -77,12 +82,21 @@ function parseDefinition(
 			if (tools.includes("subagent")) reasons.push("tool subagent is forbidden");
 		}
 		if (!parsed.body.trim()) reasons.push("prompt body must be non-empty");
+		const rawModel = parsed.frontmatter.model;
+		if (rawModel !== undefined && (typeof rawModel !== "string" || !/^[^/\s]+\/[^/\s]+$/.test(rawModel.trim())))
+			reasons.push("model must be a provider/model string");
+		const rawThinking = parsed.frontmatter.thinking;
+		const thinkingLevels: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+		if (rawThinking !== undefined && !thinkingLevels.includes(rawThinking as ThinkingLevel))
+			reasons.push(`thinking must be one of ${thinkingLevels.join(", ")}`);
 		if (reasons.length > 0) return { diagnostic: { path, name, reason: reasons.join("; ") } };
 		return {
 			definition: {
 				name,
 				description: (rawDescription as string).trim(),
 				tools: (rawTools as string[]).map((tool) => tool.trim()),
+				model: typeof rawModel === "string" ? rawModel.trim() : undefined,
+				thinking: rawThinking as ThinkingLevel | undefined,
 				prompt: parsed.body.trim(),
 				path,
 			},

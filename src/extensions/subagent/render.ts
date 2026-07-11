@@ -1,11 +1,29 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
+import { Text, truncateToWidth, type Component } from "@earendil-works/pi-tui";
 import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.js";
 import type { SubagentDetails } from "./run.ts";
 
 const cap = (text: string | undefined, length = 240) =>
 	!text ? "" : text.length <= length ? text : `${text.slice(0, length - 1)}…`;
-const component = (last: unknown) => (last as Text | undefined) ?? new Text("", 0, 0);
+class SubagentText implements Component {
+	private readonly text = new Text("", 0, 0);
+	private value = "";
+	private truncate = false;
+	setText(value: string, truncate = false): void {
+		this.value = value;
+		this.text.setText(value);
+		this.truncate = truncate;
+	}
+	render(width: number): string[] {
+		return this.truncate
+			? this.value.split("\n").map((line) => truncateToWidth(line, width))
+			: this.text.render(width);
+	}
+	invalidate(): void {
+		this.text.invalidate();
+	}
+}
+const component = (last: unknown) => (last as SubagentText | undefined) ?? new SubagentText();
 const title = (theme: Theme, rowState: ToolRowStateStore, rowId: string, invalidate: () => void) => {
 	rowState.watch(rowId, invalidate);
 	return formatToolRowTitle(rowState, rowId, "subagent", theme);
@@ -21,14 +39,15 @@ export function renderSubagentCall(
 		rowId: string;
 		invalidate: () => void;
 	},
-): Text {
+): Component {
 	const text = component(context.lastComponent);
 	if (context.executionStarted) {
 		text.setText("");
 		return text;
 	}
 	text.setText(
-		`${title(theme, context.rowState, context.rowId, context.invalidate)}  ${theme.fg("accent", args.agent ?? "")} ${theme.fg("muted", cap(args.task, 120))}`.trimEnd(),
+		`${title(theme, context.rowState, context.rowId, context.invalidate)}  ${theme.fg("accent", args.agent ?? "")} ${theme.fg("muted", args.task ?? "")}`.trimEnd(),
+		true,
 	);
 	return text;
 }
@@ -38,16 +57,16 @@ export function renderSubagentResult(
 	expanded: boolean,
 	theme: Theme,
 	context: { lastComponent?: unknown; rowState: ToolRowStateStore; rowId: string; invalidate: () => void },
-): Text {
+): Component {
 	const text = component(context.lastComponent);
 	const details = result.details;
 	if (!details) {
 		text.setText("");
 		return text;
 	}
-	const header = `${title(theme, context.rowState, context.rowId, context.invalidate)}  ${theme.fg(details.status === "completed" ? "success" : details.status === "running" || details.status === "waiting" ? "warning" : "error", `${details.agent} · ${details.status}`)}  ${theme.fg("muted", `$${details.usage.cost.toFixed(4)} · ${(details.durationMs / 1000).toFixed(1)}s`)}`;
+	const header = `${title(theme, context.rowState, context.rowId, context.invalidate)}  ${theme.fg("accent", details.agent)}  ${theme.fg("muted", `$${details.usage.cost.toFixed(4)} · ${(details.durationMs / 1000).toFixed(1)}s · ${details.toolCalls} tools`)}`;
 	if (!expanded) {
-		text.setText(header);
+		text.setText(`${header}\n${theme.fg("muted", details.task)}`, true);
 		return text;
 	}
 	const lines = [header, theme.fg("muted", `Task: ${cap(details.task, 1000)}`)];
