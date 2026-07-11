@@ -2,40 +2,47 @@
   "packages": [
     {
       "source": "git:github.com/shanepadgett/tau-agent",
+      "extensions": [],
+      "skills": [],
+      "prompts": [],
+      "themes": []
+    },
+    {
+      "source": "..",
       "extensions": [
-        "-src/extensions/attention/index.ts",
-        "-src/extensions/auto-name/index.ts",
-        "-src/extensions/branch/index.ts",
-        "-src/extensions/clear-screen/index.ts",
-        "-src/extensions/commit/index.ts",
-        "-src/extensions/explore/index.ts",
-        "-src/extensions/footer/index.ts",
-        "-src/extensions/ideas/index.ts",
-        "-src/extensions/manage-sessions/index.ts",
-        "-src/extensions/patch/index.ts",
-        "-src/extensions/qna/index.ts",
-        "-src/extensions/reference/index.ts",
-        "-src/extensions/run-summary/index.ts",
-        "-src/extensions/silent-command-runner/index.ts",
-        "-src/extensions/soul/index.ts",
-        "-src/extensions/stash/index.ts",
-        "-src/extensions/subagent/index.ts",
-        "-src/extensions/tau/index.ts",
-        "-src/extensions/turn-budget/index.ts",
-        "-src/extensions/web/index.ts"
+        "+src/extensions/appshot/index.ts",
+        "+src/extensions/attention/index.ts",
+        "+src/extensions/auto-name/index.ts",
+        "+src/extensions/branch/index.ts",
+        "+src/extensions/commit/index.ts",
+        "+src/extensions/clear-screen/index.ts",
+        "+src/extensions/explore/index.ts",
+        "+src/extensions/footer/index.ts",
+        "+src/extensions/ideas/index.ts",
+        "+src/extensions/manage-sessions/index.ts",
+        "+src/extensions/patch/index.ts",
+        "+src/extensions/qna/index.ts",
+        "+src/extensions/reference/index.ts",
+        "+src/extensions/run-summary/index.ts",
+        "+src/extensions/silent-command-runner/index.ts",
+        "+src/extensions/soul/index.ts",
+        "+src/extensions/stash/index.ts",
+        "+src/extensions/subagent/index.ts",
+        "+src/extensions/tau/index.ts",
+        "+src/extensions/turn-budget/index.ts",
+        "+src/extensions/web/index.ts"
       ],
       "skills": [
-        "-skills/writing-preferences/SKILL.md"
+        "+skills/writing-preferences/SKILL.md"
       ],
       "prompts": [
-        "-prompts/cavemanify.md",
-        "-prompts/implement.md",
-        "-prompts/interview.md",
-        "-prompts/plan-feature.md",
-        "-prompts/plan-implementation.md"
+        "+prompts/cavemanify.md",
+        "+prompts/implement.md",
+        "+prompts/interview.md",
+        "+prompts/plan-feature.md",
+        "+prompts/plan-implementation.md"
       ]
-    },
-    ".."
+    }
   ],
   "extensions": [
     "+extensions/bash-toggle/index.ts",
