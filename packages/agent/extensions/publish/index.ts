@@ -160,8 +160,9 @@ async function writeReleaseVersion(
 		packages: Record<string, PackageManifest>;
 	};
 	for (const path of PACKAGE_PATHS) {
-		const manifest = lockfile.packages[path];
-		if (!manifest) throw new Error(`Missing lockfile package: ${path}`);
+		const lockfilePath = path.slice(0, -"/package.json".length);
+		const manifest = lockfile.packages[lockfilePath];
+		if (!manifest) throw new Error(`Missing lockfile package: ${lockfilePath}`);
 		manifest.version = version;
 		if (manifest.name === "@shanepadgett/tau-agent" && manifest.dependencies)
 			manifest.dependencies["@shanepadgett/tau-tui"] = version;
