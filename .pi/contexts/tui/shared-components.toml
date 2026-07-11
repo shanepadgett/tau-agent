@@ -1,0 +1,62 @@
+name = "Shared components"
+description = "Reusable Tau TUI panels, tabs, and selectors"
+
+[all]
+description = "Every shared Tau TUI component and package export"
+files = [
+  "packages/tui/src/editor-theme.ts",
+  "packages/tui/src/filter-row.ts",
+  "packages/tui/src/index.ts",
+  "packages/tui/src/key-hints.ts",
+  "packages/tui/src/list-render.ts",
+  "packages/tui/src/marker.ts",
+  "packages/tui/src/selectable-list.ts",
+  "packages/tui/src/tabs.ts",
+  "packages/tui/src/text-record-select-panel.ts",
+  "packages/tui/src/text.ts",
+  "packages/tui/src/tool-panel.ts",
+  "packages/tui/src/viewport.ts",
+  "packages/tui/README.md",
+  "packages/tui/package.json",
+  "packages/agent/docs/tui.md",
+]
+
+[panel]
+description = "Focused bordered tool panel shell"
+files = [
+  "packages/tui/src/tool-panel.ts",
+  "packages/tui/src/key-hints.ts",
+]
+
+[tabs]
+description = "Tabbed focused-flow composition"
+files = [
+  "packages/tui/src/tabs.ts",
+]
+
+[selection]
+description = "Filtered single-select and multi-select lists"
+files = [
+  "packages/tui/src/selectable-list.ts",
+  "packages/tui/src/filter-row.ts",
+  "packages/tui/src/list-render.ts",
+  "packages/tui/src/viewport.ts",
+]
+
+[visuals]
+description = "Editor theme, markers, text formatting, and record selection composition"
+files = [
+  "packages/tui/src/editor-theme.ts",
+  "packages/tui/src/marker.ts",
+  "packages/tui/src/text-record-select-panel.ts",
+  "packages/tui/src/text.ts",
+]
+
+[package-surface]
+description = "Public exports, package metadata, and key hint helpers"
+files = [
+  "packages/tui/src/index.ts",
+  "packages/tui/src/key-hints.ts",
+  "packages/tui/package.json",
+  "packages/tui/README.md",
+]

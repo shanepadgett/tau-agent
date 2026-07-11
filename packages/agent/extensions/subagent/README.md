@@ -4,9 +4,10 @@ Subagent delegates one focused task to an isolated child Pi session. It keeps th
 
 Agent definitions can override the parent model and thinking level. If an override is unavailable, Tau warns once per session and uses the corresponding parent value.
 
-Tau includes two read-only agents:
+Tau includes three read-only agents:
 
 - `scout` explores local files and code with `read`, `grep`, `find`, and `ls`.
+- `context-research` researches reusable repository context entries with `read`, `grep`, `find`, and `ls`.
 - `web-research` researches web and code sources with `websearch`, `codesearch`, and `webfetch`.
 
 Ask Tau to delegate a task, or let it call `subagent` with an agent name and task. Children use the parent's current working directory and inherit its model and thinking level unless their definition overrides either value. They do not receive the parent conversation. When a child must inspect another repository, put its exact absolute path in the delegated task.

@@ -2,6 +2,7 @@ import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, TUI } from "@earendil-works/pi-tui";
 import { matchesKey } from "@earendil-works/pi-tui";
 import { createAutoreadPreviewWidget } from "./widgets/autoread.ts";
+import { createContextPreviewWidget } from "./widgets/context.ts";
 import { createFindPreviewWidget } from "./widgets/find.ts";
 import { createGrepPreviewWidget } from "./widgets/grep.ts";
 import { framePreviewWidget } from "./widgets/layout.ts";
@@ -22,6 +23,7 @@ interface PreviewStory {
 
 const STORIES: readonly PreviewStory[] = [
 	{ label: "autoread — line states", createWidget: createAutoreadPreviewWidget },
+	{ label: "context — hover preview", createWidget: createContextPreviewWidget },
 	{ label: "grep — row states", createWidget: createGrepPreviewWidget },
 	{ label: "find — row states", createWidget: createFindPreviewWidget },
 	{ label: "ls — row states", createWidget: createLsPreviewWidget },

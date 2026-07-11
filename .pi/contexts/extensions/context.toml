@@ -1,0 +1,44 @@
+name = "Context"
+description = "Reusable repository context selection and maintenance"
+
+[all]
+description = "Every Context file, direct shared dependency, research integration, test, and user-facing document"
+files = [
+  "packages/agent/extensions/context/definitions.ts",
+  "packages/agent/extensions/context/index.ts",
+  "packages/agent/extensions/context/panel.ts",
+  "packages/agent/extensions/context/README.md",
+  "packages/agent/shared/events.ts",
+  "packages/agent/shared/injected-context.ts",
+  "packages/agent/extensions/subagent/agents.ts",
+  "packages/agent/extensions/subagent/run.ts",
+  "packages/agent/extensions/subagent/agents/context-research.md",
+  "packages/agent/test/extensions/context/definitions.test.ts",
+  "packages/agent/extensions/tau-help/help.md",
+  "packages/agent/docs/extending-tau-agent.md",
+  "packages/agent/docs/subagents.md",
+]
+
+[definitions]
+description = "TOML loading, validation, project boundaries, and atomic updates"
+files = [
+  "packages/agent/extensions/context/definitions.ts",
+]
+
+[selection]
+description = "Tabbed context selector, hover previews, and autoread injection"
+files = [
+  "packages/agent/extensions/context/index.ts",
+  "packages/agent/extensions/context/panel.ts",
+  "packages/agent/shared/events.ts",
+  "packages/agent/shared/injected-context.ts",
+]
+
+[research]
+description = "Read-only proposal research and approval flow"
+files = [
+  "packages/agent/extensions/context/index.ts",
+  "packages/agent/extensions/subagent/agents/context-research.md",
+  "packages/agent/extensions/subagent/agents.ts",
+  "packages/agent/extensions/subagent/run.ts",
+]

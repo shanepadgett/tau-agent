@@ -29,7 +29,8 @@
 	],
 	"dependencies": {
 		"@shanepadgett/tau-tui": "0.4.0",
-		"@toon-format/toon": "2.3.0"
+		"@toon-format/toon": "2.3.0",
+		"smol-toml": "1.4.2"
 	},
 	"peerDependencies": {
 		"@earendil-works/pi-ai": "*",

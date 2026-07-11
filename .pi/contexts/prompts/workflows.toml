@@ -1,0 +1,22 @@
+name = "Workflow prompts"
+description = "Reusable planning and implementation prompt commands"
+
+[planning]
+description = "Feature and implementation planning workflows"
+files = [
+  "packages/agent/prompts/plan-feature.md",
+  "packages/agent/prompts/plan-implementation.md",
+]
+
+[implementation]
+description = "Approved implementation workflow"
+files = [
+  "packages/agent/prompts/implement.md",
+  "packages/agent/prompts/cavemanify.md",
+]
+
+[interview]
+description = "Requirements clarification workflow"
+files = [
+  "packages/agent/prompts/interview.md",
+]

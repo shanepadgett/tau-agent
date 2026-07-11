@@ -1,0 +1,29 @@
+name = "Footer"
+description = "Complete and bounded context for the footer extension"
+
+[all]
+description = "Every extension file, direct shared dependency, test, and user-facing help"
+files = [
+  "packages/agent/extensions/footer/README.md",
+  "packages/agent/extensions/footer/index.ts",
+  "packages/agent/extensions/footer/settings.ts",
+  "packages/agent/extensions/tau-help/help.md",
+  "packages/agent/shared/events.ts",
+  "packages/agent/shared/settings/define.ts",
+  "packages/agent/shared/settings/load.ts",
+]
+[runtime]
+description = "Extension runtime and direct shared dependencies"
+files = [
+  "packages/agent/extensions/footer/index.ts",
+  "packages/agent/shared/events.ts",
+  "packages/agent/shared/settings/define.ts",
+  "packages/agent/shared/settings/load.ts",
+]
+[settings]
+description = "Extension settings and shared settings infrastructure"
+files = [
+  "packages/agent/extensions/footer/settings.ts",
+  "packages/agent/shared/settings/define.ts",
+  "packages/agent/shared/settings/load.ts",
+]

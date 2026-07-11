@@ -127,6 +127,10 @@ async function loadScope(
 		return new Map([
 			["scout", [{ path: directory, name: "scout", reason: `packaged agents unavailable: ${reason}` }]],
 			[
+				"context-research",
+				[{ path: directory, name: "context-research", reason: `packaged agents unavailable: ${reason}` }],
+			],
+			[
 				"web-research",
 				[{ path: directory, name: "web-research", reason: `packaged agents unavailable: ${reason}` }],
 			],

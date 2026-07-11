@@ -1,0 +1,54 @@
+name = "Web"
+description = "Complete and bounded context for the web extension"
+
+[all]
+description = "Every extension file, direct shared dependency, test, and user-facing help"
+files = [
+  "packages/agent/extensions/tau-help/help.md",
+  "packages/agent/extensions/web/README.md",
+  "packages/agent/extensions/web/codesearch.ts",
+  "packages/agent/extensions/web/exa.ts",
+  "packages/agent/extensions/web/html.ts",
+  "packages/agent/extensions/web/index.ts",
+  "packages/agent/extensions/web/limits.ts",
+  "packages/agent/extensions/web/tool-output.ts",
+  "packages/agent/extensions/web/webfetch.ts",
+  "packages/agent/extensions/web/websearch.ts",
+  "packages/agent/shared/tool-row-state.ts",
+  "packages/agent/test/extensions/web/exa.test.ts",
+  "packages/agent/test/extensions/web/helpers.ts",
+  "packages/agent/test/extensions/web/html.test.ts",
+  "packages/agent/test/extensions/web/tools.test.ts",
+  "packages/agent/test/extensions/web/webfetch.test.ts",
+]
+[runtime]
+description = "Extension runtime and direct shared dependencies"
+files = [
+  "packages/agent/extensions/web/codesearch.ts",
+  "packages/agent/extensions/web/exa.ts",
+  "packages/agent/extensions/web/html.ts",
+  "packages/agent/extensions/web/index.ts",
+  "packages/agent/extensions/web/limits.ts",
+  "packages/agent/extensions/web/tool-output.ts",
+  "packages/agent/extensions/web/webfetch.ts",
+  "packages/agent/extensions/web/websearch.ts",
+  "packages/agent/shared/tool-row-state.ts",
+]
+[tests]
+description = "Extension implementation and automated tests"
+files = [
+  "packages/agent/extensions/web/codesearch.ts",
+  "packages/agent/extensions/web/exa.ts",
+  "packages/agent/extensions/web/html.ts",
+  "packages/agent/extensions/web/index.ts",
+  "packages/agent/extensions/web/limits.ts",
+  "packages/agent/extensions/web/tool-output.ts",
+  "packages/agent/extensions/web/webfetch.ts",
+  "packages/agent/extensions/web/websearch.ts",
+  "packages/agent/shared/tool-row-state.ts",
+  "packages/agent/test/extensions/web/exa.test.ts",
+  "packages/agent/test/extensions/web/helpers.ts",
+  "packages/agent/test/extensions/web/html.test.ts",
+  "packages/agent/test/extensions/web/tools.test.ts",
+  "packages/agent/test/extensions/web/webfetch.test.ts",
+]

@@ -26,6 +26,10 @@ Adds `/clear-screen` to clear terminal output without changing the session.
 
 Adds `/commit` for semantic commit grouping, review, and committing selected repository changes.
 
+## context
+
+Adds `/context` to select reusable repository work scopes from `.pi/contexts`, and `/context-manage <idea>` to research and approve new entries. Folder names are tabs, TOML files are concepts, and TOML sections are selectable entries.
+
 ## explore
 
 Replaces Pi’s filesystem inspection tools with compact Tau versions: `ls`, `find`, `grep`, and `read`. They produce smaller model payloads and readable tool rows. `read` includes focused line ranges; `grep`, `find`, and `ls` keep discovery output compact so the agent spends fewer tokens rereading directory and search results.
@@ -80,7 +84,7 @@ Adds `Alt+S` to stash the current prompt draft and `/pop` to browse stashed draf
 
 ## subagent
 
-Gives Tau a subagent delegation tool for isolated, focused work. You can also create your own subagents in the supported subagent directories. Ask Tau how to do it and have it consult the extension’s own documentation; the built-in `scout` and `web-research` subagents show the pattern. Each subagent can register its own model and the tools it is allowed to use.
+Gives Tau a subagent delegation tool for isolated, focused work. You can also create your own subagents in the supported subagent directories. Ask Tau how to do it and have it consult the extension’s own documentation; the built-in `scout`, `context-research`, and `web-research` subagents show the pattern. Each subagent can register its own model and the tools it is allowed to use.
 
 ## tau-help
 

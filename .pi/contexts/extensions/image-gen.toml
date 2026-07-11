@@ -1,0 +1,27 @@
+name = "Image Gen"
+description = "Complete and bounded context for the image-gen extension"
+
+[all]
+description = "Every extension file, direct shared dependency, test, and user-facing help"
+files = [
+  "packages/agent/extensions/image-gen/README.md",
+  "packages/agent/extensions/image-gen/client.ts",
+  "packages/agent/extensions/image-gen/index.ts",
+  "packages/agent/extensions/tau-help/help.md",
+  "packages/agent/test/extensions/image-gen/client.test.ts",
+  "packages/agent/test/extensions/image-gen/index.test.ts",
+]
+[runtime]
+description = "Extension runtime and direct shared dependencies"
+files = [
+  "packages/agent/extensions/image-gen/client.ts",
+  "packages/agent/extensions/image-gen/index.ts",
+]
+[tests]
+description = "Extension implementation and automated tests"
+files = [
+  "packages/agent/extensions/image-gen/client.ts",
+  "packages/agent/extensions/image-gen/index.ts",
+  "packages/agent/test/extensions/image-gen/client.test.ts",
+  "packages/agent/test/extensions/image-gen/index.test.ts",
+]

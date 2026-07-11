@@ -1,0 +1,27 @@
+name = "Shared utilities"
+description = "Reusable repository, text, range, description, and durable storage primitives"
+
+[all]
+description = "Every general-purpose shared utility"
+files = [
+  "packages/agent/shared/description.ts",
+  "packages/agent/shared/git.ts",
+  "packages/agent/shared/jsonl-store.ts",
+  "packages/agent/shared/ranges.ts",
+  "packages/agent/shared/text.ts",
+]
+
+[repository-and-text]
+description = "Git operations, descriptions, text formatting, and line ranges"
+files = [
+  "packages/agent/shared/description.ts",
+  "packages/agent/shared/git.ts",
+  "packages/agent/shared/ranges.ts",
+  "packages/agent/shared/text.ts",
+]
+
+[jsonl-storage]
+description = "Project-scoped JSONL parsing, append, sorting, and atomic rewrites"
+files = [
+  "packages/agent/shared/jsonl-store.ts",
+]

@@ -1,0 +1,39 @@
+name = "Repository tooling"
+description = "Workspace manifests and automated repository checks"
+
+[all]
+description = "Build, package, formatting, linting, type checking, tests, and dead-code configuration"
+files = [
+  "package.json",
+  "packages/agent/package.json",
+  "packages/tui/package.json",
+  "mise.toml",
+  "tsconfig.json",
+  "vitest.config.ts",
+  ".fallowrc.jsonc",
+  ".oxlintrc.jsonc",
+  ".oxfmtrc.jsonc",
+  ".markdownlint-cli2.jsonc",
+  ".npmrc",
+]
+
+[checks]
+description = "Mise task graph and formatter, linter, type, test, and dead-code policies"
+files = [
+  "mise.toml",
+  "tsconfig.json",
+  "vitest.config.ts",
+  ".fallowrc.jsonc",
+  ".oxlintrc.jsonc",
+  ".oxfmtrc.jsonc",
+  ".markdownlint-cli2.jsonc",
+]
+
+[workspace]
+description = "Root and package manifests plus npm behavior"
+files = [
+  "package.json",
+  "packages/agent/package.json",
+  "packages/tui/package.json",
+  ".npmrc",
+]

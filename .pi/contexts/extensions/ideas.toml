@@ -1,0 +1,31 @@
+name = "Ideas"
+description = "Complete and bounded context for the ideas extension"
+
+[all]
+description = "Every extension file, direct shared dependency, test, and user-facing help"
+files = [
+  "packages/agent/extensions/ideas/README.md",
+  "packages/agent/extensions/ideas/browser.ts",
+  "packages/agent/extensions/ideas/index.ts",
+  "packages/agent/extensions/ideas/store.ts",
+  "packages/agent/extensions/tau-help/help.md",
+  "packages/agent/shared/jsonl-store.ts",
+  "packages/agent/shared/text.ts",
+]
+[runtime]
+description = "Extension runtime and direct shared dependencies"
+files = [
+  "packages/agent/extensions/ideas/browser.ts",
+  "packages/agent/extensions/ideas/index.ts",
+  "packages/agent/extensions/ideas/store.ts",
+  "packages/agent/shared/jsonl-store.ts",
+  "packages/agent/shared/text.ts",
+]
+[ui]
+description = "Interactive UI and its extension integration"
+files = [
+  "packages/agent/extensions/ideas/browser.ts",
+  "packages/agent/extensions/ideas/index.ts",
+  "packages/agent/shared/jsonl-store.ts",
+  "packages/agent/shared/text.ts",
+]

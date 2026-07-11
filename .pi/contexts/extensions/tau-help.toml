@@ -1,0 +1,15 @@
+name = "Tau Help"
+description = "Complete and bounded context for the tau-help extension"
+
+[all]
+description = "Every extension file, direct shared dependency, test, and user-facing help"
+files = [
+  "packages/agent/extensions/tau-help/README.md",
+  "packages/agent/extensions/tau-help/help.md",
+  "packages/agent/extensions/tau-help/index.ts",
+]
+[runtime]
+description = "Extension runtime and direct shared dependencies"
+files = [
+  "packages/agent/extensions/tau-help/index.ts",
+]

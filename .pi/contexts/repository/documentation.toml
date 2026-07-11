@@ -1,0 +1,29 @@
+name = "Documentation"
+description = "Product, package, contributor, vocabulary, and TUI guidance"
+
+[all]
+description = "Primary repository and package documentation"
+files = [
+  "README.md",
+  "packages/agent/README.md",
+  "packages/tui/README.md",
+  "docs/CONTRIBUTING.md",
+  "docs/VOCABULARY.md",
+  "packages/agent/docs/tui.md",
+]
+
+[product-and-packages]
+description = "Installation, usage, and package boundaries"
+files = [
+  "README.md",
+  "packages/agent/README.md",
+  "packages/tui/README.md",
+]
+
+[contributing]
+description = "Contribution, release, terminology, and TUI implementation guidance"
+files = [
+  "docs/CONTRIBUTING.md",
+  "docs/VOCABULARY.md",
+  "packages/agent/docs/tui.md",
+]

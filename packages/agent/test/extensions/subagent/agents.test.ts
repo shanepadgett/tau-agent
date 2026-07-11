@@ -31,6 +31,7 @@ describe("subagent discovery", () => {
 		const trusted = await discoverAgents(paths.cwd, true);
 		expect(trusted.agents.get("scout")?.description).toBe("Project scout");
 		expect(trusted.agents.has("web-research")).toBe(true);
+		expect(trusted.agents.has("context-research")).toBe(true);
 
 		const untrusted = await discoverAgents(paths.cwd, false);
 		expect(untrusted.agents.get("scout")?.description).not.toBe("Project scout");

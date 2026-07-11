@@ -3,7 +3,7 @@ import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 export const INJECTED_CONTEXT_TYPE = "tau.injected-context";
 
 export interface InjectedContextDetails {
-	source: "review" | "tau-context";
+	source: "review" | "context";
 	title?: string;
 }
 
@@ -61,7 +61,7 @@ export function getBranchInjectedContexts(entries: readonly SessionEntry[]): Inj
 function readDetails(value: unknown): InjectedContextDetails | undefined {
 	if (!value || typeof value !== "object") return undefined;
 	const record = value as Record<string, unknown>;
-	if (record.source !== "review" && record.source !== "tau-context") return undefined;
+	if (record.source !== "review" && record.source !== "context") return undefined;
 	return {
 		source: record.source,
 		...(typeof record.title === "string" ? { title: record.title } : {}),

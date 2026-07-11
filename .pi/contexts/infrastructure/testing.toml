@@ -1,0 +1,10 @@
+name = "Test infrastructure"
+description = "Vitest setup and shared contract tests"
+
+[all]
+description = "Unit-test configuration and tests for shared coordination primitives"
+files = [
+  "vitest.config.ts",
+  "packages/agent/test/shared/events.test.ts",
+  "packages/agent/test/shared/tool-row-state.test.ts",
+]

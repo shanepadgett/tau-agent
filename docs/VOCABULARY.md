@@ -24,6 +24,14 @@
 
 **Context:** Messages and instructions sent to the model for one model call.
 
+**Context catalog:** Complete collection of maintained context definitions under `.pi/contexts/`.
+
+**Context definition:** One TOML file in the context catalog. Describes a concept and its available scopes.
+
+**Context scope:** One selectable TOML section and the files relevant to that area of work.
+
+**Working context:** Combined context scopes loaded for a task.
+
 **Hidden custom message:** Context message the model sees but the TUI does not show as normal chat.
 
 **Visible custom message:** Custom message shown in the TUI. May also become session history.

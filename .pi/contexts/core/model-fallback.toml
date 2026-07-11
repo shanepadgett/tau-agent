@@ -1,0 +1,25 @@
+name = "Model fallback"
+description = "Shared model selection, validation, retries, and cooldowns"
+
+[all]
+description = "Complete model fallback engine, settings, types, and settings loader"
+files = [
+  "packages/agent/shared/model-fallback/index.ts",
+  "packages/agent/shared/model-fallback/settings.ts",
+  "packages/agent/shared/model-fallback/types.ts",
+  "packages/agent/shared/settings/load.ts",
+]
+
+[engine]
+description = "Candidate selection, retries, validation correction, and cooldown handling"
+files = [
+  "packages/agent/shared/model-fallback/index.ts",
+  "packages/agent/shared/model-fallback/types.ts",
+]
+
+[settings]
+description = "Fallback configuration and shared settings loading"
+files = [
+  "packages/agent/shared/model-fallback/settings.ts",
+  "packages/agent/shared/settings/load.ts",
+]
