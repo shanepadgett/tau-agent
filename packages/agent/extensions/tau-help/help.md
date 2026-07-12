@@ -46,6 +46,10 @@ Adds `/ideas` to log rough ideas or open the ideas browser.
 
 Gives the agent an image-generation tool using the configured image service. Generated images are saved for inspection.
 
+## xai
+
+Adds Grok 4.5 and Grok Imagine through an xAI Grok subscription OAuth login. Run `/login` and select xAI before use.
+
 ## manage-sessions
 
 Adds `/manage-sessions` to browse saved sessions and `/sweep` to archive or delete the current session after starting a new one.

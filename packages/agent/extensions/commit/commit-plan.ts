@@ -55,7 +55,7 @@ export async function generatePlan(
 	const prompt = buildPlanPrompt(evidence, previousPlan, regenerationNote);
 	return generateToolValidated(
 		ctx,
-		await resolveCandidates(ctx, COMMIT_MODELS),
+		await resolveCandidates(ctx, COMMIT_MODELS, true),
 		prompt,
 		COMMIT_PLAN_TOOL,
 		(input) => commitGroupsFromToolInput(input, evidence.files),
@@ -83,10 +83,17 @@ export async function regenerateMessage(
 ): Promise<string> {
 	const selected = evidence.files.filter((file) => files.includes(file.path));
 	const prompt = buildMessagePrompt(evidence, selected, previousPlan, selectedGroupId, regenerationNote);
-	return generateValidated(ctx, await resolveCandidates(ctx, COMMIT_MODELS), prompt, requireCommitMessage, undefined, {
-		statusKey: "commit",
-		notifyOnFallback: true,
-	});
+	return generateValidated(
+		ctx,
+		await resolveCandidates(ctx, COMMIT_MODELS, true),
+		prompt,
+		requireCommitMessage,
+		undefined,
+		{
+			statusKey: "commit",
+			notifyOnFallback: true,
+		},
+	);
 }
 
 export function requireCommitMessage(rawMessage: string): string {

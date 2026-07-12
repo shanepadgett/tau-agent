@@ -5,12 +5,14 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const client = vi.hoisted(() => ({
-	resolveCodexAuth: vi.fn((token: string) => ({ token, accountId: "account" })),
 	generateImage: vi.fn(),
 	editImage: vi.fn(),
 }));
 
-vi.mock("../../../extensions/image-gen/client.ts", () => client);
+vi.mock("../../../extensions/image-gen/client.ts", async (importOriginal) => ({
+	...(await importOriginal()),
+	...client,
+}));
 
 import imageGenExtension from "../../../extensions/image-gen/index.ts";
 
@@ -85,14 +87,14 @@ describe("image_gen extension", () => {
 		}
 	});
 
-	it("requires the existing OpenAI Codex login", async () => {
+	it("requires the xAI OAuth login", async () => {
 		const cwd = await mkdtemp(join(tmpdir(), "tau-image-gen-test-"));
 		try {
 			const { tool, apiKey } = harness(null);
 			await expect(tool.execute("id", { prompt: "x" }, undefined, undefined, context(cwd, apiKey))).rejects.toThrow(
-				"Run /login and select OpenAI Codex",
+				"Run /login and select xAI",
 			);
-			expect(apiKey).toHaveBeenCalledWith("openai-codex");
+			expect(apiKey).toHaveBeenCalledWith("xai-oauth");
 		} finally {
 			await rm(cwd, { recursive: true, force: true });
 		}
@@ -112,20 +114,18 @@ describe("image_gen extension", () => {
 				},
 				context(cwd, apiKey),
 			);
-			expect(client.generateImage).toHaveBeenCalledWith(
-				"blue whale",
-				{ token: "token", accountId: "account" },
-				undefined,
-			);
+			expect(client.generateImage).toHaveBeenCalledWith("blue whale", "token", undefined);
 			expect(client.editImage).not.toHaveBeenCalled();
-			expect(result.details).toMatchObject({ model: "gpt-image-2", operation: "generate" });
+			expect(result.details).toMatchObject({ model: "grok-imagine-image-quality", operation: "generate" });
 			expect(result.content[1]).toEqual({ type: "image", data: PNG.toString("base64"), mimeType: "image/png" });
 			const path = String(result.details.path);
 			expect(await readFile(path)).toEqual(PNG);
 			expect(path).toBe(join(cwd, "result.png"));
 			expect(await readdir(cwd)).toEqual(["result.png"]);
 			expect(updates).toEqual([
-				expect.objectContaining({ content: [{ type: "text", text: "Generating image with gpt-image-2..." }] }),
+				expect.objectContaining({
+					content: [{ type: "text", text: "Generating image with grok-imagine-image-quality..." }],
+				}),
 			]);
 		} finally {
 			await rm(cwd, { recursive: true, force: true });
@@ -187,7 +187,7 @@ describe("image_gen extension", () => {
 					{ mimeType: "image/jpeg", data: jpeg.toString("base64") },
 					{ mimeType: "image/webp", data: webp.toString("base64") },
 				],
-				{ token: "token", accountId: "account" },
+				"token",
 				undefined,
 			);
 			expect(result.details.operation).toBe("edit");

@@ -2,22 +2,21 @@ import { defineTool, withFileMutationQueue, type ExtensionAPI } from "@earendil-
 import { randomUUID } from "node:crypto";
 import { link, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { type Static, Type } from "typebox";
-import { editImage, generateImage, resolveCodexAuth, type EditImage } from "./client.ts";
+import { XAI_IMAGE_MODEL, XAI_PROVIDER } from "../xai/constants.ts";
+import { detectImageMimeType, editImage, generateImage, type EditImage, type GeneratedImage } from "./client.ts";
 
-const MODEL = "gpt-image-2";
 const MAX_INPUT_BYTES = 50 * 1024 * 1024;
 const MAX_INLINE_BYTES = 12 * 1024 * 1024;
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 const imageGenSchema = Type.Object(
 	{
 		prompt: Type.String({ minLength: 1 }),
 		path: Type.Optional(
-			Type.String({ description: "Explicit PNG destination path; defaults to Tau's external image store" }),
+			Type.String({ description: "Explicit image destination path; defaults to Tau's external image store" }),
 		),
-		referenced_image_paths: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 5 })),
+		referenced_image_paths: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 3 })),
 	},
 	{ additionalProperties: false },
 );
@@ -26,23 +25,14 @@ type ImageGenParams = Static<typeof imageGenSchema>;
 
 interface ImageGenDetails {
 	path: string;
-	model: typeof MODEL;
+	model: typeof XAI_IMAGE_MODEL;
 	operation: "generate" | "edit";
 }
 
-function detectImageMimeType(bytes: Buffer): EditImage["mimeType"] | undefined {
-	if (bytes.length >= PNG_SIGNATURE.length && bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
-		return "image/png";
-	}
-	if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
-	if (
-		bytes.length >= 12 &&
-		bytes.subarray(0, 4).toString("ascii") === "RIFF" &&
-		bytes.subarray(8, 12).toString("ascii") === "WEBP"
-	) {
-		return "image/webp";
-	}
-	return undefined;
+function outputExtension(image: GeneratedImage): string {
+	if (image.mimeType === "image/png") return ".png";
+	if (image.mimeType === "image/webp") return ".webp";
+	return ".jpg";
 }
 
 export default function imageGenExtension(pi: ExtensionAPI): void {
@@ -51,12 +41,12 @@ export default function imageGenExtension(pi: ExtensionAPI): void {
 			name: "image_gen",
 			label: "Image Generation",
 			description:
-				"Generate a new raster image from a prompt, or edit one to five local raster images. Uses the existing OpenAI Codex OAuth login, saves a PNG under Tau's external image store unless an explicit path is provided, and returns the image for inspection.",
-			promptSnippet: "Generate or edit raster images with OpenAI Codex",
+				"Generate a new raster image from a prompt, or edit one to three local raster images. Uses the xAI Grok subscription OAuth login, saves the result under Tau's external image store unless an explicit path is provided, and returns the image for inspection.",
+			promptSnippet: "Generate or edit raster images with Grok Imagine",
 			promptGuidelines: [
 				"Use image_gen when the user asks for a generated raster image or an AI edit of local raster images.",
 				"Omit referenced_image_paths when image_gen should create a new image.",
-				"Pass one to five local paths in referenced_image_paths when image_gen should edit or compose existing images.",
+				"Pass one to three local paths in referenced_image_paths when image_gen should edit or compose existing images.",
 				"Omit path for temporary external storage. Pass path only when the user wants the generated image saved in their repository or another explicit location.",
 			],
 			parameters: imageGenSchema,
@@ -66,18 +56,22 @@ export default function imageGenExtension(pi: ExtensionAPI): void {
 				if (!prompt) throw new Error("Image prompt cannot be empty");
 				const requestedPath = params.path?.startsWith("@") ? params.path.slice(1) : params.path;
 				if (requestedPath !== undefined && !requestedPath.trim()) throw new Error("Image path cannot be empty");
-				const absolutePath = requestedPath
+				const requestedAbsolutePath = requestedPath
 					? isAbsolute(requestedPath)
 						? requestedPath
 						: resolve(ctx.cwd, requestedPath)
-					: join(homedir(), ".local", "share", "tau-agent", "images", `image-${randomUUID()}.png`);
-				if (!absolutePath.toLowerCase().endsWith(".png")) throw new Error("Image path must end in .png");
-
-				const token = await ctx.modelRegistry.getApiKeyForProvider("openai-codex");
-				if (!token) {
-					throw new Error("OpenAI Codex OAuth is unavailable. Run /login and select OpenAI Codex.");
+					: undefined;
+				if (
+					requestedAbsolutePath &&
+					![".jpg", ".jpeg", ".png", ".webp"].includes(extname(requestedAbsolutePath).toLowerCase())
+				) {
+					throw new Error("Image path must end in .jpg, .jpeg, .png, or .webp");
 				}
-				const auth = resolveCodexAuth(token);
+
+				const token = await ctx.modelRegistry.getApiKeyForProvider(XAI_PROVIDER);
+				if (!token) {
+					throw new Error("xAI OAuth is unavailable. Run /login and select xAI (Grok subscription OAuth).");
+				}
 				const images: EditImage[] = [];
 				for (const path of params.referenced_image_paths ?? []) {
 					const rawPath = path.startsWith("@") ? path.slice(1) : path;
@@ -101,22 +95,37 @@ export default function imageGenExtension(pi: ExtensionAPI): void {
 							type: "text",
 							text:
 								operation === "generate"
-									? `Generating image with ${MODEL}...`
-									: `Editing image with ${MODEL}...`,
+									? `Generating image with ${XAI_IMAGE_MODEL}...`
+									: `Editing image with ${XAI_IMAGE_MODEL}...`,
 						},
 					],
 					details: undefined,
 				});
 				const generated =
 					operation === "generate"
-						? await generateImage(prompt, auth, signal)
-						: await editImage(prompt, images, auth, signal);
+						? await generateImage(prompt, token, signal)
+						: await editImage(prompt, images, token, signal);
 				signal?.throwIfAborted();
+				const generatedExtension = outputExtension(generated);
+				if (requestedAbsolutePath) {
+					const requestedExtension = extname(requestedAbsolutePath).toLowerCase();
+					const matches =
+						requestedExtension === generatedExtension ||
+						(generatedExtension === ".jpg" && requestedExtension === ".jpeg");
+					if (!matches)
+						throw new Error(`xAI returned ${generated.mimeType}; destination must end in ${generatedExtension}`);
+				}
+				const absolutePath =
+					requestedAbsolutePath ??
+					join(homedir(), ".local", "share", "tau-agent", "images", `image-${randomUUID()}${generatedExtension}`);
 
 				const outputDirectory = dirname(absolutePath);
 				await withFileMutationQueue(absolutePath, async () => {
 					await mkdir(outputDirectory, { recursive: true });
-					const temporaryPath = join(outputDirectory, `.${basename(absolutePath)}.${randomUUID()}.tmp.png`);
+					const temporaryPath = join(
+						outputDirectory,
+						`.${basename(absolutePath)}.${randomUUID()}.tmp${generatedExtension}`,
+					);
 					try {
 						await writeFile(temporaryPath, generated.bytes, { flag: "wx" });
 						signal?.throwIfAborted();
@@ -127,7 +136,7 @@ export default function imageGenExtension(pi: ExtensionAPI): void {
 				});
 
 				const verb = operation === "generate" ? "Generated" : "Edited";
-				const details: ImageGenDetails = { path: absolutePath, model: MODEL, operation };
+				const details: ImageGenDetails = { path: absolutePath, model: XAI_IMAGE_MODEL, operation };
 				if (generated.bytes.length > MAX_INLINE_BYTES) {
 					return {
 						content: [

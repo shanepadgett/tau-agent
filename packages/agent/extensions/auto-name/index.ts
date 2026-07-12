@@ -87,7 +87,7 @@ async function runAutoName(
 ): Promise<void> {
 	const ui = ctx.ui;
 	try {
-		const candidates = await resolveCandidates(ctx, AUTO_NAME_MODELS);
+		const candidates = await resolveCandidates(ctx, AUTO_NAME_MODELS, true);
 		const result = await generateToolValidated(
 			{ ui, signal: controller.signal },
 			candidates,

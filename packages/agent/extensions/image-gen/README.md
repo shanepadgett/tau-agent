@@ -1,11 +1,11 @@
 # Image Generation
 
-`image_gen` generates raster images and edits up to five local raster images with OpenAI Codex. It uses the current `gpt-image-2` model and saves results under `~/.local/share/tau-agent/images/` by default. Pass an explicit PNG path when the image should be saved in the current repository or another chosen location.
+`image_gen` generates raster images and edits up to three local raster images with Grok Imagine. It uses `grok-imagine-image-quality` and saves results under `~/.local/share/tau-agent/images/` by default. Pass an explicit path with the expected image extension when the image should be saved in the current repository or another chosen location.
 
-Use `/login` and select OpenAI Codex before invoking the tool. No `OPENAI_API_KEY` is needed.
+Use `/login` and select xAI (Grok subscription OAuth) before invoking the tool. No xAI API key is used.
 
 Run `/reload` after installing or changing the extension.
 
-The model invokes `image_gen` with a prompt. Size, quality, and background use the Codex automatic settings. For edits, it also supplies one to five local PNG, JPEG, or WebP paths. Successful PNGs up to 12 MiB are returned inline for inspection; larger results remain available at the saved path.
+The model invokes `image_gen` with a prompt. For edits, it also supplies one to three local PNG, JPEG, or WebP paths. Successful images up to 12 MiB are returned inline for inspection; larger results remain available at the saved path.
 
-This extension calls a private Codex backend. OpenAI may change its availability or protocol without notice.
+This extension uses xAI's undocumented subscription OAuth access. xAI may change its availability, entitlement rules, or protocol without notice.
