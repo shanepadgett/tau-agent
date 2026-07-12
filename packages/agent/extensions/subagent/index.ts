@@ -3,7 +3,7 @@ import { Type } from "typebox";
 import { createToolRowStateStore } from "../../shared/tool-row-state.js";
 import { discoverAgents, type AgentDiscovery } from "./agents.ts";
 import { renderSubagentCall, renderSubagentResult } from "./render.ts";
-import { FifoGate, runSubagent, type SubagentDetails } from "./run.ts";
+import { extensionPathsForTools, FifoGate, runSubagent, type SubagentDetails } from "./run.ts";
 
 const params = Type.Object(
 	{ agent: Type.String({ minLength: 1 }), task: Type.String({ minLength: 1 }) },
@@ -137,6 +137,7 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 					}
 					const result = await runSubagent({
 						definition,
+						extensionPaths: extensionPathsForTools(pi, definition.tools),
 						task,
 						ctx,
 						thinkingLevel,

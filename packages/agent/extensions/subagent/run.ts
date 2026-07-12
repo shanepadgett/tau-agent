@@ -6,11 +6,14 @@ import {
 	createAgentSession,
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
+	DefaultResourceLoader,
 	formatSize,
+	getAgentDir,
 	SessionManager,
 	truncateHead,
 	type AgentSession,
 	type AgentSessionEvent,
+	type ExtensionAPI,
 	type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import type { AgentDefinition } from "./agents.ts";
@@ -75,6 +78,19 @@ export interface SubagentDetails {
 		outputBytes: number;
 		totalBytes: number;
 	};
+}
+
+export function extensionPathsForTools(pi: ExtensionAPI, tools: readonly string[]): string[] {
+	const selected = new Set(tools);
+	return [
+		...new Set(
+			pi
+				.getAllTools()
+				.filter((tool) => selected.has(tool.name))
+				.map((tool) => tool.sourceInfo.path)
+				.filter((path) => path.length > 0 && !path.startsWith("<")),
+		),
+	].sort();
 }
 
 export class FifoGate {
@@ -144,6 +160,7 @@ function assistants(session: AgentSession): AssistantMessage[] {
 
 export async function runSubagent(options: {
 	definition: AgentDefinition;
+	extensionPaths: readonly string[];
 	task: string;
 	ctx: ExtensionContext;
 	thinkingLevel: string;
@@ -151,7 +168,16 @@ export async function runSubagent(options: {
 	onUpdate?: (details: SubagentDetails) => void | Promise<void>;
 	onWarning?: (warning: string) => void;
 }): Promise<{ content: string; details: SubagentDetails }> {
-	const { definition, task, ctx, thinkingLevel: parentThinkingLevel, signal, onUpdate, onWarning } = options;
+	const {
+		definition,
+		extensionPaths,
+		task,
+		ctx,
+		thinkingLevel: parentThinkingLevel,
+		signal,
+		onUpdate,
+		onWarning,
+	} = options;
 	const started = Date.now();
 	let model = ctx.model;
 	let thinkingLevel = parentThinkingLevel;
@@ -212,6 +238,13 @@ export async function runSubagent(options: {
 		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 		if (!auth.ok) throw new Error(`Agent ${definition.name} startup failed: ${auth.error}`);
 		if (signal.aborted) throw new Error(`Agent ${definition.name} startup aborted`);
+		const resourceLoader = new DefaultResourceLoader({
+			cwd: ctx.cwd,
+			agentDir: getAgentDir(),
+			noExtensions: true,
+			additionalExtensionPaths: [...extensionPaths],
+		});
+		await resourceLoader.reload();
 		const created = await createAgentSession({
 			cwd: ctx.cwd,
 			model,
@@ -219,6 +252,7 @@ export async function runSubagent(options: {
 			modelRegistry: ctx.modelRegistry,
 			tools: definition.tools,
 			excludeTools: ["subagent"],
+			resourceLoader,
 			sessionManager: SessionManager.inMemory(ctx.cwd),
 		});
 		session = created.session;

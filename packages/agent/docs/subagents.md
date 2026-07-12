@@ -46,6 +46,7 @@ Named tools and configured models must exist in the normally loaded child Pi env
 
 - Children use the parent's cwd and inherit model/thinking unless the definition overrides them.
 - Children do not receive the parent conversation.
+- Children load only the extensions that own their declared tools. Unrelated extension hooks do not run in child sessions.
 - At most four children run at once; extra calls wait in order.
 - Returned text is capped (50 KB / 2,000 lines); full truncated output is saved to a private temp file.
 

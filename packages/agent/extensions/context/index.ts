@@ -5,7 +5,7 @@ import { Type } from "typebox";
 import { emitTauEvent } from "../../shared/events.ts";
 import { createInjectedContext } from "../../shared/injected-context.ts";
 import { discoverAgents } from "../subagent/agents.ts";
-import { runSubagent } from "../subagent/run.ts";
+import { extensionPathsForTools, runSubagent } from "../subagent/run.ts";
 import { ContextPanel, ProposalPanel, type ProposalReviewDecision } from "./panel.ts";
 import {
 	applyContextOperation,
@@ -188,6 +188,7 @@ async function maintain(pi: ExtensionAPI, ctx: ExtensionCommandContext, root: st
 	const controller = new AbortController();
 	const response = await runSubagent({
 		definition,
+		extensionPaths: extensionPathsForTools(pi, definition.tools),
 		task: `Maintain repository context for this request:\n${request}\n\nExisting entries:\n${JSON.stringify(
 			existing.map(({ id, description, files }) => ({ id, description, files })),
 			null,
