@@ -28,7 +28,7 @@ Adds `/commit` for semantic commit grouping, review, and committing selected rep
 
 ## context
 
-Adds `/context` to select reusable repository work scopes from `.pi/contexts`, and `/context-manage <idea>` to run interactive, approval-based catalog maintenance. Folder names are tabs, TOML files are concepts, and TOML sections are selectable entries.
+Adds `/context` to select reusable repository work scopes from `.pi/contexts`, and `/context-sync` to reconcile affected scopes from current Git changes. Folder names are tabs, TOML files are concepts, and TOML sections are selectable entries.
 
 ## explore
 
@@ -84,7 +84,7 @@ Adds `Alt+S` to stash the current prompt draft and `/pop` to browse stashed draf
 
 ## subagent
 
-Gives Tau a subagent delegation tool for isolated, focused work. You can also create your own subagents in the supported subagent directories. Ask Tau how to do it and have it consult the extension’s own documentation; the built-in `scout`, `context-maintenance`, and `web-research` subagents show the pattern. Each subagent can register its own model and the tools it is allowed to use.
+Gives Tau a subagent delegation tool for isolated, focused work. You can also create your own subagents in the supported subagent directories. Ask Tau how to do it and have it consult the extension’s own documentation; the built-in `scout` and `web-research` subagents show the pattern. Each subagent can register its own model and the tools it is allowed to use.
 
 ## tau-help
 

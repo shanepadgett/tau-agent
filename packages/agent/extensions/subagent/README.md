@@ -7,7 +7,6 @@ Agent definitions can override the parent model and thinking level. If an overri
 Tau includes three built-in agents:
 
 - `scout` explores local files and code with `read`, `grep`, `find`, and `ls`.
-- `context-maintenance` reconciles reusable repository context entries and requests approval before updates.
 - `web-research` researches web and code sources with `websearch`, `codesearch`, and `webfetch`.
 
 Ask Tau to delegate a task, or let it call `subagent` with an agent name and task. Children use the parent's current working directory and inherit its model and thinking level unless their definition overrides either value. They do not receive the parent conversation. Tau loads only the extensions that own a child's declared tools, so unrelated extension hooks do not run in child sessions. When a child must inspect another repository, put its exact absolute path in the delegated task.

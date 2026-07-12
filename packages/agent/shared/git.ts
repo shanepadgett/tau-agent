@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const DEFAULT_GIT_TIMEOUT_MS = 10_000;
 
@@ -7,7 +7,7 @@ export interface GitRunner {
 	run(args: string[], options?: { cwd?: string; optional?: boolean; timeout?: number }): Promise<string>;
 }
 
-export function createGitRunner(pi: ExtensionAPI, ctx: ExtensionCommandContext): GitRunner {
+export function createGitRunner(pi: ExtensionAPI, ctx: ExtensionContext): GitRunner {
 	return {
 		cwd: ctx.cwd,
 		async run(args, options = {}) {

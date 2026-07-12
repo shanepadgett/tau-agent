@@ -1,8 +1,7 @@
-import { access, mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { access, readFile, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
-import { parse, stringify } from "smol-toml";
-import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
+import { parse } from "smol-toml";
 
 export interface ContextEntry {
 	id: string;
@@ -15,38 +14,6 @@ export interface ContextEntry {
 	files: string[];
 	path: string;
 }
-
-export interface ContextProposal {
-	tab: string;
-	concept: string;
-	conceptName: string;
-	conceptDescription: string;
-	entry: string;
-	description: string;
-	files: string[];
-}
-
-export type ContextOperation =
-	| (ContextProposal & { id: string; kind: "create"; reason: string })
-	| {
-			id: string;
-			kind: "add-files" | "remove-files";
-			tab: string;
-			concept: string;
-			entry: string;
-			files: string[];
-			reason: string;
-	  }
-	| {
-			id: string;
-			kind: "replace-file";
-			tab: string;
-			concept: string;
-			entry: string;
-			from: string;
-			to: string;
-			reason: string;
-	  };
 
 export async function pathExists(path: string): Promise<boolean> {
 	try {
@@ -148,111 +115,4 @@ export async function loadContextEntries(root: string): Promise<ContextEntry[]> 
 		}
 	}
 	return result;
-}
-
-export async function writeContextEntry(root: string, proposal: ContextProposal, replace: boolean): Promise<void> {
-	const tab = validSlug(proposal.tab, "Context tab");
-	const concept = validSlug(proposal.concept, "Context concept");
-	const entry = validSlug(proposal.entry, "Context entry");
-	const conceptName = proposal.conceptName.trim();
-	const description = proposal.description.trim();
-	if (!conceptName) throw new Error("Context concept name is required");
-	if (!description) throw new Error("Context entry description is required");
-	const files = await requireFiles(root, proposal.files);
-	const path = join(root, ".pi", "contexts", tab, `${concept}.toml`);
-	await withFileMutationQueue(path, async () => {
-		let raw: Record<string, unknown> = {};
-		if (await pathExists(path)) raw = parse(await readFile(path, "utf8")) as Record<string, unknown>;
-		if (!replace && raw[entry] !== undefined)
-			throw new Error(`Context entry already exists: ${tab}/${concept}/${entry}`);
-		if (raw.name === undefined) raw.name = conceptName;
-		if (raw.description === undefined) raw.description = proposal.conceptDescription.trim();
-		raw[entry] = { description, files };
-		await mkdir(dirname(path), { recursive: true });
-		const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
-		await writeFile(temporary, stringify(raw), "utf8");
-		await rename(temporary, path);
-	});
-}
-
-export async function updateContextFiles(
-	root: string,
-	tabInput: string,
-	conceptInput: string,
-	entryInput: string,
-	paths: readonly string[],
-	action: "add" | "remove",
-): Promise<string[]> {
-	const tab = validSlug(tabInput, "Context tab");
-	const concept = validSlug(conceptInput, "Context concept");
-	const entry = validSlug(entryInput, "Context entry");
-	const current = (await loadContextEntries(root)).find((item) => item.id === `${tab}/${concept}/${entry}`);
-	if (!current) throw new Error(`Unknown context entry: ${tab}/${concept}/${entry}`);
-	const changed =
-		action === "add" ? await requireFiles(root, paths) : paths.map((path) => normalizeProjectPath(root, path));
-	const changedSet = new Set(changed);
-	const files =
-		action === "add" ? [...current.files, ...changed] : current.files.filter((file) => !changedSet.has(file));
-	if (files.length === 0) throw new Error("Context entries must contain at least one file");
-	await writeContextEntry(
-		root,
-		{
-			tab,
-			concept,
-			conceptName: current.conceptName,
-			conceptDescription: current.conceptDescription,
-			entry,
-			description: current.description,
-			files,
-		},
-		true,
-	);
-	return sortedUnique(changed);
-}
-
-export async function replaceContextFile(
-	root: string,
-	tab: string,
-	concept: string,
-	entry: string,
-	fromInput: string,
-	toInput: string,
-): Promise<void> {
-	const from = normalizeProjectPath(root, fromInput);
-	const [to] = await requireFiles(root, [toInput]);
-	const current = (await loadContextEntries(root)).find((item) => item.id === `${tab}/${concept}/${entry}`);
-	if (!current) throw new Error(`Unknown context entry: ${tab}/${concept}/${entry}`);
-	if (!current.files.includes(from)) throw new Error(`Context entry does not contain: ${from}`);
-	await writeContextEntry(
-		root,
-		{
-			tab: current.tab,
-			concept: current.concept,
-			conceptName: current.conceptName,
-			conceptDescription: current.conceptDescription,
-			entry: current.name,
-			description: current.description,
-			files: current.files.map((file) => (file === from ? to : file)),
-		},
-		true,
-	);
-}
-
-export async function applyContextOperation(root: string, operation: ContextOperation): Promise<void> {
-	if (operation.kind === "create") {
-		await writeContextEntry(root, operation, false);
-		return;
-	}
-	if (operation.kind === "replace-file") {
-		await replaceContextFile(root, operation.tab, operation.concept, operation.entry, operation.from, operation.to);
-		return;
-	}
-	await updateContextFiles(
-		root,
-		operation.tab,
-		operation.concept,
-		operation.entry,
-		operation.files,
-		operation.kind === "add-files" ? "add" : "remove",
-	);
 }

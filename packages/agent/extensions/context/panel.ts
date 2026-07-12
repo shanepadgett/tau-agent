@@ -1,7 +1,7 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, getKeybindings, Key, matchesKey, truncateToWidth, type TUI } from "@earendil-works/pi-tui";
 import { bindingHint, rawHint, SelectableList, Tabs, ToolPanel, type ToolPanelConfig } from "@shanepadgett/tau-tui";
-import type { ContextEntry, ContextOperation } from "./definitions.ts";
+import type { ContextEntry } from "./definitions.ts";
 
 type SelectableEntry = ContextEntry & { id: string };
 
@@ -15,6 +15,7 @@ export class ContextPanel implements Component {
 	private readonly selected = new Map<string, readonly SelectableEntry[]>();
 	private readonly done: (result: ContextEntry[] | undefined) => void;
 	private current: ContextEntry;
+	private fileOffset = 0;
 
 	constructor(
 		tui: TUI,
@@ -72,6 +73,17 @@ export class ContextPanel implements Component {
 		const list = this.activeList();
 		if (!list?.isFilterFocused()) {
 			const keys = getKeybindings();
+			const pageSize = this.filePageSize();
+			if (this.current.files.length > pageSize && matchesKey(data, Key.alt("up"))) {
+				this.fileOffset = Math.max(0, this.fileOffset - pageSize);
+				this.sync();
+				return;
+			}
+			if (this.current.files.length > pageSize && matchesKey(data, Key.alt("down"))) {
+				this.fileOffset = Math.min(this.current.files.length - pageSize, this.fileOffset + pageSize);
+				this.sync();
+				return;
+			}
 			if (matchesKey(data, Key.ctrl("c"))) {
 				for (const [tab, tabList] of this.lists) {
 					tabList.setSelectedIds([]);
@@ -90,7 +102,9 @@ export class ContextPanel implements Component {
 			}
 		}
 		this.tabs.handleInput(data);
-		this.current = this.activeList()?.getCurrentItem() ?? this.current;
+		const current = this.activeList()?.getCurrentItem() ?? this.current;
+		if (current.id !== this.current.id) this.fileOffset = 0;
+		this.current = current;
 		this.sync();
 	}
 
@@ -106,13 +120,34 @@ export class ContextPanel implements Component {
 	}
 	private body(): Component {
 		return {
-			render: (width) => [
-				...this.tabs.render(width),
-				"",
-				...this.current.files.map((file) => truncateToWidth(this.theme.fg("muted", `• ${file}`), width, "…")),
-			],
+			render: (width) => {
+				const tabs = this.tabs.render(width);
+				const pageSize = this.filePageSize(tabs.length);
+				const maxOffset = Math.max(0, this.current.files.length - pageSize);
+				this.fileOffset = Math.min(this.fileOffset, maxOffset);
+				const files = this.current.files.slice(this.fileOffset, this.fileOffset + pageSize);
+				const range =
+					this.current.files.length > pageSize
+						? this.theme.fg(
+								"dim",
+								`${this.fileOffset + 1}-${this.fileOffset + files.length} of ${this.current.files.length} files`,
+							)
+						: undefined;
+				return [
+					...tabs,
+					"",
+					...(range ? [truncateToWidth(range, width, "…")] : []),
+					...files.map((file) => truncateToWidth(this.theme.fg("muted", `• ${file}`), width, "…")),
+				];
+			},
 			invalidate: () => this.tabs.invalidate(),
 		};
+	}
+	private filePageSize(tabLines = this.tabs.render(this.tui.terminal.columns).length): number {
+		const overlayHeight = Math.floor(this.tui.terminal.rows * 0.8);
+		const available = Math.max(1, overlayHeight - tabLines - 7);
+		const pageSize = Math.min(8, available);
+		return this.current.files.length > pageSize ? Math.max(1, pageSize - 1) : pageSize;
 	}
 	private secondary(): string {
 		return `${[...this.selected.values()].reduce((sum, items) => sum + items.length, 0)} selected`;
@@ -123,6 +158,7 @@ export class ContextPanel implements Component {
 			? list.getKeyHints()
 			: [
 					...this.tabs.getKeyHints(),
+					...(this.current.files.length > this.filePageSize() ? [rawHint("option+↑/↓", "scroll files")] : []),
 					rawHint("ctrl+c", "clear all"),
 					bindingHint("tui.select.confirm", "inject"),
 					bindingHint("tui.select.cancel", "cancel"),
@@ -133,105 +169,4 @@ export class ContextPanel implements Component {
 		this.config.footer = { kind: "hints", hints: this.hints() };
 		this.tui.requestRender();
 	}
-}
-
-export type ProposalReviewDecision =
-	| { kind: "approve"; operations: ContextOperation[] }
-	| { kind: "feedback"; scope: "batch"; selectedIds: string[] }
-	| { kind: "feedback"; scope: "operation"; operationId: string; selectedIds: string[] }
-	| { kind: "rejected" };
-
-export class ProposalPanel implements Component {
-	private readonly list: SelectableList<ContextOperation>;
-	private readonly panel: ToolPanel;
-	private readonly done: (result: ProposalReviewDecision) => void;
-	private selected: readonly ContextOperation[] = [];
-	private current: ContextOperation;
-	constructor(
-		tui: TUI,
-		theme: Theme,
-		proposals: readonly ContextOperation[],
-		done: (result: ProposalReviewDecision) => void,
-	) {
-		const first = proposals[0];
-		if (!first) throw new Error("Proposal panel requires at least one operation");
-		this.done = done;
-		this.current = first;
-		const items = [...proposals];
-		this.list = new SelectableList(theme, {
-			items,
-			emptyMessage: "No proposals.",
-			selection: { kind: "multi", primaryLabel: "apply selected" },
-			actions: [],
-			cancelLabel: "cancel",
-			maxVisible: 12,
-			renderItem: (item, _state, width) => [
-				truncateToWidth(
-					`${theme.fg("accent", item.kind)} · ${item.tab}/${item.concept}/${item.entry}  ${theme.fg("dim", item.reason)}`,
-					width,
-					"…",
-				),
-			],
-			onResult: (result) =>
-				done(
-					result.kind === "primary" && result.items.length > 0
-						? { kind: "approve", operations: [...result.items] }
-						: { kind: "rejected" },
-				),
-			onSelectionChange: (selected) => {
-				this.selected = selected;
-				tui.requestRender();
-			},
-		});
-		this.list.setSelectedIds(items.map((item) => item.id));
-		this.selected = items;
-		this.panel = new ToolPanel(theme, {
-			title: "Maintain contexts",
-			secondary: "Review proposed operations",
-			body: {
-				render: (width) => [
-					...this.list.render(width),
-					"",
-					...operationPaths(this.current).map((path) =>
-						truncateToWidth(theme.fg("muted", `• ${path}`), width, "…"),
-					),
-				],
-				invalidate: () => this.list.invalidate(),
-			},
-			footer: {
-				kind: "hints",
-				hints: [
-					...this.list.getKeyHints(),
-					rawHint("ctrl+b", "batch feedback"),
-					rawHint("ctrl+i", "item feedback"),
-				],
-			},
-		});
-	}
-	handleInput(data: string): void {
-		if (!this.list.isFilterFocused()) {
-			const selectedIds = this.selected.map((item) => item.id);
-			if (matchesKey(data, Key.ctrl("b"))) {
-				this.done({ kind: "feedback", scope: "batch", selectedIds });
-				return;
-			}
-			if (matchesKey(data, Key.ctrl("i"))) {
-				const current = this.list.getCurrentItem();
-				if (current) this.done({ kind: "feedback", scope: "operation", operationId: current.id, selectedIds });
-				return;
-			}
-		}
-		this.list.handleInput(data);
-		this.current = this.list.getCurrentItem() ?? this.current;
-	}
-	render(width: number): string[] {
-		return this.panel.render(width);
-	}
-	invalidate(): void {
-		this.panel.invalidate();
-	}
-}
-
-function operationPaths(operation: ContextOperation): string[] {
-	return operation.kind === "replace-file" ? [`${operation.from} → ${operation.to}`] : operation.files;
 }

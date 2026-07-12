@@ -9,7 +9,7 @@ Tau's `subagent` tool delegates one focused task to an isolated child Pi session
 | **User (global)** | `~/.pi/agent/tau/agents/*.md` | You want the agent in every project |
 | **Project** | nearest trusted `.pi/tau/agents/*.md` | Repo-specific helpers |
 
-Precedence: **project overrides user**, which overrides Tau's built-ins (`scout`, `context-maintenance`, `web-research`). Duplicate names in one scope are invalid.
+Precedence: **project overrides user**, which overrides Tau's built-ins (`scout`, `web-research`). Duplicate names in one scope are invalid.
 
 ## Definition format
 
@@ -53,7 +53,6 @@ Named tools and configured models must exist in the normally loaded child Pi env
 ## Built-ins
 
 - `scout` — local exploration with `read`, `grep`, `find`, `ls`
-- `context-maintenance` — repository context reconciliation with interactive user approval
 - `web-research` — `websearch`, `codesearch`, `webfetch`
 
 Ask Tau to delegate, or let it call `subagent` with an agent name and task.
