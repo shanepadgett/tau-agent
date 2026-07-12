@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadContextEntries, writeContextEntry } from "../../../extensions/context/definitions.ts";
+import { loadContextEntries, replaceContextFile, writeContextEntry } from "../../../extensions/context/definitions.ts";
 
 const temporaryDirectories: string[] = [];
 
@@ -71,5 +71,27 @@ describe("context definitions", () => {
 		const entries = await loadContextEntries(root);
 		expect(entries.map((entry) => entry.id).sort()).toEqual(["gameplay/player/input", "gameplay/player/movement"]);
 		expect(entries.every((entry) => entry.conceptName === "Player")).toBe(true);
+	});
+
+	it("replaces a moved context file without leaving the old path", async () => {
+		const root = await project();
+		await writeFile(join(root, "src", "movement.ts"), "export {};\n");
+		await writeContextEntry(
+			root,
+			{
+				tab: "gameplay",
+				concept: "player",
+				conceptName: "Player",
+				conceptDescription: "Player systems",
+				entry: "movement",
+				description: "Player movement",
+				files: ["src/player.ts"],
+			},
+			false,
+		);
+
+		await replaceContextFile(root, "gameplay", "player", "movement", "src/player.ts", "src/movement.ts");
+
+		expect((await loadContextEntries(root))[0]?.files).toEqual(["src/movement.ts"]);
 	});
 });

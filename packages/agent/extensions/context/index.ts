@@ -6,8 +6,9 @@ import { emitTauEvent } from "../../shared/events.ts";
 import { createInjectedContext } from "../../shared/injected-context.ts";
 import { discoverAgents } from "../subagent/agents.ts";
 import { runSubagent } from "../subagent/run.ts";
-import { ContextPanel, ProposalPanel } from "./panel.ts";
+import { ContextPanel, ProposalPanel, type ProposalReviewDecision } from "./panel.ts";
 import {
+	applyContextOperation,
 	findProjectRoot,
 	loadContextEntries,
 	normalizeProjectPath,
@@ -17,7 +18,7 @@ import {
 	validSlug,
 	writeContextEntry,
 	type ContextEntry,
-	type ContextProposal,
+	type ContextOperation,
 } from "./definitions.ts";
 
 const identityParams = Type.Object(
@@ -46,61 +47,157 @@ const createParams = Type.Object(
 	{ additionalProperties: false },
 );
 
+const operationIdentity = {
+	id: Type.String({ minLength: 1 }),
+	tab: Type.String(),
+	concept: Type.String(),
+	entry: Type.String(),
+	reason: Type.String({ minLength: 1 }),
+};
+const reviewParams = Type.Object(
+	{
+		operations: Type.Array(
+			Type.Union([
+				Type.Object({
+					...operationIdentity,
+					kind: Type.Literal("create"),
+					conceptName: Type.String(),
+					conceptDescription: Type.String(),
+					description: Type.String(),
+					files: Type.Array(Type.String(), { minItems: 1 }),
+				}),
+				Type.Object({
+					...operationIdentity,
+					kind: Type.Union([Type.Literal("add-files"), Type.Literal("remove-files")]),
+					files: Type.Array(Type.String(), { minItems: 1 }),
+				}),
+				Type.Object({
+					...operationIdentity,
+					kind: Type.Literal("replace-file"),
+					from: Type.String(),
+					to: Type.String(),
+				}),
+			]),
+			{ minItems: 1 },
+		),
+	},
+	{ additionalProperties: false },
+);
+
 function result(value: unknown) {
 	return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }], details: value };
 }
 
-async function research(
-	pi: ExtensionAPI,
-	ctx: ExtensionCommandContext,
+let reviewQueue = Promise.resolve();
+
+async function withReviewLock<T>(task: () => Promise<T>): Promise<T> {
+	const previous = reviewQueue;
+	let release = () => {};
+	reviewQueue = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	await previous;
+	try {
+		return await task();
+	} finally {
+		release();
+	}
+}
+
+function parseChangedFiles(raw: string): Array<{ path: string; status: string; renamedFrom?: string }> {
+	const fields = raw.split("\0").filter(Boolean);
+	const changes: Array<{ path: string; status: string; renamedFrom?: string }> = [];
+	for (let index = 0; index < fields.length; index += 1) {
+		const field = fields[index];
+		if (!field) continue;
+		const status = field.slice(0, 2);
+		const path = field.slice(3);
+		if (status.includes("R") || status.includes("C")) {
+			const renamedFrom = fields[index + 1];
+			if (renamedFrom) index += 1;
+			changes.push({ path, status, ...(renamedFrom ? { renamedFrom } : {}) });
+		} else changes.push({ path, status });
+	}
+	return changes;
+}
+
+async function validateContextOperations(
 	root: string,
-	request: string,
-): Promise<ContextProposal[]> {
+	operations: readonly ContextOperation[],
+): Promise<ContextOperation[]> {
+	const entries = await loadContextEntries(root);
+	const ids = new Set(entries.map((entry) => entry.id));
+	const normalized: ContextOperation[] = [];
+	for (const operation of operations) {
+		const id = operation.id.trim();
+		const reason = operation.reason.trim();
+		if (!id) throw new Error("Context operation id is required");
+		if (!reason) throw new Error(`Context operation reason is required: ${id}`);
+		const tab = validSlug(operation.tab, "Context tab");
+		const concept = validSlug(operation.concept, "Context concept");
+		const entry = validSlug(operation.entry, "Context entry");
+		const contextId = `${tab}/${concept}/${entry}`;
+		if (operation.kind === "create") {
+			if (ids.has(contextId)) throw new Error(`Context entry already exists: ${contextId}`);
+			if (!operation.conceptName.trim()) throw new Error(`Context concept name is required: ${id}`);
+			if (!operation.description.trim()) throw new Error(`Context entry description is required: ${id}`);
+			ids.add(contextId);
+			normalized.push({
+				...operation,
+				id,
+				reason,
+				tab,
+				concept,
+				entry,
+				conceptName: operation.conceptName.trim(),
+				conceptDescription: operation.conceptDescription.trim(),
+				description: operation.description.trim(),
+				files: await requireFiles(root, operation.files),
+			});
+			continue;
+		}
+		const current = entries.find((item) => item.id === contextId);
+		if (!current) throw new Error(`Unknown context entry: ${contextId}`);
+		if (operation.kind === "replace-file") {
+			const from = normalizeProjectPath(root, operation.from);
+			if (!current.files.includes(from)) throw new Error(`Context entry does not contain: ${from}`);
+			const [to] = await requireFiles(root, [operation.to]);
+			normalized.push({ ...operation, id, reason, tab, concept, entry, from, to });
+			continue;
+		}
+		const files =
+			operation.kind === "add-files"
+				? await requireFiles(root, operation.files)
+				: operation.files.map((path) => normalizeProjectPath(root, path));
+		if (operation.kind === "remove-files" && current.files.filter((path) => !files.includes(path)).length === 0)
+			throw new Error(`Context operation would empty entry: ${contextId}`);
+		if (operation.kind === "remove-files") {
+			const unknown = files.find((path) => !current.files.includes(path));
+			if (unknown) throw new Error(`Context entry does not contain: ${unknown}`);
+		}
+		normalized.push({ ...operation, id, reason, tab, concept, entry, files });
+	}
+	return normalized;
+}
+
+async function maintain(pi: ExtensionAPI, ctx: ExtensionCommandContext, root: string, request: string): Promise<void> {
 	const discovery = await discoverAgents(root, ctx.isProjectTrusted());
-	const definition = discovery.agents.get("context-research");
-	if (!definition) throw new Error("Built-in context-research subagent is unavailable");
+	const definition = discovery.agents.get("context-maintenance");
+	if (!definition) throw new Error("Built-in context-maintenance subagent is unavailable");
 	const existing = await loadContextEntries(root);
 	const controller = new AbortController();
 	const response = await runSubagent({
 		definition,
-		task: `Research context entries for this request:\n${request}\n\nExisting entries:\n${JSON.stringify(
+		task: `Maintain repository context for this request:\n${request}\n\nExisting entries:\n${JSON.stringify(
 			existing.map(({ id, description, files }) => ({ id, description, files })),
 			null,
 			2,
-		)}\n\nReturn only a JSON array. Each item must contain tab, concept, conceptName, conceptDescription, entry, description, and files.`,
+		)}`,
 		ctx,
 		thinkingLevel: pi.getThinkingLevel(),
 		signal: controller.signal,
 	});
-	const text = response.content
-		.trim()
-		.replace(/^```(?:json)?\s*/i, "")
-		.replace(/\s*```$/, "");
-	const parsed: unknown = JSON.parse(text);
-	if (!Array.isArray(parsed)) throw new Error("Context research returned invalid JSON");
-	const proposals: ContextProposal[] = [];
-	for (const item of parsed) {
-		if (!item || typeof item !== "object") throw new Error("Context research returned an invalid proposal");
-		const value = item as Record<string, unknown>;
-		if (
-			["tab", "concept", "conceptName", "conceptDescription", "entry", "description"].some(
-				(key) => typeof value[key] !== "string",
-			) ||
-			!Array.isArray(value.files) ||
-			value.files.some((file) => typeof file !== "string")
-		)
-			throw new Error("Context research returned an invalid proposal");
-		proposals.push({
-			tab: validSlug(value.tab as string, "Context tab"),
-			concept: validSlug(value.concept as string, "Context concept"),
-			conceptName: (value.conceptName as string).trim(),
-			conceptDescription: (value.conceptDescription as string).trim(),
-			entry: validSlug(value.entry as string, "Context entry"),
-			description: (value.description as string).trim(),
-			files: await requireFiles(root, value.files as string[]),
-		});
-	}
-	return proposals;
+	if (response.details.status !== "completed") throw new Error(response.content);
 }
 
 export default function contextExtension(pi: ExtensionAPI): void {
@@ -155,7 +252,7 @@ export default function contextExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.registerCommand("context-manage", {
-		description: "Research and approve repository context entries",
+		description: "Research, review, and maintain repository context entries",
 		handler: async (args, ctx) => {
 			if (!args.trim()) {
 				ctx.ui.notify("Usage: /context-manage <context idea>", "warning");
@@ -167,43 +264,84 @@ export default function contextExtension(pi: ExtensionAPI): void {
 			}
 			await ctx.waitForIdle();
 			const root = await findProjectRoot(ctx.cwd);
-			ctx.ui.setStatus("context-manage", "researching contexts");
-			let proposals: ContextProposal[];
+			ctx.ui.setStatus("context-manage", "maintaining contexts");
 			try {
-				proposals = await research(pi, ctx, root, args.trim());
+				await maintain(pi, ctx, root, args.trim());
 			} catch (error) {
 				ctx.ui.notify(
-					`Context research failed: ${error instanceof Error ? error.message : String(error)}`,
+					`Context maintenance failed: ${error instanceof Error ? error.message : String(error)}`,
 					"error",
 				);
 				return;
 			} finally {
 				ctx.ui.setStatus("context-manage", undefined);
 			}
-			if (proposals.length === 0) {
-				ctx.ui.notify("No context entries proposed", "info");
-				return;
-			}
-			const selected = await ctx.ui.custom<ContextProposal[] | undefined>(
-				(tui, theme, _keys, done) => new ProposalPanel(tui, theme, proposals, done, () => {}),
-			);
-			if (!selected?.length) return;
-			const existingIds = new Set((await loadContextEntries(root)).map((entry) => entry.id));
-			const selectedIds = selected.map((proposal) => `${proposal.tab}/${proposal.concept}/${proposal.entry}`);
-			if (new Set(selectedIds).size !== selectedIds.length) {
-				ctx.ui.notify("Context proposals contain duplicate entries", "error");
-				return;
-			}
-			const collision = selectedIds.find((id) => existingIds.has(id));
-			if (collision) {
-				ctx.ui.notify(`Context entry already exists: ${collision}`, "error");
-				return;
-			}
-			for (const proposal of selected) await writeContextEntry(root, proposal, false);
-			ctx.ui.notify(`Created ${selected.length} context ${selected.length === 1 ? "entry" : "entries"}`, "info");
 		},
 	});
 
+	pi.registerTool({
+		name: "context_changes",
+		label: "Context Changes",
+		description: "Report uncommitted repository paths for context maintenance.",
+		parameters: Type.Object({}, { additionalProperties: false }),
+		async execute(_id, _params, signal, _update, ctx) {
+			if (!ctx.isProjectTrusted()) throw new Error("Context changes require a trusted project");
+			const rootResult = await pi.exec("git", ["rev-parse", "--show-toplevel"], { cwd: ctx.cwd, signal });
+			if (rootResult.code !== 0) throw new Error("No Git repository found");
+			const root = rootResult.stdout.trim();
+			const status = await pi.exec("git", ["status", "--porcelain=v1", "-z", "--untracked-files=all"], {
+				cwd: root,
+				signal,
+			});
+			if (status.code !== 0) throw new Error(status.stderr.trim() || "Unable to read Git status");
+			return result({ root, changes: parseChangedFiles(status.stdout) });
+		},
+	});
+	pi.registerTool({
+		name: "context_review",
+		label: "Context Review",
+		description: "Present context maintenance operations for user approval and apply only selected operations.",
+		parameters: reviewParams,
+		executionMode: "sequential",
+		async execute(_id, params, _signal, _update, ctx) {
+			if (ctx.mode !== "tui" || !ctx.hasUI) throw new Error("Context review requires TUI mode");
+			if (!ctx.isProjectTrusted()) throw new Error("Context review requires a trusted project");
+			const rawOperations = params.operations as ContextOperation[];
+			if (new Set(rawOperations.map((operation) => operation.id)).size !== rawOperations.length)
+				throw new Error("Context operation ids must be unique");
+			const root = await findProjectRoot(ctx.cwd);
+			const operations = await validateContextOperations(root, rawOperations);
+			if (new Set(operations.map((operation) => operation.id)).size !== operations.length)
+				throw new Error("Context operation ids must be unique after trimming");
+			ctx.ui.setWorkingVisible(false);
+			try {
+				return await withReviewLock(async () => {
+					const decision = await ctx.ui.custom<ProposalReviewDecision>(
+						(tui, theme, _keys, done) => new ProposalPanel(tui, theme, operations, done),
+					);
+					if (decision.kind === "rejected") return result(decision);
+					if (decision.kind === "feedback") {
+						const feedback = await ctx.ui.editor(
+							decision.scope === "batch" ? "Context proposal feedback" : `Feedback for ${decision.operationId}`,
+							"",
+						);
+						return result(
+							feedback?.trim()
+								? { ...decision, text: feedback.trim() }
+								: { kind: "rejected", reason: "Feedback cancelled" },
+						);
+					}
+					for (const operation of decision.operations) await applyContextOperation(root, operation);
+					return result({
+						kind: "applied" as const,
+						operationIds: decision.operations.map((operation) => operation.id),
+					});
+				});
+			} finally {
+				ctx.ui.setWorkingVisible(true);
+			}
+		},
+	});
 	pi.registerTool({
 		name: "context_list",
 		label: "Context List",

@@ -18,6 +18,25 @@ import type { AgentDefinition } from "./agents.ts";
 const PREVIEW_LIMIT = 600;
 const VALUE_LIMIT = 180;
 
+const CHILD_UI_BLOCKED_METHODS = new Set([
+	"setEditorComponent",
+	"setFooter",
+	"setStatus",
+	"setTitle",
+	"setWidget",
+	"setWorkingIndicator",
+]);
+
+function childUiContext(ui: ExtensionContext["ui"]): ExtensionContext["ui"] {
+	return new Proxy(ui, {
+		get(target, property, receiver) {
+			if (typeof property === "string" && CHILD_UI_BLOCKED_METHODS.has(property)) return () => undefined;
+			const value = Reflect.get(target, property, receiver) as unknown;
+			return typeof value === "function" ? value.bind(target) : value;
+		},
+	});
+}
+
 export interface SubagentAction {
 	tool: string;
 	summary: string;
@@ -203,7 +222,9 @@ export async function runSubagent(options: {
 			sessionManager: SessionManager.inMemory(ctx.cwd),
 		});
 		session = created.session;
-		await session.bindExtensions({ mode: "print" });
+		await session.bindExtensions(
+			ctx.mode === "tui" && ctx.hasUI ? { mode: "tui", uiContext: childUiContext(ctx.ui) } : { mode: "print" },
+		);
 		const active = session.getActiveToolNames().sort();
 		const expected = [...definition.tools].sort();
 		if (active.join("\0") !== expected.join("\0") || active.includes("subagent")) {

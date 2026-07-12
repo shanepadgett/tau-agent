@@ -26,6 +26,28 @@ export interface ContextProposal {
 	files: string[];
 }
 
+export type ContextOperation =
+	| (ContextProposal & { id: string; kind: "create"; reason: string })
+	| {
+			id: string;
+			kind: "add-files" | "remove-files";
+			tab: string;
+			concept: string;
+			entry: string;
+			files: string[];
+			reason: string;
+	  }
+	| {
+			id: string;
+			kind: "replace-file";
+			tab: string;
+			concept: string;
+			entry: string;
+			from: string;
+			to: string;
+			reason: string;
+	  };
+
 export async function pathExists(path: string): Promise<boolean> {
 	try {
 		await access(path);
@@ -186,4 +208,51 @@ export async function updateContextFiles(
 		true,
 	);
 	return sortedUnique(changed);
+}
+
+export async function replaceContextFile(
+	root: string,
+	tab: string,
+	concept: string,
+	entry: string,
+	fromInput: string,
+	toInput: string,
+): Promise<void> {
+	const from = normalizeProjectPath(root, fromInput);
+	const [to] = await requireFiles(root, [toInput]);
+	const current = (await loadContextEntries(root)).find((item) => item.id === `${tab}/${concept}/${entry}`);
+	if (!current) throw new Error(`Unknown context entry: ${tab}/${concept}/${entry}`);
+	if (!current.files.includes(from)) throw new Error(`Context entry does not contain: ${from}`);
+	await writeContextEntry(
+		root,
+		{
+			tab: current.tab,
+			concept: current.concept,
+			conceptName: current.conceptName,
+			conceptDescription: current.conceptDescription,
+			entry: current.name,
+			description: current.description,
+			files: current.files.map((file) => (file === from ? to : file)),
+		},
+		true,
+	);
+}
+
+export async function applyContextOperation(root: string, operation: ContextOperation): Promise<void> {
+	if (operation.kind === "create") {
+		await writeContextEntry(root, operation, false);
+		return;
+	}
+	if (operation.kind === "replace-file") {
+		await replaceContextFile(root, operation.tab, operation.concept, operation.entry, operation.from, operation.to);
+		return;
+	}
+	await updateContextFiles(
+		root,
+		operation.tab,
+		operation.concept,
+		operation.entry,
+		operation.files,
+		operation.kind === "add-files" ? "add" : "remove",
+	);
 }

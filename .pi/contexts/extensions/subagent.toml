@@ -3,43 +3,16 @@ description = "Delegation to isolated child Tau sessions"
 
 [all]
 description = "Every Subagent file, built-in definition, direct shared dependency, test, and user-facing document"
-files = [
-  "packages/agent/extensions/subagent/agents.ts",
-  "packages/agent/extensions/subagent/index.ts",
-  "packages/agent/extensions/subagent/README.md",
-  "packages/agent/extensions/subagent/render.ts",
-  "packages/agent/extensions/subagent/run.ts",
-  "packages/agent/extensions/subagent/agents/context-research.md",
-  "packages/agent/extensions/subagent/agents/scout.md",
-  "packages/agent/extensions/subagent/agents/web-research.md",
-  "packages/agent/shared/tool-row-state.ts",
-  "packages/agent/test/extensions/subagent/agents.test.ts",
-  "packages/agent/test/extensions/subagent/index.test.ts",
-  "packages/agent/test/extensions/subagent/run.test.ts",
-  "packages/agent/extensions/tau-help/help.md",
-  "packages/agent/docs/extending-tau-agent.md",
-  "packages/agent/docs/subagents.md",
-]
+files = [ "packages/agent/docs/extending-tau-agent.md", "packages/agent/docs/subagents.md", "packages/agent/extensions/subagent/agents.ts", "packages/agent/extensions/subagent/agents/context-maintenance.md", "packages/agent/extensions/subagent/agents/scout.md", "packages/agent/extensions/subagent/agents/web-research.md", "packages/agent/extensions/subagent/index.ts", "packages/agent/extensions/subagent/README.md", "packages/agent/extensions/subagent/render.ts", "packages/agent/extensions/subagent/run.ts", "packages/agent/extensions/tau-help/help.md", "packages/agent/shared/tool-row-state.ts", "packages/agent/test/extensions/subagent/agents.test.ts", "packages/agent/test/extensions/subagent/index.test.ts", "packages/agent/test/extensions/subagent/run.test.ts" ]
 
 [definitions]
 description = "Built-in, user, and project agent definition discovery"
-files = [
-  "packages/agent/extensions/subagent/agents.ts",
-  "packages/agent/extensions/subagent/agents/scout.md",
-  "packages/agent/extensions/subagent/agents/context-research.md",
-  "packages/agent/extensions/subagent/agents/web-research.md",
-]
+files = [ "packages/agent/extensions/subagent/agents.ts", "packages/agent/extensions/subagent/agents/context-maintenance.md", "packages/agent/extensions/subagent/agents/scout.md", "packages/agent/extensions/subagent/agents/web-research.md" ]
 
 [execution]
 description = "Child session execution, limits, and results"
-files = [
-  "packages/agent/extensions/subagent/index.ts",
-  "packages/agent/extensions/subagent/run.ts",
-]
+files = [ "packages/agent/extensions/subagent/index.ts", "packages/agent/extensions/subagent/run.ts" ]
 
 [documentation]
 description = "User-facing subagent configuration and behavior"
-files = [
-  "packages/agent/extensions/subagent/README.md",
-  "packages/agent/docs/subagents.md",
-]
+files = [ "packages/agent/extensions/subagent/README.md", "packages/agent/docs/subagents.md" ]

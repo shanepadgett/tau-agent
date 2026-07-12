@@ -2,7 +2,7 @@
 
 Context stores reusable repository work scopes in `.pi/contexts`. Folder names become selector tabs, TOML files become concepts, and TOML sections become selectable entries.
 
-Use `/context` to select entries and inject their files through Tau autoread. Use `/context-manage <idea>` to have Tau research proposed entries and present them for approval.
+Use `/context` to select entries and inject their files through Tau autoread. Use `/context-manage <idea>` to start an isolated maintenance agent that researches the catalog, presents proposed operations for approval, accepts feedback, and applies only selected operations.
 
 ```toml
 name = "Player"

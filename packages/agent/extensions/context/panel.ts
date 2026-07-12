@@ -1,7 +1,7 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, getKeybindings, Key, matchesKey, truncateToWidth, type TUI } from "@earendil-works/pi-tui";
 import { bindingHint, rawHint, SelectableList, Tabs, ToolPanel, type ToolPanelConfig } from "@shanepadgett/tau-tui";
-import type { ContextEntry, ContextProposal } from "./definitions.ts";
+import type { ContextEntry, ContextOperation } from "./definitions.ts";
 
 type SelectableEntry = ContextEntry & { id: string };
 
@@ -135,54 +135,94 @@ export class ContextPanel implements Component {
 	}
 }
 
-type ProposalItem = ContextProposal & { id: string };
+export type ProposalReviewDecision =
+	| { kind: "approve"; operations: ContextOperation[] }
+	| { kind: "feedback"; scope: "batch"; selectedIds: string[] }
+	| { kind: "feedback"; scope: "operation"; operationId: string; selectedIds: string[] }
+	| { kind: "rejected" };
 
 export class ProposalPanel implements Component {
-	private readonly list: SelectableList<ProposalItem>;
+	private readonly list: SelectableList<ContextOperation>;
 	private readonly panel: ToolPanel;
-	private readonly onCurrent: (proposal: ContextProposal | undefined) => void;
+	private readonly done: (result: ProposalReviewDecision) => void;
+	private selected: readonly ContextOperation[] = [];
+	private current: ContextOperation;
 	constructor(
 		tui: TUI,
 		theme: Theme,
-		proposals: readonly ContextProposal[],
-		done: (result: ContextProposal[] | undefined) => void,
-		onCurrent: (proposal: ContextProposal | undefined) => void,
+		proposals: readonly ContextOperation[],
+		done: (result: ProposalReviewDecision) => void,
 	) {
-		this.onCurrent = onCurrent;
-		const items = proposals.map((proposal) => ({
-			...proposal,
-			id: `${proposal.tab}/${proposal.concept}/${proposal.entry}`,
-		}));
+		const first = proposals[0];
+		if (!first) throw new Error("Proposal panel requires at least one operation");
+		this.done = done;
+		this.current = first;
+		const items = [...proposals];
 		this.list = new SelectableList(theme, {
 			items,
 			emptyMessage: "No proposals.",
-			selection: { kind: "multi", primaryLabel: "create selected" },
+			selection: { kind: "multi", primaryLabel: "apply selected" },
 			actions: [],
 			cancelLabel: "cancel",
 			maxVisible: 12,
 			renderItem: (item, _state, width) => [
 				truncateToWidth(
-					`${theme.fg("accent", item.tab)} · ${item.conceptName} · ${item.entry}  ${theme.fg("dim", item.description)}`,
+					`${theme.fg("accent", item.kind)} · ${item.tab}/${item.concept}/${item.entry}  ${theme.fg("dim", item.reason)}`,
 					width,
 					"…",
 				),
 			],
 			onResult: (result) =>
-				done(result.kind === "primary" ? result.items.map(({ id: _id, ...item }) => item) : undefined),
-			onSelectionChange: () => tui.requestRender(),
+				done(
+					result.kind === "primary" && result.items.length > 0
+						? { kind: "approve", operations: [...result.items] }
+						: { kind: "rejected" },
+				),
+			onSelectionChange: (selected) => {
+				this.selected = selected;
+				tui.requestRender();
+			},
 		});
 		this.list.setSelectedIds(items.map((item) => item.id));
+		this.selected = items;
 		this.panel = new ToolPanel(theme, {
-			title: "Create contexts",
-			secondary: "Review researched entries",
-			body: this.list,
-			footer: { kind: "hints", hints: this.list.getKeyHints() },
+			title: "Maintain contexts",
+			secondary: "Review proposed operations",
+			body: {
+				render: (width) => [
+					...this.list.render(width),
+					"",
+					...operationPaths(this.current).map((path) =>
+						truncateToWidth(theme.fg("muted", `• ${path}`), width, "…"),
+					),
+				],
+				invalidate: () => this.list.invalidate(),
+			},
+			footer: {
+				kind: "hints",
+				hints: [
+					...this.list.getKeyHints(),
+					rawHint("ctrl+b", "batch feedback"),
+					rawHint("ctrl+i", "item feedback"),
+				],
+			},
 		});
-		this.onCurrent(this.list.getCurrentItem());
 	}
 	handleInput(data: string): void {
+		if (!this.list.isFilterFocused()) {
+			const selectedIds = this.selected.map((item) => item.id);
+			if (matchesKey(data, Key.ctrl("b"))) {
+				this.done({ kind: "feedback", scope: "batch", selectedIds });
+				return;
+			}
+			if (matchesKey(data, Key.ctrl("i"))) {
+				const current = this.list.getCurrentItem();
+				if (current) this.done({ kind: "feedback", scope: "operation", operationId: current.id, selectedIds });
+				return;
+			}
+		}
 		this.list.handleInput(data);
-		this.onCurrent(this.list.getCurrentItem());
+		this.current = this.list.getCurrentItem() ?? this.current;
 	}
 	render(width: number): string[] {
 		return this.panel.render(width);
@@ -190,4 +230,8 @@ export class ProposalPanel implements Component {
 	invalidate(): void {
 		this.panel.invalidate();
 	}
+}
+
+function operationPaths(operation: ContextOperation): string[] {
+	return operation.kind === "replace-file" ? [`${operation.from} → ${operation.to}`] : operation.files;
 }
