@@ -10,6 +10,7 @@ import { createLsPreviewWidget } from "./widgets/ls.ts";
 import { createPatchPreviewWidget } from "./widgets/patch.ts";
 import { createPublishPreviewWidget } from "./widgets/publish.ts";
 import { createReadPreviewWidget } from "./widgets/read.ts";
+import { createReadStatsPreviewOverlay } from "./widgets/read-stats.ts";
 import { createTabsListPreviewWidget } from "./widgets/tabs-list.ts";
 import { createToolPanelPreviewWidget } from "./widgets/tool-panel.ts";
 import { createTurnBudgetPreviewWidget } from "./widgets/turn-budget.ts";
@@ -64,6 +65,7 @@ export default function toolPreview(pi: ExtensionAPI): void {
 
 			const label = await ctx.ui.select("Tool preview", [
 				"context — selection overlay",
+				"read-stats — savings overlay",
 				...STORIES.map((story) => story.label),
 			]);
 			const story = STORIES.find((item) => item.label === label);
@@ -71,6 +73,13 @@ export default function toolPreview(pi: ExtensionAPI): void {
 				await ctx.ui.custom((tui, theme, _keys, done) => createContextPreviewOverlay(tui, theme, done), {
 					overlay: true,
 					overlayOptions: { anchor: "center", width: "70%", minWidth: 64, maxHeight: "80%", margin: 2 },
+				});
+				return;
+			}
+			if (label === "read-stats — savings overlay") {
+				await ctx.ui.custom((tui, theme, keys, done) => createReadStatsPreviewOverlay(tui, theme, keys, done), {
+					overlay: true,
+					overlayOptions: { anchor: "center", width: "54%", minWidth: 50, maxHeight: "85%", margin: 2 },
 				});
 				return;
 			}

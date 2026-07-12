@@ -2,17 +2,21 @@ import {
 	createReadToolDefinition,
 	DEFAULT_MAX_BYTES,
 	formatSize,
+	generateUnifiedPatch,
 	truncateHead,
 	type ReadToolDetails,
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
+import { Container, Text } from "@earendil-works/pi-tui";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { Type, type Static } from "typebox";
 import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.js";
 import { normalizeCountLimit } from "./limits.ts";
 import { stripLeadingAt } from "./path-display.ts";
+import { createReadCacheStore, type ReadCacheMetaV1, type ReadCacheStore } from "./read-cache.ts";
+import { createReadSnapshotStore, type ReadSnapshotStore } from "./read-snapshots.ts";
 
 const readSchema = Type.Object({
 	path: Type.String({ description: "Path to the file to read (relative or absolute)" }),
@@ -23,10 +27,25 @@ const readSchema = Type.Object({
 
 type ReadToolInput = Static<typeof readSchema>;
 type BaseReadDefinition = ReturnType<typeof createReadToolDefinition>;
-type ReadDefinition = ToolDefinition<typeof readSchema, ReadToolDetails | undefined>;
+interface ExploreReadDetails extends ReadToolDetails {
+	readCache?: ReadCacheMetaV1;
+}
+type ReadDefinition = ToolDefinition<typeof readSchema, ExploreReadDetails | undefined>;
 type ReadExecute = ReadDefinition["execute"];
 type ReadRenderCall = NonNullable<ReadDefinition["renderCall"]>;
 type ReadRenderResult = NonNullable<ReadDefinition["renderResult"]>;
+
+interface BaselineTextResult {
+	text: string;
+	details: ReadToolDetails | undefined;
+	totalLines: number;
+	startLine: number;
+	endLine: number;
+	completeFile: boolean;
+	scopeKey: string;
+	summary: string;
+	cacheable: boolean;
+}
 
 const readDefinitionByCwd = new Map<string, BaseReadDefinition>();
 
@@ -67,7 +86,114 @@ function renderCallSummary(args: ReadToolInput | undefined): string {
 	return `${path}:${start}${end === "" ? "" : `-${end}`}`;
 }
 
-export function createExploreReadTool(rowState: ToolRowStateStore): ReadDefinition {
+function estimateTokens(text: string): number {
+	return Math.ceil(text.length / 4);
+}
+
+function baselineText(text: string, params: ReadToolInput): BaselineTextResult {
+	const allLines = text.split("\n");
+	const startIndex = params.offset ? Math.max(0, params.offset - 1) : 0;
+	const startLine = startIndex + 1;
+	if (startIndex >= allLines.length) {
+		throw new Error(`Offset ${params.offset} is beyond end of file (${allLines.length} lines total)`);
+	}
+
+	const selectedEnd =
+		params.limit === undefined ? allLines.length : Math.min(startIndex + params.limit, allLines.length);
+	const selectedLines = allLines.slice(startIndex, selectedEnd);
+	const selectedContent = selectedLines
+		.map((line, index) => (params.lineNumbers ? `${startLine + index}: ${line}` : line))
+		.join("\n");
+	const truncation = truncateHead(selectedContent);
+	let outputText: string;
+	let details: ReadToolDetails | undefined;
+	let outputLines = selectedLines.length;
+	let cacheable = true;
+
+	if (truncation.firstLineExceedsLimit) {
+		const firstLineSize = formatSize(Buffer.byteLength(selectedLines[0] ?? "", "utf-8"));
+		outputText = `[Line ${startLine} is ${firstLineSize}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Use bash: sed -n '${startLine}p' ${params.path} | head -c ${DEFAULT_MAX_BYTES}]`;
+		details = { truncation };
+		outputLines = 0;
+		cacheable = false;
+	} else if (truncation.truncated) {
+		outputLines = truncation.outputLines;
+		const endLineDisplay = startLine + outputLines - 1;
+		const nextOffset = endLineDisplay + 1;
+		outputText = truncation.content;
+		outputText +=
+			truncation.truncatedBy === "lines"
+				? `\n\n[Showing lines ${startLine}-${endLineDisplay} of ${allLines.length}. Use offset=${nextOffset} to continue.]`
+				: `\n\n[Showing lines ${startLine}-${endLineDisplay} of ${allLines.length} (${formatSize(DEFAULT_MAX_BYTES)} limit). Use offset=${nextOffset} to continue.]`;
+		details = { truncation };
+	} else if (selectedEnd < allLines.length) {
+		outputText = `${truncation.content}\n\n[${allLines.length - selectedEnd} more lines in file. Use offset=${selectedEnd + 1} to continue.]`;
+	} else {
+		outputText = truncation.content;
+	}
+
+	const endLine = outputLines === 0 ? startLine : startLine + outputLines - 1;
+	const completeFile = startIndex === 0 && selectedEnd === allLines.length && !truncation.truncated;
+	const scopeKey = `${completeFile ? "full" : `r:${startLine}:${endLine}`}:n${params.lineNumbers ? 1 : 0}`;
+	const summary = completeFile ? `${allLines.length} lines` : `${outputLines} lines`;
+	return {
+		text: outputText,
+		details,
+		totalLines: allLines.length,
+		startLine,
+		endLine,
+		completeFile,
+		scopeKey,
+		summary,
+		cacheable,
+	};
+}
+
+function withMeta(baseline: BaselineTextResult, meta: ReadCacheMetaV1, text = baseline.text) {
+	return {
+		content: [{ type: "text" as const, text }],
+		details: { ...baseline.details, readCache: meta },
+	};
+}
+
+function createMeta(
+	baseline: BaselineTextResult,
+	pathKey: string,
+	hash: string,
+	mode: ReadCacheMetaV1["mode"],
+	returnedText: string,
+	baseHash?: string,
+	summary = baseline.summary,
+): ReadCacheMetaV1 {
+	return {
+		v: 1,
+		pathKey,
+		scopeKey: baseline.scopeKey,
+		servedHash: hash,
+		baseHash,
+		mode,
+		baselineTokens: estimateTokens(baseline.text),
+		returnedTokens: estimateTokens(returnedText),
+		totalLines: baseline.totalLines,
+		summary,
+	};
+}
+
+function countDiffLines(patch: string): { added: number; removed: number } {
+	let added = 0;
+	let removed = 0;
+	for (const line of patch.split("\n")) {
+		if (line.startsWith("+") && !line.startsWith("+++")) added += 1;
+		else if (line.startsWith("-") && !line.startsWith("---")) removed += 1;
+	}
+	return { added, removed };
+}
+
+export function createExploreReadTool(
+	rowState: ToolRowStateStore,
+	cache: ReadCacheStore = createReadCacheStore(),
+	snapshots: ReadSnapshotStore = createReadSnapshotStore(),
+): ReadDefinition {
 	const baseDefinition = readDefinitionForCwd(process.cwd());
 	return {
 		...baseDefinition,
@@ -81,7 +207,7 @@ export function createExploreReadTool(rowState: ToolRowStateStore): ReadDefiniti
 		) {
 			const definition = readDefinitionForCwd(ctx.cwd);
 			const normalized = normalizeReadParams(params);
-			const path = isAbsolute(normalized.path) ? normalized.path : resolve(ctx.cwd, normalized.path);
+			const path = isAbsolute(normalized.path) ? resolve(normalized.path) : resolve(ctx.cwd, normalized.path);
 			const buffer = await readFile(path);
 			if (isSupportedImage(buffer)) {
 				return definition.execute(
@@ -94,42 +220,49 @@ export function createExploreReadTool(rowState: ToolRowStateStore): ReadDefiniti
 			}
 
 			if (signal?.aborted) throw new Error("Operation aborted");
-			const allLines = buffer.toString("utf-8").split("\n");
-			const startLine = normalized.offset ? Math.max(0, normalized.offset - 1) : 0;
-			const startLineDisplay = startLine + 1;
-			if (startLine >= allLines.length) {
-				throw new Error(`Offset ${normalized.offset} is beyond end of file (${allLines.length} lines total)`);
+			let text: string;
+			try {
+				text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+			} catch {
+				return definition.execute(toolCallId, normalized, signal, onUpdate, ctx);
 			}
 
-			const endLine =
-				normalized.limit === undefined ? allLines.length : Math.min(startLine + normalized.limit, allLines.length);
-			const selectedLines = allLines.slice(startLine, endLine);
-			const selectedContent = selectedLines
-				.map((line, index) => (normalized.lineNumbers ? `${startLineDisplay + index}: ${line}` : line))
-				.join("\n");
-			const truncation = truncateHead(selectedContent);
-			let outputText: string;
-			let details: ReadToolDetails | undefined;
-			if (truncation.firstLineExceedsLimit) {
-				const firstLineSize = formatSize(Buffer.byteLength(selectedLines[0] ?? "", "utf-8"));
-				outputText = `[Line ${startLineDisplay} is ${firstLineSize}, exceeds ${formatSize(DEFAULT_MAX_BYTES)} limit. Use bash: sed -n '${startLineDisplay}p' ${normalized.path} | head -c ${DEFAULT_MAX_BYTES}]`;
-				details = { truncation };
-			} else if (truncation.truncated) {
-				const endLineDisplay = startLineDisplay + truncation.outputLines - 1;
-				const nextOffset = endLineDisplay + 1;
-				outputText = truncation.content;
-				outputText +=
-					truncation.truncatedBy === "lines"
-						? `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${allLines.length}. Use offset=${nextOffset} to continue.]`
-						: `\n\n[Showing lines ${startLineDisplay}-${endLineDisplay} of ${allLines.length} (${formatSize(DEFAULT_MAX_BYTES)} limit). Use offset=${nextOffset} to continue.]`;
-				details = { truncation };
-			} else if (endLine < allLines.length) {
-				outputText = `${truncation.content}\n\n[${allLines.length - endLine} more lines in file. Use offset=${endLine + 1} to continue.]`;
-			} else {
-				outputText = truncation.content;
+			const baseline = baselineText(text, normalized);
+			if (!baseline.cacheable) {
+				return { content: [{ type: "text", text: baseline.text }], details: baseline.details };
+			}
+			const hash = createHash("sha256").update(buffer).digest("hex");
+			const decision = cache.decision(ctx, path, baseline.scopeKey);
+			let output = baseline.text;
+			let mode: ReadCacheMetaV1["mode"] = decision.recovery ? "recovery" : "baseline";
+			let summary = baseline.summary;
+
+			if (!decision.recovery && decision.baseHash === hash) {
+				output = baseline.completeFile
+					? `unchanged, ${baseline.totalLines} lines`
+					: `unchanged, lines ${baseline.startLine}-${baseline.endLine} of ${baseline.totalLines}`;
+				mode = "unchanged";
+				summary = output;
+			} else if (!decision.recovery && decision.baseHash && baseline.completeFile && !normalized.lineNumbers) {
+				const baseText = snapshots.get(decision.baseHash);
+				if (baseText !== undefined) {
+					const patch = generateUnifiedPatch(normalized.path, baseText, text, 3);
+					const counts = countDiffLines(patch);
+					const candidate = `[read: ${counts.added} lines added, ${counts.removed} removed of ${baseline.totalLines}]\n${patch}`;
+					const candidateTruncation = truncateHead(candidate);
+					if (!candidateTruncation.truncated && estimateTokens(candidate) < estimateTokens(baseline.text)) {
+						output = candidate;
+						mode = "diff";
+						summary = `+${counts.added} -${counts.removed}`;
+					}
+				}
 			}
 
-			return { content: [{ type: "text", text: outputText }], details };
+			if (signal?.aborted) throw new Error("Operation aborted");
+			snapshots.set(hash, text, buffer.byteLength);
+			const meta = createMeta(baseline, path, hash, mode, output, decision.baseHash, summary);
+			cache.record(ctx, meta);
+			return withMeta(baseline, meta, output);
 		},
 		renderCall(
 			args: Parameters<ReadRenderCall>[0],
@@ -138,6 +271,10 @@ export function createExploreReadTool(rowState: ToolRowStateStore): ReadDefiniti
 		) {
 			rowState.watch(context.toolCallId, context.invalidate);
 			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+			if (context.executionStarted) {
+				text.setText("");
+				return text;
+			}
 			const title = formatToolRowTitle(rowState, context.toolCallId, "read", theme);
 			text.setText(`${title} ${theme.fg("muted", renderCallSummary(args))}`);
 			return text;
@@ -148,13 +285,32 @@ export function createExploreReadTool(rowState: ToolRowStateStore): ReadDefiniti
 			theme: Parameters<ReadRenderResult>[2],
 			context: Parameters<ReadRenderResult>[3],
 		) {
-			if (!context.expanded) {
-				const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-				text.setText("");
-				return text;
+			rowState.watch(context.toolCallId, context.invalidate);
+			const container = new Container();
+			const title = formatToolRowTitle(rowState, context.toolCallId, "read", theme);
+			const args = context.args as ReadToolInput | undefined;
+			const details = result.details as ExploreReadDetails | undefined;
+			const summary = details?.readCache?.summary;
+			const summaryText = context.isError
+				? theme.fg("error", "error")
+				: summary
+					? theme.fg(
+							details?.readCache?.mode === "unchanged"
+								? "success"
+								: details?.readCache?.mode === "diff"
+									? "accent"
+									: "muted",
+							summary,
+						)
+					: "";
+			const header = `${title} ${theme.fg("muted", renderCallSummary(args))}${summaryText ? `  ${summaryText}` : ""}`;
+			container.addChild(new Text(header, 0, 0));
+			if (options.expanded) {
+				const definition = readDefinitionForCwd(context.cwd);
+				const body = definition.renderResult?.(result, { ...options, expanded: true }, theme, context);
+				if (body) container.addChild(body);
 			}
-			const definition = readDefinitionForCwd(context.cwd);
-			return definition.renderResult?.(result, { ...options, expanded: true }, theme, context) ?? new Text("", 0, 0);
+			return container;
 		},
 	};
 }

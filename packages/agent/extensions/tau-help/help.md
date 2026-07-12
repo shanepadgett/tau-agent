@@ -32,7 +32,7 @@ Adds `/context` to select reusable repository work scopes from `.pi/contexts`, a
 
 ## explore
 
-Replaces Pi’s filesystem inspection tools with compact Tau versions: `ls`, `find`, `grep`, and `read`. They produce smaller model payloads and readable tool rows. `read` includes focused line ranges; `grep`, `find`, and `ls` keep discovery output compact so the agent spends fewer tokens rereading directory and search results.
+Replaces Pi’s filesystem inspection tools with compact Tau versions: `ls`, `find`, `grep`, and `read`. They produce smaller model payloads and readable tool rows. Repeated `read` calls return unchanged markers or useful diffs when branch history proves the agent already saw the base content. A failed patch unlocks one normal reread of the affected path. `/read-stats` shows estimated token and cost savings for the current chat and whole session.
 
 ## footer
 

@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { resolve } from "node:path";
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import { onTauEvent, type TauAgentEvents } from "../../shared/events.js";
 import type { ToolRowStateStore } from "../../shared/tool-row-state.js";
 import { Marker, type MarkerState } from "@shanepadgett/tau-tui";
+import type { ReadCacheMetaV1 } from "./read-cache.ts";
 
 const AUTOREAD_MESSAGE_TYPE = "tau.autoread";
 
@@ -17,6 +19,7 @@ interface AutoreadDetails {
 	batchId: string;
 	status: AutoreadStatus;
 	error?: string;
+	readCache?: ReadCacheMetaV1;
 }
 
 export function registerAutoread(pi: ExtensionAPI, rowState: ToolRowStateStore): void {
@@ -34,12 +37,26 @@ export function registerAutoread(pi: ExtensionAPI, rowState: ToolRowStateStore):
 					batchId: event.batchId,
 				} satisfies Omit<AutoreadDetails, "status" | "error">;
 				try {
-					const content = await readFile(join(event.cwd, file.path), "utf8");
+					const pathKey = resolve(event.cwd, file.path);
+					const bytes = await readFile(pathKey);
+					const content = bytes.toString("utf8");
+					const totalLines = content.split("\n").length;
+					const readCache = {
+						v: 1,
+						pathKey,
+						scopeKey: "full:n0",
+						servedHash: createHash("sha256").update(bytes).digest("hex"),
+						mode: "baseline",
+						baselineTokens: Math.ceil(content.length / 4),
+						returnedTokens: Math.ceil(content.length / 4),
+						totalLines,
+						summary: `${totalLines} lines`,
+					} satisfies ReadCacheMetaV1;
 					pi.sendMessage({
 						customType: AUTOREAD_MESSAGE_TYPE,
 						content: `${file.path}\n${content}`,
 						display: true,
-						details: { ...details, status: "read" },
+						details: { ...details, status: "read", readCache },
 					});
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);

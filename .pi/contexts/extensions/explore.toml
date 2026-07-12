@@ -3,94 +3,28 @@ description = "Compact repository inspection tools and autoread"
 
 [all]
 description = "Every Explore file, direct shared dependency, test, and user-facing document"
-files = [
-  "packages/agent/extensions/explore/autoread.ts",
-  "packages/agent/extensions/explore/find.ts",
-  "packages/agent/extensions/explore/grep.ts",
-  "packages/agent/extensions/explore/index.ts",
-  "packages/agent/extensions/explore/limits.ts",
-  "packages/agent/extensions/explore/ls.ts",
-  "packages/agent/extensions/explore/path-display.ts",
-  "packages/agent/extensions/explore/path-tree.ts",
-  "packages/agent/extensions/explore/read.ts",
-  "packages/agent/extensions/explore/README.md",
-  "packages/agent/extensions/explore/result.ts",
-  "packages/agent/extensions/explore/traverse.ts",
-  "packages/agent/shared/events.ts",
-  "packages/agent/shared/injected-context.ts",
-  "packages/agent/shared/tool-row-state.ts",
-  "packages/agent/test/extensions/explore/find.test.ts",
-  "packages/agent/test/extensions/explore/grep.test.ts",
-  "packages/agent/test/extensions/explore/helpers.ts",
-  "packages/agent/test/extensions/explore/ls.test.ts",
-  "packages/agent/test/extensions/explore/read.test.ts",
-  "packages/agent/extensions/tau-help/help.md",
-  "packages/agent/docs/extending-tau-agent.md",
-]
+files = [ "packages/agent/extensions/explore/autoread.ts", "packages/agent/extensions/explore/find.ts", "packages/agent/extensions/explore/grep.ts", "packages/agent/extensions/explore/index.ts", "packages/agent/extensions/explore/limits.ts", "packages/agent/extensions/explore/ls.ts", "packages/agent/extensions/explore/path-display.ts", "packages/agent/extensions/explore/path-tree.ts", "packages/agent/extensions/explore/read.ts", "packages/agent/extensions/explore/README.md", "packages/agent/extensions/explore/result.ts", "packages/agent/extensions/explore/traverse.ts", "packages/agent/shared/events.ts", "packages/agent/shared/injected-context.ts", "packages/agent/shared/tool-row-state.ts", "packages/agent/test/extensions/explore/find.test.ts", "packages/agent/test/extensions/explore/grep.test.ts", "packages/agent/test/extensions/explore/helpers.ts", "packages/agent/test/extensions/explore/ls.test.ts", "packages/agent/test/extensions/explore/read.test.ts", "packages/agent/extensions/tau-help/help.md", "packages/agent/docs/extending-tau-agent.md" ]
 
 [tools]
 description = "Read, grep, find, and list tool registration"
-files = [
-  "packages/agent/extensions/explore/index.ts",
-  "packages/agent/extensions/explore/README.md",
-  "packages/agent/shared/tool-row-state.ts",
-]
+files = [ "packages/agent/extensions/explore/index.ts", "packages/agent/extensions/explore/README.md", "packages/agent/shared/tool-row-state.ts" ]
 
 [read]
 description = "Focused text and image file reads with line ranges and truncation"
-files = [
-  "packages/agent/extensions/explore/read.ts",
-  "packages/agent/extensions/explore/limits.ts",
-  "packages/agent/extensions/explore/path-display.ts",
-  "packages/agent/shared/tool-row-state.ts",
-  "packages/agent/test/extensions/explore/read.test.ts",
-  "packages/agent/test/extensions/explore/helpers.ts",
-]
+files = [ ".pi/extensions/tool-preview/index.ts", ".pi/extensions/tool-preview/widgets/read-stats.ts", ".pi/extensions/tool-preview/widgets/read.ts", ".working/explore-read-cache-plan.md", "packages/agent/extensions/explore/index.ts", "packages/agent/extensions/explore/limits.ts", "packages/agent/extensions/explore/path-display.ts", "packages/agent/extensions/explore/read-cache.ts", "packages/agent/extensions/explore/read-snapshots.ts", "packages/agent/extensions/explore/read-stats-panel.ts", "packages/agent/extensions/explore/read-stats.ts", "packages/agent/extensions/explore/read.ts", "packages/agent/extensions/explore/README.md", "packages/agent/extensions/tau-help/help.md", "packages/agent/shared/tool-row-state.ts", "packages/agent/test/extensions/explore/helpers.ts", "packages/agent/test/extensions/explore/read.test.ts" ]
 
 [grep]
 description = "Compact batched repository text search"
-files = [
-  "packages/agent/extensions/explore/grep.ts",
-  "packages/agent/extensions/explore/limits.ts",
-  "packages/agent/extensions/explore/path-display.ts",
-  "packages/agent/extensions/explore/result.ts",
-  "packages/agent/shared/tool-row-state.ts",
-  "packages/agent/test/extensions/explore/grep.test.ts",
-  "packages/agent/test/extensions/explore/helpers.ts",
-]
+files = [ "packages/agent/extensions/explore/grep.ts", "packages/agent/extensions/explore/limits.ts", "packages/agent/extensions/explore/path-display.ts", "packages/agent/extensions/explore/result.ts", "packages/agent/shared/tool-row-state.ts", "packages/agent/test/extensions/explore/grep.test.ts", "packages/agent/test/extensions/explore/helpers.ts" ]
 
 [find]
 description = "Structured file and directory discovery"
-files = [
-  "packages/agent/extensions/explore/find.ts",
-  "packages/agent/extensions/explore/limits.ts",
-  "packages/agent/extensions/explore/path-display.ts",
-  "packages/agent/extensions/explore/path-tree.ts",
-  "packages/agent/extensions/explore/result.ts",
-  "packages/agent/extensions/explore/traverse.ts",
-  "packages/agent/shared/tool-row-state.ts",
-  "packages/agent/test/extensions/explore/find.test.ts",
-  "packages/agent/test/extensions/explore/helpers.ts",
-]
+files = [ "packages/agent/extensions/explore/find.ts", "packages/agent/extensions/explore/limits.ts", "packages/agent/extensions/explore/path-display.ts", "packages/agent/extensions/explore/path-tree.ts", "packages/agent/extensions/explore/result.ts", "packages/agent/extensions/explore/traverse.ts", "packages/agent/shared/tool-row-state.ts", "packages/agent/test/extensions/explore/find.test.ts", "packages/agent/test/extensions/explore/helpers.ts" ]
 
 [ls]
 description = "Compact directory listings and path trees"
-files = [
-  "packages/agent/extensions/explore/ls.ts",
-  "packages/agent/extensions/explore/limits.ts",
-  "packages/agent/extensions/explore/path-display.ts",
-  "packages/agent/extensions/explore/path-tree.ts",
-  "packages/agent/extensions/explore/result.ts",
-  "packages/agent/extensions/explore/traverse.ts",
-  "packages/agent/shared/tool-row-state.ts",
-  "packages/agent/test/extensions/explore/ls.test.ts",
-  "packages/agent/test/extensions/explore/helpers.ts",
-]
+files = [ "packages/agent/extensions/explore/ls.ts", "packages/agent/extensions/explore/limits.ts", "packages/agent/extensions/explore/path-display.ts", "packages/agent/extensions/explore/path-tree.ts", "packages/agent/extensions/explore/result.ts", "packages/agent/extensions/explore/traverse.ts", "packages/agent/shared/tool-row-state.ts", "packages/agent/test/extensions/explore/ls.test.ts", "packages/agent/test/extensions/explore/helpers.ts" ]
 
 [autoread]
 description = "External file requests injected as visible context"
-files = [
-  "packages/agent/extensions/explore/autoread.ts",
-  "packages/agent/shared/events.ts",
-  "packages/agent/shared/injected-context.ts",
-]
+files = [ "packages/agent/extensions/explore/autoread.ts", "packages/agent/shared/events.ts", "packages/agent/shared/injected-context.ts" ]
