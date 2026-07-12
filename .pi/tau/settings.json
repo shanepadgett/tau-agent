@@ -13,6 +13,14 @@
 		"silentCommandRunner": {
 			"commands": [
 				{
+					"name": "context-check",
+					"command": "npm run check:contexts",
+					"details": "Validates context file references and reports uncommitted files missing from every context so the agent runs context_sync.",
+					"includeGlobs": [
+						"**/*"
+					]
+				},
+				{
 					"name": "ts-check",
 					"command": "mise run check:ts",
 					"details": "Runs Tau schema drift check, Oxfmt formatting, Oxlint lint fixes, TypeScript (tsgo) checks, unit tests, and Fallow dead-code/duplication checks.",

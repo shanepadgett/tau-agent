@@ -13,6 +13,8 @@ files = [
   "packages/agent/shared/settings/schema.ts",
   "packages/agent/shared/settings/specs.ts",
   "packages/agent/scripts/generate-tau-schema.ts",
+  "packages/agent/scripts/check-contexts.ts",
+  ".pi/tau/settings.json",
   "packages/agent/schemas/tau.schema.json",
   "packages/agent/extensions/footer/settings.ts",
   "packages/agent/extensions/reference/settings.ts",
@@ -31,6 +33,13 @@ files = [
   "packages/agent/shared/settings/load.ts",
   "packages/agent/shared/settings/merge.ts",
   "packages/agent/shared/settings/paths.ts",
+]
+
+[validation]
+description = "Project context catalog validation and automatic silent-runner configuration"
+files = [
+  "packages/agent/scripts/check-contexts.ts",
+  ".pi/tau/settings.json",
 ]
 
 [schema]
