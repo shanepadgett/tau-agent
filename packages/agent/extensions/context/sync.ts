@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
-import { Type, type Tool } from "@earendil-works/pi-ai";
+import { Type, type ThinkingLevel, type Tool } from "@earendil-works/pi-ai";
 import { withFileMutationQueue, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { parse, stringify } from "smol-toml";
 import { createGitRunner, loadRepoStatus, type GitRunner } from "../../shared/git.ts";
 import { generateToolValidated, resolveCandidates } from "../../shared/model-fallback/index.ts";
 import { truncAt } from "../../shared/text.ts";
+import { XAI_CHAT_MODEL, XAI_PROVIDER } from "../xai/constants.ts";
 import {
 	loadContextEntries,
 	normalizeProjectPath,
@@ -22,19 +23,22 @@ const MAX_TOTAL_EVIDENCE = 64_000;
 const MAX_UNTRACKED_BYTES = 12_000;
 const EVIDENCE_CONCURRENCY = 4;
 
+const CONTEXT_SYNC_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
+	{ provider: "openai-codex", model: "gpt-5.6-terra", reasoning: "medium" },
+	{ provider: "openai-codex", model: "gpt-5.6-sol", reasoning: "low" },
+	{ provider: "anthropic", model: "claude-sonnet-5", reasoning: "low" },
+	{ provider: XAI_PROVIDER, model: XAI_CHAT_MODEL, reasoning: "high" },
+];
+
 const SUBMIT_TOOL = {
 	name: "submit_context_sync",
 	description: "Submit the desired context catalog changes.",
-	parameters: Type.Union([
-		Type.Object(
-			{ outcome: Type.Literal("no-change"), reason: Type.String({ minLength: 1 }) },
-			{ additionalProperties: false },
-		),
-		Type.Object(
-			{
-				outcome: Type.Literal("apply"),
-				reason: Type.String({ minLength: 1 }),
-				changes: Type.Array(
+	parameters: Type.Object(
+		{
+			outcome: Type.Union([Type.Literal("no-change"), Type.Literal("apply")]),
+			reason: Type.String({ minLength: 1 }),
+			changes: Type.Optional(
+				Type.Array(
 					Type.Union([
 						Type.Object(
 							{
@@ -61,10 +65,10 @@ const SUBMIT_TOOL = {
 					]),
 					{ minItems: 1 },
 				),
-			},
-			{ additionalProperties: false },
-		),
-	]),
+			),
+		},
+		{ additionalProperties: false },
+	),
 } satisfies Tool;
 
 export interface SyncDirtyFile {
@@ -122,8 +126,13 @@ export interface SyncEvidence {
 
 let syncQueue = Promise.resolve();
 
-export async function runContextSync(pi: ExtensionAPI, ctx: ExtensionContext): Promise<ContextSyncDetails> {
+export async function runContextSync(
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+	onStatus?: (status: string) => void | Promise<void>,
+): Promise<ContextSyncDetails> {
 	if (!ctx.isProjectTrusted()) throw new Error("Context sync requires a trusted project");
+	await onStatus?.("Inspecting repository context");
 	const git = createGitRunner(pi, ctx);
 	const status = await loadRepoStatus(git);
 	if (!status) throw new Error("No Git repository found");
@@ -132,14 +141,15 @@ export async function runContextSync(pi: ExtensionAPI, ctx: ExtensionContext): P
 	const prompt = buildContextSyncPrompt(evidence);
 	const plan = await generateToolValidated(
 		ctx,
-		await resolveCandidates(ctx),
+		await resolveCandidates(ctx, CONTEXT_SYNC_MODELS, false),
 		prompt,
 		SUBMIT_TOOL,
 		(input) => normalizeContextSyncPlan(input, evidence),
 		(error) => `Validation failed: ${error.message}\nCall submit_context_sync once with corrected arguments only.`,
-		{ statusKey: "context-sync", notifyOnFallback: true },
+		{ statusKey: "context-sync", onStatus },
 	);
 	if (plan.outcome === "no-change") return noChange(plan.reason);
+	await onStatus?.("Applying context catalog changes");
 	return withSyncLock(async () => {
 		return applyContextSyncPlan(evidence.root, plan, evidence.entries, async () => {
 			const currentEntries = await loadContextEntries(evidence.root);

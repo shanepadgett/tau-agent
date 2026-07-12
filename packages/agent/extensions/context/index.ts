@@ -89,39 +89,42 @@ export default function contextExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.registerTool(
-		defineTool<typeof contextSyncParams, ContextSyncDetails>({
+		defineTool<typeof contextSyncParams, ContextSyncDetails | undefined>({
 			name: "context_sync",
 			label: "context_sync",
 			description: "Synchronize repository context from current Git changes.",
 			parameters: contextSyncParams,
-			async execute(_id, _params, _signal, _update, ctx) {
-				return compactResult(await runContextSync(pi, ctx));
+			async execute(_id, _params, _signal, onUpdate, ctx) {
+				return compactResult(
+					await runContextSync(pi, ctx, (status) =>
+						onUpdate?.({ content: [{ type: "text", text: status }], details: undefined }),
+					),
+				);
 			},
 			renderCall(_args, theme, context) {
 				const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
 				text.setText(theme.fg("toolTitle", "context_sync"));
 				return text;
 			},
-			renderResult(result, _options, theme, context) {
+			renderResult(result, options, theme, context) {
 				const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
 				const details = result.details;
+				const output = result.content.map((part) => (part.type === "text" ? part.text : "")).join("");
 				text.setText(
-					context.expanded && details
-						? [
-								details.summary,
-								details.reason,
-								...details.changes.map((change) =>
-									change.action === "set-entry"
-										? `${change.action} ${change.tab}/${change.concept}/${change.entry}: ${change.files.join(", ")}`
-										: `${change.action} ${change.tab}/${change.concept}/${change.entry}`,
-								),
-								...details.changedContextFiles,
-							].join("\n")
-						: (details?.summary ??
-								theme.fg(
-									"error",
-									result.content.map((part) => (part.type === "text" ? part.text : "")).join(""),
-								)),
+					options.isPartial
+						? theme.fg("dim", output)
+						: context.expanded && details
+							? [
+									details.summary,
+									details.reason,
+									...details.changes.map((change) =>
+										change.action === "set-entry"
+											? `${change.action} ${change.tab}/${change.concept}/${change.entry}: ${change.files.join(", ")}`
+											: `${change.action} ${change.tab}/${change.concept}/${change.entry}`,
+									),
+									...details.changedContextFiles,
+								].join("\n")
+							: (details?.summary ?? theme.fg("error", output)),
 				);
 				return text;
 			},
