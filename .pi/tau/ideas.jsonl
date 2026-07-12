@@ -8,3 +8,5 @@
 {"id":"0e365866-237d-41dc-9006-9264f26d3b3d","text":"we need whole file structural maps when agent tries to read whole file","createdAt":1782254899726}
 {"id":"a7c05e7a-e73b-4b67-a4b3-a6edda03d607","text":"session naming should not happen for subagents","createdAt":1783818798991}
 {"id":"fa81b7f7-f2e4-4a7c-805c-ea7a765d9a06","text":"We need to better defend against delete and add changes in patch because I believe they fail and you're meant to be using replace or literally just using add to overwrite and so I wonder if A we can treat a delete and then add in a way where it it it analyzes all the files being changed and it sees if there is an add over a delete and then it just does essentially the operation of a replace else the prompting needs stronger guidance.","createdAt":1783839603032}
+{"id":"1a45b025-50ab-4dca-890d-ef911b5e440b","text":"The context sync tool call should show some kind of progress with what's happening.","createdAt":1783841956502}
+{"id":"b996002a-388d-4016-b892-575dea00c1cc","text":"Context sync should only be run when the agent feels it's actually done with its work before it tries to end the turn.","createdAt":1783844542120}
