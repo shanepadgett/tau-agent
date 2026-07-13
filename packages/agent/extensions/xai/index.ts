@@ -16,7 +16,7 @@ export default function xaiExtension(pi: ExtensionAPI): void {
 				name: "Grok 4.5",
 				reasoning: true,
 				input: ["text", "image"],
-				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				cost: { input: 2, output: 6, cacheRead: 0.5, cacheWrite: 0 },
 				contextWindow: 500_000,
 				maxTokens: 131_072,
 				thinkingLevelMap: {
