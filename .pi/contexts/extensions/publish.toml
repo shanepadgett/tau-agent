@@ -7,6 +7,7 @@ files = [
   "packages/agent/extensions/publish/README.md",
   "packages/agent/extensions/publish/index.ts",
   "packages/agent/extensions/publish/publish-ui.ts",
+  "packages/agent/scripts/check-package-sources.ts",
   "packages/agent/shared/git.ts",
   "packages/agent/shared/text.ts",
 ]
@@ -15,6 +16,7 @@ description = "Extension runtime and direct shared dependencies"
 files = [
   "packages/agent/extensions/publish/index.ts",
   "packages/agent/extensions/publish/publish-ui.ts",
+  "packages/agent/scripts/check-package-sources.ts",
   "packages/agent/shared/git.ts",
   "packages/agent/shared/text.ts",
 ]

@@ -19,6 +19,8 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+      - run: npm install --global npm@10.9.3
+      - run: npm run check:package-sources
       - run: npm ci --ignore-scripts
       - run: npm pack --dry-run --workspace @shanepadgett/tau-tui
       - run: npm pack --dry-run --workspace @shanepadgett/tau-agent
