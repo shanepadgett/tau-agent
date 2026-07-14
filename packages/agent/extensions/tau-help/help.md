@@ -98,13 +98,17 @@ Adds `/tau-help` to show this guide as rendered Markdown in the chat.
 
 Adds `/tau`, `/tau init [--global|--project]`, and `/tau doctor` for Tau setup and diagnostics.
 
+## tool-loader
+
+Progressively exposes specialist tools through `load_tools`. Tau normally loads the fixed `web`, `image`, and `appshot` groups itself when needed; supported providers can preserve more prompt-cache reuse.
+
 ## turn-budget
 
 Tracks and limits agent turns to keep work bounded.
 
 ## web
 
-Gives the agent compact `web_search`, `web_fetch`, and `code_search` tools for web and implementation research.
+Gives the agent compact `websearch`, `webfetch`, and `codesearch` tools for web and implementation research.
 
 ## Prompts
 

@@ -8,7 +8,6 @@ files = [
   "packages/agent/extensions/reference/index.ts",
   "packages/agent/extensions/reference/panel.ts",
   "packages/agent/extensions/reference/settings.ts",
-  "packages/agent/extensions/tau-help/help.md",
   "packages/agent/shared/git.ts",
   "packages/agent/shared/settings/define.ts",
   "packages/agent/shared/settings/load.ts",

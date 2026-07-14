@@ -8,7 +8,6 @@ files = [
   "packages/agent/extensions/ideas/browser.ts",
   "packages/agent/extensions/ideas/index.ts",
   "packages/agent/extensions/ideas/store.ts",
-  "packages/agent/extensions/tau-help/help.md",
   "packages/agent/shared/jsonl-store.ts",
   "packages/agent/shared/text.ts",
 ]

@@ -8,7 +8,6 @@ files = [
   "packages/agent/extensions/manage-sessions/index.ts",
   "packages/agent/extensions/manage-sessions/manager-ui.ts",
   "packages/agent/extensions/manage-sessions/sessions.ts",
-  "packages/agent/extensions/tau-help/help.md",
   "packages/agent/shared/text.ts",
 ]
 [runtime]

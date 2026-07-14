@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCodeSearchTool } from "../../../extensions/web/codesearch.ts";
+import { createWebFetchTool } from "../../../extensions/web/webfetch.ts";
 import webExtension from "../../../extensions/web/index.ts";
 import { clampInteger, normalizeTimeout } from "../../../extensions/web/limits.ts";
 import { createWebSearchTool } from "../../../extensions/web/websearch.ts";
@@ -168,5 +169,17 @@ describe("web search tools", () => {
 		} as unknown as ExtensionAPI;
 		webExtension(pi);
 		expect(names).toEqual(["webfetch", "websearch", "codesearch"]);
+	});
+
+	it("keeps specialist guidance in native descriptions", () => {
+		for (const tool of [
+			createWebFetchTool(testRowState),
+			createWebSearchTool(testRowState),
+			createCodeSearchTool(testRowState),
+		]) {
+			expect(tool.promptSnippet).toBeUndefined();
+			expect(tool.promptGuidelines).toBeUndefined();
+			expect(tool.description.length).toBeGreaterThan(100);
+		}
 	});
 });

@@ -1,0 +1,6 @@
+name = "System prompt contributions"
+description = "Shared registration and composition of system prompt contributions"
+
+[all]
+description = "Shared system-prompt contribution implementation and automated tests"
+files = [ "packages/agent/shared/system-prompt-contributions.ts", "packages/agent/test/shared/system-prompt-contributions.test.ts" ]

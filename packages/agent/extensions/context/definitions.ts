@@ -15,9 +15,31 @@ export interface ContextEntry {
 	path: string;
 }
 
+const CONTEXT_IGNORED_FILENAMES = new Set([
+	"bun.lock",
+	"bun.lockb",
+	"Cargo.lock",
+	"composer.lock",
+	"flake.lock",
+	"Gemfile.lock",
+	"go.sum",
+	"mix.lock",
+	"npm-shrinkwrap.json",
+	"package-lock.json",
+	"Package.resolved",
+	"Pipfile.lock",
+	"pnpm-lock.yaml",
+	"Podfile.lock",
+	"poetry.lock",
+	"pubspec.lock",
+	"uv.lock",
+	"yarn.lock",
+]);
+
 export function isContextEligiblePath(path: string): boolean {
 	return (
 		path !== "LICENSE" &&
+		!CONTEXT_IGNORED_FILENAMES.has(basename(path)) &&
 		path !== ".pi/tau/ideas.jsonl" &&
 		path !== ".working" &&
 		!path.startsWith(".working/") &&

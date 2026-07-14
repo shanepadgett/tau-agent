@@ -7,7 +7,6 @@ files = [
   "packages/agent/extensions/publish/README.md",
   "packages/agent/extensions/publish/index.ts",
   "packages/agent/extensions/publish/publish-ui.ts",
-  "packages/agent/extensions/tau-help/help.md",
   "packages/agent/shared/git.ts",
   "packages/agent/shared/text.ts",
 ]

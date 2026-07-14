@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Api, AssistantMessage, Message, Model, ThinkingLevel, Tool } from "@earendil-works/pi-ai";
 import { completeSimple } from "@earendil-works/pi-ai/compat";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -13,7 +14,6 @@ const SEVEN_DAYS_MS = 604_800_000;
 interface GenerationContext {
 	ui: ExtensionContext["ui"];
 	signal: AbortSignal | undefined;
-	sessionManager?: { getSessionId(): string };
 }
 
 interface ModelFallbackOptions {
@@ -131,9 +131,10 @@ async function requestValidated<T>(
 ): Promise<T> {
 	const userMessage: Message = { role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() };
 	const messages: Message[] = [userMessage];
+	const sessionId = randomUUID();
 
 	for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-		const response = await completeCandidate(ctx, candidate, messages);
+		const response = await completeCandidate(ctx, candidate, messages, sessionId);
 		const text = responseText(response);
 		if (response.stopReason === "error") {
 			const error = new Error(response.errorMessage || "model returned an error");
@@ -169,9 +170,10 @@ async function requestToolValidated<T>(
 	maxAttempts = MAX_TOOL_ATTEMPTS,
 ): Promise<T> {
 	const messages: Message[] = [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }];
+	const sessionId = randomUUID();
 
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-		const response = await completeCandidate(ctx, candidate, messages, [tool]);
+		const response = await completeCandidate(ctx, candidate, messages, sessionId, [tool]);
 		const text = responseText(response);
 		const toolCalls = response.content.flatMap((part) => (part.type === "toolCall" ? [part] : []));
 		const output = text || formatToolCalls(toolCalls);
@@ -206,6 +208,7 @@ function completeCandidate(
 	ctx: GenerationContext,
 	candidate: ModelCandidate,
 	messages: readonly Message[],
+	sessionId: string,
 	tools?: Tool[],
 ): Promise<AssistantMessage> {
 	return completeSimple(candidate.model, tools ? { messages: [...messages], tools } : { messages: [...messages] }, {
@@ -213,7 +216,7 @@ function completeCandidate(
 		headers: candidate.headers,
 		signal: ctx.signal,
 		reasoning: candidate.reasoning,
-		sessionId: ctx.sessionManager?.getSessionId(),
+		sessionId,
 	});
 }
 

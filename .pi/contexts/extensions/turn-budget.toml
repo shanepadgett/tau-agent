@@ -4,7 +4,6 @@ description = "Complete and bounded context for the turn-budget extension"
 [all]
 description = "Every extension file, direct shared dependency, test, and user-facing help"
 files = [
-  "packages/agent/extensions/tau-help/help.md",
   "packages/agent/extensions/turn-budget/README.md",
   "packages/agent/extensions/turn-budget/index.ts",
   "packages/agent/extensions/turn-budget/settings.ts",

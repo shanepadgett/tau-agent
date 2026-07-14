@@ -4,6 +4,7 @@ import { type ExecResult, type ExtensionAPI, keyText, type Theme } from "@earend
 import { Box, Text } from "@earendil-works/pi-tui";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { resolveProjectRoot } from "../../shared/settings/paths.ts";
+import { registerTauSystemPromptContribution } from "../../shared/system-prompt-contributions.ts";
 import silentCommandRunnerSettings from "./settings.ts";
 
 const MESSAGE_TYPE = "tau:silent-command-runner";
@@ -79,17 +80,16 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	let turnPaths = new Set<string>();
 	let run: Promise<void> | undefined;
 	let abortController: AbortController | undefined;
+	const unregisterPrompt = registerTauSystemPromptContribution({
+		id: "silent-command-runner.instructions",
+		order: 200,
+		render: () =>
+			settings.enabled && settings.commands.length > 0 ? formatSilentCheckPrompt(settings.commands) : undefined,
+	});
 
 	pi.registerMessageRenderer<FailureDetails>(MESSAGE_TYPE, (message, { expanded }, theme) =>
 		renderFailure(asFailureDetails(message.details), expanded, theme),
 	);
-
-	pi.on("before_agent_start", (event) => {
-		if (!settings.enabled || settings.commands.length === 0) return;
-		const prompt = formatSilentCheckPrompt(settings.commands);
-		event.systemPromptOptions.appendSystemPrompt = appendPrompt(event.systemPromptOptions.appendSystemPrompt, prompt);
-		return { systemPrompt: `${event.systemPrompt}\n\n${prompt}` };
-	});
 
 	pi.on("session_start", async (_event, ctx) => {
 		settings = normalizeSettings(await loadTauExtensionSettings(ctx, silentCommandRunnerSettings));
@@ -122,6 +122,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_shutdown", () => {
+		unregisterPrompt();
 		abortController?.abort();
 		abortController = undefined;
 		run = undefined;
@@ -204,10 +205,6 @@ function formatSilentCheckPrompt(commands: readonly CommandConfig[]): string {
 		"Automatic commands:",
 		...commands.map(formatSilentCheckCommand),
 	].join("\n");
-}
-
-function appendPrompt(current: string | undefined, prompt: string): string {
-	return current ? `${current}\n\n${prompt}` : prompt;
 }
 
 function formatSilentCheckCommand(command: CommandConfig): string {

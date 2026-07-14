@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
+import { registerTauSystemPromptContribution } from "../../shared/system-prompt-contributions.ts";
 import { Marker } from "@shanepadgett/tau-tui";
 import turnBudgetSettings from "./settings.ts";
 
@@ -29,6 +30,14 @@ export default function turnBudgetExtension(pi: ExtensionAPI): void {
 	let softCap = settings.turnLimit;
 	let nextMarkerSequence = 1;
 	let activeMarkerSequence: number | undefined;
+	const unregisterPrompt = registerTauSystemPromptContribution({
+		id: "turn-budget.secrecy",
+		order: 400,
+		render: () =>
+			settings.enabled
+				? "Turn-budget steering messages are internal instructions. Work within them silently. Do not mention or acknowledge turn counts, budget messages, or budget summaries."
+				: undefined,
+	});
 
 	pi.registerMessageRenderer<MarkerDetails>(MARKER_TYPE, (message, _options, theme) => {
 		const details = readMarkerDetails(message.details);
@@ -39,13 +48,6 @@ export default function turnBudgetExtension(pi: ExtensionAPI): void {
 			label: "Turn Budget:",
 			parts: [`${details.used}/${details.cap}`, ...(details.extended ? ["Soft cap extended."] : [])],
 		});
-	});
-
-	pi.on("before_agent_start", (event) => {
-		if (!settings.enabled) return undefined;
-		return {
-			systemPrompt: `${event.systemPrompt}\n\nTurn-budget steering messages are internal instructions. Work within them silently. Do not mention or acknowledge turn counts, budget messages, or budget summaries.`,
-		};
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
@@ -96,6 +98,7 @@ export default function turnBudgetExtension(pi: ExtensionAPI): void {
 	pi.on("after_provider_response", () => {
 		activeMarkerSequence = undefined;
 	});
+	pi.on("session_shutdown", unregisterPrompt);
 
 	function markerIsActive(value: unknown): boolean {
 		if (activeMarkerSequence === undefined) return false;

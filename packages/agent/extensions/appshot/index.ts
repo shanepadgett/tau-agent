@@ -116,11 +116,7 @@ function registerAppshotTools(pi: ExtensionAPI, runHelper: RunHelper): void {
 			name: "list_windows",
 			label: "List Windows",
 			description:
-				"List visible normal macOS windows as compact TOON with window IDs, titles, application identity, process IDs, and bounds. Requires macOS 14 or newer and Screen & System Audio Recording permission.",
-			promptSnippet: "Discover visible macOS application windows and their IDs",
-			promptGuidelines: [
-				"Use list_windows to discover graphical applications and select an exact window before calling screenshot_window.",
-			],
+				"List visible normal macOS windows as compact TOON with window IDs, titles, application identity, process IDs, and bounds. Use list_windows to discover exact window IDs and application PIDs before screenshot_window or activate_app. Requires macOS 14 or newer and Screen & System Audio Recording permission.",
 			parameters: listWindowsSchema,
 			async execute(_toolCallId, _params, signal) {
 				if (process.platform !== "darwin") throw new Error("list_windows is only available on macOS");
@@ -158,9 +154,7 @@ function registerAppshotTools(pi: ExtensionAPI, runHelper: RunHelper): void {
 			name: "screenshot_window",
 			label: "Screenshot Window",
 			description:
-				"Capture one visible macOS window by its list_windows ID, resize it to fit within 1568×1568 pixels, save it as PNG, and inspect the image.",
-			promptSnippet: "Capture and inspect an exact visible macOS window by window ID",
-			promptGuidelines: ["Call list_windows before screenshot_window; pass its exact window_id and a PNG path."],
+				"Capture one visible macOS window by an exact ID returned by list_windows, resize it to fit within 1568×1568 pixels, save it to the required PNG path, and inspect the image. Call list_windows first.",
 			parameters: screenshotWindowSchema,
 			async execute(_toolCallId, params: ScreenshotWindowParams, signal, onUpdate, ctx) {
 				if (process.platform !== "darwin") throw new Error("screenshot_window is only available on macOS");
@@ -219,11 +213,7 @@ function registerAppshotTools(pi: ExtensionAPI, runHelper: RunHelper): void {
 			name: "activate_app",
 			label: "Activate App",
 			description:
-				"Bring a running macOS application and its windows to the foreground by process ID. Use a PID returned by list_windows.",
-			promptSnippet: "Bring a listed macOS application to the foreground by process ID",
-			promptGuidelines: [
-				"Use activate_app only when foregrounding a listed application is needed for visual validation because it changes user focus.",
-			],
+				"Bring a running macOS application and its windows to the foreground by a process ID returned by list_windows. Use only when foregrounding is required for visual validation because activate_app changes user focus.",
 			parameters: activateAppSchema,
 			async execute(_toolCallId, params, signal) {
 				if (process.platform !== "darwin") throw new Error("activate_app is only available on macOS");

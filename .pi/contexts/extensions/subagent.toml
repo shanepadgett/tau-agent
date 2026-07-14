@@ -3,7 +3,7 @@ description = "Delegation to isolated child Tau sessions"
 
 [all]
 description = "Every Subagent file, built-in definition, direct shared dependency, test, and user-facing document"
-files = [ "packages/agent/docs/extending-tau-agent.md", "packages/agent/docs/subagents.md", "packages/agent/extensions/subagent/agents.ts", "packages/agent/extensions/subagent/agents/scout.md", "packages/agent/extensions/subagent/agents/web-research.md", "packages/agent/extensions/subagent/index.ts", "packages/agent/extensions/subagent/README.md", "packages/agent/extensions/subagent/render.ts", "packages/agent/extensions/subagent/run.ts", "packages/agent/extensions/tau-help/help.md", "packages/agent/shared/tool-row-state.ts", "packages/agent/test/extensions/subagent/agents.test.ts", "packages/agent/test/extensions/subagent/index.test.ts", "packages/agent/test/extensions/subagent/run.test.ts" ]
+files = [ "packages/agent/docs/extending-tau-agent.md", "packages/agent/docs/subagents.md", "packages/agent/extensions/subagent/agents.ts", "packages/agent/extensions/subagent/agents/scout.md", "packages/agent/extensions/subagent/agents/web-research.md", "packages/agent/extensions/subagent/index.ts", "packages/agent/extensions/subagent/README.md", "packages/agent/extensions/subagent/render.ts", "packages/agent/extensions/subagent/run.ts", "packages/agent/shared/tool-row-state.ts", "packages/agent/test/extensions/subagent/agents.test.ts", "packages/agent/test/extensions/subagent/index.test.ts", "packages/agent/test/extensions/subagent/run.test.ts" ]
 
 [definitions]
 description = "Built-in, user, and project agent definition discovery"

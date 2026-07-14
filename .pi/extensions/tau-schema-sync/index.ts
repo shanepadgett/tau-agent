@@ -5,6 +5,7 @@ import { join, relative } from "node:path";
 import { promisify } from "node:util";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { listSettingsFiles } from "../../../packages/agent/shared/settings/files.ts";
+import { registerTauSystemPromptContribution } from "../../../packages/agent/shared/system-prompt-contributions.ts";
 
 const execFileAsync = promisify(execFile);
 const SETTINGS_ROOT = join("src", "extensions");
@@ -21,19 +22,14 @@ export default function tauSchemaSync(pi: ExtensionAPI): void {
 	let baseline: Hashes | undefined;
 	let run: Promise<string | undefined> | undefined;
 	let pendingNotice: string | undefined;
+	const unregisterPrompt = registerTauSystemPromptContribution({
+		id: "repository.schema-sync",
+		order: 500,
+		render: () => SETTINGS_PROMPT,
+	});
 
 	pi.on("session_start", async (_event, ctx) => {
 		baseline = await hashSettingsFiles(ctx.cwd);
-	});
-
-	pi.on("before_agent_start", (event) => {
-		const promptGuidelines = event.systemPromptOptions.promptGuidelines ?? [];
-		event.systemPromptOptions.promptGuidelines = promptGuidelines;
-		for (const guideline of SETTINGS_PROMPT.split("\n")) {
-			if (!promptGuidelines.includes(guideline)) promptGuidelines.push(guideline);
-		}
-
-		return { systemPrompt: `${event.systemPrompt}\n\n${SETTINGS_PROMPT}` };
 	});
 
 	pi.on("tool_result", async (_event, ctx) => {
@@ -60,6 +56,7 @@ export default function tauSchemaSync(pi: ExtensionAPI): void {
 		ctx.ui.notify(pendingNotice, "info");
 		pendingNotice = undefined;
 	});
+	pi.on("session_shutdown", unregisterPrompt);
 }
 
 async function generateSchema(cwd: string): Promise<void> {

@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { type Dirent, existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,7 +20,6 @@ interface SnapshotEntry {
 }
 
 export interface RuntimeContext {
-	date: string;
 	cwd: string;
 	rootSnapshot: readonly string[];
 }
@@ -73,21 +73,50 @@ export function buildRokPrompt(options: BuildSystemPromptOptions, runtimeContext
 }
 
 export function freezeRuntimeContext(cwd: string): RuntimeContext {
-	return { date: formatDate(new Date()), cwd: cwd.replace(/\\/g, "/"), rootSnapshot: listRootSnapshot(cwd) };
+	return { cwd: cwd.replace(/\\/g, "/"), rootSnapshot: listRootSnapshot(cwd) };
 }
 
-function formatDate(date: Date): string {
+export function formatLocalDateKey(date: Date): string {
 	const year = date.getFullYear();
 	const month = String(date.getMonth() + 1).padStart(2, "0");
 	const day = String(date.getDate()).padStart(2, "0");
 	return `${year}-${month}-${day}`;
 }
 
+export function formatLocalDisplayDate(date: Date): string {
+	const months = [
+		"January",
+		"February",
+		"March",
+		"April",
+		"May",
+		"June",
+		"July",
+		"August",
+		"September",
+		"October",
+		"November",
+		"December",
+	];
+	return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+export function fingerprintRuntimeSnapshot(context: RuntimeContext): string {
+	return createHash("sha256")
+		.update(JSON.stringify({ version: 1, cwd: context.cwd, paths: context.rootSnapshot }))
+		.digest("hex");
+}
+
+export function formatRuntimeContextMessage(displayDate: string, rootSnapshot: readonly string[] | undefined): string {
+	const blocks = [`Current local date: ${displayDate}`];
+	if (rootSnapshot?.length) {
+		blocks.push(`Root directory snapshot (depth 2):\n${rootSnapshot.map((path) => `- ${path}`).join("\n")}`);
+	}
+	return blocks.join("\n");
+}
+
 function formatRuntimeContext(context: RuntimeContext): string {
-	const rootSnapshot = context.rootSnapshot.length
-		? `\nRoot directory snapshot (depth 2):\n${context.rootSnapshot.map((path) => `- ${path}`).join("\n")}`
-		: "";
-	return `Current date: ${context.date}\nCurrent working directory: ${context.cwd}${rootSnapshot}`;
+	return `Current working directory: ${context.cwd}`;
 }
 
 function listRootSnapshot(cwd: string): string[] {

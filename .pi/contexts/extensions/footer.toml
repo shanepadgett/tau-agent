@@ -7,7 +7,6 @@ files = [
   "packages/agent/extensions/footer/README.md",
   "packages/agent/extensions/footer/index.ts",
   "packages/agent/extensions/footer/settings.ts",
-  "packages/agent/extensions/tau-help/help.md",
   "packages/agent/shared/events.ts",
   "packages/agent/shared/settings/define.ts",
   "packages/agent/shared/settings/load.ts",

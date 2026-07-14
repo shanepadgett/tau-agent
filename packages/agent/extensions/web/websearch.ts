@@ -36,13 +36,7 @@ export function createWebSearchTool(rowState: ToolRowStateStore) {
 		name: "websearch",
 		label: "Web Search",
 		description:
-			"Search the public web through Exa for current information and relevant pages. Output is truncated to 2,000 lines or 50 KB.",
-		promptSnippet: "Search the public web for current or external information",
-		promptGuidelines: [
-			"Use websearch for broad discovery, then webfetch when you have a specific URL.",
-			"Use codesearch for implementation-oriented code and documentation context.",
-			"Use a separate research workflow instead of websearch when several searches, fetches, and synthesis are needed.",
-		],
+			"Search the public web through Exa for current information and relevant pages. Use websearch for broad discovery, then webfetch for a known URL; use codesearch for implementation-oriented code and documentation context. Use a separate research workflow when several searches, fetches, and synthesis are needed. Output is truncated to 2,000 lines or 50 KB.",
 		parameters: webSearchParams,
 		async execute(_toolCallId, params, signal, onUpdate) {
 			const timeout = normalizeTimeout(params.timeout, 25);

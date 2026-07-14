@@ -7,7 +7,6 @@ files = [
   "packages/agent/extensions/silent-command-runner/README.md",
   "packages/agent/extensions/silent-command-runner/index.ts",
   "packages/agent/extensions/silent-command-runner/settings.ts",
-  "packages/agent/extensions/tau-help/help.md",
   "packages/agent/shared/settings/define.ts",
   "packages/agent/shared/settings/load.ts",
   "packages/agent/shared/settings/paths.ts",

@@ -6,7 +6,6 @@ description = "Every extension file, direct shared dependency, test, and user-fa
 files = [
   "packages/agent/extensions/run-summary/README.md",
   "packages/agent/extensions/run-summary/index.ts",
-  "packages/agent/extensions/tau-help/help.md",
   "packages/agent/test/extensions/run-summary/index.test.ts",
 ]
 [runtime]

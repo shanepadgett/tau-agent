@@ -133,6 +133,14 @@ export async function runContextSync(
 	ctx: ExtensionContext,
 	onStatus?: (status: string) => void | Promise<void>,
 ): Promise<ContextSyncDetails> {
+	return withSyncLock(() => runContextSyncLocked(pi, ctx, onStatus));
+}
+
+async function runContextSyncLocked(
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+	onStatus?: (status: string) => void | Promise<void>,
+): Promise<ContextSyncDetails> {
 	if (!ctx.isProjectTrusted()) throw new Error("Context sync requires a trusted project");
 	await onStatus?.("Inspecting repository context");
 	const git = createGitRunner(pi, ctx);
@@ -153,15 +161,13 @@ export async function runContextSync(
 	);
 	if (plan.outcome === "no-change") return noChange(plan.reason);
 	await onStatus?.("Applying context catalog changes");
-	return withSyncLock(async () => {
-		return applyContextSyncPlan(evidence.root, plan, evidence.entries, async () => {
-			const currentEntries = await loadContextEntries(evidence.root);
-			const currentFiles = await collectDirtyFiles(git, evidence.root, currentEntries);
-			if ((await computeWorktreeSignature(git, evidence.root, currentFiles)) !== evidence.worktreeSignature)
-				throw new Error("Repository changed during context sync. Rerun context sync.");
-			if ((await computeCatalogSignature(evidence.root)) !== evidence.catalogSignature)
-				throw new Error("Context catalog changed during context sync. Rerun context sync.");
-		});
+	return applyContextSyncPlan(evidence.root, plan, evidence.entries, async () => {
+		const currentEntries = await loadContextEntries(evidence.root);
+		const currentFiles = await collectDirtyFiles(git, evidence.root, currentEntries);
+		if ((await computeWorktreeSignature(git, evidence.root, currentFiles)) !== evidence.worktreeSignature)
+			throw new Error("Repository changed during context sync. Rerun context sync.");
+		if ((await computeCatalogSignature(evidence.root)) !== evidence.catalogSignature)
+			throw new Error("Context catalog changed during context sync. Rerun context sync.");
 	});
 }
 
@@ -647,16 +653,16 @@ export async function applyContextSyncPlan(
 	for (const path of paths) originals.set(path, (await pathExists(path)) ? await readFile(path) : undefined);
 	const temporaryFiles = new Map<string, string>();
 	try {
-		for (const path of paths) {
-			const output = outputs.get(path);
-			if (output === undefined) continue;
-			await mkdir(dirname(path), { recursive: true });
-			const temporary = `${path}.${process.pid}.${Date.now()}.${temporaryFiles.size}.tmp`;
-			await writeFile(temporary, output, "utf8");
-			temporaryFiles.set(path, temporary);
-		}
 		await acquireMutationQueues(lockPaths, async () => {
 			await verifyFreshness?.();
+			for (const path of paths) {
+				const output = outputs.get(path);
+				if (output === undefined) continue;
+				await mkdir(dirname(path), { recursive: true });
+				const temporary = `${path}.${process.pid}.${Date.now()}.${temporaryFiles.size}.tmp`;
+				await writeFile(temporary, output, "utf8");
+				temporaryFiles.set(path, temporary);
+			}
 			const changed: string[] = [];
 			try {
 				for (const path of paths) {

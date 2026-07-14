@@ -3,7 +3,7 @@ description = "Reusable repository context selection and maintenance"
 
 [all]
 description = "Every Context file, direct shared dependency, research integration, test, and user-facing document"
-files = [ "packages/agent/docs/extending-tau-agent.md", "packages/agent/docs/subagents.md", "packages/agent/extensions/context/definitions.ts", "packages/agent/extensions/context/index.ts", "packages/agent/extensions/context/panel.ts", "packages/agent/extensions/context/README.md", "packages/agent/extensions/context/sync.ts", "packages/agent/extensions/subagent/agents.ts", "packages/agent/extensions/subagent/run.ts", "packages/agent/extensions/tau-help/help.md", "packages/agent/shared/events.ts", "packages/agent/shared/injected-context.ts", "packages/agent/test/extensions/context/definitions.test.ts" ]
+files = [ "packages/agent/docs/extending-tau-agent.md", "packages/agent/docs/subagents.md", "packages/agent/extensions/context/README.md", "packages/agent/extensions/context/definitions.ts", "packages/agent/extensions/context/index.ts", "packages/agent/extensions/context/panel.ts", "packages/agent/extensions/context/sync.ts", "packages/agent/extensions/subagent/agents.ts", "packages/agent/extensions/subagent/run.ts", "packages/agent/shared/events.ts", "packages/agent/shared/injected-context.ts", "packages/agent/test/extensions/context/definitions.test.ts", "packages/agent/test/extensions/context/index.test.ts", "packages/agent/test/extensions/context/sync.test.ts" ]
 
 [definitions]
 description = "TOML loading, validation, project boundaries, and atomic updates"

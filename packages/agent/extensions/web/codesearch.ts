@@ -27,13 +27,7 @@ export function createCodeSearchTool(rowState: ToolRowStateStore) {
 		name: "codesearch",
 		label: "Code Search",
 		description:
-			"Search Exa for implementation-oriented code and documentation context. Output is truncated to 2,000 lines or 50 KB.",
-		promptSnippet: "Search code and documentation context for implementation details",
-		promptGuidelines: [
-			"Use codesearch for API usage, code examples, and implementation-oriented documentation.",
-			"Use websearch for broad discovery and webfetch for a known URL.",
-			"Use a separate research workflow instead of codesearch when several searches, fetches, and synthesis are needed.",
-		],
+			"Search Exa for API usage, code examples, and implementation-oriented documentation context. Use websearch for broad discovery and webfetch for a known URL. Use a separate research workflow when several searches, fetches, and synthesis are needed. Output is truncated to 2,000 lines or 50 KB.",
 		parameters: codeSearchParams,
 		async execute(_toolCallId, params, signal, onUpdate) {
 			const timeout = normalizeTimeout(params.timeout, 25);

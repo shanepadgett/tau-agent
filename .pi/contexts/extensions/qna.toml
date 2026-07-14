@@ -14,7 +14,6 @@ files = [
   "packages/agent/extensions/qna/model.ts",
   "packages/agent/extensions/qna/panel.ts",
   "packages/agent/extensions/qna/ui.ts",
-  "packages/agent/extensions/tau-help/help.md",
   "packages/agent/shared/agent-blocked.ts",
 ]
 [runtime]

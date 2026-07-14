@@ -28,6 +28,9 @@ describe("context definitions", () => {
 		expect(isContextEligiblePath(".pi/contexts/core/settings.toml")).toBe(false);
 		expect(isContextEligiblePath(".pi/tau/ideas.jsonl")).toBe(false);
 		expect(isContextEligiblePath("LICENSE")).toBe(false);
+		expect(isContextEligiblePath("package-lock.json")).toBe(false);
+		expect(isContextEligiblePath("packages/example/pnpm-lock.yaml")).toBe(false);
+		expect(isContextEligiblePath("crates/example/Cargo.lock")).toBe(false);
 		expect(isContextEligiblePath("packages/agent/index.ts")).toBe(true);
 	});
 

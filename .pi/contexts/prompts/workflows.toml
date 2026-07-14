@@ -12,6 +12,11 @@ files = [
 description = "Approved implementation workflow"
 files = [
   "packages/agent/prompts/implement.md",
+]
+
+[style]
+description = "Response style transformation workflow"
+files = [
   "packages/agent/prompts/cavemanify.md",
 ]
 

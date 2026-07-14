@@ -66,13 +66,7 @@ export function createWebFetchTool(rowState: ToolRowStateStore) {
 		name: "webfetch",
 		label: "Web Fetch",
 		description:
-			"Fetch a known HTTP(S) URL as Markdown, text, or HTML. Supports inline images, limits response bodies to 5 MB, and truncates text to 2,000 lines or 50 KB.",
-		promptSnippet: "Fetch a specific URL and extract readable content",
-		promptGuidelines: [
-			"Use webfetch when you already have a URL and need its content.",
-			"Use websearch for broad discovery and codesearch for implementation-oriented lookups.",
-			"Use a separate research workflow instead of webfetch when several searches, fetches, and synthesis are needed.",
-		],
+			"Fetch a known HTTP(S) URL as Markdown, text, or HTML. Use webfetch when you already have a URL; use websearch for broad discovery and codesearch for implementation-oriented lookups. Use a separate research workflow when several searches, fetches, and synthesis are needed. Supports inline images, limits response bodies to 5 MB, and truncates text to 2,000 lines or 50 KB.",
 		parameters: webFetchParams,
 		async execute(_toolCallId, params, signal, onUpdate) {
 			let url: URL;

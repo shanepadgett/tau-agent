@@ -8,7 +8,6 @@ files = [
   "packages/agent/extensions/stash/browser.ts",
   "packages/agent/extensions/stash/index.ts",
   "packages/agent/extensions/stash/store.ts",
-  "packages/agent/extensions/tau-help/help.md",
   "packages/agent/shared/jsonl-store.ts",
   "packages/agent/shared/text.ts",
 ]

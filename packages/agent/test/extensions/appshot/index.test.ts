@@ -19,6 +19,9 @@ interface ToolResult {
 
 interface RegisteredTool {
 	name: string;
+	description: string;
+	promptSnippet?: string;
+	promptGuidelines?: string[];
 	execute: unknown;
 	renderCall?: unknown;
 	renderResult?: unknown;
@@ -52,6 +55,16 @@ afterEach(() => {
 });
 
 describe("appshot extension", () => {
+	it("keeps sequencing and focus rules in native descriptions", () => {
+		const tools = harness();
+		for (const tool of tools.values()) {
+			expect(tool.promptSnippet).toBeUndefined();
+			expect(tool.promptGuidelines).toBeUndefined();
+		}
+		expect(tools.get("list_windows")?.description).toContain("before screenshot_window");
+		expect(tools.get("screenshot_window")?.description).toContain("Call list_windows first");
+		expect(tools.get("activate_app")?.description).toContain("changes user focus");
+	});
 	it("returns a flat TOON window table and hides it while collapsed", async () => {
 		vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
 		runHelper.mockResolvedValue({

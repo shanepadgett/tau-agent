@@ -20,6 +20,7 @@ const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
 
 interface RegisteredTool {
 	name: string;
+	description: string;
 	parameters: unknown;
 	promptSnippet?: string;
 	promptGuidelines?: string[];
@@ -69,8 +70,10 @@ describe("image_gen extension", () => {
 	it("registers the intended tool metadata", () => {
 		const { tool } = harness();
 		expect(tool.name).toBe("image_gen");
-		expect(tool.promptSnippet).toContain("Generate or edit raster images");
-		expect(tool.promptGuidelines).toHaveLength(4);
+		expect(tool.promptSnippet).toBeUndefined();
+		expect(tool.promptGuidelines).toBeUndefined();
+		expect(tool.description).toContain("Omit referenced_image_paths");
+		expect(tool.description).toContain("explicitly requests");
 		expect(tool.parameters).toBeDefined();
 	});
 

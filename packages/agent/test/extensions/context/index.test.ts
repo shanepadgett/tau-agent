@@ -7,13 +7,19 @@ import type { ContextSyncDetails } from "../../../extensions/context/sync.ts";
 interface RegisteredTool {
 	name: string;
 	parameters: { additionalProperties?: boolean; properties?: Record<string, unknown> };
+	execute?: unknown;
 	renderCall?: unknown;
 	renderResult?: unknown;
 }
 
-function harness(): { tools: Map<string, RegisteredTool>; commands: Set<string> } {
+function harness(): {
+	tools: Map<string, RegisteredTool>;
+	commands: Set<string>;
+	emit: (name: string, event: unknown) => void;
+} {
 	const tools = new Map<string, RegisteredTool>();
 	const commands = new Set<string>();
+	const handlers = new Map<string, Array<(event: unknown) => void>>();
 	const pi = {
 		events: createEventBus(),
 		registerTool(tool: RegisteredTool) {
@@ -22,10 +28,18 @@ function harness(): { tools: Map<string, RegisteredTool>; commands: Set<string> 
 		registerCommand(name: string) {
 			commands.add(name);
 		},
-		on() {},
+		on(name: string, handler: (event: unknown) => void) {
+			handlers.set(name, [...(handlers.get(name) ?? []), handler]);
+		},
 	} as unknown as ExtensionAPI;
 	contextExtension(pi);
-	return { tools, commands };
+	return {
+		tools,
+		commands,
+		emit(name, event) {
+			for (const handler of handlers.get(name) ?? []) handler(event);
+		},
+	};
 }
 
 const theme = { fg: (_color: string, value: string) => value } as unknown as Theme;
@@ -97,5 +111,33 @@ describe("context extension", () => {
 				.trimEnd(),
 		).toContain("set-entry code/context/sync");
 		expect(result.content[0]?.text).not.toContain(details.reason);
+	});
+
+	it("waits for sibling tools before inspecting the repository", async () => {
+		const { tools, emit } = harness();
+		const tool = tools.get("context_sync");
+		if (!tool) throw new Error("context_sync was not registered");
+		const execute = tool.execute as (
+			id: string,
+			params: Record<string, never>,
+			signal: undefined,
+			onUpdate: undefined,
+			ctx: { isProjectTrusted(): boolean },
+		) => Promise<unknown>;
+
+		emit("tool_execution_start", { toolCallId: "patch-call", toolName: "patch" });
+		emit("tool_execution_start", { toolCallId: "sync-call", toolName: "context_sync" });
+		const result = execute("sync-call", {}, undefined, undefined, { isProjectTrusted: () => false });
+		let settled = false;
+		void result
+			.catch(() => undefined)
+			.finally(() => {
+				settled = true;
+			});
+		await Promise.resolve();
+		expect(settled).toBe(false);
+
+		emit("tool_execution_end", { toolCallId: "patch-call", toolName: "patch" });
+		await expect(result).rejects.toThrow("Context sync requires a trusted project");
 	});
 });

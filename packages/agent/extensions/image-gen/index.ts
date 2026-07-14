@@ -41,14 +41,7 @@ export default function imageGenExtension(pi: ExtensionAPI): void {
 			name: "image_gen",
 			label: "Image Generation",
 			description:
-				"Generate a new raster image from a prompt, or edit one to three local raster images. Uses the xAI Grok subscription OAuth login, saves the result under Tau's external image store unless an explicit path is provided, and returns the image for inspection.",
-			promptSnippet: "Generate or edit raster images with Grok Imagine",
-			promptGuidelines: [
-				"Use image_gen when the user asks for a generated raster image or an AI edit of local raster images.",
-				"Omit referenced_image_paths when image_gen should create a new image.",
-				"Pass one to three local paths in referenced_image_paths when image_gen should edit or compose existing images.",
-				"Omit path for temporary external storage. Pass path only when the user wants the generated image saved in their repository or another explicit location.",
-			],
+				"Generate a requested raster image or AI-edit existing images with the xAI Grok subscription OAuth login. Omit referenced_image_paths to generate; pass one to three local paths to edit or compose. Omit path to use Tau's external image store; pass path only when the user explicitly requests a repository file or other destination. Returns the image for inspection.",
 			parameters: imageGenSchema,
 			async execute(_toolCallId, params: ImageGenParams, signal, onUpdate, ctx) {
 				signal?.throwIfAborted();

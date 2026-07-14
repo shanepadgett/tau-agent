@@ -5,6 +5,7 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { emitTauEvent } from "../../shared/events.ts";
 import { createInjectedContext } from "../../shared/injected-context.ts";
+import { registerTauSystemPromptContribution } from "../../shared/system-prompt-contributions.ts";
 import { ContextPanel } from "./panel.ts";
 import { findProjectRoot, loadContextEntries, type ContextEntry } from "./definitions.ts";
 import { runContextSync, type ContextSyncDetails } from "./sync.ts";
@@ -22,6 +23,15 @@ function compactResult(details: ContextSyncDetails) {
 
 export default function contextExtension(pi: ExtensionAPI): void {
 	let active: ContextEntry[] = [];
+	const activeToolExecutions = new Map<string, { toolName: string; done: Promise<void>; complete: () => void }>();
+	const unregisterPrompt = registerTauSystemPromptContribution({
+		id: "context.selected-authority",
+		order: 100,
+		render: () =>
+			active.length
+				? "Treat the autoread files as the authoritative project context and current snapshots. Do not reread them or search for coverage around them. Start work from them immediately. Explore outside them only when the user's request or concrete evidence in those files requires missing code or information."
+				: undefined,
+	});
 
 	pi.registerCommand("context", {
 		description: "Select repository context entries and inject their files",
@@ -94,7 +104,12 @@ export default function contextExtension(pi: ExtensionAPI): void {
 			label: "context_sync",
 			description: "Synchronize repository context from current Git changes.",
 			parameters: contextSyncParams,
-			async execute(_id, _params, _signal, onUpdate, ctx) {
+			async execute(id, _params, _signal, onUpdate, ctx) {
+				await Promise.all(
+					[...activeToolExecutions]
+						.filter(([toolCallId, execution]) => toolCallId !== id && execution.toolName !== "context_sync")
+						.map(([, execution]) => execution.done),
+				);
 				return compactResult(
 					await runContextSync(pi, ctx, (status) =>
 						onUpdate?.({ content: [{ type: "text", text: status }], details: undefined }),
@@ -131,6 +146,20 @@ export default function contextExtension(pi: ExtensionAPI): void {
 		}),
 	);
 
+	pi.on("tool_execution_start", (event) => {
+		let complete = () => {};
+		const done = new Promise<void>((resolve) => {
+			complete = resolve;
+		});
+		activeToolExecutions.set(event.toolCallId, { toolName: event.toolName, done, complete });
+	});
+
+	pi.on("tool_execution_end", (event) => {
+		const execution = activeToolExecutions.get(event.toolCallId);
+		activeToolExecutions.delete(event.toolCallId);
+		execution?.complete();
+	});
+
 	pi.on("session_start", async (_event, ctx) => {
 		const root = await findProjectRoot(ctx.cwd);
 		const entries = await loadContextEntries(root);
@@ -146,11 +175,9 @@ export default function contextExtension(pi: ExtensionAPI): void {
 				: [];
 		active = entries.filter((entry) => ids.includes(entry.id));
 	});
-	pi.on("before_agent_start", (event) =>
-		active.length
-			? {
-					systemPrompt: `${event.systemPrompt}\n\nTreat the autoread files as the authoritative project context and current snapshots. Do not reread them or search for coverage around them. Start work from them immediately. Explore outside them only when the user's request or concrete evidence in those files requires missing code or information.`,
-				}
-			: undefined,
-	);
+	pi.on("session_shutdown", () => {
+		unregisterPrompt();
+		for (const execution of activeToolExecutions.values()) execution.complete();
+		activeToolExecutions.clear();
+	});
 }

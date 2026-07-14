@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -82,6 +82,11 @@ describe("context sync", () => {
 				],
 			},
 			entries,
+			async () => {
+				expect(
+					(await readdir(join(root, ".pi", "contexts", "gameplay"))).some((file) => file.endsWith(".tmp")),
+				).toBe(false);
+			},
 		);
 		const output = await readFile(path, "utf8");
 		expect(output).toContain('name = "Player"');
