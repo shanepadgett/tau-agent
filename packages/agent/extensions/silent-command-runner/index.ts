@@ -5,7 +5,6 @@ import { Box, Text } from "@earendil-works/pi-tui";
 import { matchGlob, posixPath } from "../../shared/glob.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { resolveProjectRoot } from "../../shared/settings/paths.ts";
-import { registerTauSystemPromptContribution } from "../../shared/system-prompt-contributions.ts";
 import silentCommandRunnerSettings from "./settings.ts";
 
 const MESSAGE_TYPE = "tau:silent-command-runner";
@@ -81,12 +80,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	let turnPaths = new Set<string>();
 	let run: Promise<void> | undefined;
 	let abortController: AbortController | undefined;
-	const unregisterPrompt = registerTauSystemPromptContribution({
-		id: "silent-command-runner.instructions",
-		order: 200,
-		render: () =>
-			settings.enabled && settings.commands.length > 0 ? formatSilentCheckPrompt(settings.commands) : undefined,
-	});
 
 	pi.registerMessageRenderer<FailureDetails>(MESSAGE_TYPE, (message, { expanded }, theme) =>
 		renderFailure(asFailureDetails(message.details), expanded, theme),
@@ -98,9 +91,14 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		turnPaths = new Set();
 	});
 
+	pi.on("before_agent_start", async (event, ctx) => {
+		settings = normalizeSettings(await loadTauExtensionSettings(ctx, silentCommandRunnerSettings));
+		if (!settings.enabled || settings.commands.length === 0) return undefined;
+		return { systemPrompt: `${event.systemPrompt}\n\n${formatSilentCheckPrompt(settings.commands)}` };
+	});
+
 	pi.on("agent_start", async (_event, ctx) => {
 		turnStart = Date.now();
-		settings = normalizeSettings(await loadTauExtensionSettings(ctx, silentCommandRunnerSettings));
 		if (!settings.enabled || settings.commands.length === 0) {
 			turnPaths = new Set();
 			return;
@@ -123,7 +121,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_shutdown", () => {
-		unregisterPrompt();
 		abortController?.abort();
 		abortController = undefined;
 		run = undefined;
@@ -202,7 +199,7 @@ function normalizeSettings(value: typeof silentCommandRunnerSettings.defaults): 
 
 function formatSilentCheckPrompt(commands: readonly CommandConfig[]): string {
 	return [
-		"**NEVER** run the following commands. Ever. Not even following a failure. They will run automatically when you finish and if you just fixed an issue, end the turn and it will run again. Always assume your code is good.",
+		"Do not manually run the commands listed below. They run automatically after matching changes. After fixing a reported failure, end the turn so they can run again. Targeted checks outside this list remain allowed when needed.",
 		"Automatic commands:",
 		...commands.map(formatSilentCheckCommand),
 	].join("\n");

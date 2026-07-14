@@ -22,7 +22,8 @@ describe("context validation", () => {
 			'name = "Source"\ndescription = "Source files"\n\n[all]\ndescription = "Covered source"\nfiles = ["src/covered.ts"]\n',
 		);
 		const git = {
-			run: async () => " M src/covered.ts\0?? src/uncovered.ts\0?? generated/output.ts\0",
+			run: async () =>
+				"1 .M N... 100644 100644 100644 abc abc src/covered.ts\0? src/uncovered.ts\0? generated/output.ts\0",
 		} as unknown as GitRunner;
 		const result = await validateContextCatalog(git, root, ["generated/**"]);
 		expect(result.uncovered).toEqual(["src/uncovered.ts"]);

@@ -1,7 +1,6 @@
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { createToolRowStateStore } from "../../shared/tool-row-state.js";
-import { registerTauSystemPromptContribution } from "../../shared/system-prompt-contributions.ts";
 import { discoverAgents, type AgentDiscovery } from "./agents.ts";
 import { renderSubagentCall, renderSubagentResult } from "./render.ts";
 import { extensionPathsForTools, FifoGate, runSubagent, type SubagentDetails } from "./run.ts";
@@ -34,18 +33,15 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 		}
 		for (const path of fingerprints.keys()) if (!current.has(path)) fingerprints.delete(path);
 	};
-	const unregisterPrompt = registerTauSystemPromptContribution({
-		id: "subagent.catalog",
-		order: 300,
-		render: async (_event, ctx) => {
-			if (!pi.getActiveTools().includes("subagent")) return undefined;
-			const discovery = await discoverAgents(ctx.cwd, ctx.isProjectTrusted());
-			warn(discovery, ctx);
-			const lines = [...discovery.agents.values()]
-				.sort((a, b) => a.name.localeCompare(b.name))
-				.map((agent) => `- ${agent.name}: ${agent.description}`);
-			return `## Subagents\nUse \`subagent\` when an available agent matches a focused part of the task.\n\nAvailable agents for this turn:\n${lines.join("\n")}\n\nDelegate one focused task per call. Children do not inherit parent messages. Include exact absolute reference paths when a child must inspect a repository outside the current working directory.`;
-		},
+	pi.on("before_agent_start", async (event, ctx) => {
+		if (!pi.getActiveTools().includes("subagent")) return undefined;
+		const discovery = await discoverAgents(ctx.cwd, ctx.isProjectTrusted());
+		warn(discovery, ctx);
+		const lines = [...discovery.agents.values()]
+			.sort((a, b) => a.name.localeCompare(b.name))
+			.map((agent) => `- ${agent.name}: ${agent.description}`);
+		const prompt = `## Subagents\nUse \`subagent\` when an available agent matches a focused part of the task.\n\nAvailable agents for this turn:\n${lines.join("\n")}\n\nDelegate one focused task per call. Children do not inherit parent messages. Include exact absolute reference paths when a child must inspect a repository outside the current working directory.`;
+		return { systemPrompt: `${event.systemPrompt}\n\n${prompt}` };
 	});
 	pi.registerTool(
 		defineTool<typeof params, SubagentDetails>({
@@ -208,7 +204,6 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 		runtimeWarnings.clear();
 	});
 	pi.on("session_shutdown", () => {
-		unregisterPrompt();
 		for (const controller of controllers) controller.abort();
 		controllers.clear();
 	});

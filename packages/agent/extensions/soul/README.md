@@ -1,8 +1,8 @@
 # Soul
 
-Soul replaces Pi's default assistant prompt with Rok: caveman voice plus old-code senior judgment.
+Soul adds Rok's caveman voice and old-code senior judgment to Pi's native assistant prompt.
 
-It keeps the core prompt stable for cache reuse. Soul supplies the current local date and the initial root directory snapshot as hidden session context; the working directory and project instructions remain in the system prompt.
+Pi continues to own tool guidance, project instructions, skills, documentation paths, custom prompts, and working-directory context.
 
 Disable it in Tau settings:
 

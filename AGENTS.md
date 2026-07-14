@@ -37,6 +37,12 @@
 - New Tau extension needs `README.md` in extension dir.
 - Tau extension README: product level only. What it is. Why it exists. How users invoke it. Update only when user-facing feature description changes. No implementation details unless asked.
 
+## Extension Settings
+
+- Keep extension settings in `packages/agent/extensions/<extension>/settings.ts`, next to `index.ts`. Do not place extension settings in `packages/agent/shared/`.
+- Never edit `packages/agent/schemas/tau.schema.json` manually. `.pi/extensions/tau-schema-sync` regenerates it after settings changes.
+- Do not write `settings.ts` and read `packages/agent/schemas/tau.schema.json` in the same parallel tool batch. Read the generated schema only in a later tool call.
+
 ## TUI
 
 - Before creating or updating TUI components here, read `packages/agent/docs/tui.md`.

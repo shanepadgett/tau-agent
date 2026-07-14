@@ -1,0 +1,6 @@
+name = "Repository guidance"
+description = "Repository-wide instructions for agents and contributors"
+
+[all]
+description = "Repository-wide agent guidance"
+files = [ "AGENTS.md" ]

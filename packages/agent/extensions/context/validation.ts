@@ -28,16 +28,26 @@ export async function validateContextCatalog(
 		}
 	}
 
-	const status = await git.run(["status", "--porcelain=v1", "-z", "--untracked-files=all"], { cwd: root });
+	const status = await git.run(["status", "--porcelain=v2", "-z", "--untracked-files=all"], { cwd: root });
 	const records = status.split("\0");
 	const dirty = new Set<string>();
 	for (let index = 0; index < records.length; index++) {
 		const record = records[index];
-		if (!record || record.length < 4) continue;
-		const state = record.slice(0, 2);
-		const path = record.slice(3).replaceAll("\\", "/");
-		if (state.includes("R") || state.includes("C")) index += 1;
-		if (!state.includes("D")) dirty.add(path);
+		if (!record) continue;
+		if (record.startsWith("? ")) {
+			dirty.add(record.slice(2).replaceAll("\\", "/"));
+			continue;
+		}
+		const fields = record.split(" ");
+		const state = fields[1] ?? "..";
+		if (record.startsWith("1 ") && !state.includes("D")) {
+			dirty.add(fields.slice(8).join(" ").replaceAll("\\", "/"));
+		} else if (record.startsWith("2 ")) {
+			if (!state.includes("D")) dirty.add(fields.slice(9).join(" ").replaceAll("\\", "/"));
+			index += 1;
+		} else if (record.startsWith("u ")) {
+			dirty.add(fields.slice(10).join(" ").replaceAll("\\", "/"));
+		}
 	}
 	const uncovered = [...dirty]
 		.filter(

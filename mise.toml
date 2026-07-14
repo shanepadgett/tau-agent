@@ -40,7 +40,7 @@ run = "./node_modules/.bin/tsgo --noEmit"
 
 [tasks."test:unit"]
 description = "Run unit tests"
-run = "npm run test:unit"
+run = "./node_modules/.bin/vitest --run --reporter=agent"
 
 [tasks."check:deadcode"]
 description = "Run Fallow dead-code and duplication checks"

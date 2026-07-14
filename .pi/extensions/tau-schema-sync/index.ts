@@ -5,16 +5,10 @@ import { join, relative } from "node:path";
 import { promisify } from "node:util";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { listSettingsFiles } from "../../../packages/agent/shared/settings/files.ts";
-import { registerTauSystemPromptContribution } from "../../../packages/agent/shared/system-prompt-contributions.ts";
 
 const execFileAsync = promisify(execFile);
-const SETTINGS_ROOT = join("src", "extensions");
-const GENERATOR = join("scripts", "generate-tau-schema.ts");
-const SETTINGS_PROMPT = [
-	"Tau settings: src/extensions/<extension>/settings.ts only, next to index.ts. Not src/shared.",
-	"Never edit schemas/tau.schema.json manually; tau-schema-sync regenerates it after settings.ts tool results.",
-	"Do not write settings.ts and read schemas/tau.schema.json in same parallel tool batch; read schema only in a later tool call.",
-].join("\n");
+const SETTINGS_ROOT = join("packages", "agent", "extensions");
+const GENERATOR = join("packages", "agent", "scripts", "generate-tau-schema.ts");
 
 type Hashes = Map<string, string>;
 
@@ -22,11 +16,6 @@ export default function tauSchemaSync(pi: ExtensionAPI): void {
 	let baseline: Hashes | undefined;
 	let run: Promise<string | undefined> | undefined;
 	let pendingNotice: string | undefined;
-	const unregisterPrompt = registerTauSystemPromptContribution({
-		id: "repository.schema-sync",
-		order: 500,
-		render: () => SETTINGS_PROMPT,
-	});
 
 	pi.on("session_start", async (_event, ctx) => {
 		baseline = await hashSettingsFiles(ctx.cwd);
@@ -40,7 +29,7 @@ export default function tauSchemaSync(pi: ExtensionAPI): void {
 		run ??= generateSchema(ctx.cwd)
 			.then(() => {
 				baseline = next;
-				return "Tau schema regenerated: schemas/tau.schema.json";
+				return "Tau schema regenerated: packages/agent/schemas/tau.schema.json";
 			})
 			.catch(() => undefined)
 			.finally(() => {
@@ -56,7 +45,6 @@ export default function tauSchemaSync(pi: ExtensionAPI): void {
 		ctx.ui.notify(pendingNotice, "info");
 		pendingNotice = undefined;
 	});
-	pi.on("session_shutdown", unregisterPrompt);
 }
 
 async function generateSchema(cwd: string): Promise<void> {

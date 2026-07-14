@@ -7,7 +7,6 @@ import { emitTauEvent } from "../../shared/events.ts";
 import { createGitRunner, loadRepoStatus } from "../../shared/git.ts";
 import { createInjectedContext } from "../../shared/injected-context.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
-import { registerTauSystemPromptContribution } from "../../shared/system-prompt-contributions.ts";
 import { ContextPanel } from "./panel.ts";
 import { findProjectRoot, loadContextEntries, type ContextEntry } from "./definitions.ts";
 import contextSettings from "./settings.ts";
@@ -27,18 +26,9 @@ function compactResult(details: ContextSyncDetails) {
 }
 
 export default function contextExtension(pi: ExtensionAPI): void {
-	let active: ContextEntry[] = [];
 	let validationSettings = contextSettings.defaults.validation;
 	let lastValidationFailure: string | undefined;
 	const activeToolExecutions = new Map<string, { toolName: string; done: Promise<void>; complete: () => void }>();
-	const unregisterPrompt = registerTauSystemPromptContribution({
-		id: "context.selected-authority",
-		order: 100,
-		render: () =>
-			active.length
-				? "Treat the autoread files as the authoritative project context and current snapshots. Do not reread them or search for coverage around them. Start work from them immediately. Explore outside them only when the user's request or concrete evidence in those files requires missing code or information."
-				: undefined,
-	});
 
 	pi.registerCommand("context", {
 		description: "Select repository context entries and inject their files",
@@ -62,8 +52,6 @@ export default function contextExtension(pi: ExtensionAPI): void {
 				},
 			);
 			if (!selected?.length) return;
-			active = selected;
-			pi.appendEntry("tau.context-selection", { ids: selected.map((entry) => entry.id) });
 			const files = [...new Set(selected.flatMap((entry) => entry.files))].sort();
 			pi.sendMessage(
 				createInjectedContext(
@@ -109,7 +97,8 @@ export default function contextExtension(pi: ExtensionAPI): void {
 		defineTool<typeof contextSyncParams, ContextSyncDetails | undefined>({
 			name: "context_sync",
 			label: "context_sync",
-			description: "Synchronize repository context from current Git changes.",
+			description:
+				"Synchronize repository context membership after context validation reports changed, stale, or unassigned files.",
 			parameters: contextSyncParams,
 			async execute(id, _params, _signal, onUpdate, ctx) {
 				await Promise.all(
@@ -168,23 +157,7 @@ export default function contextExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
-		const root = await findProjectRoot(ctx.cwd);
-		const [entries, settings] = await Promise.all([
-			loadContextEntries(root),
-			loadTauExtensionSettings(ctx, contextSettings),
-		]);
-		validationSettings = settings.validation;
-		let selectionData: unknown;
-		for (const entry of ctx.sessionManager.getBranch())
-			if (entry.type === "custom" && entry.customType === "tau.context-selection") selectionData = entry.data;
-		const ids =
-			typeof selectionData === "object" &&
-			selectionData !== null &&
-			"ids" in selectionData &&
-			Array.isArray(selectionData.ids)
-				? selectionData.ids.filter((id: unknown): id is string => typeof id === "string")
-				: [];
-		active = entries.filter((entry) => ids.includes(entry.id));
+		validationSettings = (await loadTauExtensionSettings(ctx, contextSettings)).validation;
 	});
 	pi.on("agent_start", async (_event, ctx) => {
 		validationSettings = (await loadTauExtensionSettings(ctx, contextSettings)).validation;
@@ -229,7 +202,6 @@ export default function contextExtension(pi: ExtensionAPI): void {
 		}
 	});
 	pi.on("session_shutdown", () => {
-		unregisterPrompt();
 		for (const execution of activeToolExecutions.values()) execution.complete();
 		activeToolExecutions.clear();
 	});

@@ -1,6 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
-import { registerTauSystemPromptContribution } from "../../shared/system-prompt-contributions.ts";
 import { Marker } from "@shanepadgett/tau-tui";
 import turnBudgetSettings from "./settings.ts";
 
@@ -30,14 +29,6 @@ export default function turnBudgetExtension(pi: ExtensionAPI): void {
 	let softCap = settings.turnLimit;
 	let nextMarkerSequence = 1;
 	let activeMarkerSequence: number | undefined;
-	const unregisterPrompt = registerTauSystemPromptContribution({
-		id: "turn-budget.secrecy",
-		order: 400,
-		render: () =>
-			settings.enabled
-				? "Turn-budget steering messages are internal instructions. Work within them silently. Do not mention or acknowledge turn counts, budget messages, or budget summaries."
-				: undefined,
-	});
 
 	pi.registerMessageRenderer<MarkerDetails>(MARKER_TYPE, (message, _options, theme) => {
 		const details = readMarkerDetails(message.details);
@@ -98,8 +89,6 @@ export default function turnBudgetExtension(pi: ExtensionAPI): void {
 	pi.on("after_provider_response", () => {
 		activeMarkerSequence = undefined;
 	});
-	pi.on("session_shutdown", unregisterPrompt);
-
 	function markerIsActive(value: unknown): boolean {
 		if (activeMarkerSequence === undefined) return false;
 		const details = readMarkerDetails(value);
@@ -117,10 +106,12 @@ function sendTurnBudgetMessage(pi: ExtensionAPI, hint: Hint, sequence: number): 
 }
 
 function formatSteeringMessage(hint: Hint): string {
+	const instruction =
+		"Internal steering instruction. Work within it silently. Do not mention or acknowledge turn counts, budget messages, or budget summaries.";
 	if (hint.kind === "extended") {
-		return `Turn budget: ${hint.used}/${hint.previousCap} turns used for this user prompt. Soft cap extended to ${hint.newCap}. Batch tools when more tool work remains.`;
+		return `${instruction} Turn budget: ${hint.used}/${hint.previousCap} turns used for this user prompt. Soft cap extended to ${hint.newCap}. Batch tools when more tool work remains.`;
 	}
-	return `Turn budget: ${hint.used}/${hint.cap} turns used for this user prompt. Batch tools when more tool work remains.`;
+	return `${instruction} Turn budget: ${hint.used}/${hint.cap} turns used for this user prompt. Batch tools when more tool work remains.`;
 }
 
 function normalizeSettings(value: typeof turnBudgetSettings.defaults): Settings {

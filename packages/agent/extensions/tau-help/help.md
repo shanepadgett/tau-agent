@@ -74,13 +74,17 @@ Adds `/reference` to manage separate repositories kept outside the current proje
 
 Shows a compact display-only marker after each run with wall time and model cost. It does not enter agent context.
 
+## runtime-context
+
+Supplies the agent with the current local date and an initial root directory snapshot as hidden session context.
+
 ## silent-command-runner
 
 Runs configured commands while keeping their output out of agent context when that is useful.
 
 ## soul
 
-Manages the session’s soul prompt and its persistent working guidance.
+Adds Rok’s persona and operating rules to Pi’s native assistant prompt.
 
 ## stash
 
