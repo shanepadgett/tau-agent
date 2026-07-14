@@ -1,7 +1,12 @@
 import { execFile } from "node:child_process";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import { findProjectRoot, loadContextEntries } from "../extensions/context/definitions.ts";
+import {
+	findProjectRoot,
+	isContextEligiblePath,
+	isSensitiveContextPath,
+	loadContextEntries,
+} from "../extensions/context/definitions.ts";
 
 function gitStatus(root: string): Promise<string> {
 	return new Promise((resolve, reject) => {
@@ -49,9 +54,13 @@ try {
 		}
 	}
 
-	const uncovered = uncommittedFiles(await gitStatus(root)).filter(
-		(path) => !path.startsWith(".pi/contexts/") && !memberships.has(path),
-	);
+	const uncommitted = uncommittedFiles(await gitStatus(root));
+	const sensitive = uncommitted.filter(isSensitiveContextPath);
+	if (sensitive.length > 0)
+		throw new Error(
+			`Sensitive files cannot be inspected by context sync:\n${sensitive.map((path) => `- ${path}`).join("\n")}`,
+		);
+	const uncovered = uncommitted.filter((path) => isContextEligiblePath(path) && !memberships.has(path));
 	if (stale.length === 0 && uncovered.length === 0) process.exitCode = 0;
 	else {
 		const output = ["Context catalog validation failed."];

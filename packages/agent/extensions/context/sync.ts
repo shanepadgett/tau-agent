@@ -9,6 +9,8 @@ import { generateToolValidated, resolveCandidates } from "../../shared/model-fal
 import { truncAt } from "../../shared/text.ts";
 import { XAI_CHAT_MODEL, XAI_PROVIDER } from "../xai/constants.ts";
 import {
+	isContextEligiblePath,
+	isSensitiveContextPath,
 	loadContextEntries,
 	normalizeProjectPath,
 	pathExists,
@@ -138,6 +140,7 @@ export async function runContextSync(
 	if (!status) throw new Error("No Git repository found");
 	if (status.fileCount === 0) return noChange("Existing context mappings already fit the changed scope.");
 	const evidence = await collectSyncEvidence(git, status.root);
+	if (evidence.files.length === 0) return noChange("Changed files are outside context catalog scope.");
 	const prompt = buildContextSyncPrompt(evidence);
 	const plan = await generateToolValidated(
 		ctx,
@@ -197,6 +200,7 @@ async function collectSyncEvidence(git: GitRunner, root: string): Promise<SyncEv
 		root,
 		files.filter((file) => dirtyExisting.has(file.path)),
 	);
+	for (const path of dependencies) if (!isContextEligiblePath(path)) dependencies.delete(path);
 	const affectedIds = new Set<string>();
 	for (const entry of entries) {
 		if (
@@ -211,7 +215,9 @@ async function collectSyncEvidence(git: GitRunner, root: string): Promise<SyncEv
 	const missingPaths = new Set<string>();
 	for (const entry of entries)
 		for (const path of entry.files) if (!(await isFile(join(root, path)))) missingPaths.add(path);
-	const siblingFiles = siblingEntries.flatMap((entry) => entry.files).filter((path) => !missingPaths.has(path));
+	const siblingFiles = siblingEntries
+		.flatMap((entry) => entry.files)
+		.filter((path) => !missingPaths.has(path) && isContextEligiblePath(path));
 	const eligibleFiles = new Set([...dirtyExisting, ...dependencies, ...siblingFiles]);
 	const structuralPreviews = new Map<string, string>();
 	for (const path of [...new Set(siblingFiles)].sort()) {
@@ -282,7 +288,21 @@ async function collectDirtyFiles(
 			index++;
 		}
 	}
-	const sorted = parsed.sort((a, b) => a.path.localeCompare(b.path));
+	const sensitive = parsed.filter(
+		(file) =>
+			file.kind !== "deleted" &&
+			(isSensitiveContextPath(file.path) || (file.oldPath !== undefined && isSensitiveContextPath(file.oldPath))),
+	);
+	if (sensitive.length > 0)
+		throw new Error(
+			`Sensitive files cannot be inspected by context sync:\n${sensitive.map((file) => `- ${file.path}`).join("\n")}`,
+		);
+	const sorted = parsed
+		.filter(
+			(file) =>
+				isContextEligiblePath(file.path) || (file.oldPath !== undefined && isContextEligiblePath(file.oldPath)),
+		)
+		.sort((a, b) => a.path.localeCompare(b.path));
 	const result: SyncDirtyFile[] = [];
 	for (let offset = 0; offset < sorted.length; offset += EVIDENCE_CONCURRENCY) {
 		result.push(

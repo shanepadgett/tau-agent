@@ -15,6 +15,23 @@ export interface ContextEntry {
 	path: string;
 }
 
+export function isContextEligiblePath(path: string): boolean {
+	return (
+		path !== "LICENSE" &&
+		path !== ".pi/tau/ideas.jsonl" &&
+		path !== ".working" &&
+		!path.startsWith(".working/") &&
+		path !== ".pi/contexts" &&
+		!path.startsWith(".pi/contexts/")
+	);
+}
+
+export function isSensitiveContextPath(path: string): boolean {
+	const name = basename(path);
+	if (name === ".env.example" || name === ".env.sample") return false;
+	return name === ".env" || name.startsWith(".env.") || /\.(?:pem|key|crt|p12|pfx)$/i.test(name);
+}
+
 export async function pathExists(path: string): Promise<boolean> {
 	try {
 		await access(path);

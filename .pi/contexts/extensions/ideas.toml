@@ -4,7 +4,6 @@ description = "Complete and bounded context for the ideas extension"
 [all]
 description = "Every extension file, direct shared dependency, test, and user-facing help"
 files = [
-  ".pi/tau/ideas.jsonl",
   "packages/agent/extensions/ideas/README.md",
   "packages/agent/extensions/ideas/browser.ts",
   "packages/agent/extensions/ideas/index.ts",
