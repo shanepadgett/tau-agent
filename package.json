@@ -5,11 +5,11 @@
 	"type": "module",
 	"description": "Tau Agent monorepo",
 	"license": "MIT",
-	"packageManager": "npm@10.9.3",
+	"packageManager": "npm@11.16.0",
 	"devEngines": {
 		"packageManager": {
 			"name": "npm",
-			"version": "10.9.3",
+			"version": "11.16.0",
 			"onFail": "error"
 		}
 	},
