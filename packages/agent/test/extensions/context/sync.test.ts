@@ -53,6 +53,38 @@ describe("context sync", () => {
 		});
 	});
 
+	it("rejects no-change while a changed file is uncovered", async () => {
+		const root = await project();
+		const evidence: SyncEvidence = {
+			root,
+			files: [
+				{
+					id: 1,
+					path: "src/player.ts",
+					status: " M",
+					kind: "modified",
+					untracked: false,
+					memberships: [],
+					oldMemberships: [],
+					evidence: "changed",
+				},
+			],
+			entries: [],
+			dirtyExisting: new Set(["src/player.ts"]),
+			dependencies: new Set(),
+			affectedIds: new Set(),
+			affectedConcepts: new Set(),
+			eligibleFiles: new Set(["src/player.ts"]),
+			missingPaths: new Set(),
+			structuralPreviews: new Map(),
+			worktreeSignature: "worktree",
+			catalogSignature: "catalog",
+		};
+		expect(() => normalizeContextSyncPlan({ outcome: "no-change", reason: "Skip" }, evidence)).toThrow(
+			"no-change cannot leave uncovered changed files",
+		);
+	});
+
 	it("applies multiple desired entries without losing concept metadata", async () => {
 		const root = await project();
 		const path = join(root, ".pi", "contexts", "gameplay", "player.toml");

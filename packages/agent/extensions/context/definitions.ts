@@ -2,6 +2,7 @@ import { access, readFile, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { parse } from "smol-toml";
+import { matchGlob } from "../../shared/glob.ts";
 
 export interface ContextEntry {
 	id: string;
@@ -36,10 +37,11 @@ const CONTEXT_IGNORED_FILENAMES = new Set([
 	"yarn.lock",
 ]);
 
-export function isContextEligiblePath(path: string): boolean {
+export function isContextEligiblePath(path: string, ignoreGlobs: readonly string[] = []): boolean {
 	return (
 		path !== "LICENSE" &&
 		!CONTEXT_IGNORED_FILENAMES.has(basename(path)) &&
+		!ignoreGlobs.some((glob) => matchGlob(glob, path)) &&
 		path !== ".pi/tau/ideas.jsonl" &&
 		path !== ".working" &&
 		!path.startsWith(".working/") &&

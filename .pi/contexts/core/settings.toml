@@ -3,15 +3,11 @@ description = "Tau settings runtime, registration, and schema pipeline"
 
 [all]
 description = "Every shared settings implementation, registered setting, generator, and schema"
-files = [ ".pi/extensions/tau-schema-sync/index.ts", ".pi/tau/settings.json", "packages/agent/extensions/footer/settings.ts", "packages/agent/extensions/reference/settings.ts", "packages/agent/extensions/silent-command-runner/settings.ts", "packages/agent/extensions/soul/settings.ts", "packages/agent/extensions/turn-budget/settings.ts", "packages/agent/schemas/tau.schema.json", "packages/agent/scripts/check-contexts.ts", "packages/agent/scripts/generate-tau-schema.ts", "packages/agent/shared/model-fallback/settings.ts", "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/files.ts", "packages/agent/shared/settings/json.ts", "packages/agent/shared/settings/load.ts", "packages/agent/shared/settings/merge.ts", "packages/agent/shared/settings/paths.ts", "packages/agent/shared/settings/schema.ts", "packages/agent/shared/settings/specs.ts" ]
+files = [ ".pi/extensions/tau-schema-sync/index.ts", ".pi/tau/settings.json", "packages/agent/extensions/context/settings.ts", "packages/agent/extensions/footer/settings.ts", "packages/agent/extensions/reference/settings.ts", "packages/agent/extensions/silent-command-runner/settings.ts", "packages/agent/extensions/soul/settings.ts", "packages/agent/extensions/turn-budget/settings.ts", "packages/agent/schemas/tau.schema.json", "packages/agent/scripts/generate-tau-schema.ts", "packages/agent/shared/model-fallback/settings.ts", "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/files.ts", "packages/agent/shared/settings/json.ts", "packages/agent/shared/settings/load.ts", "packages/agent/shared/settings/merge.ts", "packages/agent/shared/settings/paths.ts", "packages/agent/shared/settings/schema.ts", "packages/agent/shared/settings/specs.ts" ]
 
 [runtime]
 description = "Settings scopes, paths, reads, atomic writes, merging, and loading"
 files = [ "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/files.ts", "packages/agent/shared/settings/json.ts", "packages/agent/shared/settings/load.ts", "packages/agent/shared/settings/merge.ts", "packages/agent/shared/settings/paths.ts" ]
-
-[validation]
-description = "Project context catalog validation and automatic silent-runner configuration"
-files = [ "packages/agent/scripts/check-contexts.ts", ".pi/tau/settings.json" ]
 
 [schema]
 description = "Settings discovery, schema generation, synchronization, and generated schema"
@@ -19,4 +15,4 @@ files = [ ".pi/extensions/tau-schema-sync/index.ts", "packages/agent/schemas/tau
 
 [registrations]
 description = "Current extension and shared settings specifications"
-files = [ "packages/agent/extensions/footer/settings.ts", "packages/agent/extensions/reference/settings.ts", "packages/agent/extensions/silent-command-runner/settings.ts", "packages/agent/extensions/soul/settings.ts", "packages/agent/extensions/turn-budget/settings.ts", "packages/agent/shared/model-fallback/settings.ts" ]
+files = [ "packages/agent/extensions/context/settings.ts", "packages/agent/extensions/footer/settings.ts", "packages/agent/extensions/reference/settings.ts", "packages/agent/extensions/silent-command-runner/settings.ts", "packages/agent/extensions/soul/settings.ts", "packages/agent/extensions/turn-budget/settings.ts", "packages/agent/shared/model-fallback/settings.ts" ]

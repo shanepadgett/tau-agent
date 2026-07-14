@@ -12,6 +12,31 @@
 		"extensions": {
 			"type": "object",
 			"properties": {
+				"context": {
+					"type": "object",
+					"properties": {
+						"validation": {
+							"type": "object",
+							"properties": {
+								"enabled": {
+									"type": "boolean",
+									"default": true,
+									"description": "Validate context membership after agent turns."
+								},
+								"ignoreGlobs": {
+									"type": "array",
+									"items": {
+										"type": "string"
+									},
+									"default": [],
+									"description": "Project-relative files excluded from context membership validation and sync."
+								}
+							},
+							"additionalProperties": false
+						}
+					},
+					"additionalProperties": false
+				},
 				"footer": {
 					"type": "object",
 					"properties": {

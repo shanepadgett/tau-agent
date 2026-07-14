@@ -6,6 +6,7 @@ import { withFileMutationQueue, type ExtensionAPI, type ExtensionContext } from 
 import { parse, stringify } from "smol-toml";
 import { createGitRunner, loadRepoStatus, type GitRunner } from "../../shared/git.ts";
 import { generateToolValidated, resolveCandidates } from "../../shared/model-fallback/index.ts";
+import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { truncAt } from "../../shared/text.ts";
 import { XAI_CHAT_MODEL, XAI_PROVIDER } from "../xai/constants.ts";
 import {
@@ -18,6 +19,7 @@ import {
 	validSlug,
 	type ContextEntry,
 } from "./definitions.ts";
+import contextSettings from "./settings.ts";
 
 const MAX_DIRTY_EVIDENCE = 4_000;
 const MAX_STRUCTURAL_PREVIEW = 1_500;
@@ -146,9 +148,10 @@ async function runContextSyncLocked(
 	const git = createGitRunner(pi, ctx);
 	const status = await loadRepoStatus(git);
 	if (!status) throw new Error("No Git repository found");
-	if (status.fileCount === 0) return noChange("Existing context mappings already fit the changed scope.");
-	const evidence = await collectSyncEvidence(git, status.root);
-	if (evidence.files.length === 0) return noChange("Changed files are outside context catalog scope.");
+	const settings = await loadTauExtensionSettings(ctx, contextSettings);
+	const evidence = await collectSyncEvidence(git, status.root, settings.validation.ignoreGlobs);
+	if (evidence.files.length === 0 && evidence.missingPaths.size === 0)
+		return noChange("Changed files are outside context catalog scope.");
 	const prompt = buildContextSyncPrompt(evidence);
 	const plan = await generateToolValidated(
 		ctx,
@@ -163,7 +166,7 @@ async function runContextSyncLocked(
 	await onStatus?.("Applying context catalog changes");
 	return applyContextSyncPlan(evidence.root, plan, evidence.entries, async () => {
 		const currentEntries = await loadContextEntries(evidence.root);
-		const currentFiles = await collectDirtyFiles(git, evidence.root, currentEntries);
+		const currentFiles = await collectDirtyFiles(git, evidence.root, currentEntries, settings.validation.ignoreGlobs);
 		if ((await computeWorktreeSignature(git, evidence.root, currentFiles)) !== evidence.worktreeSignature)
 			throw new Error("Repository changed during context sync. Rerun context sync.");
 		if ((await computeCatalogSignature(evidence.root)) !== evidence.catalogSignature)
@@ -196,9 +199,13 @@ async function withSyncLock<T>(task: () => Promise<T>): Promise<T> {
 	}
 }
 
-async function collectSyncEvidence(git: GitRunner, root: string): Promise<SyncEvidence> {
+async function collectSyncEvidence(
+	git: GitRunner,
+	root: string,
+	ignoreGlobs: readonly string[],
+): Promise<SyncEvidence> {
 	const entries = await loadContextEntries(root);
-	const files = await collectDirtyFiles(git, root, entries);
+	const files = await collectDirtyFiles(git, root, entries, ignoreGlobs);
 	const dirtyExisting = new Set<string>();
 	for (const file of files)
 		if (file.kind !== "deleted" && (await isFile(join(root, file.path)))) dirtyExisting.add(file.path);
@@ -206,10 +213,15 @@ async function collectSyncEvidence(git: GitRunner, root: string): Promise<SyncEv
 		root,
 		files.filter((file) => dirtyExisting.has(file.path)),
 	);
-	for (const path of dependencies) if (!isContextEligiblePath(path)) dependencies.delete(path);
+	for (const path of dependencies) if (!isContextEligiblePath(path, ignoreGlobs)) dependencies.delete(path);
+	const missingPaths = new Set<string>();
+	for (const entry of entries)
+		for (const path of entry.files)
+			if (isContextEligiblePath(path, ignoreGlobs) && !(await isFile(join(root, path)))) missingPaths.add(path);
 	const affectedIds = new Set<string>();
 	for (const entry of entries) {
 		if (
+			entry.files.some((path) => missingPaths.has(path)) ||
 			entry.files.some(
 				(path) => files.some((file) => file.path === path || file.oldPath === path) || dependencies.has(path),
 			)
@@ -218,12 +230,9 @@ async function collectSyncEvidence(git: GitRunner, root: string): Promise<SyncEv
 	}
 	const affectedConcepts = new Set([...affectedIds].map((id) => id.split("/").slice(0, 2).join("/")));
 	const siblingEntries = entries.filter((entry) => affectedConcepts.has(`${entry.tab}/${entry.concept}`));
-	const missingPaths = new Set<string>();
-	for (const entry of entries)
-		for (const path of entry.files) if (!(await isFile(join(root, path)))) missingPaths.add(path);
 	const siblingFiles = siblingEntries
 		.flatMap((entry) => entry.files)
-		.filter((path) => !missingPaths.has(path) && isContextEligiblePath(path));
+		.filter((path) => !missingPaths.has(path) && isContextEligiblePath(path, ignoreGlobs));
 	const eligibleFiles = new Set([...dirtyExisting, ...dependencies, ...siblingFiles]);
 	const structuralPreviews = new Map<string, string>();
 	for (const path of [...new Set(siblingFiles)].sort()) {
@@ -259,6 +268,7 @@ async function collectDirtyFiles(
 	git: GitRunner,
 	root: string,
 	entries: readonly ContextEntry[],
+	ignoreGlobs: readonly string[],
 ): Promise<SyncDirtyFile[]> {
 	const raw = await git.run(["status", "--porcelain=v2", "-z", "--untracked-files=all"], { cwd: root });
 	const parts = raw.split("\0").filter(Boolean);
@@ -306,7 +316,8 @@ async function collectDirtyFiles(
 	const sorted = parsed
 		.filter(
 			(file) =>
-				isContextEligiblePath(file.path) || (file.oldPath !== undefined && isContextEligiblePath(file.oldPath)),
+				isContextEligiblePath(file.path, ignoreGlobs) ||
+				(file.oldPath !== undefined && isContextEligiblePath(file.oldPath, ignoreGlobs)),
 		)
 		.sort((a, b) => a.path.localeCompare(b.path));
 	const result: SyncDirtyFile[] = [];
@@ -420,13 +431,7 @@ async function isFile(path: string): Promise<boolean> {
 
 function buildContextSyncPrompt(evidence: SyncEvidence): string {
 	const stale = evidence.entries.flatMap((entry) =>
-		entry.files
-			.filter(
-				(path) =>
-					evidence.missingPaths.has(path) &&
-					!evidence.files.some((file) => file.path === path || file.oldPath === path),
-			)
-			.map((path) => `${entry.id}: ${path}`),
+		entry.files.filter((path) => evidence.missingPaths.has(path)).map((path) => `${entry.id}: ${path}`),
 	);
 	const affected = evidence.entries.filter((entry) => evidence.affectedIds.has(entry.id));
 	const previews = [...evidence.structuralPreviews].map(([path, preview]) => `${path}\n${preview}`);
@@ -434,11 +439,11 @@ function buildContextSyncPrompt(evidence: SyncEvidence): string {
 		[
 			"Synchronize reusable repository context scopes from the supplied Git and catalog evidence.",
 			"Call submit_context_sync exactly once and produce no prose response.",
-			"Return no-change when existing mappings already support likely future work.",
+			"Return no-change only when every eligible changed file has context membership and no stale catalog paths remain.",
 			"Context entries are reusable work scopes, not inventories of every touched file. Prefer updating an existing entry over creating a near-duplicate. Do not create one entry per file.",
 			"Follow direct local dependency candidates only when needed. Do not add package dependencies, generated files, incidental imports, or recursive dependencies.",
 			"Reconsider granularity only inside affected concepts. Preserve broad entries when splitting would duplicate files without improving future work.",
-			"New or unmapped changed files may remain unmapped. Do not clean unrelated stale paths. Use only supplied candidate paths.",
+			"Every eligible changed file must belong to at least one entry. Remove every stale catalog path. Use only supplied candidate paths.",
 			"Example: replace gameplay/player/all with gameplay/player/movement and gameplay/player/input only when every still-useful file from all remains in the final entries.",
 			"Changed-file catalog and current memberships:",
 			...evidence.files.map(
@@ -458,7 +463,7 @@ function buildContextSyncPrompt(evidence: SyncEvidence): string {
 			),
 			"Changed files with no membership:",
 			evidence.files
-				.filter((file) => file.memberships.length === 0 && file.oldMemberships.length === 0)
+				.filter((file) => file.kind !== "deleted" && file.memberships.length === 0)
 				.map((file) => file.path)
 				.join("\n") || "(none)",
 			"Affected entries:",
@@ -467,7 +472,7 @@ function buildContextSyncPrompt(evidence: SyncEvidence): string {
 			[...evidence.affectedConcepts].sort().join("\n") || "(none)",
 			"Resolved direct dependency candidates:",
 			[...evidence.dependencies].sort().join("\n") || "(none)",
-			"Unrelated stale catalog paths (evidence only; do not modify):",
+			"Stale catalog paths that must be removed:",
 			stale.join("\n") || "(none)",
 			"Dirty files:",
 			...evidence.files.map(
@@ -488,6 +493,9 @@ export function normalizeContextSyncPlan(input: unknown, evidence: SyncEvidence)
 	if (!reason) throw new Error("Context sync reason is required.");
 	if (input.outcome === "no-change") {
 		if ("changes" in input) throw new Error("no-change must not include changes.");
+		const uncovered = evidence.files.filter((file) => file.kind !== "deleted" && file.memberships.length === 0);
+		if (uncovered.length > 0 || evidence.missingPaths.size > 0)
+			throw new Error("no-change cannot leave uncovered changed files or stale catalog paths.");
 		return { outcome: "no-change", reason };
 	}
 	if (!Array.isArray(input.changes) || input.changes.length === 0)
@@ -567,6 +575,12 @@ export function normalizeContextSyncPlan(input: unknown, evidence: SyncEvidence)
 			if (evidence.eligibleFiles.has(path) && ![...final.values()].some((files) => files.includes(path)))
 				throw new Error(`Deleting entry would orphan surviving file: ${path}`);
 	}
+	for (const path of evidence.dirtyExisting)
+		if (![...final.values()].some((files) => files.includes(path)))
+			throw new Error(`Context sync would leave changed file uncovered: ${path}`);
+	for (const files of final.values())
+		for (const path of files)
+			if (evidence.missingPaths.has(path)) throw new Error(`Context sync would leave stale path: ${path}`);
 	return { outcome: "apply", reason, changes };
 }
 

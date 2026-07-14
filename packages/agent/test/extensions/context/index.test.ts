@@ -55,7 +55,7 @@ describe("context extension", () => {
 		expect(commands).toEqual(new Set(["context", "context-sync"]));
 	});
 
-	it("keeps collapsed rendering compact and expanded details private from text output", () => {
+	it("keeps collapsed rendering compact and exposes the sync reason to the agent", () => {
 		const tool = harness().tools.get("context_sync");
 		if (!tool) throw new Error("context_sync was not registered");
 		const details: ContextSyncDetails = {
@@ -84,6 +84,7 @@ describe("context extension", () => {
 					text: JSON.stringify({
 						outcome: details.outcome,
 						summary: details.summary,
+						reason: details.reason,
 						changedContextFiles: details.changedContextFiles,
 					}),
 				},
@@ -110,7 +111,7 @@ describe("context extension", () => {
 				.join("\n")
 				.trimEnd(),
 		).toContain("set-entry code/context/sync");
-		expect(result.content[0]?.text).not.toContain(details.reason);
+		expect(result.content[0]?.text).toContain(details.reason);
 	});
 
 	it("waits for sibling tools before inspecting the repository", async () => {

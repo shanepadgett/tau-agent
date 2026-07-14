@@ -7,6 +7,7 @@ files = [
   "packages/agent/extensions/silent-command-runner/README.md",
   "packages/agent/extensions/silent-command-runner/index.ts",
   "packages/agent/extensions/silent-command-runner/settings.ts",
+  "packages/agent/shared/glob.ts",
   "packages/agent/shared/settings/define.ts",
   "packages/agent/shared/settings/load.ts",
   "packages/agent/shared/settings/paths.ts",
@@ -15,6 +16,7 @@ files = [
 description = "Extension runtime and direct shared dependencies"
 files = [
   "packages/agent/extensions/silent-command-runner/index.ts",
+  "packages/agent/shared/glob.ts",
   "packages/agent/shared/settings/define.ts",
   "packages/agent/shared/settings/load.ts",
   "packages/agent/shared/settings/paths.ts",

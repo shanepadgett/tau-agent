@@ -1,7 +1,8 @@
 import { readdir, stat } from "node:fs/promises";
-import { resolve, sep } from "node:path";
+import { resolve } from "node:path";
 import { type ExecResult, type ExtensionAPI, keyText, type Theme } from "@earendil-works/pi-coding-agent";
 import { Box, Text } from "@earendil-works/pi-tui";
+import { matchGlob, posixPath } from "../../shared/glob.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { resolveProjectRoot } from "../../shared/settings/paths.ts";
 import { registerTauSystemPromptContribution } from "../../shared/system-prompt-contributions.ts";
@@ -410,39 +411,6 @@ function isFailedCommandDetails(value: unknown): value is FailedCommandDetails {
 	return isRecord(value) && typeof value.name === "string" && typeof value.command === "string";
 }
 
-function matchGlob(pattern: string, path: string): boolean {
-	return matchSegments(normalizeGlob(pattern).split("/"), normalizeGlob(path).split("/"));
-}
-
-function matchSegments(pattern: readonly string[], path: readonly string[]): boolean {
-	const [head, ...tail] = pattern;
-	if (head === undefined) return path.length === 0;
-	if (head === "**") return matchSegments(tail, path) || (path.length > 0 && matchSegments(pattern, path.slice(1)));
-	const [pathHead, ...pathTail] = path;
-	return pathHead !== undefined && matchSegment(head, pathHead) && matchSegments(tail, pathTail);
-}
-
-function matchSegment(pattern: string, value: string): boolean {
-	const source = [...pattern]
-		.map((char) => {
-			if (char === "*") return "[^/]*";
-			if (char === "?") return "[^/]";
-			return escapeRegExp(char);
-		})
-		.join("");
-	return new RegExp(`^${source}$`).test(value);
-}
-
-function normalizeGlob(value: string): string {
-	return posixPath(value.trim())
-		.replace(/^\.\//, "")
-		.replace(/^\/+|\/+$/g, "");
-}
-
-function posixPath(value: string): string {
-	return sep === "/" ? value : value.split(sep).join("/");
-}
-
 function nonEmptyStrings(value: readonly string[] | undefined, fallback: string[]): string[] {
 	const strings = value?.map((item) => item.trim()).filter(Boolean) ?? [];
 	return strings.length ? strings : fallback;
@@ -450,10 +418,6 @@ function nonEmptyStrings(value: readonly string[] | undefined, fallback: string[
 
 function positiveInteger(value: number | undefined, fallback: number): number {
 	return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : fallback;
-}
-
-function escapeRegExp(value: string): string {
-	return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 }
 
 function errorMessage(error: unknown): string {

@@ -4,11 +4,15 @@ import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { emitTauEvent } from "../../shared/events.ts";
+import { createGitRunner, loadRepoStatus } from "../../shared/git.ts";
 import { createInjectedContext } from "../../shared/injected-context.ts";
+import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { registerTauSystemPromptContribution } from "../../shared/system-prompt-contributions.ts";
 import { ContextPanel } from "./panel.ts";
 import { findProjectRoot, loadContextEntries, type ContextEntry } from "./definitions.ts";
+import contextSettings from "./settings.ts";
 import { runContextSync, type ContextSyncDetails } from "./sync.ts";
+import { formatContextValidationFailure, validateContextCatalog } from "./validation.ts";
 
 const contextSyncParams = Type.Object({}, { additionalProperties: false });
 
@@ -16,6 +20,7 @@ function compactResult(details: ContextSyncDetails) {
 	const value = {
 		outcome: details.outcome,
 		summary: details.summary,
+		reason: details.reason,
 		changedContextFiles: details.changedContextFiles,
 	};
 	return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details };
@@ -23,6 +28,8 @@ function compactResult(details: ContextSyncDetails) {
 
 export default function contextExtension(pi: ExtensionAPI): void {
 	let active: ContextEntry[] = [];
+	let validationSettings = contextSettings.defaults.validation;
+	let lastValidationFailure: string | undefined;
 	const activeToolExecutions = new Map<string, { toolName: string; done: Promise<void>; complete: () => void }>();
 	const unregisterPrompt = registerTauSystemPromptContribution({
 		id: "context.selected-authority",
@@ -162,7 +169,11 @@ export default function contextExtension(pi: ExtensionAPI): void {
 
 	pi.on("session_start", async (_event, ctx) => {
 		const root = await findProjectRoot(ctx.cwd);
-		const entries = await loadContextEntries(root);
+		const [entries, settings] = await Promise.all([
+			loadContextEntries(root),
+			loadTauExtensionSettings(ctx, contextSettings),
+		]);
+		validationSettings = settings.validation;
 		let selectionData: unknown;
 		for (const entry of ctx.sessionManager.getBranch())
 			if (entry.type === "custom" && entry.customType === "tau.context-selection") selectionData = entry.data;
@@ -174,6 +185,48 @@ export default function contextExtension(pi: ExtensionAPI): void {
 				? selectionData.ids.filter((id: unknown): id is string => typeof id === "string")
 				: [];
 		active = entries.filter((entry) => ids.includes(entry.id));
+	});
+	pi.on("agent_start", async (_event, ctx) => {
+		validationSettings = (await loadTauExtensionSettings(ctx, contextSettings)).validation;
+	});
+	pi.on("agent_end", async (event, ctx) => {
+		if (
+			event.messages.some(
+				(message) =>
+					typeof message === "object" &&
+					message !== null &&
+					"role" in message &&
+					message.role === "assistant" &&
+					"stopReason" in message &&
+					message.stopReason === "aborted",
+			)
+		)
+			return;
+		if (!validationSettings.enabled || !ctx.isProjectTrusted()) {
+			lastValidationFailure = undefined;
+			return;
+		}
+		try {
+			const root = await findProjectRoot(ctx.cwd);
+			const git = createGitRunner(pi, ctx);
+			if (!(await loadRepoStatus(git))) return;
+			const failure = formatContextValidationFailure(
+				await validateContextCatalog(git, root, validationSettings.ignoreGlobs),
+			);
+			if (!failure) {
+				lastValidationFailure = undefined;
+				return;
+			}
+			if (failure === lastValidationFailure) return;
+			lastValidationFailure = failure;
+			ctx.ui.notify("Context catalog validation failed", "error");
+			pi.sendMessage(
+				{ customType: "tau.context-validation", content: failure, display: false },
+				{ triggerTurn: true },
+			);
+		} catch (error) {
+			ctx.ui.notify(`Context validation failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+		}
 	});
 	pi.on("session_shutdown", () => {
 		unregisterPrompt();
