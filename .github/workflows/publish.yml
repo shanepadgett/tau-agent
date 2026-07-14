@@ -16,9 +16,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.18.0
           registry-url: https://registry.npmjs.org
-      - run: npm install --global npm@11.16.0
       - run: npm run check:package-sources
       - run: npm ci --ignore-scripts
       - run: npm pack --dry-run --workspace @shanepadgett/tau-tui
