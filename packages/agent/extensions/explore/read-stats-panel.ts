@@ -116,7 +116,7 @@ class SavingsBody implements Component {
 			metricRow("Changes only", formatCost(this.snapshot.diffCost), width),
 			"",
 			this.theme.bold("Read results"),
-			countRow("Full", this.snapshot.counts.baseline, "Unchanged", this.snapshot.counts.unchanged, width),
+			countRow("Baseline", this.snapshot.counts.baseline, "Unchanged", this.snapshot.counts.unchanged, width),
 			countRow("Changes", this.snapshot.counts.diff, "Recovery", this.snapshot.counts.recovery, width),
 			"",
 			truncateToWidth(
