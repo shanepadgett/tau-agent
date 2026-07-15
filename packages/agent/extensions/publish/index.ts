@@ -60,7 +60,7 @@ async function publish(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<
 	const manifests = await loadManifests(repo.root);
 	const currentVersion = sharedVersion(manifests);
 	const tag = await latestReleaseTag(git, repo.root);
-	const bump = await recommendBump(git, repo.root, tag);
+	const bump = await recommendBump(git, repo.root, tag, currentVersion);
 	const version = tag ? incrementVersion(currentVersion, bump) : currentVersion;
 	const selectedBump = await ctx.ui.select(`Release ${version}`, [
 		`Use recommended ${bump} bump`,
@@ -153,10 +153,15 @@ async function latestReleaseTag(git: GitRunner, root: string): Promise<string | 
 	return tags.split("\n").find((tag) => /^v\d+\.\d+\.\d+$/.test(tag));
 }
 
-async function recommendBump(git: GitRunner, root: string, tag: string | undefined): Promise<Bump> {
+async function recommendBump(
+	git: GitRunner,
+	root: string,
+	tag: string | undefined,
+	currentVersion: string,
+): Promise<Bump> {
 	const range = tag ? `${tag}..HEAD` : "HEAD";
 	const commits = await git.run(["log", "--format=%B%x00", range], { cwd: root });
-	if (/BREAKING CHANGE:|^[^\n]*!:/m.test(commits)) return "major";
+	if (/BREAKING CHANGE:|^[^\n]*!:/m.test(commits)) return currentVersion.startsWith("0.") ? "minor" : "major";
 	if (/^feat(?:\([^\n]+\))?:/m.test(commits)) return "minor";
 	return "patch";
 }
