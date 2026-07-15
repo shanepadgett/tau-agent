@@ -28,7 +28,7 @@ Adds `/commit` for semantic commit grouping, review, and committing selected rep
 
 ## context
 
-Adds `/context` to select reusable repository work scopes from `.pi/contexts`, and `/context-sync` to reconcile affected scopes from current Git changes. Tau automatically validates changed-file membership and stale references after agent turns. Folder names are tabs, TOML files are concepts, and TOML sections are selectable entries.
+Adds `/context` to select reusable repository work scopes from `.pi/contexts`, and `/context-sync` to reconcile affected scopes from current Git changes. Context validation is disabled by default; when enabled, Tau checks changed-file membership and stale references after agent turns. Folder names are tabs, TOML files are concepts, and TOML sections are selectable entries.
 
 ## explore
 

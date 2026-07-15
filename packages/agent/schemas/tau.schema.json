@@ -20,7 +20,7 @@
 							"properties": {
 								"enabled": {
 									"type": "boolean",
-									"default": true,
+									"default": false,
 									"description": "Validate context membership after agent turns."
 								},
 								"ignoreGlobs": {

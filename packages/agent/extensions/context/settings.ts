@@ -5,7 +5,7 @@ export default defineTauExtensionSettings({
 	key: "context",
 	defaults: {
 		validation: {
-			enabled: true as boolean,
+			enabled: false as boolean,
 			ignoreGlobs: [] as string[],
 		},
 	},
@@ -15,7 +15,7 @@ export default defineTauExtensionSettings({
 				Type.Object(
 					{
 						enabled: Type.Optional(
-							Type.Boolean({ default: true, description: "Validate context membership after agent turns." }),
+							Type.Boolean({ default: false, description: "Validate context membership after agent turns." }),
 						),
 						ignoreGlobs: Type.Optional(
 							Type.Array(Type.String(), {
