@@ -4,6 +4,8 @@ import { onTauEvent } from "../../shared/events.js";
 
 const DEFAULT_TITLE = "Tau";
 const DEFAULT_BODY = "Ready for input";
+const COMPACTION_BODY = "Compaction complete";
+const BRANCH_SUMMARY_BODY = "Branch summary complete";
 const MACOS_SOUND = "/System/Library/Sounds/Submarine.aiff";
 
 function oscText(value: string): string {
@@ -67,5 +69,15 @@ export default function attentionExtension(pi: ExtensionAPI): void {
 	pi.on("agent_end", (_event, ctx) => {
 		if (ctx.mode === "print") return;
 		notify({ title: DEFAULT_TITLE, body: DEFAULT_BODY });
+	});
+
+	pi.on("session_compact", (_event, ctx) => {
+		if (ctx.mode === "print") return;
+		notify({ title: DEFAULT_TITLE, body: COMPACTION_BODY });
+	});
+
+	pi.on("session_tree", (event, ctx) => {
+		if (ctx.mode === "print" || !event.summaryEntry) return;
+		notify({ title: DEFAULT_TITLE, body: BRANCH_SUMMARY_BODY });
 	});
 }

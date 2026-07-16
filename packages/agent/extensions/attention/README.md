@@ -1,10 +1,12 @@
 # Attention
 
-Sends a terminal-driven attention notification when Tau is ready for input.
+Sends a terminal-driven attention notification when Tau is ready for input, finishes compacting a session, or summarizes an abandoned branch during tree navigation.
 
 ## Behavior
 
 - Emits an attention notification on `agent_end`.
+- Emits an attention notification on `session_compact`.
+- Emits an attention notification on `session_tree` when it includes a branch summary.
 - Listens for shared event `tau:agent.blocked` when Tau is waiting on user input.
 - Uses the terminal or host OS notification path that best fits the current environment.
 

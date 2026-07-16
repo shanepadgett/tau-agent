@@ -8,7 +8,7 @@ Gives the agent macOS window discovery, screenshots, and app activation tools fo
 
 ## attention
 
-Shows attention state when Tau needs the user to look at the chat.
+Shows attention state when Tau needs the user to look at the chat, finishes compacting a session, or summarizes an abandoned branch.
 
 ## auto-name
 
