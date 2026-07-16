@@ -135,6 +135,19 @@ export default function patchExtension(pi: ExtensionAPI): void {
 	const rowState = createToolRowStateStore(pi, "patch.tool-row-state");
 	pi.registerTool(createPatchTool(rowState));
 
+	function configureMutationTools(model: { provider: string; id: string } | undefined): void {
+		const active = new Set(pi.getActiveTools());
+		const usesGrok = model?.provider.toLowerCase() === "xai" || model?.id.toLowerCase().includes("grok") === true;
+		if (usesGrok) {
+			active.delete("patch");
+			for (const tool of SUPPRESSED_TOOLS) active.add(tool);
+		} else {
+			active.add("patch");
+			for (const tool of SUPPRESSED_TOOLS) active.delete(tool);
+		}
+		pi.setActiveTools([...active]);
+	}
+
 	// AgentToolResult has no isError field, so execute returns are always treated as success.
 	// Override via tool_result to flag partial/failed patches as errors for the model and UI.
 	pi.on("tool_result", async (event, ctx) => {
@@ -160,11 +173,12 @@ export default function patchExtension(pi: ExtensionAPI): void {
 		return { isError: true };
 	});
 
-	pi.on("session_start", () => {
+	pi.on("session_start", (_event, ctx) => {
 		rowState.clear();
-		const active = new Set(pi.getActiveTools());
-		active.add("patch");
-		for (const tool of SUPPRESSED_TOOLS) active.delete(tool);
-		pi.setActiveTools([...active]);
+		configureMutationTools(ctx.model);
+	});
+
+	pi.on("model_select", (event) => {
+		configureMutationTools(event.model);
 	});
 }

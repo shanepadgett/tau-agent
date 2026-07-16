@@ -52,7 +52,7 @@ Adds `/manage-sessions` to browse saved sessions and `/sweep` to archive or dele
 
 ## patch
 
-Replaces separate edit/write operations with one multi-file `patch` tool. It can create, rewrite, edit, move, and delete files in one structured call. Fewer tool calls means fewer turns, and each avoided turn prevents the full chat context from being sent again.
+Replaces separate edit/write operations with one multi-file `patch` tool. It can create, rewrite, edit, move, and delete files in one structured call. Fewer tool calls means fewer turns, and each avoided turn prevents the full chat context from being sent again. Tau keeps `patch` disabled and uses `edit` and `write` for xAI and Grok models.
 
 ## publish
 
