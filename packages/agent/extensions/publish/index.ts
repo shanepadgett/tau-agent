@@ -42,7 +42,18 @@ export default function publishExtension(pi: ExtensionAPI): void {
 			try {
 				await publish(pi, ctx);
 			} catch (error) {
-				ctx.ui.notify(`Publish failed: ${errorText(error)}`, "error");
+				pi.sendMessage(
+					{
+						customType: "tau.publish-failure",
+						content: [
+							"The /publish command failed with this error:",
+							errorText(error),
+							"Investigate the failure using read-only diagnostics. Determine the likely cause and recommend a solution to the user. Do not change files, git state, package state, or remote state, and do not retry publishing.",
+						].join("\n\n"),
+						display: false,
+					},
+					{ triggerTurn: true },
+				);
 			}
 		},
 	});

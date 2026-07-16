@@ -60,7 +60,7 @@ Replaces separate edit/write operations with one multi-file `patch` tool. It can
 
 ## publish
 
-Adds `/publish` to create a tagged release, trigger trusted npm publishing in GitHub Actions, and show its status. It recommends a semantic version bump from commits since the prior release tag, but you must confirm the release type and publish action.
+Adds `/publish` to create a tagged release, trigger trusted npm publishing in GitHub Actions, and show its status. It recommends a semantic version bump from commits since the prior release tag, but you must confirm the release type and publish action. If publishing fails, the agent investigates with read-only diagnostics and recommends a solution without applying it or retrying the release.
 
 ## qna
 
