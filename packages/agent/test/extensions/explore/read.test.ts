@@ -248,4 +248,13 @@ describe("explore read", () => {
 			),
 		).toContain("Offset 99 is beyond end of file");
 	});
+
+	it("hides the completed call renderer after reload", () => {
+		const tool = createExploreReadTool(testRowState);
+		const context = {
+			...renderContext({ path: "file.txt" }, false),
+			executionStarted: false,
+		};
+		expect(renderedText(tool.renderCall?.({ path: "file.txt" }, testTheme, context))).toBe("");
+	});
 });

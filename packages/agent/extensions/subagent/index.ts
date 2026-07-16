@@ -178,6 +178,7 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 			renderCall(args, theme, context) {
 				return renderSubagentCall(args, theme, {
 					executionStarted: context.executionStarted,
+					isPartial: context.isPartial,
 					lastComponent: context.lastComponent,
 					rowState,
 					rowId: context.toolCallId,

@@ -271,7 +271,7 @@ export function createExploreReadTool(
 		) {
 			rowState.watch(context.toolCallId, context.invalidate);
 			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			if (context.executionStarted) {
+			if (context.executionStarted || !context.isPartial) {
 				text.setText("");
 				return text;
 			}
