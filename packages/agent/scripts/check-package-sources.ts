@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
@@ -29,6 +29,7 @@ const trackedFiles = execFileSync("git", ["ls-files", "-z"], { cwd: root })
 	.split("\0")
 	.filter(Boolean);
 for (const path of trackedFiles) {
+	if (!existsSync(join(root, path))) continue;
 	const content = readFileSync(join(root, path));
 	if (content.includes(0)) continue;
 	const text = content.toString("utf8").toLowerCase();

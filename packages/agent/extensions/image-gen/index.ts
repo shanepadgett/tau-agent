@@ -4,8 +4,8 @@ import { link, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { type Static, Type } from "typebox";
-import { XAI_IMAGE_MODEL, XAI_PROVIDER } from "../xai/constants.ts";
 import { detectImageMimeType, editImage, generateImage, type EditImage, type GeneratedImage } from "./client.ts";
+import { XAI_IMAGE_MODEL, XAI_PROVIDER } from "./constants.ts";
 
 const MAX_INPUT_BYTES = 50 * 1024 * 1024;
 const MAX_INLINE_BYTES = 12 * 1024 * 1024;
@@ -41,7 +41,7 @@ export default function imageGenExtension(pi: ExtensionAPI): void {
 			name: "image_gen",
 			label: "Image Generation",
 			description:
-				"Generate a requested raster image or AI-edit existing images with the xAI Grok subscription OAuth login. Omit referenced_image_paths to generate; pass one to three local paths to edit or compose. Omit path to use Tau's external image store; pass path only when the user explicitly requests a repository file or other destination. Returns the image for inspection.",
+				"Generate a requested raster image or AI-edit existing images with configured xAI authentication. Omit referenced_image_paths to generate; pass one to three local paths to edit or compose. Omit path to use Tau's external image store; pass path only when the user explicitly requests a repository file or other destination. Returns the image for inspection.",
 			parameters: imageGenSchema,
 			async execute(_toolCallId, params: ImageGenParams, signal, onUpdate, ctx) {
 				signal?.throwIfAborted();
@@ -63,7 +63,7 @@ export default function imageGenExtension(pi: ExtensionAPI): void {
 
 				const token = await ctx.modelRegistry.getApiKeyForProvider(XAI_PROVIDER);
 				if (!token) {
-					throw new Error("xAI OAuth is unavailable. Run /login and select xAI (Grok subscription OAuth).");
+					throw new Error("xAI authentication is unavailable. Run /login xai and choose a login method.");
 				}
 				const images: EditImage[] = [];
 				for (const path of params.referenced_image_paths ?? []) {

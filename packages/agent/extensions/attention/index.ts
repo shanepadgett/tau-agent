@@ -66,7 +66,7 @@ export default function attentionExtension(pi: ExtensionAPI): void {
 
 	onTauEvent(pi, "attention.agent-blocked", "tau:agent.blocked", notify);
 
-	pi.on("agent_end", (_event, ctx) => {
+	pi.on("agent_settled", (_event, ctx) => {
 		if (ctx.mode === "print") return;
 		notify({ title: DEFAULT_TITLE, body: DEFAULT_BODY });
 	});

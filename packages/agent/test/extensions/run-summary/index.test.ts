@@ -22,13 +22,19 @@ describe("run summary extension", () => {
 				{ role: "toolResult", toolName: "subagent", details: { usage: { cost: 0.03 } } },
 			],
 		});
+		expect(appendEntry).not.toHaveBeenCalled();
+		handlers.get("agent_start")?.({});
+		handlers.get("agent_end")?.({
+			messages: [{ role: "assistant", usage: { cost: { total: 0.01 } } }],
+		});
+		handlers.get("agent_settled")?.({});
 
 		expect(appendEntry).toHaveBeenCalledOnce();
 		expect(appendEntry.mock.calls[0]?.[0]).toBe("tau.run-summary");
 		expect(appendEntry.mock.calls[0]?.[1]).toMatchObject({
-			runCost: 0.12,
+			runCost: 0.13,
 			subagentCost: 0.03,
-			totalCost: 0.15,
+			totalCost: 0.16,
 		});
 	});
 });

@@ -13,6 +13,8 @@ interface RunSummary {
 
 export default function runSummaryExtension(pi: ExtensionAPI): void {
 	let startedAt: number | undefined;
+	let runCost = 0;
+	let subagentCost = 0;
 
 	pi.registerEntryRenderer<RunSummary>(ENTRY_TYPE, (entry, _options, theme) => {
 		const summary = readRunSummary(entry.data);
@@ -32,18 +34,15 @@ export default function runSummaryExtension(pi: ExtensionAPI): void {
 
 	pi.on("session_start", () => {
 		startedAt = undefined;
+		runCost = 0;
+		subagentCost = 0;
 	});
 
 	pi.on("agent_start", () => {
-		startedAt = performance.now();
+		startedAt ??= performance.now();
 	});
 
 	pi.on("agent_end", (event) => {
-		if (startedAt === undefined) return;
-		const wallMs = Math.max(0, performance.now() - startedAt);
-		startedAt = undefined;
-		let runCost = 0;
-		let subagentCost = 0;
 		for (const message of event.messages) {
 			if (message.role === "assistant") {
 				runCost += finiteNonNegative((message as AssistantMessage).usage.cost.total);
@@ -52,12 +51,20 @@ export default function runSummaryExtension(pi: ExtensionAPI): void {
 			if (message.role !== "toolResult" || message.toolName !== "subagent") continue;
 			subagentCost += readSubagentCost(message.details);
 		}
+	});
+
+	pi.on("agent_settled", () => {
+		if (startedAt === undefined) return;
+		const wallMs = Math.max(0, performance.now() - startedAt);
+		startedAt = undefined;
 		pi.appendEntry<RunSummary>(ENTRY_TYPE, {
 			wallMs,
 			runCost,
 			subagentCost,
 			totalCost: runCost + subagentCost,
 		});
+		runCost = 0;
+		subagentCost = 0;
 	});
 }
 

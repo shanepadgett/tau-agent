@@ -1,4 +1,4 @@
-import { XAI_API_BASE_URL, XAI_IMAGE_MODEL } from "../xai/constants.ts";
+import { XAI_API_BASE_URL, XAI_IMAGE_MODEL } from "./constants.ts";
 
 const MAX_ERROR_BODY_BYTES = 8192;
 const MAX_ERROR_MESSAGE_LENGTH = 2000;

@@ -232,7 +232,6 @@ export async function createSubagentThread(options: {
 			cwd: ctx.cwd,
 			model,
 			thinkingLevel: thinkingLevel as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
-			modelRegistry: ctx.modelRegistry,
 			tools: definition.tools,
 			excludeTools: ["subagent"],
 			resourceLoader,

@@ -6,6 +6,7 @@ description = "Every extension file, direct shared dependency, test, and user-fa
 files = [
   "packages/agent/extensions/image-gen/README.md",
   "packages/agent/extensions/image-gen/client.ts",
+  "packages/agent/extensions/image-gen/constants.ts",
   "packages/agent/extensions/image-gen/index.ts",
   "packages/agent/test/extensions/image-gen/client.test.ts",
   "packages/agent/test/extensions/image-gen/index.test.ts",
@@ -14,12 +15,14 @@ files = [
 description = "Extension runtime and direct shared dependencies"
 files = [
   "packages/agent/extensions/image-gen/client.ts",
+  "packages/agent/extensions/image-gen/constants.ts",
   "packages/agent/extensions/image-gen/index.ts",
 ]
 [tests]
 description = "Extension implementation and automated tests"
 files = [
   "packages/agent/extensions/image-gen/client.ts",
+  "packages/agent/extensions/image-gen/constants.ts",
   "packages/agent/extensions/image-gen/index.ts",
   "packages/agent/test/extensions/image-gen/client.test.ts",
   "packages/agent/test/extensions/image-gen/index.test.ts",

@@ -8,7 +8,6 @@ import { createGitRunner, loadRepoStatus, type GitRunner } from "../../shared/gi
 import { generateToolValidated, resolveCandidates } from "../../shared/model-fallback/index.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { truncAt } from "../../shared/text.ts";
-import { XAI_CHAT_MODEL, XAI_PROVIDER } from "../xai/constants.ts";
 import {
 	contextEntryPaths,
 	isContextEligiblePath,
@@ -32,7 +31,7 @@ const CONTEXT_SYNC_MODELS: ReadonlyArray<{ provider: string; model: string; reas
 	{ provider: "openai-codex", model: "gpt-5.6-terra", reasoning: "medium" },
 	{ provider: "openai-codex", model: "gpt-5.6-sol", reasoning: "low" },
 	{ provider: "anthropic", model: "claude-sonnet-5", reasoning: "low" },
-	{ provider: XAI_PROVIDER, model: XAI_CHAT_MODEL, reasoning: "high" },
+	{ provider: "xai", model: "grok-4.5", reasoning: "high" },
 ];
 
 const SUBMIT_TOOL = {

@@ -90,14 +90,14 @@ describe("image_gen extension", () => {
 		}
 	});
 
-	it("requires the xAI OAuth login", async () => {
+	it("requires xAI authentication", async () => {
 		const cwd = await mkdtemp(join(tmpdir(), "tau-image-gen-test-"));
 		try {
 			const { tool, apiKey } = harness(null);
 			await expect(tool.execute("id", { prompt: "x" }, undefined, undefined, context(cwd, apiKey))).rejects.toThrow(
-				"Run /login and select xAI",
+				"Run /login xai",
 			);
-			expect(apiKey).toHaveBeenCalledWith("xai-oauth");
+			expect(apiKey).toHaveBeenCalledWith("xai");
 		} finally {
 			await rm(cwd, { recursive: true, force: true });
 		}

@@ -80,6 +80,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	let turnPaths = new Set<string>();
 	let run: Promise<void> | undefined;
 	let abortController: AbortController | undefined;
+	let lastRunAborted = false;
+	let chainActive = false;
 
 	pi.registerMessageRenderer<FailureDetails>(MESSAGE_TYPE, (message, { expanded }, theme) =>
 		renderFailure(asFailureDetails(message.details), expanded, theme),
@@ -89,6 +91,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		settings = normalizeSettings(await loadTauExtensionSettings(ctx, silentCommandRunnerSettings));
 		turnStart = Date.now();
 		turnPaths = new Set();
+		lastRunAborted = false;
+		chainActive = false;
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
@@ -98,6 +102,9 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("agent_start", async (_event, ctx) => {
+		lastRunAborted = false;
+		if (chainActive) return;
+		chainActive = true;
 		turnStart = Date.now();
 		if (!settings.enabled || settings.commands.length === 0) {
 			turnPaths = new Set();
@@ -107,8 +114,13 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		turnPaths = new Set(await walkFiles(projectRoot));
 	});
 
-	pi.on("agent_end", async (event, ctx) => {
-		if (hasAbortedAssistantMessage(event.messages)) return;
+	pi.on("agent_end", (event) => {
+		lastRunAborted = hasAbortedAssistantMessage(event.messages);
+	});
+
+	pi.on("agent_settled", async (_event, ctx) => {
+		chainActive = false;
+		if (lastRunAborted) return;
 		if (run) return;
 		run = runChangedCommands(ctx.cwd, turnStart, ctx.ui.notify)
 			.catch((error: unknown) => {
@@ -125,6 +137,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		abortController = undefined;
 		run = undefined;
 		turnPaths = new Set();
+		lastRunAborted = false;
+		chainActive = false;
 	});
 
 	async function runChangedCommands(
