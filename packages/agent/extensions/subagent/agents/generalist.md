@@ -2,12 +2,12 @@
 name: generalist
 description: Handle focused analysis, review, implementation, or mixed tasks when no narrower agent fits; specify scope and depth
 tools:
-  - read
-  - patch
-  - grep
-  - find
-  - ls
-model: openai-codex/gpt-5.5-sol
+   - read
+   - patch
+   - grep
+   - find
+   - ls
+model: openai-codex/gpt-5.6-sol
 thinking: high
 ---
 
