@@ -55,6 +55,7 @@ export interface SubagentUsage {
 }
 export interface SubagentDetails {
 	agent: string;
+	threadId?: string;
 	status: "waiting" | "running" | "completed" | "failed" | "aborted";
 	phase: "discovery" | "queue" | "startup" | "run" | "output";
 	completionState?: string;
@@ -78,6 +79,20 @@ export interface SubagentDetails {
 		outputBytes: number;
 		totalBytes: number;
 	};
+}
+
+export interface SubagentThread {
+	id: string;
+	definition: AgentDefinition;
+	session: AgentSession;
+	cwd: string;
+	model: string;
+	thinkingLevel: string;
+	initialTask: string;
+	turns: number;
+	turnGate: FifoGate;
+	pendingTurns: number;
+	lastUsedAt: number;
 }
 
 export function extensionPathsForTools(pi: ExtensionAPI, tools: readonly string[]): string[] {
@@ -154,31 +169,26 @@ function textOf(message: AssistantMessage): string {
 		.join("");
 }
 
-function assistants(session: AgentSession): AssistantMessage[] {
-	return session.messages.filter((message): message is AssistantMessage => message.role === "assistant");
-}
-
-export async function runSubagent(options: {
+export async function createSubagentThread(options: {
+	id: string;
 	definition: AgentDefinition;
 	extensionPaths: readonly string[];
-	task: string;
+	initialTask: string;
 	ctx: ExtensionContext;
 	thinkingLevel: string;
 	signal: AbortSignal;
-	onUpdate?: (details: SubagentDetails) => void | Promise<void>;
 	onWarning?: (warning: string) => void;
-}): Promise<{ content: string; details: SubagentDetails }> {
+}): Promise<SubagentThread> {
 	const {
+		id,
 		definition,
 		extensionPaths,
-		task,
+		initialTask,
 		ctx,
 		thinkingLevel: parentThinkingLevel,
 		signal,
-		onUpdate,
 		onWarning,
 	} = options;
-	const started = Date.now();
 	let model = ctx.model;
 	let thinkingLevel = parentThinkingLevel;
 	if (definition.model) {
@@ -205,34 +215,7 @@ export async function runSubagent(options: {
 		else thinkingLevel = definition.thinking;
 	}
 	const modelName = model ? `${model.provider}/${model.id}` : "unavailable";
-	const usage: SubagentUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 0 };
-	const details: SubagentDetails = {
-		agent: definition.name,
-		status: "running",
-		phase: "startup",
-		task,
-		model: modelName,
-		thinkingLevel,
-		toolCalls: 0,
-		actions: [],
-		omittedActions: 0,
-		omittedErrors: 0,
-		usage,
-		durationMs: 0,
-	};
 	let session: AgentSession | undefined;
-	let unsubscribe: (() => void) | undefined;
-	let updateChain = Promise.resolve();
-	let lastTextUpdate = 0;
-	const publish = (force = false) => {
-		const now = Date.now();
-		if (!force && now - lastTextUpdate < 100) return;
-		lastTextUpdate = now;
-		details.durationMs = now - started;
-		const snapshot = structuredClone(details);
-		snapshot.actions = snapshot.actions.slice(-5);
-		updateChain = updateChain.then(() => onUpdate?.(snapshot)).catch(() => undefined);
-	};
 	try {
 		if (!model) throw new Error(`Agent ${definition.name} startup failed: parent has no model`);
 		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
@@ -267,12 +250,78 @@ export async function runSubagent(options: {
 				`Agent ${definition.name} startup failed: unavailable tools: ${missing.join(", ") || "active tool mismatch"}`,
 			);
 		}
-		details.phase = "run";
+		return {
+			id,
+			definition,
+			session,
+			cwd: ctx.cwd,
+			model: modelName,
+			thinkingLevel,
+			initialTask,
+			turns: 0,
+			turnGate: new FifoGate(1),
+			pendingTurns: 0,
+			lastUsedAt: Date.now(),
+		};
+	} catch (error) {
+		if (session?.isStreaming) await session.abort().catch(() => undefined);
+		session?.dispose();
+		throw error;
+	}
+}
+
+export async function disposeSubagentThread(thread: SubagentThread): Promise<void> {
+	if (thread.session.isStreaming) await thread.session.abort().catch(() => undefined);
+	thread.session.dispose();
+}
+
+export async function runSubagentTurn(options: {
+	thread: SubagentThread;
+	task: string;
+	initial: boolean;
+	signal: AbortSignal;
+	onUpdate?: (details: SubagentDetails) => void | Promise<void>;
+}): Promise<{ content: string; details: SubagentDetails }> {
+	const { thread, task, initial, signal, onUpdate } = options;
+	const { definition, session } = thread;
+	const started = Date.now();
+	const usage: SubagentUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 0 };
+	const details: SubagentDetails = {
+		agent: definition.name,
+		threadId: thread.id,
+		status: "running",
+		phase: "run",
+		task,
+		model: thread.model,
+		thinkingLevel: thread.thinkingLevel,
+		toolCalls: 0,
+		actions: [],
+		omittedActions: 0,
+		omittedErrors: 0,
+		usage,
+		durationMs: 0,
+	};
+	let unsubscribe: (() => void) | undefined;
+	let updateChain = Promise.resolve();
+	let lastTextUpdate = 0;
+	const turnMessages: AssistantMessage[] = [];
+	const publish = (force = false) => {
+		const now = Date.now();
+		if (!force && now - lastTextUpdate < 100) return;
+		lastTextUpdate = now;
+		details.durationMs = now - started;
+		const snapshot = structuredClone(details);
+		snapshot.actions = snapshot.actions.slice(-5);
+		updateChain = updateChain.then(() => onUpdate?.(snapshot)).catch(() => undefined);
+	};
+	try {
 		const actionById = new Map<string, string>();
 		unsubscribe = session.subscribe((event: AgentSessionEvent) => {
 			if (event.type === "message_update" && event.message.role === "assistant") {
 				details.response = capped(textOf(event.message), PREVIEW_LIMIT);
 				publish();
+			} else if (event.type === "message_end" && event.message.role === "assistant") {
+				turnMessages.push(event.message);
 			} else if (event.type === "tool_execution_start") {
 				details.toolCalls += 1;
 				const summary = `${event.toolName} ${capped(event.args)}`.trim();
@@ -302,14 +351,15 @@ export async function runSubagent(options: {
 		signal.addEventListener("abort", abort, { once: true });
 		try {
 			await session.prompt(
-				`You are an isolated delegated child agent. Stay within the delegated task and return only the requested result.\n\n## Agent instructions\n${definition.prompt}\n\n## Delegated task\n${task}`,
+				initial
+					? `You are an isolated delegated child agent. Stay within the delegated task and return only the requested result.\n\n## Agent instructions\n${definition.prompt}\n\n## Delegated task\n${task}`
+					: `Continue the existing delegated work using the context already in this thread. Return only the requested result.\n\n## Parent follow-up\n${task}`,
 				{ expandPromptTemplates: false },
 			);
 		} finally {
 			signal.removeEventListener("abort", abort);
 		}
-		const messages = assistants(session);
-		for (const message of messages) {
+		for (const message of turnMessages) {
 			usage.input += message.usage.input;
 			usage.output += message.usage.output;
 			usage.cacheRead += message.usage.cacheRead;
@@ -317,7 +367,7 @@ export async function runSubagent(options: {
 			usage.cost += message.usage.cost.total;
 			usage.turns += 1;
 		}
-		const terminal = messages.at(-1);
+		const terminal = turnMessages.at(-1);
 		if (!terminal) throw new Error(`Agent ${definition.name} run failed: no terminal assistant response`);
 		const response = textOf(terminal);
 		if (terminal.stopReason === "aborted") {
@@ -374,7 +424,8 @@ export async function runSubagent(options: {
 		return { content: details.error, details };
 	} finally {
 		unsubscribe?.();
-		if (session?.isStreaming) await session.abort().catch(() => undefined);
-		session?.dispose();
+		thread.turns += 1;
+		thread.lastUsedAt = Date.now();
+		if (session.isStreaming) await session.abort().catch(() => undefined);
 	}
 }

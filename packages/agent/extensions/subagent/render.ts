@@ -12,7 +12,7 @@ const title = (theme: Theme, rowState: ToolRowStateStore, rowId: string, invalid
 };
 
 export function renderSubagentCall(
-	args: { agent?: string; task?: string },
+	args: { agent?: string; thread?: string; task?: string },
 	theme: Theme,
 	context: {
 		executionStarted: boolean;
@@ -29,7 +29,7 @@ export function renderSubagentCall(
 		return text;
 	}
 	const prefix =
-		`${title(theme, context.rowState, context.rowId, context.invalidate)}  ${theme.fg("accent", args.agent ?? "")}`.trimEnd();
+		`${title(theme, context.rowState, context.rowId, context.invalidate)}  ${theme.fg("accent", args.agent ?? args.thread ?? "")}`.trimEnd();
 	const task = args.task?.replace(/\s+/g, " ").trim();
 	text.setText(task ? `${prefix}  ${theme.fg("muted", task)}` : prefix);
 	return text;
@@ -47,7 +47,8 @@ export function renderSubagentResult(
 		text.setText("");
 		return text;
 	}
-	const header = `${title(theme, context.rowState, context.rowId, context.invalidate)}  ${theme.fg("accent", details.agent)}  ${theme.fg("muted", `$${details.usage.cost.toFixed(4)} · ${(details.durationMs / 1000).toFixed(1)}s · ${details.toolCalls} tools`)}`;
+	const identity = details.threadId ? `${details.agent} · ${details.threadId}` : details.agent;
+	const header = `${title(theme, context.rowState, context.rowId, context.invalidate)}  ${theme.fg("accent", identity)}  ${theme.fg("muted", `$${details.usage.cost.toFixed(4)} · ${(details.durationMs / 1000).toFixed(1)}s · ${details.toolCalls} tools`)}`;
 	if (!expanded) {
 		text.setText(`${header}  ${theme.fg("muted", details.task.replace(/\s+/g, " ").trim())}`);
 		return text;

@@ -12,6 +12,8 @@ Tau includes three built-in agents:
 
 Ask Tau to delegate a task, or let it call `subagent` with an agent name and task. Children use the parent's current working directory and inherit its model and thinking level unless their definition overrides either value. They do not receive the parent conversation. Tau loads only the extensions that own a child's declared tools, so unrelated extension hooks do not run in child sessions. When a child must inspect another repository, put its exact absolute path in the delegated task.
 
+Fresh calls return a thread ID. Tau can send feedback or follow-up work to that thread, preserving the child's conversation, prior reads, and tool results. It starts a fresh thread for unrelated work or when retained context is stale or oversized. Threads live for the current parent session. Tau retains up to 16 and evicts the least recently used idle thread when needed. Calls to one thread run sequentially.
+
 ## Agent definitions
 
 Add Markdown definitions at `~/.pi/agent/tau/agents/*.md` or, in a trusted project, the nearest `.pi/tau/agents/*.md`. Project definitions override user definitions, which override built-ins. Duplicate names in one scope are invalid.
