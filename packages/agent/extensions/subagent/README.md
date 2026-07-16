@@ -6,6 +6,7 @@ Agent definitions can override the parent model and thinking level. If an overri
 
 Tau includes three built-in agents:
 
+- `generalist` handles focused analysis, review, implementation, or mixed work when no narrower agent fits. Delegated tasks should state their scope and desired depth.
 - `scout` explores local files and code with `read`, `grep`, `find`, and `ls`.
 - `web-research` researches web and code sources with `websearch`, `codesearch`, and `webfetch`.
 

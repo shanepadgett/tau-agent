@@ -52,6 +52,7 @@ Named tools and configured models must exist in the normally loaded child Pi env
 
 ## Built-ins
 
+- `generalist` — focused analysis, review, implementation, or mixed work when no narrower agent fits
 - `scout` — local exploration with `read`, `grep`, `find`, `ls`
 - `web-research` — `websearch`, `codesearch`, `webfetch`
 

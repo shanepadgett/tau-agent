@@ -30,6 +30,8 @@ describe("subagent discovery", () => {
 		expect(await findProjectAgentsDir(paths.cwd)).toBe(paths.agents);
 		const trusted = await discoverAgents(paths.cwd, true);
 		expect(trusted.agents.get("scout")?.description).toBe("Project scout");
+		expect(trusted.agents.get("generalist")?.model).toBe("openai-codex/gpt-5.5-sol");
+		expect(trusted.agents.get("generalist")?.thinking).toBe("high");
 		expect(trusted.agents.has("web-research")).toBe(true);
 
 		const untrusted = await discoverAgents(paths.cwd, false);
