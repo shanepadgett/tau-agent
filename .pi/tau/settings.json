@@ -1,12 +1,6 @@
 {
 	"$schema": "../../packages/agent/schemas/tau.schema.json",
 	"extensions": {
-		"soul": {
-			"enabled": true
-		},
-		"search": {
-			"workingMemory": false
-		},
 		"reference": {
 			"editor": "code"
 		},
