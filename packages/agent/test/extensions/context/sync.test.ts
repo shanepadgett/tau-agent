@@ -91,7 +91,7 @@ describe("context sync", () => {
 		await mkdir(join(root, ".pi", "contexts", "gameplay"), { recursive: true });
 		await writeFile(
 			path,
-			'name = "Player"\ndescription = "Player systems"\n\n[all]\ndescription = "All player code"\nfiles = ["src/player.ts", "src/math.ts"]\n',
+			'name = "Player"\ndescription = "Player systems"\n\n[all]\ndescription = "All player code"\nfiles = ["src/player.ts"]\nanchors = ["src/math.ts"]\n',
 		);
 		const entries = await loadContextEntries(root);
 		await applyContextSyncPlan(
@@ -124,5 +124,47 @@ describe("context sync", () => {
 		expect(output).toContain('name = "Player"');
 		expect(output).toContain("[movement]");
 		expect(output).not.toContain("[all]");
+		expect(await loadContextEntries(root)).toMatchObject([
+			{ name: "movement", files: ["src/player.ts"], anchors: ["src/math.ts"] },
+		]);
+	});
+
+	it("preserves retained anchors and makes new membership eager", async () => {
+		const root = await project();
+		await writeFile(join(root, "src", "extra.ts"), "export {};\n");
+		const path = join(root, ".pi", "contexts", "gameplay", "player.toml");
+		await mkdir(join(root, ".pi", "contexts", "gameplay"), { recursive: true });
+		await writeFile(
+			path,
+			'name = "Player"\ndescription = "Player systems"\n\n[movement]\ndescription = "Player movement"\nfiles = ["src/player.ts"]\nanchors = ["src/math.ts"]\n',
+		);
+		const entries = await loadContextEntries(root);
+		await applyContextSyncPlan(
+			root,
+			{
+				outcome: "apply",
+				reason: "Add related source",
+				changes: [
+					{
+						action: "set-entry",
+						tab: "gameplay",
+						concept: "player",
+						conceptName: "Player",
+						conceptDescription: "Player systems",
+						entry: "movement",
+						description: "Player movement",
+						files: ["src/extra.ts", "src/math.ts", "src/player.ts"],
+					},
+				],
+			},
+			entries,
+		);
+
+		expect(await loadContextEntries(root)).toMatchObject([
+			{
+				files: ["src/extra.ts", "src/player.ts"],
+				anchors: ["src/math.ts"],
+			},
+		]);
 	});
 });

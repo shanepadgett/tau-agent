@@ -73,14 +73,15 @@ export class ContextPanel implements Component {
 		const list = this.activeList();
 		if (!list?.isFilterFocused()) {
 			const keys = getKeybindings();
-			const pageSize = this.filePageSize();
-			if (this.current.files.length > pageSize && matchesKey(data, Key.alt("up"))) {
+			const paths = this.currentPaths();
+			const pageSize = this.pathPageSize();
+			if (paths.length > pageSize && matchesKey(data, Key.alt("up"))) {
 				this.fileOffset = Math.max(0, this.fileOffset - pageSize);
 				this.sync();
 				return;
 			}
-			if (this.current.files.length > pageSize && matchesKey(data, Key.alt("down"))) {
-				this.fileOffset = Math.min(this.current.files.length - pageSize, this.fileOffset + pageSize);
+			if (paths.length > pageSize && matchesKey(data, Key.alt("down"))) {
+				this.fileOffset = Math.min(paths.length - pageSize, this.fileOffset + pageSize);
 				this.sync();
 				return;
 			}
@@ -122,35 +123,51 @@ export class ContextPanel implements Component {
 		return {
 			render: (width) => {
 				const tabs = this.tabs.render(width);
-				const pageSize = this.filePageSize(tabs.length);
-				const maxOffset = Math.max(0, this.current.files.length - pageSize);
+				const paths = this.currentPaths();
+				const pageSize = this.pathPageSize(tabs.length);
+				const maxOffset = Math.max(0, paths.length - pageSize);
 				this.fileOffset = Math.min(this.fileOffset, maxOffset);
-				const files = this.current.files.slice(this.fileOffset, this.fileOffset + pageSize);
+				const visible = paths.slice(this.fileOffset, this.fileOffset + pageSize);
 				const range =
-					this.current.files.length > pageSize
+					paths.length > pageSize
 						? this.theme.fg(
 								"dim",
-								`${this.fileOffset + 1}-${this.fileOffset + files.length} of ${this.current.files.length} files`,
+								`${this.fileOffset + 1}-${this.fileOffset + visible.length} of ${paths.length} paths`,
 							)
 						: undefined;
 				return [
 					...tabs,
 					"",
 					...(range ? [truncateToWidth(range, width, "…")] : []),
-					...files.map((file) => truncateToWidth(this.theme.fg("muted", `• ${file}`), width, "…")),
+					...visible.map(({ kind, path }) =>
+						truncateToWidth(
+							this.theme.fg(
+								kind === "read" ? "muted" : "dim",
+								`${kind === "read" ? "read" : "anchor"} • ${path}`,
+							),
+							width,
+							"…",
+						),
+					),
 				];
 			},
 			invalidate: () => this.tabs.invalidate(),
 		};
 	}
-	private filePageSize(tabLines = this.tabs.render(this.tui.terminal.columns).length): number {
+	private currentPaths(): Array<{ kind: "read" | "anchor"; path: string }> {
+		return [
+			...this.current.files.map((path) => ({ kind: "read" as const, path })),
+			...this.current.anchors.map((path) => ({ kind: "anchor" as const, path })),
+		];
+	}
+	private pathPageSize(tabLines = this.tabs.render(this.tui.terminal.columns).length): number {
 		const overlayHeight = Math.floor(this.tui.terminal.rows * 0.8);
 		const available = Math.max(1, overlayHeight - tabLines - 7);
 		const pageSize = Math.min(8, available);
-		return this.current.files.length > pageSize ? Math.max(1, pageSize - 1) : pageSize;
+		return this.currentPaths().length > pageSize ? Math.max(1, pageSize - 1) : pageSize;
 	}
 	private secondary(): string {
-		return `${[...this.selected.values()].reduce((sum, items) => sum + items.length, 0)} selected`;
+		return `${[...this.selected.values()].reduce((sum, items) => sum + items.length, 0)} selected · ${this.current.files.length} read · ${this.current.anchors.length} anchors`;
 	}
 	private hints() {
 		const list = this.activeList();
@@ -158,7 +175,7 @@ export class ContextPanel implements Component {
 			? list.getKeyHints()
 			: [
 					...this.tabs.getKeyHints(),
-					...(this.current.files.length > this.filePageSize() ? [rawHint("option+↑/↓", "scroll files")] : []),
+					...(this.currentPaths().length > this.pathPageSize() ? [rawHint("option+↑/↓", "scroll paths")] : []),
 					rawHint("ctrl+c", "clear all"),
 					bindingHint("tui.select.confirm", "inject"),
 					bindingHint("tui.select.cancel", "cancel"),

@@ -53,19 +53,35 @@ export default function contextExtension(pi: ExtensionAPI): void {
 			);
 			if (!selected?.length) return;
 			const files = [...new Set(selected.flatMap((entry) => entry.files))].sort();
+			const fileSet = new Set(files);
+			const anchors = [...new Set(selected.flatMap((entry) => entry.anchors))]
+				.filter((path) => !fileSet.has(path))
+				.sort();
 			pi.sendMessage(
 				createInjectedContext(
-					"Treat the autoread files as the authoritative project context and current snapshots. Do not reread them or search for coverage around them. Start work from them immediately. Explore outside them only when the user's request or concrete evidence in those files requires missing code or information.",
+					[
+						"Selected repository context:",
+						...selected.map((entry) => `- ${entry.id}: ${entry.description}`),
+						"",
+						"Eager snapshots supplied through autoread:",
+						...(files.length ? files.map((path) => `- ${path}`) : ["(none)"]),
+						"",
+						"Lazy navigation anchors whose contents have not been loaded:",
+						...(anchors.length ? anchors.map((path) => `- ${path}`) : ["(none)"]),
+						"",
+						"Treat eager snapshots as authoritative current project context. Do not reread them or search for coverage around them. Inspect only the anchors needed for the request, using grep or bounded reads. Explore elsewhere only when the request or concrete evidence requires missing information.",
+					].join("\n"),
 					{ source: "context", title: "Project context" },
 				),
 			);
-			emitTauEvent(pi, "tau:autoread.requested", {
-				source: "context",
-				title: "Project context",
-				cwd: root,
-				batchId: randomUUID(),
-				files: files.map((path) => ({ path })),
-			});
+			if (files.length)
+				emitTauEvent(pi, "tau:autoread.requested", {
+					source: "context",
+					title: "Project context",
+					cwd: root,
+					batchId: randomUUID(),
+					files: files.map((path) => ({ path })),
+				});
 		},
 	});
 

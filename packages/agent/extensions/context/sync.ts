@@ -10,6 +10,7 @@ import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { truncAt } from "../../shared/text.ts";
 import { XAI_CHAT_MODEL, XAI_PROVIDER } from "../xai/constants.ts";
 import {
+	contextEntryPaths,
 	isContextEligiblePath,
 	isSensitiveContextPath,
 	loadContextEntries,
@@ -216,13 +217,14 @@ async function collectSyncEvidence(
 	for (const path of dependencies) if (!isContextEligiblePath(path, ignoreGlobs)) dependencies.delete(path);
 	const missingPaths = new Set<string>();
 	for (const entry of entries)
-		for (const path of entry.files)
+		for (const path of contextEntryPaths(entry))
 			if (isContextEligiblePath(path, ignoreGlobs) && !(await isFile(join(root, path)))) missingPaths.add(path);
 	const affectedIds = new Set<string>();
 	for (const entry of entries) {
+		const paths = contextEntryPaths(entry);
 		if (
-			entry.files.some((path) => missingPaths.has(path)) ||
-			entry.files.some(
+			paths.some((path) => missingPaths.has(path)) ||
+			paths.some(
 				(path) => files.some((file) => file.path === path || file.oldPath === path) || dependencies.has(path),
 			)
 		)
@@ -231,7 +233,7 @@ async function collectSyncEvidence(
 	const affectedConcepts = new Set([...affectedIds].map((id) => id.split("/").slice(0, 2).join("/")));
 	const siblingEntries = entries.filter((entry) => affectedConcepts.has(`${entry.tab}/${entry.concept}`));
 	const siblingFiles = siblingEntries
-		.flatMap((entry) => entry.files)
+		.flatMap((entry) => contextEntryPaths(entry))
 		.filter((path) => !missingPaths.has(path) && isContextEligiblePath(path, ignoreGlobs));
 	const eligibleFiles = new Set([...dirtyExisting, ...dependencies, ...siblingFiles]);
 	const structuralPreviews = new Map<string, string>();
@@ -327,9 +329,13 @@ async function collectDirtyFiles(
 				sorted.slice(offset, offset + EVIDENCE_CONCURRENCY).map(async (file, inner) => ({
 					...file,
 					id: offset + inner + 1,
-					memberships: entries.filter((entry) => entry.files.includes(file.path)).map((entry) => entry.id),
+					memberships: entries
+						.filter((entry) => contextEntryPaths(entry).includes(file.path))
+						.map((entry) => entry.id),
 					oldMemberships: file.oldPath
-						? entries.filter((entry) => entry.files.includes(file.oldPath ?? "")).map((entry) => entry.id)
+						? entries
+								.filter((entry) => contextEntryPaths(entry).includes(file.oldPath ?? ""))
+								.map((entry) => entry.id)
 						: [],
 					evidence: await dirtyEvidence(git, root, file),
 				})),
@@ -431,7 +437,9 @@ async function isFile(path: string): Promise<boolean> {
 
 function buildContextSyncPrompt(evidence: SyncEvidence): string {
 	const stale = evidence.entries.flatMap((entry) =>
-		entry.files.filter((path) => evidence.missingPaths.has(path)).map((path) => `${entry.id}: ${path}`),
+		contextEntryPaths(entry)
+			.filter((path) => evidence.missingPaths.has(path))
+			.map((path) => `${entry.id}: ${path}`),
 	);
 	const affected = evidence.entries.filter((entry) => evidence.affectedIds.has(entry.id));
 	const previews = [...evidence.structuralPreviews].map(([path, preview]) => `${path}\n${preview}`);
@@ -441,6 +449,7 @@ function buildContextSyncPrompt(evidence: SyncEvidence): string {
 			"Call submit_context_sync exactly once and produce no prose response.",
 			"Return no-change only when every eligible changed file has context membership and no stale catalog paths remain.",
 			"Context entries are reusable work scopes, not inventories of every touched file. Prefer updating an existing entry over creating a near-duplicate. Do not create one entry per file.",
+			"The files field in your changes is desired membership, including eager files and lazy anchors. Paths already classified anywhere in the catalog preserve their loading class; new paths become eager files. Do not change loading policy.",
 			"Follow direct local dependency candidates only when needed. Do not add package dependencies, generated files, incidental imports, or recursive dependencies.",
 			"Reconsider granularity only inside affected concepts. Preserve broad entries when splitting would duplicate files without improving future work.",
 			"Every eligible changed file must belong to at least one entry. Remove every stale catalog path. Use only supplied candidate paths.",
@@ -457,8 +466,9 @@ function buildContextSyncPrompt(evidence: SyncEvidence): string {
 					conceptName: entry.conceptName,
 					conceptDescription: entry.conceptDescription,
 					description: entry.description,
-					files: entry.files,
-					missingFiles: entry.files.filter((path) => evidence.missingPaths.has(path)),
+					eagerFiles: entry.files,
+					anchors: entry.anchors,
+					missingFiles: contextEntryPaths(entry).filter((path) => evidence.missingPaths.has(path)),
 				})),
 			),
 			"Changed files with no membership:",
@@ -540,7 +550,7 @@ export function normalizeContextSyncPlan(input: unknown, evidence: SyncEvidence)
 				throw new Error(`Entry is unrelated: ${id}`);
 			if (conceptName !== existing.conceptName || conceptDescription !== existing.conceptDescription)
 				throw new Error(`Existing concept metadata cannot change: ${conceptId}`);
-			if (description === existing.description && files.join("\0") === existing.files.join("\0"))
+			if (description === existing.description && files.join("\0") === contextEntryPaths(existing).join("\0"))
 				throw new Error(`Set-entry is identical: ${id}`);
 		} else {
 			const existingConcept = evidence.entries.find((item) => item.tab === tab && item.concept === concept);
@@ -560,7 +570,7 @@ export function normalizeContextSyncPlan(input: unknown, evidence: SyncEvidence)
 		}
 		changes.push({ action: "set-entry", tab, concept, conceptName, conceptDescription, entry, description, files });
 	}
-	const final = new Map(evidence.entries.map((entry) => [entry.id, [...entry.files]]));
+	const final = new Map(evidence.entries.map((entry) => [entry.id, contextEntryPaths(entry)]));
 	for (const change of changes) {
 		const id = `${change.tab}/${change.concept}/${change.entry}`;
 		if (change.action === "delete-entry") final.delete(id);
@@ -571,7 +581,7 @@ export function normalizeContextSyncPlan(input: unknown, evidence: SyncEvidence)
 	)) {
 		const old = current.get(`${change.tab}/${change.concept}/${change.entry}`);
 		if (!old) continue;
-		for (const path of old.files)
+		for (const path of contextEntryPaths(old))
 			if (evidence.eligibleFiles.has(path) && ![...final.values()].some((files) => files.includes(path)))
 				throw new Error(`Deleting entry would orphan surviving file: ${path}`);
 	}
@@ -640,6 +650,8 @@ export async function applyContextSyncPlan(
 ): Promise<ContextSyncDetails> {
 	for (const change of plan.changes) if (change.action === "set-entry") await requireFiles(root, change.files);
 	const concepts = [...new Set(plan.changes.map((change) => `${change.tab}/${change.concept}`))].sort();
+	const eagerPaths = new Set(entries.flatMap((entry) => entry.files));
+	const anchorPaths = new Set(entries.flatMap((entry) => entry.anchors).filter((path) => !eagerPaths.has(path)));
 	const outputs = new Map<string, string | undefined>();
 	for (const key of concepts) {
 		const [tab, concept] = key.split("/");
@@ -653,7 +665,12 @@ export async function applyContextSyncPlan(
 			else {
 				if (raw.name === undefined) raw.name = change.conceptName;
 				if (raw.description === undefined) raw.description = change.conceptDescription;
-				raw[change.entry] = { description: change.description, files: change.files };
+				const anchors = change.files.filter((path) => anchorPaths.has(path));
+				raw[change.entry] = {
+					description: change.description,
+					files: change.files.filter((path) => !anchors.includes(path)),
+					...(anchors.length ? { anchors } : {}),
+				};
 			}
 		}
 		outputs.set(

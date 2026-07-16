@@ -1,8 +1,8 @@
 name = "Shared components"
-description = "Reusable Tau TUI panels, tabs, and selectors"
+description = "Reusable Tau TUI components and representative agent integrations"
 
 [all]
-description = "Every shared Tau TUI component and package export"
+description = "Core Tau TUI package implementation with lazy integration and usage references"
 files = [
   "packages/tui/src/editor-theme.ts",
   "packages/tui/src/filter-row.ts",
@@ -16,47 +16,87 @@ files = [
   "packages/tui/src/text.ts",
   "packages/tui/src/tool-panel.ts",
   "packages/tui/src/viewport.ts",
-  "packages/tui/README.md",
-  "packages/tui/package.json",
+]
+anchors = [
   "packages/agent/docs/tui.md",
+  "packages/agent/test/extensions/branch/panel.test.ts",
+  "packages/agent/test/extensions/context/panel.test.ts",
 ]
 
 [panel]
-description = "Focused bordered tool panel shell"
+description = "Bordered focused-flow shell, footer acknowledgements, and configurable key hints"
 files = [
-  "packages/tui/src/tool-panel.ts",
   "packages/tui/src/key-hints.ts",
+  "packages/tui/src/tool-panel.ts",
+]
+anchors = [
+  "packages/agent/extensions/branch/panel.ts",
+  "packages/agent/extensions/commit/review-ui.ts",
+  "packages/agent/extensions/context/panel.ts",
+  "packages/agent/extensions/manage-sessions/manager-ui.ts",
+  "packages/agent/extensions/publish/publish-ui.ts",
+  "packages/agent/extensions/qna/panel.ts",
+  "packages/agent/extensions/reference/panel.ts",
 ]
 
 [tabs]
-description = "Tabbed focused-flow composition"
+description = "Tabbed composition for focused flows with delegated child hints"
 files = [
+  "packages/tui/src/key-hints.ts",
   "packages/tui/src/tabs.ts",
+]
+anchors = [
+  "packages/agent/extensions/context/panel.ts",
+  "packages/agent/extensions/explore/read-stats-panel.ts",
+  "packages/agent/extensions/manage-sessions/manager-ui.ts",
+  "packages/agent/extensions/qna/panel.ts",
 ]
 
 [selection]
-description = "Filtered single-select and multi-select lists"
+description = "Cursor, filtering, windowing, selection, and action handling for reusable lists"
 files = [
-  "packages/tui/src/selectable-list.ts",
   "packages/tui/src/filter-row.ts",
+  "packages/tui/src/key-hints.ts",
   "packages/tui/src/list-render.ts",
+  "packages/tui/src/selectable-list.ts",
   "packages/tui/src/viewport.ts",
+]
+anchors = [
+  "packages/agent/extensions/branch/panel.ts",
+  "packages/agent/extensions/commit/review-ui.ts",
+  "packages/agent/extensions/context/panel.ts",
+  "packages/agent/extensions/manage-sessions/manager-ui.ts",
+  "packages/agent/extensions/reference/panel.ts",
+  "packages/agent/test/extensions/branch/panel.test.ts",
+  "packages/agent/test/extensions/context/panel.test.ts",
 ]
 
 [visuals]
-description = "Editor theme, markers, text formatting, and record selection composition"
+description = "Theme adaptation, status markers, text formatting, and record-selection composition"
 files = [
   "packages/tui/src/editor-theme.ts",
   "packages/tui/src/marker.ts",
   "packages/tui/src/text-record-select-panel.ts",
   "packages/tui/src/text.ts",
 ]
+anchors = [
+  "packages/agent/extensions/explore/autoread.ts",
+  "packages/agent/extensions/ideas/browser.ts",
+  "packages/agent/extensions/qna/choice-question-body.ts",
+  "packages/agent/extensions/run-summary/index.ts",
+  "packages/agent/extensions/stash/browser.ts",
+  "packages/agent/extensions/turn-budget/index.ts",
+  "packages/agent/shared/text.ts",
+]
 
 [package-surface]
-description = "Public exports, package metadata, and key hint helpers"
+description = "Public exports, package metadata, installation, and usage guidance"
 files = [
   "packages/tui/src/index.ts",
-  "packages/tui/src/key-hints.ts",
   "packages/tui/package.json",
   "packages/tui/README.md",
+]
+anchors = [
+  "packages/agent/docs/tui.md",
+  "packages/agent/package.json",
 ]

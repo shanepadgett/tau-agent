@@ -13,6 +13,7 @@ export interface ContextEntry {
 	name: string;
 	description: string;
 	files: string[];
+	anchors: string[];
 	path: string;
 }
 
@@ -36,6 +37,7 @@ const CONTEXT_IGNORED_FILENAMES = new Set([
 	"uv.lock",
 	"yarn.lock",
 ]);
+const CONTEXT_ENTRY_FIELDS = new Set(["description", "files", "anchors"]);
 
 export function isContextEligiblePath(path: string, ignoreGlobs: readonly string[] = []): boolean {
 	return (
@@ -97,6 +99,10 @@ function sortedUnique(values: readonly string[]): string[] {
 	return [...new Set(values)].sort((a, b) => a.localeCompare(b));
 }
 
+export function contextEntryPaths(entry: Pick<ContextEntry, "files" | "anchors">): string[] {
+	return sortedUnique([...entry.files, ...entry.anchors]);
+}
+
 export async function requireFiles(root: string, inputs: readonly string[]): Promise<string[]> {
 	const files = sortedUnique(inputs.map((input) => normalizeProjectPath(root, input)));
 	for (const file of files) {
@@ -132,15 +138,24 @@ export async function loadContextEntries(root: string): Promise<ContextEntry[]> 
 				if (!value || typeof value !== "object" || Array.isArray(value))
 					throw new Error(`Invalid context entry: ${path} [${name}]`);
 				const record = value as Record<string, unknown>;
+				const unknownField = Object.keys(record).find((field) => !CONTEXT_ENTRY_FIELDS.has(field));
+				if (unknownField) throw new Error(`Invalid context entry field: ${path} [${name}] ${unknownField}`);
+				const anchors = record.anchors ?? [];
 				if (
 					typeof record.description !== "string" ||
 					!record.description.trim() ||
 					!Array.isArray(record.files) ||
-					record.files.length === 0 ||
-					record.files.some((item) => typeof item !== "string")
+					record.files.some((item) => typeof item !== "string") ||
+					!Array.isArray(anchors) ||
+					anchors.some((item) => typeof item !== "string") ||
+					(record.files.length === 0 && anchors.length === 0)
 				)
 					throw new Error(`Invalid context entry: ${path} [${name}]`);
 				const entry = validSlug(name, "Context entry");
+				const entryFiles = sortedUnique((record.files as string[]).map((item) => normalizeProjectPath(root, item)));
+				const entryAnchors = sortedUnique((anchors as string[]).map((item) => normalizeProjectPath(root, item)));
+				const overlap = entryFiles.find((item) => entryAnchors.includes(item));
+				if (overlap) throw new Error(`Context path cannot be both file and anchor: ${path} [${name}] ${overlap}`);
 				result.push({
 					id: `${tab}/${concept}/${entry}`,
 					tab,
@@ -149,7 +164,8 @@ export async function loadContextEntries(root: string): Promise<ContextEntry[]> 
 					conceptDescription,
 					name: entry,
 					description: record.description.trim(),
-					files: sortedUnique((record.files as string[]).map((item) => normalizeProjectPath(root, item))),
+					files: entryFiles,
+					anchors: entryAnchors,
 					path,
 				});
 			}

@@ -17,6 +17,7 @@ const ENTRIES: readonly ContextEntry[] = [
 			"packages/agent/extensions/context/panel.ts",
 			"packages/agent/extensions/context/definitions.ts",
 		],
+		anchors: [],
 		path: ".pi/contexts/extensions/context.toml",
 	},
 	{
@@ -28,6 +29,7 @@ const ENTRIES: readonly ContextEntry[] = [
 		name: "sync",
 		description: "Git-based context synchronization",
 		files: ["packages/agent/extensions/context/sync.ts", "packages/agent/extensions/context/definitions.ts"],
+		anchors: [],
 		path: ".pi/contexts/extensions/context.toml",
 	},
 	{
@@ -39,6 +41,7 @@ const ENTRIES: readonly ContextEntry[] = [
 		name: "external-integration",
 		description: "External integration events",
 		files: ["packages/agent/docs/extending-tau-agent.md", "packages/agent/shared/events.ts"],
+		anchors: [],
 		path: ".pi/contexts/docs/tau.toml",
 	},
 ];

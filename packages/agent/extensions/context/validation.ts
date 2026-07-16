@@ -1,7 +1,7 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { GitRunner } from "../../shared/git.ts";
-import { isContextEligiblePath, isSensitiveContextPath, loadContextEntries } from "./definitions.ts";
+import { contextEntryPaths, isContextEligiblePath, isSensitiveContextPath, loadContextEntries } from "./definitions.ts";
 
 export interface ContextValidationResult {
 	stale: Array<{ path: string; ids: string[] }>;
@@ -16,7 +16,7 @@ export async function validateContextCatalog(
 	const entries = await loadContextEntries(root);
 	const memberships = new Map<string, string[]>();
 	for (const entry of entries)
-		for (const file of entry.files) memberships.set(file, [...(memberships.get(file) ?? []), entry.id]);
+		for (const file of contextEntryPaths(entry)) memberships.set(file, [...(memberships.get(file) ?? []), entry.id]);
 
 	const stale: Array<{ path: string; ids: string[] }> = [];
 	for (const [path, ids] of memberships) {

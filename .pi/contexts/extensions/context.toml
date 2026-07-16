@@ -3,7 +3,8 @@ description = "Reusable repository context selection and maintenance"
 
 [all]
 description = "Every Context file, direct shared dependency, research integration, test, and user-facing document"
-files = [ "packages/agent/docs/extending-tau-agent.md", "packages/agent/docs/subagents.md", "packages/agent/extensions/context/README.md", "packages/agent/extensions/context/definitions.ts", "packages/agent/extensions/context/index.ts", "packages/agent/extensions/context/panel.ts", "packages/agent/extensions/context/settings.ts", "packages/agent/extensions/context/sync.ts", "packages/agent/extensions/context/validation.ts", "packages/agent/extensions/subagent/agents.ts", "packages/agent/extensions/subagent/run.ts", "packages/agent/extensions/tau-help/help.md", "packages/agent/shared/events.ts", "packages/agent/shared/git.ts", "packages/agent/shared/glob.ts", "packages/agent/shared/injected-context.ts", "packages/agent/shared/settings/load.ts", "packages/agent/test/extensions/context/definitions.test.ts", "packages/agent/test/extensions/context/index.test.ts", "packages/agent/test/extensions/context/sync.test.ts", "packages/agent/test/extensions/context/validation.test.ts" ]
+files = [ ".pi/extensions/tool-preview/widgets/context.ts", "packages/agent/extensions/context/README.md", "packages/agent/extensions/context/definitions.ts", "packages/agent/extensions/context/index.ts", "packages/agent/extensions/context/panel.ts", "packages/agent/extensions/context/settings.ts", "packages/agent/extensions/context/sync.ts", "packages/agent/extensions/context/validation.ts", "packages/agent/shared/events.ts", "packages/agent/shared/git.ts", "packages/agent/shared/glob.ts", "packages/agent/shared/injected-context.ts", "packages/agent/shared/settings/load.ts" ]
+anchors = [ "packages/agent/docs/extending-tau-agent.md", "packages/agent/docs/subagents.md", "packages/agent/extensions/subagent/agents.ts", "packages/agent/extensions/subagent/run.ts", "packages/agent/extensions/tau-help/help.md", "packages/agent/test/extensions/context/definitions.test.ts", "packages/agent/test/extensions/context/index.test.ts", "packages/agent/test/extensions/context/panel.test.ts", "packages/agent/test/extensions/context/sync.test.ts", "packages/agent/test/extensions/context/validation.test.ts" ]
 
 [definitions]
 description = "TOML loading, validation, project boundaries, and atomic updates"
@@ -11,7 +12,7 @@ files = [ "packages/agent/extensions/context/definitions.ts", "packages/agent/sh
 
 [selection]
 description = "Tabbed context selector, hover previews, and autoread injection"
-files = [ "packages/agent/extensions/context/index.ts", "packages/agent/extensions/context/panel.ts", "packages/agent/extensions/context/settings.ts", "packages/agent/extensions/context/validation.ts", "packages/agent/shared/events.ts", "packages/agent/shared/git.ts", "packages/agent/shared/injected-context.ts", "packages/agent/shared/settings/load.ts" ]
+files = [ ".pi/extensions/tool-preview/widgets/context.ts", "packages/agent/extensions/context/index.ts", "packages/agent/extensions/context/panel.ts", "packages/agent/extensions/context/settings.ts", "packages/agent/extensions/context/validation.ts", "packages/agent/shared/events.ts", "packages/agent/shared/git.ts", "packages/agent/shared/injected-context.ts", "packages/agent/shared/settings/load.ts" ]
 
 [maintenance]
 description = "Automatic validation, settings, and model-assisted catalog synchronization"
