@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
@@ -26,6 +29,7 @@ function assistant(text: string, input = 10, stopReason: AssistantMessage["stopR
 function fakeSession(options: {
 	responses?: AssistantMessage[];
 	onPrompt?: (text: string) => void | Promise<void>;
+	onCustomMessage?: (message: unknown, options: unknown) => void | Promise<void>;
 	abortImpl?: () => Promise<void>;
 }): AgentSession {
 	const listeners = new Set<(event: AgentSessionEvent) => void>();
@@ -57,6 +61,9 @@ function fakeSession(options: {
 				} as AgentSessionEvent);
 				listener({ type: "message_end", message });
 			}
+		},
+		async sendCustomMessage(message: unknown, sendOptions: unknown) {
+			await options.onCustomMessage?.(message, sendOptions);
 		},
 		async abort() {
 			if (options.abortImpl) return options.abortImpl();
@@ -140,6 +147,62 @@ describe("cappedTail", () => {
 });
 
 describe("runSubagentTurn", () => {
+	it("autoreads line-numbered files into the requested child turn", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "tau-subagent-autoread-test-"));
+		const path = join(directory, "sample.ts");
+		await writeFile(path, "const one = 1;\nconst two = 2;\n", "utf8");
+		const messages: Array<{ message: Record<string, unknown>; options: Record<string, unknown> }> = [];
+		const session = fakeSession({
+			onCustomMessage(message, options) {
+				messages.push({
+					message: message as Record<string, unknown>,
+					options: options as Record<string, unknown>,
+				});
+			},
+		});
+		const thread = threadOf(session);
+		thread.cwd = directory;
+		try {
+			const result = await runSubagentTurn({
+				thread,
+				task: "Inspect sample",
+				files: ["sample.ts", "missing.ts"],
+				invocationId: "inv-7",
+				initial: true,
+				signal: new AbortController().signal,
+			});
+			expect(result.details.status).toBe("completed");
+			expect(messages).toHaveLength(2);
+			expect(messages[0]?.message).toMatchObject({
+				customType: "tau.autoread",
+				content: "sample.ts\n1: const one = 1;\n2: const two = 2;\n3: ",
+				display: false,
+				details: {
+					rowId: "inv-7:0",
+					path: "sample.ts",
+					cwd: directory,
+					source: "subagent",
+					batchId: "inv-7",
+					status: "read",
+					readCache: { scopeKey: "full:n1", totalLines: 3 },
+				},
+			});
+			expect(messages[0]?.options).toEqual({ deliverAs: "nextTurn" });
+			expect(messages[1]?.message).toMatchObject({
+				customType: "tau.autoread",
+				content: expect.stringContaining("missing.ts\nAutoread failed:"),
+				display: false,
+				details: {
+					rowId: "inv-7:1",
+					path: "missing.ts",
+					status: "failed",
+				},
+			});
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
+	});
+
 	it("continues the same child session without repeating bootstrap instructions", async () => {
 		const session = fakeSession({
 			responses: [assistant("first result", 10), assistant("follow-up result", 20)],

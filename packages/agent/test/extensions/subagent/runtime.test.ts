@@ -512,6 +512,32 @@ describe("SubagentRuntime", () => {
 		await runtime.shutdown();
 	});
 
+	it("passes requested autoread files to the child turn", async () => {
+		const runtime = new SubagentRuntime(pi());
+		createSubagentThread.mockImplementation(async (options: { id: string }) => makeThread(options.id));
+		let received: { files?: readonly string[]; invocationId?: string } | undefined;
+		runSubagentTurn.mockImplementation(
+			async (options: { thread: SubagentThread; files?: readonly string[]; invocationId?: string }) => {
+				received = { files: options.files, invocationId: options.invocationId };
+				options.thread.turns += 1;
+				return {
+					content: "ok",
+					details: completedDetails(options.thread.id),
+					retainable: true,
+				};
+			},
+		);
+
+		const result = await runtime.execute({
+			...execArgs("inspect"),
+			files: ["src/runtime.ts", "test/runtime.test.ts"],
+		});
+
+		expect(received?.files).toEqual(["src/runtime.ts", "test/runtime.test.ts"]);
+		expect(received?.invocationId).toBe(result.details.invocationId);
+		await runtime.shutdown();
+	});
+
 	it("gives batched agents unique names and suffixes a reused pool name", async () => {
 		const runtime = new SubagentRuntime(pi());
 		createSubagentThread.mockImplementation(async (options: { id: string; displayName: string }) =>

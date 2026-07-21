@@ -11,6 +11,14 @@ subagent({ thread: "thread-1", task: "Now check whether this proposed fix covers
 
 Retained threads keep their child conversation and tool results for the current parent session. Start fresh for unrelated work or when earlier context is stale or oversized. Tau keeps up to 16 threads and evicts the least recently used idle thread when needed.
 
+If the relevant files are already known, autoread them into a fresh or retained child turn:
+
+```text
+subagent({ agent: "generalist", task: "Review the runtime change", files: ["src/runtime.ts", "test/runtime.test.ts"] })
+```
+
+Paths may be relative to the parent's current working directory or absolute. Tau reads current, line-numbered snapshots when the turn starts. Unreadable files produce failed context entries without stopping the child. Keep the list focused because complete snapshots consume the child's context window.
+
 ## Where definitions live
 
 | Scope | Path | Use when |
@@ -62,6 +70,7 @@ Tau assigns one display name to each fresh child and keeps it for follow-up turn
 
 - Children use the parent's cwd and inherit model/thinking unless the definition overrides them.
 - Children do not receive the parent conversation.
+- Calls can include `files` to autoread line-numbered snapshots into that child turn.
 - Follow-up calls reuse the retained child's conversation, model, thinking level, tools, and cwd.
 - Children load only the extensions that own their declared tools. Unrelated extension hooks do not run in child sessions.
 - At most four children run at once; extra calls wait in order.

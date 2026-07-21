@@ -15,6 +15,14 @@ Tau includes these built-in agents:
 
 Ask Tau to delegate a task, or let it call `subagent` with an agent name and task. Children use the parent's current working directory and inherit its model and thinking level unless their definition overrides either value. They do not receive the parent conversation. Tau loads only the extensions that own a child's declared tools, so unrelated extension hooks do not run in child sessions. When a child must inspect another repository, put its exact absolute path in the delegated task.
 
+When the relevant files are already known, pass them with the call so Tau can autoread them into that child turn:
+
+```text
+subagent({ agent: "generalist", task: "Review the runtime change", files: ["src/runtime.ts", "test/runtime.test.ts"] })
+```
+
+Paths may be relative to the parent's current working directory or absolute. Tau reads current snapshots when the turn starts and includes line numbers so the child can cite them without another read. Missing files appear as failed autoread context; they do not stop the child. Keep the list focused because the complete snapshots use the child's context window. Files can also be supplied on a retained-thread follow-up.
+
 Fresh calls return a thread ID. Tau can send feedback or follow-up work to that thread, preserving the child's conversation, prior reads, and tool results. It starts a fresh thread for unrelated work or when retained context is stale or oversized. Threads live for the current parent session. Tau retains up to 16 and evicts the least recently used idle thread when needed. Calls to one thread run sequentially.
 
 ## Agent definitions

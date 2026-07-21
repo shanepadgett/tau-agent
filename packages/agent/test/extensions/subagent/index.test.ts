@@ -34,10 +34,10 @@ describe("subagent extension", () => {
 		expect(tools[0]?.executionMode).toBe("parallel");
 		expect(tools[0]?.parameters.anyOf).toHaveLength(2);
 		expect(tools[0]?.parameters.anyOf?.[0]?.required).toEqual(["agent", "task"]);
-		expect(Object.keys(tools[0]?.parameters.anyOf?.[0]?.properties ?? {})).toEqual(["agent", "task"]);
+		expect(Object.keys(tools[0]?.parameters.anyOf?.[0]?.properties ?? {})).toEqual(["agent", "task", "files"]);
 		expect(tools[0]?.parameters.anyOf?.[0]?.additionalProperties).toBe(false);
 		expect(tools[0]?.parameters.anyOf?.[1]?.required).toEqual(["thread", "task"]);
-		expect(Object.keys(tools[0]?.parameters.anyOf?.[1]?.properties ?? {})).toEqual(["thread", "task"]);
+		expect(Object.keys(tools[0]?.parameters.anyOf?.[1]?.properties ?? {})).toEqual(["thread", "task", "files"]);
 		expect(tools[0]?.parameters.anyOf?.[1]?.additionalProperties).toBe(false);
 	});
 });

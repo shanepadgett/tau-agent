@@ -11,7 +11,7 @@ description = "Built-in, user, and project agent definition discovery"
 files = [ "packages/agent/extensions/subagent/agents.ts", "packages/agent/extensions/subagent/agents/context-sync.md", "packages/agent/extensions/subagent/agents/generalist.md", "packages/agent/extensions/subagent/agents/scout.md", "packages/agent/extensions/subagent/agents/web-research.md" ]
 
 [execution]
-description = "Child session execution, limits, and results"
+description = "Child session execution, autoread injection, limits, and results"
 files = [ "packages/agent/extensions/subagent/index.ts", "packages/agent/extensions/subagent/run.ts", "packages/agent/extensions/subagent/runtime.ts", "packages/agent/test/extensions/subagent/runtime.test.ts" ]
 
 [observability]
@@ -19,7 +19,7 @@ description = "cmux live progress dashboard and its remediation plan"
 files = [ "docs/plans/subagent-cmux-observability-remediation.md", "packages/agent/extensions/subagent/cmux-dashboard.ts", "packages/agent/test/extensions/subagent/cmux-dashboard.test.ts" ]
 
 [documentation]
-description = "User-facing subagent configuration and behavior"
+description = "User-facing subagent configuration, autoread, and behavior"
 files = [ "packages/agent/extensions/subagent/README.md" ]
 anchors = [ "packages/agent/docs/subagents.md" ]
 

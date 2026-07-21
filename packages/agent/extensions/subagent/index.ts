@@ -12,11 +12,27 @@ import { failedToolResult, SubagentRuntime } from "./runtime.ts";
 
 const params = Type.Union([
 	Type.Object(
-		{ agent: Type.String({ minLength: 1 }), task: Type.String({ minLength: 1 }) },
+		{
+			agent: Type.String({ minLength: 1 }),
+			task: Type.String({ minLength: 1 }),
+			files: Type.Optional(
+				Type.Array(Type.String({ minLength: 1 }), {
+					description: "Files to autoread into the child's context before this turn",
+				}),
+			),
+		},
 		{ additionalProperties: false },
 	),
 	Type.Object(
-		{ thread: Type.String({ minLength: 1 }), task: Type.String({ minLength: 1 }) },
+		{
+			thread: Type.String({ minLength: 1 }),
+			task: Type.String({ minLength: 1 }),
+			files: Type.Optional(
+				Type.Array(Type.String({ minLength: 1 }), {
+					description: "Files to autoread into the child's context before this turn",
+				}),
+			),
+		},
 		{ additionalProperties: false },
 	),
 ]);
@@ -132,6 +148,8 @@ ${lines.join("\n")}
 
 Start a fresh thread with \`agent\` and \`task\`. Continue an existing thread with \`thread\` and \`task\`. Reuse a thread when feedback or follow-up work depends on its prior reads and reasoning. Start fresh for unrelated work or when its context is stale or oversized.${threadSection}
 
+Pass \`files\` when exact relevant files are already known. Tau autoreads current line-numbered snapshots into that child turn before it starts.
+
 Delegate one focused task per call. Children do not inherit parent messages. Include exact absolute reference paths when a child must inspect a repository outside the current working directory.`;
 		return { systemPrompt: `${event.systemPrompt}\n\n${prompt}` };
 	});
@@ -140,12 +158,13 @@ Delegate one focused task per call. Children do not inherit parent messages. Inc
 			name: "subagent",
 			label: "Subagent",
 			description:
-				"Start a focused isolated child agent or continue a retained child thread. Output is limited to 50KB or 2,000 lines.",
+				"Start a focused isolated child agent or continue a retained child thread. Known files can be autoread into the child turn. Output is limited to 50KB or 2,000 lines.",
 			promptSnippet: "Start a focused child agent or continue a retained child thread",
 			parameters: params,
 			executionMode: "parallel",
 			async execute(_id, raw, signal, onUpdate, ctx) {
 				const task = raw.task.trim();
+				const files = [...new Set((raw.files ?? []).map((path) => path.trim()))];
 				const continuing = "thread" in raw;
 				const parentModel = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "unavailable";
 				const parentThinking = pi.getThinkingLevel();
@@ -157,16 +176,17 @@ Delegate one focused task per call. Children do not inherit parent messages. Inc
 				};
 				dashboard.setInteractive(ctx.mode === "tui" && ctx.hasUI);
 
-				if (!task || !agent) {
+				if (!task || !agent || files.some((path) => !path)) {
 					const error = continuing
-						? "Subagent continuation requires non-empty thread and task"
-						: "Subagent input requires non-empty agent and task";
+						? "Subagent continuation requires non-empty thread, task, and file paths"
+						: "Subagent input requires non-empty agent, task, and file paths";
 					return failedToolResult(agent, task, "queue", parentModel, parentThinking, error, threadKey);
 				}
 
 				return runtime.execute({
 					agent,
 					task,
+					files,
 					continuing,
 					threadKey,
 					ctx,

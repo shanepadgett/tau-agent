@@ -199,6 +199,7 @@ export class SubagentRuntime {
 	execute(options: {
 		agent: string;
 		task: string;
+		files?: readonly string[];
 		continuing: boolean;
 		threadKey?: string;
 		definition?: AgentDefinition;
@@ -268,6 +269,7 @@ export class SubagentRuntime {
 		options: {
 			agent: string;
 			task: string;
+			files?: readonly string[];
 			continuing: boolean;
 			threadKey?: string;
 			ctx: ExtensionContext;
@@ -490,6 +492,8 @@ export class SubagentRuntime {
 			const result = await runSubagentTurn({
 				thread,
 				task,
+				files: options.files,
+				invocationId,
 				initial: thread.turns === 0,
 				signal: combined,
 				onUpdate: (details) => {

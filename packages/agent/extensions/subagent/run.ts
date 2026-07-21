@@ -1,6 +1,7 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
 	createAgentSession,
@@ -20,6 +21,7 @@ import type { AgentDefinition } from "./agents.ts";
 
 const PREVIEW_LIMIT = 600;
 const VALUE_LIMIT = 180;
+const AUTOREAD_MESSAGE_TYPE = "tau.autoread";
 
 const CHILD_UI_BLOCKED_METHODS = new Set([
 	"setEditorComponent",
@@ -316,11 +318,13 @@ export async function disposeSubagentThread(thread: SubagentThread): Promise<voi
 export async function runSubagentTurn(options: {
 	thread: SubagentThread;
 	task: string;
+	files?: readonly string[];
+	invocationId?: string;
 	initial: boolean;
 	signal: AbortSignal;
 	onUpdate?: (details: SubagentDetails) => void | Promise<void>;
 }): Promise<{ content: string; details: SubagentDetails; retainable: boolean }> {
-	const { thread, task, initial, signal, onUpdate } = options;
+	const { thread, task, files = [], invocationId = thread.id, initial, signal, onUpdate } = options;
 	const { definition, session } = thread;
 	const started = Date.now();
 	const usage: SubagentUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 0 };
@@ -402,10 +406,60 @@ export async function runSubagentTurn(options: {
 		};
 		signal.addEventListener("abort", abort, { once: true });
 		try {
+			const autoreadMessages = await Promise.all(
+				files.map(async (file, index) => {
+					const pathKey = resolve(thread.cwd, file);
+					const common = {
+						rowId: `${invocationId}:${index}`,
+						path: file,
+						cwd: thread.cwd,
+						source: "subagent",
+						batchId: invocationId,
+					};
+					try {
+						const bytes = await readFile(pathKey);
+						const content = bytes.toString("utf8");
+						const lines = content.split("\n");
+						const numbered = lines.map((line, lineIndex) => `${lineIndex + 1}: ${line}`).join("\n");
+						return {
+							customType: AUTOREAD_MESSAGE_TYPE,
+							content: `${file}\n${numbered}`,
+							display: false,
+							details: {
+								...common,
+								status: "read",
+								readCache: {
+									v: 1,
+									pathKey,
+									scopeKey: "full:n1",
+									servedHash: createHash("sha256").update(bytes).digest("hex"),
+									mode: "baseline",
+									baselineTokens: Math.ceil(numbered.length / 4),
+									returnedTokens: Math.ceil(numbered.length / 4),
+									totalLines: lines.length,
+									summary: `${lines.length} lines`,
+								},
+							},
+						};
+					} catch (error) {
+						const message = error instanceof Error ? error.message : String(error);
+						return {
+							customType: AUTOREAD_MESSAGE_TYPE,
+							content: `${file}\nAutoread failed: ${message}`,
+							display: false,
+							details: { ...common, status: "failed", error: message },
+						};
+					}
+				}),
+			);
+			if (signal.aborted) throw new Error("Subagent call aborted before prompt");
+			for (const message of autoreadMessages) {
+				await session.sendCustomMessage<unknown>(message, { deliverAs: "nextTurn" });
+			}
 			await session.prompt(
 				initial
-					? `You are an isolated delegated child agent. Stay within the delegated task and return only the requested result.\n\n## Agent instructions\n${definition.prompt}\n\n## Delegated task\n${task}`
-					: `Continue the existing delegated work using the context already in this thread. Return only the requested result.\n\n## Parent follow-up\n${task}`,
+					? `You are an isolated delegated child agent. Stay within the delegated task and return only the requested result.${files.length ? " Parent-supplied autoread files are included as line-numbered context for this turn." : ""}\n\n## Agent instructions\n${definition.prompt}\n\n## Delegated task\n${task}`
+					: `Continue the existing delegated work using the context already in this thread. Return only the requested result.${files.length ? " Parent-supplied autoread files are included as line-numbered context for this turn." : ""}\n\n## Parent follow-up\n${task}`,
 				{ expandPromptTemplates: false },
 			);
 		} finally {
