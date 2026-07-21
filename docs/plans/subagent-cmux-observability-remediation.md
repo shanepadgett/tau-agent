@@ -1,6 +1,6 @@
 # Subagent cmux observability remediation
 
-Status: proposed
+Status: implemented
 
 ## Decision
 

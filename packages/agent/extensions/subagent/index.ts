@@ -1,20 +1,14 @@
+import { rm } from "node:fs/promises";
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { createToolRowStateStore } from "../../shared/tool-row-state.js";
 import contextSettings from "../context/settings.ts";
-import { discoverAgents, type AgentDefinition, type AgentDiscovery } from "./agents.ts";
-import { openCmuxSubagentPanel, type CmuxSubagentPanel } from "./cmux-panel.ts";
+import { discoverAgents, type AgentDiscovery } from "./agents.ts";
+import { createCmuxDashboard, type CmuxDashboard, type DashboardOrphan } from "./cmux-dashboard.ts";
 import { renderSubagentCall, renderSubagentResult } from "./render.ts";
-import {
-	createSubagentThread,
-	disposeSubagentThread,
-	extensionPathsForTools,
-	FifoGate,
-	runSubagentTurn,
-	type SubagentDetails,
-	type SubagentThread,
-} from "./run.ts";
+import type { SubagentDetails } from "./run.ts";
+import { failedToolResult, SubagentRuntime } from "./runtime.ts";
 
 const params = Type.Union([
 	Type.Object(
@@ -27,43 +21,73 @@ const params = Type.Union([
 	),
 ]);
 
-const MAX_RETAINED_THREADS = 16;
-
-function emptyDetails(
-	agent: string,
-	task: string,
-	status: "waiting" | "failed" | "aborted",
-	phase: "discovery" | "queue" | "startup",
-	model: string,
-	thinkingLevel: string,
-	threadId: string | undefined,
-	error: string | undefined,
-): SubagentDetails {
-	return {
-		agent,
-		...(threadId === undefined ? {} : { threadId }),
-		status,
-		phase,
-		task,
-		model,
-		thinkingLevel,
-		toolCalls: 0,
-		actions: [],
-		omittedActions: 0,
-		omittedErrors: 0,
-		usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 0 },
-		durationMs: 0,
-		...(error === undefined ? {} : { error }),
-	};
-}
-
 export default function subagentExtension(pi: ExtensionAPI): void {
-	const gate = new FifoGate(4);
-	const controllers = new Set<AbortController>();
-	const threads = new Map<string, SubagentThread>();
+	const runtime = new SubagentRuntime(pi);
+	let failureNotify: ((message: string) => void) | undefined;
+	const orphans: DashboardOrphan[] = [];
+	const retryOrphans = async () => {
+		if (orphans.length === 0) return;
+		const pending = orphans.splice(0, orphans.length);
+		for (const orphan of pending) {
+			if (orphan.surfaceId && orphan.workspaceId) {
+				const result = await pi
+					.exec(
+						"cmux",
+						[
+							"--json",
+							"--id-format",
+							"both",
+							"rpc",
+							"surface.close",
+							JSON.stringify({ workspace_id: orphan.workspaceId, surface_id: orphan.surfaceId }),
+						],
+						{ timeout: 2500 },
+					)
+					.catch(() => ({ stdout: "", stderr: "close failed", code: 1, killed: false }));
+				const closed =
+					(result.code === 0 && !result.killed) ||
+					/not found|unknown surface|no such/i.test(`${result.stderr}\n${result.stdout}`);
+				if (!closed) {
+					orphans.push(orphan);
+					continue;
+				}
+			}
+			// Known-closed or never had a surface id after ambiguous open: drop directory only when closed/absent.
+			// Ambiguous no-id orphans stay on disk; keep tracking so we do not open more without awareness.
+			if (orphan.surfaceId) {
+				await rm(orphan.directory, { recursive: true, force: true }).catch(() => undefined);
+			} else {
+				orphans.push(orphan);
+			}
+		}
+	};
+	const makeDashboard = () =>
+		createCmuxDashboard({
+			exec: (command, args, options) => pi.exec(command, args, options),
+			canOpen: () => orphans.length === 0,
+			notify: (message) => {
+				try {
+					failureNotify?.(message);
+				} catch {
+					// ignore
+				}
+			},
+		});
+	let dashboard: CmuxDashboard = makeDashboard();
+	let unsubscribeDashboard = runtime.subscribe((snapshot) => {
+		dashboard.onSnapshot(snapshot);
+	});
+	const replaceDashboard = async () => {
+		unsubscribeDashboard();
+		const leftover = await dashboard.shutdown();
+		orphans.push(...leftover);
+		await retryOrphans();
+		dashboard = makeDashboard();
+		unsubscribeDashboard = runtime.subscribe((snapshot) => {
+			dashboard.onSnapshot(snapshot);
+		});
+	};
 	const fingerprints = new Map<string, string>();
-	const runtimeWarnings = new Set<string>();
-	let nextThreadId = 1;
 	const rowState = createToolRowStateStore(pi, "subagent.tool-row-state");
 	const warn = (discovery: AgentDiscovery, ctx: ExtensionContext) => {
 		const current = new Set<string>();
@@ -82,11 +106,6 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 		}
 		for (const path of fingerprints.keys()) if (!current.has(path)) fingerprints.delete(path);
 	};
-	const disposeThreads = async () => {
-		const retained = [...threads.values()];
-		threads.clear();
-		await Promise.all(retained.map((thread) => disposeSubagentThread(thread)));
-	};
 	const parentVisibleAgents = async (ctx: ExtensionContext, discovery: AgentDiscovery) => {
 		const sync = (await loadTauExtensionSettings(ctx, contextSettings)).sync;
 		const parentVisible = sync.enabled && sync.automation;
@@ -100,13 +119,10 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 		const discovery = await discoverAgents(ctx.cwd, ctx.isProjectTrusted());
 		warn(discovery, ctx);
 		const lines = (await parentVisibleAgents(ctx, discovery)).map((agent) => `- ${agent.name}: ${agent.description}`);
-		const activeThreads = [...threads.values()]
-			.filter((thread) => thread.cwd === ctx.cwd)
-			.sort((a, b) => a.id.localeCompare(b.id))
-			.map((thread) => {
-				const task = thread.initialTask.replace(/\s+/g, " ").trim();
-				return `- ${thread.id} (${thread.definition.name}): ${task.length <= 160 ? task : `${task.slice(0, 159)}…`}`;
-			});
+		const activeThreads = runtime.listThreads(ctx.cwd).map((thread) => {
+			const task = thread.initialTask.replace(/\s+/g, " ").trim();
+			return `- ${thread.id} (${thread.definition.name}): ${task.length <= 160 ? task : `${task.slice(0, 159)}…`}`;
+		});
 		const threadSection = activeThreads.length ? `\n\nActive reusable threads:\n${activeThreads.join("\n")}` : "";
 		const prompt = `## Subagents
 Use \`subagent\` when an available agent matches a focused part of the task.
@@ -133,230 +149,71 @@ Delegate one focused task per call. Children do not inherit parent messages. Inc
 				const continuing = "thread" in raw;
 				const parentModel = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "unavailable";
 				const parentThinking = pi.getThinkingLevel();
-				let thread: SubagentThread | undefined;
-				let definition: AgentDefinition | undefined;
-				let agent = continuing ? raw.thread.trim() : raw.agent.trim();
-				let threadId = continuing ? raw.thread.trim() : undefined;
+				const agent = continuing ? raw.thread.trim() : raw.agent.trim();
+				const threadKey = continuing ? raw.thread.trim() : undefined;
+
+				failureNotify = (message) => {
+					ctx.ui.notify(message, "warning");
+				};
+				dashboard.setInteractive(ctx.mode === "tui" && ctx.hasUI);
+
 				if (!task || !agent) {
 					const error = continuing
 						? "Subagent continuation requires non-empty thread and task"
 						: "Subagent input requires non-empty agent and task";
-					return {
-						content: [{ type: "text", text: error }],
-						details: emptyDetails(agent, task, "failed", "queue", parentModel, parentThinking, threadId, error),
-					};
+					return failedToolResult(agent, task, "queue", parentModel, parentThinking, error, threadKey);
 				}
-				if (continuing) {
-					thread = threads.get(agent);
-					if (!thread || thread.cwd !== ctx.cwd) {
-						const names =
-							[...threads.values()]
-								.filter((item) => item.cwd === ctx.cwd)
-								.map((item) => item.id)
-								.sort()
-								.join(", ") || "none";
-						const error = `Subagent thread ${agent} is unavailable. Active threads: ${names}`;
-						return {
-							content: [{ type: "text", text: error }],
-							details: emptyDetails(
-								agent,
-								task,
-								"failed",
-								"discovery",
-								parentModel,
-								parentThinking,
-								agent,
-								error,
-							),
-						};
-					}
-					agent = thread.definition.name;
-					threadId = thread.id;
-					definition = thread.definition;
-				} else {
-					const discovery = await discoverAgents(ctx.cwd, ctx.isProjectTrusted());
-					warn(discovery, ctx);
-					definition = discovery.agents.get(agent);
-					const invalid = discovery.invalid.get(agent);
-					if (!definition) {
-						const reason = invalid?.map((item) => item.reason).join("; ") ?? "unknown agent";
-						const names =
-							(await parentVisibleAgents(ctx, discovery)).map((item) => item.name).join(", ") || "none";
-						const error = `Agent ${agent} discovery failed: ${reason}. Runnable agents: ${names}`;
-						return {
-							content: [{ type: "text", text: error }],
-							details: emptyDetails(
-								agent,
-								task,
-								"failed",
-								"discovery",
-								parentModel,
-								parentThinking,
-								undefined,
-								error,
-							),
-						};
-					}
-					if (definition.name === "context-sync") {
-						const sync = (await loadTauExtensionSettings(ctx, contextSettings)).sync;
-						if (!sync.enabled) {
-							const error = "Context sync is disabled in settings.";
+
+				return runtime.execute({
+					agent,
+					task,
+					continuing,
+					threadKey,
+					ctx,
+					parentModel,
+					parentThinking,
+					signal,
+					onUpdate: (details) =>
+						onUpdate?.({
+							content: [
+								{
+									type: "text",
+									text: details.currentActivity ?? details.response ?? `${details.agent}: ${details.status}`,
+								},
+							],
+							details,
+						}),
+					resolveFreshDefinition: async () => {
+						const discovery = await discoverAgents(ctx.cwd, ctx.isProjectTrusted());
+						warn(discovery, ctx);
+						const definition = discovery.agents.get(agent);
+						const invalid = discovery.invalid.get(agent);
+						if (!definition) {
+							const reason = invalid?.map((item) => item.reason).join("; ") ?? "unknown agent";
+							const names =
+								(await parentVisibleAgents(ctx, discovery)).map((item) => item.name).join(", ") || "none";
 							return {
-								content: [{ type: "text", text: error }],
-								details: emptyDetails(
-									definition.name,
-									task,
-									"failed",
-									"discovery",
-									parentModel,
-									parentThinking,
-									undefined,
-									error,
-								),
+								ok: false,
+								phase: "discovery",
+								error: `Agent ${agent} discovery failed: ${reason}. Runnable agents: ${names}`,
 							};
 						}
-						if (!sync.automation) {
-							const error =
-								"Context-sync automation is disabled. Use /context-sync or enable extensions.context.sync.automation.";
-							return {
-								content: [{ type: "text", text: error }],
-								details: emptyDetails(
-									definition.name,
-									task,
-									"failed",
-									"discovery",
-									parentModel,
-									parentThinking,
-									undefined,
-									error,
-								),
-							};
+						if (definition.name === "context-sync") {
+							const sync = (await loadTauExtensionSettings(ctx, contextSettings)).sync;
+							if (!sync.enabled) {
+								return { ok: false, phase: "discovery", error: "Context sync is disabled in settings." };
+							}
+							if (!sync.automation) {
+								return {
+									ok: false,
+									phase: "discovery",
+									error: "Context-sync automation is disabled. Use /context-sync or enable extensions.context.sync.automation.",
+								};
+							}
 						}
-					}
-					threadId = `thread-${nextThreadId++}`;
-				}
-				const controller = new AbortController();
-				controllers.add(controller);
-				const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
-				let releaseThread: (() => void) | undefined;
-				let releaseGlobal: (() => void) | undefined;
-				let reservedThread: SubagentThread | undefined;
-				let phase: "queue" | "startup" = "queue";
-				let panel: CmuxSubagentPanel | undefined;
-				let panelDetails: SubagentDetails | undefined;
-				try {
-					const waiting = emptyDetails(
-						agent,
-						task,
-						"waiting",
-						"queue",
-						thread?.model ?? parentModel,
-						thread?.thinkingLevel ?? parentThinking,
-						threadId,
-						undefined,
-					);
-					panelDetails = waiting;
-					// Open pane before the concurrency gate so all siblings show up immediately.
-					if (threadId) {
-						panel = await openCmuxSubagentPanel({
-							agent: definition?.name ?? agent,
-							threadId,
-							task,
-							details: waiting,
-						});
-					}
-					await onUpdate?.({ content: [{ type: "text", text: `${agent}: waiting` }], details: waiting });
-					if (thread) {
-						reservedThread = thread;
-						thread.pendingTurns += 1;
-						releaseThread = await thread.turnGate.acquire(combined);
-					}
-					releaseGlobal = await gate.acquire(combined);
-					if (!thread) {
-						phase = "startup";
-						if (!threadId || !definition) throw new Error("Subagent startup state is incomplete");
-						const selectedDefinition = definition;
-						if (threads.size >= MAX_RETAINED_THREADS) {
-							const evicted = [...threads.values()]
-								.filter((item) => item.pendingTurns === 0)
-								.sort((a, b) => a.lastUsedAt - b.lastUsedAt)[0];
-							if (!evicted) throw new Error("Subagent thread limit reached while all retained threads are busy");
-							threads.delete(evicted.id);
-							await disposeSubagentThread(evicted);
-						}
-						thread = await createSubagentThread({
-							id: threadId,
-							definition: selectedDefinition,
-							extensionPaths: extensionPathsForTools(pi, selectedDefinition.tools),
-							initialTask: task,
-							ctx,
-							thinkingLevel: parentThinking,
-							signal: combined,
-							onWarning: (warning) => {
-								const message = `Subagent definition ${selectedDefinition.path}: ${warning}`;
-								if (runtimeWarnings.has(message)) return;
-								runtimeWarnings.add(message);
-								ctx.ui.notify(message, "warning");
-							},
-						});
-						threads.set(thread.id, thread);
-						reservedThread = thread;
-						thread.pendingTurns += 1;
-					}
-					if (!thread) throw new Error("Subagent thread startup failed");
-					const result = await runSubagentTurn({
-						thread,
-						task,
-						initial: thread.turns === 0,
-						signal: combined,
-						panel,
-						onUpdate: (details) => {
-							panelDetails = details;
-							return onUpdate?.({
-								content: [
-									{
-										type: "text",
-										text: details.currentActivity ?? details.response ?? `${agent}: ${details.status}`,
-									},
-								],
-								details,
-							});
-						},
-					});
-					panelDetails = result.details;
-					return {
-						content: [
-							{
-								type: "text",
-								text: `Thread: ${thread.id}\nReuse with subagent({ thread: "${thread.id}", task: "..." })\n\n${result.content}`,
-							},
-						],
-						details: result.details,
-					};
-				} catch (error) {
-					const message = error instanceof Error ? error.message : `Agent ${agent} ${phase} failed`;
-					const status = combined.aborted ? "aborted" : "failed";
-					const details = emptyDetails(
-						agent,
-						task,
-						status,
-						phase,
-						thread?.model ?? parentModel,
-						thread?.thinkingLevel ?? parentThinking,
-						thread?.id ?? threadId,
-						message,
-					);
-					panelDetails = details;
-					panel?.update(details, true);
-					return { content: [{ type: "text", text: message }], details };
-				} finally {
-					if (reservedThread) reservedThread.pendingTurns -= 1;
-					releaseGlobal?.();
-					releaseThread?.();
-					controllers.delete(controller);
-					// Flush final paint after gate release. Dismiss delay is async — does not hold the slot.
-					if (panel && panelDetails) await panel.close(panelDetails).catch(() => undefined);
-				}
+						return { ok: true, definition };
+					},
+				});
 			},
 			renderCall(args, theme, context) {
 				return renderSubagentCall(args, theme, {
@@ -384,16 +241,20 @@ Delegate one focused task per call. Children do not inherit parent messages. Inc
 		if (details?.status === "failed" || details?.status === "aborted") return { isError: true };
 	});
 	pi.on("session_start", async () => {
-		for (const controller of controllers) controller.abort();
-		controllers.clear();
-		await disposeThreads();
-		nextThreadId = 1;
+		await runtime.reset();
+		await replaceDashboard();
 		rowState.clear();
-		runtimeWarnings.clear();
+		fingerprints.clear();
+		failureNotify = undefined;
 	});
 	pi.on("session_shutdown", async () => {
-		for (const controller of controllers) controller.abort();
-		controllers.clear();
-		await disposeThreads();
+		unsubscribeDashboard();
+		await runtime.shutdown();
+		const leftover = await dashboard.shutdown();
+		orphans.push(...leftover);
+		await retryOrphans();
+		rowState.clear();
+		fingerprints.clear();
+		failureNotify = undefined;
 	});
 }

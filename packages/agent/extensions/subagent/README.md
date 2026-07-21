@@ -36,3 +36,5 @@ Stay within the delegated task. Return exact paths and symbols.
 `name`, `description`, and `tools` are required. Optional `model` uses `provider/model`; optional `thinking` accepts `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. Tool names must be unique, and `subagent` cannot be delegated. Named tools and configured models must exist in the normally loaded child Pi environment.
 
 At most four children run at once. Additional calls wait in order. Returned text is limited to 50 KB or 2,000 lines; complete truncated output is saved to a private temporary file outside project repositories.
+
+When Tau runs interactively inside cmux, a single temporary Markdown surface shows waiting and running subagent work beside the parent terminal. It does not change child scheduling, concurrency, or results. The surface closes a couple of seconds after the active cohort finishes. Print mode and non-cmux sessions never open it.

@@ -17,7 +17,6 @@ import {
 	type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import type { AgentDefinition } from "./agents.ts";
-import type { CmuxSubagentPanel } from "./cmux-panel.ts";
 
 const PREVIEW_LIMIT = 600;
 const VALUE_LIMIT = 180;
@@ -54,11 +53,16 @@ export interface SubagentUsage {
 	cost: number;
 	turns: number;
 }
+
+export type SubagentLifecycle = "waiting" | "starting" | "running" | "completed" | "failed" | "aborted";
+export type SubagentPhase = "discovery" | "queue" | "startup" | "run" | "output";
+
 export interface SubagentDetails {
 	agent: string;
 	threadId?: string;
-	status: "waiting" | "running" | "completed" | "failed" | "aborted";
-	phase: "discovery" | "queue" | "startup" | "run" | "output";
+	invocationId?: string;
+	status: SubagentLifecycle;
+	phase: SubagentPhase;
 	completionState?: string;
 	task: string;
 	model: string;
@@ -80,6 +84,12 @@ export interface SubagentDetails {
 		outputBytes: number;
 		totalBytes: number;
 	};
+}
+
+/** Immutable observer payload. Distinct invocation IDs for queued turns of one thread. */
+export interface SubagentInvocationSnapshot extends SubagentDetails {
+	invocationId: string;
+	startedAt: number;
 }
 
 export interface SubagentThread {
@@ -163,11 +173,31 @@ function capped(value: unknown, limit = VALUE_LIMIT): string {
 	return text.length <= limit ? text : `${text.slice(0, limit - 1)}…`;
 }
 
+/** Rolling tail so live previews keep changing after the limit. */
+export function cappedTail(value: unknown, limit = PREVIEW_LIMIT): string {
+	let text: string;
+	try {
+		text = typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));
+	} catch {
+		text = "[unavailable]";
+	}
+	if (text.length <= limit) return text;
+	return `…${text.slice(-(limit - 1))}`;
+}
+
 function textOf(message: AssistantMessage): string {
 	return message.content
 		.filter((part) => part.type === "text")
 		.map((part) => part.text)
 		.join("");
+}
+
+function cloneSnapshot(details: SubagentDetails): SubagentDetails {
+	return structuredClone(details);
+}
+
+export function cloneInvocationSnapshot(snapshot: SubagentInvocationSnapshot): SubagentInvocationSnapshot {
+	return structuredClone(snapshot);
 }
 
 export async function createSubagentThread(options: {
@@ -229,6 +259,7 @@ export async function createSubagentThread(options: {
 			additionalExtensionPaths: [...extensionPaths],
 		});
 		await resourceLoader.reload();
+		if (signal.aborted) throw new Error(`Agent ${definition.name} startup aborted`);
 		const created = await createAgentSession({
 			cwd: ctx.cwd,
 			model,
@@ -239,9 +270,11 @@ export async function createSubagentThread(options: {
 			sessionManager: SessionManager.inMemory(ctx.cwd),
 		});
 		session = created.session;
+		if (signal.aborted) throw new Error(`Agent ${definition.name} startup aborted`);
 		await session.bindExtensions(
 			ctx.mode === "tui" && ctx.hasUI ? { mode: "tui", uiContext: childUiContext(ctx.ui) } : { mode: "print" },
 		);
+		if (signal.aborted) throw new Error(`Agent ${definition.name} startup aborted`);
 		const active = session.getActiveToolNames().sort();
 		const expected = [...definition.tools].sort();
 		if (active.join("\0") !== expected.join("\0") || active.includes("subagent")) {
@@ -280,10 +313,9 @@ export async function runSubagentTurn(options: {
 	task: string;
 	initial: boolean;
 	signal: AbortSignal;
-	panel?: CmuxSubagentPanel;
 	onUpdate?: (details: SubagentDetails) => void | Promise<void>;
-}): Promise<{ content: string; details: SubagentDetails }> {
-	const { thread, task, initial, signal, panel, onUpdate } = options;
+}): Promise<{ content: string; details: SubagentDetails; retainable: boolean }> {
+	const { thread, task, initial, signal, onUpdate } = options;
 	const { definition, session } = thread;
 	const started = Date.now();
 	const usage: SubagentUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 0 };
@@ -303,29 +335,37 @@ export async function runSubagentTurn(options: {
 		durationMs: 0,
 	};
 	let unsubscribe: (() => void) | undefined;
-	let updateChain = Promise.resolve();
 	let lastTextUpdate = 0;
 	const turnMessages: AssistantMessage[] = [];
-	panel?.update(structuredClone(details), true);
+	let retainable = false;
 	const publish = (force = false) => {
 		const now = Date.now();
 		if (!force && now - lastTextUpdate < 100) return;
 		lastTextUpdate = now;
 		details.durationMs = now - started;
-		panel?.update(structuredClone(details), force);
-		const snapshot = structuredClone(details);
+		const snapshot = cloneSnapshot(details);
 		snapshot.actions = snapshot.actions.slice(-5);
-		updateChain = updateChain.then(() => onUpdate?.(snapshot)).catch(() => undefined);
+		// Detached observer chain — must not delay prompt completion.
+		void Promise.resolve()
+			.then(() => onUpdate?.(snapshot))
+			.catch(() => undefined);
 	};
 	try {
+		if (signal.aborted) {
+			details.status = "aborted";
+			details.error = "Subagent call aborted before prompt";
+			details.durationMs = Date.now() - started;
+			publish(true);
+			return { content: details.error, details, retainable: false };
+		}
 		const actionById = new Map<string, string>();
 		unsubscribe = session.subscribe((event: AgentSessionEvent) => {
 			if (event.type === "message_update" && event.message.role === "assistant") {
-				details.response = capped(textOf(event.message), PREVIEW_LIMIT);
+				details.response = cappedTail(textOf(event.message), PREVIEW_LIMIT);
 				publish();
 			} else if (event.type === "message_end" && event.message.role === "assistant") {
 				turnMessages.push(event.message);
-				details.response = capped(textOf(event.message), PREVIEW_LIMIT);
+				details.response = cappedTail(textOf(event.message), PREVIEW_LIMIT);
 				details.currentActivity = undefined;
 				publish(true);
 			} else if (event.type === "tool_execution_start") {
@@ -352,7 +392,7 @@ export async function runSubagentTurn(options: {
 			}
 		});
 		const abort = () => {
-			void session?.abort();
+			void session.abort().catch(() => undefined);
 		};
 		signal.addEventListener("abort", abort, { once: true });
 		try {
@@ -365,6 +405,8 @@ export async function runSubagentTurn(options: {
 		} finally {
 			signal.removeEventListener("abort", abort);
 		}
+		// Prompt returned without throw — session remains usable for retention decisions.
+		retainable = true;
 		for (const message of turnMessages) {
 			usage.input += message.usage.input;
 			usage.output += message.usage.output;
@@ -413,21 +455,22 @@ export async function runSubagentTurn(options: {
 		}
 		details.durationMs = Date.now() - started;
 		publish(true);
-		await updateChain;
 		return {
 			content:
 				details.status === "completed"
 					? (details.response ?? "")
 					: (details.error ?? `Agent ${definition.name} failed`),
 			details,
+			retainable,
 		};
 	} catch (error) {
 		details.status = signal.aborted ? "aborted" : "failed";
 		details.error = capped(error instanceof Error ? error.message : "Subagent failed");
 		details.durationMs = Date.now() - started;
+		// Prompt/session failures leave the child unsafe for reuse.
+		retainable = false;
 		publish(true);
-		await updateChain;
-		return { content: details.error, details };
+		return { content: details.error, details, retainable };
 	} finally {
 		unsubscribe?.();
 		thread.turns += 1;

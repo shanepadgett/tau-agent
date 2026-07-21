@@ -60,6 +60,7 @@ Named tools and configured models must exist in the normally loaded child Pi env
 - At most four children run at once; extra calls wait in order.
 - Calls to the same retained thread run one at a time.
 - Returned text is capped (50 KB / 2,000 lines); full truncated output is saved to a private temp file.
+- Interactive cmux sessions get one temporary Markdown dashboard for waiting and running invocations. It is observational only: cmux latency or failure cannot delay, fail, or reorder children. The dashboard closes shortly after the active cohort finishes. Print mode never opens it.
 
 ## Built-ins
 
