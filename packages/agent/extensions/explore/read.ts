@@ -2,7 +2,6 @@ import {
 	createReadToolDefinition,
 	DEFAULT_MAX_BYTES,
 	formatSize,
-	generateUnifiedPatch,
 	truncateHead,
 	type ReadToolDetails,
 	type ToolDefinition,
@@ -13,9 +12,20 @@ import { readFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { Type, type Static } from "typebox";
 import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.js";
+import {
+	createCompleteFileMeta,
+	estimateTokens,
+	readScopeKey,
+	selectCompleteFileResponse,
+} from "./full-file-knowledge.ts";
 import { normalizeCountLimit } from "./limits.ts";
 import { stripLeadingAt } from "./path-display.ts";
-import { createReadCacheStore, type ReadCacheMetaV1, type ReadCacheStore } from "./read-cache.ts";
+import {
+	createReadCacheStore,
+	type ReadCacheMetaV1,
+	type ReadCachePresentation,
+	type ReadCacheStore,
+} from "./read-cache.ts";
 import { createReadSnapshotStore, type ReadSnapshotStore } from "./read-snapshots.ts";
 
 const readSchema = Type.Object({
@@ -43,6 +53,7 @@ interface BaselineTextResult {
 	endLine: number;
 	completeFile: boolean;
 	scopeKey: string;
+	presentation: ReadCachePresentation;
 	summary: string;
 	cacheable: boolean;
 }
@@ -84,10 +95,6 @@ function renderCallSummary(args: ReadToolInput | undefined): string {
 	const limit = args.limit === undefined ? undefined : normalizeCountLimit(args.limit, 1);
 	const end = limit === undefined ? "" : start + limit - 1;
 	return `${path}:${start}${end === "" ? "" : `-${end}`}`;
-}
-
-function estimateTokens(text: string): number {
-	return Math.ceil(text.length / 4);
 }
 
 function baselineText(text: string, params: ReadToolInput): BaselineTextResult {
@@ -134,7 +141,8 @@ function baselineText(text: string, params: ReadToolInput): BaselineTextResult {
 
 	const endLine = outputLines === 0 ? startLine : startLine + outputLines - 1;
 	const completeFile = startIndex === 0 && selectedEnd === allLines.length && !truncation.truncated;
-	const scopeKey = `${completeFile ? "full" : `r:${startLine}:${endLine}`}:n${params.lineNumbers ? 1 : 0}`;
+	const presentation: ReadCachePresentation = params.lineNumbers ? "line-numbered" : "plain";
+	const scopeKey = readScopeKey(completeFile, startLine, endLine, presentation);
 	const summary = completeFile ? `${allLines.length} lines` : `${outputLines} lines`;
 	return {
 		text: outputText,
@@ -144,6 +152,7 @@ function baselineText(text: string, params: ReadToolInput): BaselineTextResult {
 		endLine,
 		completeFile,
 		scopeKey,
+		presentation,
 		summary,
 		cacheable,
 	};
@@ -165,10 +174,24 @@ function createMeta(
 	baseHash?: string,
 	summary = baseline.summary,
 ): ReadCacheMetaV1 {
+	if (baseline.completeFile) {
+		return createCompleteFileMeta({
+			pathKey,
+			presentation: baseline.presentation,
+			servedHash: hash,
+			mode,
+			sourceText: baseline.text,
+			returnedText,
+			totalLines: baseline.totalLines,
+			summary,
+			baseHash,
+		});
+	}
 	return {
 		v: 1,
 		pathKey,
 		scopeKey: baseline.scopeKey,
+		presentation: baseline.presentation,
 		servedHash: hash,
 		baseHash,
 		mode,
@@ -177,16 +200,6 @@ function createMeta(
 		totalLines: baseline.totalLines,
 		summary,
 	};
-}
-
-function countDiffLines(patch: string): { added: number; removed: number } {
-	let added = 0;
-	let removed = 0;
-	for (const line of patch.split("\n")) {
-		if (line.startsWith("+") && !line.startsWith("+++")) added += 1;
-		else if (line.startsWith("-") && !line.startsWith("---")) removed += 1;
-	}
-	return { added, removed };
 }
 
 export function createExploreReadTool(
@@ -210,6 +223,7 @@ export function createExploreReadTool(
 			const definition = readDefinitionForCwd(ctx.cwd);
 			const normalized = normalizeReadParams(params);
 			const path = isAbsolute(normalized.path) ? resolve(normalized.path) : resolve(ctx.cwd, normalized.path);
+			const snapshotEpoch = snapshots.epoch();
 			const buffer = await readFile(path);
 			if (isSupportedImage(buffer)) {
 				return definition.execute(
@@ -224,7 +238,7 @@ export function createExploreReadTool(
 			if (signal?.aborted) throw new Error("Operation aborted");
 			let text: string;
 			try {
-				text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+				text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(buffer);
 			} catch {
 				return definition.execute(toolCallId, normalized, signal, onUpdate, ctx);
 			}
@@ -234,36 +248,39 @@ export function createExploreReadTool(
 				return { content: [{ type: "text", text: baseline.text }], details: baseline.details };
 			}
 			const hash = createHash("sha256").update(buffer).digest("hex");
-			const decision = cache.decision(ctx, path, baseline.scopeKey);
+			const staleEpoch = !snapshots.isCurrent(snapshotEpoch);
+			const decision = staleEpoch
+				? { baseHash: undefined, baselineText: undefined, recovery: false }
+				: cache.decision(ctx, path, baseline.scopeKey);
 			let output = baseline.text;
 			let mode: ReadCacheMetaV1["mode"] = decision.recovery ? "recovery" : "baseline";
 			let summary = baseline.summary;
 
-			if (!decision.recovery && decision.baseHash === hash) {
-				output = baseline.completeFile
-					? `unchanged, ${baseline.totalLines} lines`
-					: `unchanged, lines ${baseline.startLine}-${baseline.endLine} of ${baseline.totalLines}`;
+			if (baseline.completeFile) {
+				const selected = selectCompleteFileResponse({
+					displayPath: normalized.path,
+					currentText: text,
+					currentHash: hash,
+					fullText: baseline.text,
+					totalLines: baseline.totalLines,
+					recovery: decision.recovery,
+					baseHash: decision.baseHash,
+					baselineText:
+						decision.baselineText ??
+						(decision.baseHash === undefined ? undefined : snapshots.get(decision.baseHash)),
+				});
+				output = selected.text;
+				mode = selected.mode;
+				summary = selected.summary;
+			} else if (!decision.recovery && decision.baseHash === hash) {
+				output = `unchanged, lines ${baseline.startLine}-${baseline.endLine} of ${baseline.totalLines}`;
 				mode = "unchanged";
 				summary = output;
-			} else if (!decision.recovery && decision.baseHash && baseline.completeFile && !normalized.lineNumbers) {
-				const baseText = snapshots.get(decision.baseHash);
-				if (baseText !== undefined) {
-					const patch = generateUnifiedPatch(normalized.path, baseText, text, 3);
-					const counts = countDiffLines(patch);
-					const candidate = `[read: ${counts.added} lines added, ${counts.removed} removed of ${baseline.totalLines}]\n${patch}`;
-					const candidateTruncation = truncateHead(candidate);
-					if (!candidateTruncation.truncated && estimateTokens(candidate) < estimateTokens(baseline.text)) {
-						output = candidate;
-						mode = "diff";
-						summary = `+${counts.added} -${counts.removed}`;
-					}
-				}
 			}
 
 			if (signal?.aborted) throw new Error("Operation aborted");
-			snapshots.set(hash, text, buffer.byteLength);
+			snapshots.set(hash, text, buffer.byteLength, snapshotEpoch);
 			const meta = createMeta(baseline, path, hash, mode, output, decision.baseHash, summary);
-			cache.record(ctx, meta);
 			return withMeta(baseline, meta, output);
 		},
 		renderCall(

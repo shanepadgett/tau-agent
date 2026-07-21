@@ -1,12 +1,15 @@
-import { resolve } from "node:path";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { resolve } from "node:path";
+import { COMPLETE_FILE_SCOPE, decodeCompleteFileSource } from "./full-file-knowledge.ts";
 
 export type ReadCacheMode = "baseline" | "recovery" | "unchanged" | "diff";
+export type ReadCachePresentation = "plain" | "line-numbered";
 
 export interface ReadCacheMetaV1 {
 	v: 1;
 	pathKey: string;
 	scopeKey: string;
+	presentation: ReadCachePresentation;
 	servedHash: string;
 	baseHash?: string;
 	mode: ReadCacheMode;
@@ -18,61 +21,34 @@ export interface ReadCacheMetaV1 {
 
 interface ScopeTrust {
 	hash: string;
-	sequence: number;
+	text?: string;
 }
 
 interface ReplayState {
 	trust: Map<string, Map<string, ScopeTrust>>;
 	unlockedPaths: Set<string>;
-	sequence: number;
-}
-
-interface OverlayState {
-	trust: Map<string, Map<string, ScopeTrust>>;
-	sequence: number;
 }
 
 export interface ReadCacheDecision {
 	baseHash?: string;
+	baselineText?: string;
 	recovery: boolean;
 }
 
 export interface ReadCacheStore {
 	decision(ctx: ExtensionContext, pathKey: string, scopeKey: string): ReadCacheDecision;
-	record(ctx: ExtensionContext, meta: ReadCacheMetaV1): void;
-	clear(): void;
 }
 
 export function createReadCacheStore(): ReadCacheStore {
-	const overlays = new Map<string, OverlayState>();
-
 	return {
 		decision(ctx, pathKey, scopeKey) {
 			const state = replay(ctx);
-			const overlay = overlays.get(overlayKey(ctx));
-			if (overlay) mergeTrust(state, overlay.trust);
+			const trust = state.trust.get(pathKey)?.get(scopeKey);
 			return {
-				baseHash: state.trust.get(pathKey)?.get(scopeKey)?.hash,
+				baseHash: trust?.hash,
+				baselineText: trust?.text,
 				recovery: state.unlockedPaths.has(pathKey),
 			};
-		},
-		record(ctx, meta) {
-			const key = overlayKey(ctx);
-			let overlay = overlays.get(key);
-			if (!overlay) {
-				overlay = { trust: new Map(), sequence: 1_000_000_000 };
-				overlays.set(key, overlay);
-			}
-			overlay.sequence += 1;
-			setTrust(overlay.trust, meta.pathKey, meta.scopeKey, meta.servedHash, overlay.sequence);
-			while (overlays.size > 32) {
-				const oldest = overlays.keys().next().value as string | undefined;
-				if (oldest === undefined) break;
-				overlays.delete(oldest);
-			}
-		},
-		clear() {
-			overlays.clear();
 		},
 	};
 }
@@ -80,6 +56,7 @@ export function createReadCacheStore(): ReadCacheStore {
 function parseReadCacheMeta(value: unknown): ReadCacheMetaV1 | undefined {
 	if (!isRecord(value) || value.v !== 1) return undefined;
 	if (typeof value.pathKey !== "string" || typeof value.scopeKey !== "string") return undefined;
+	if (value.presentation !== "plain" && value.presentation !== "line-numbered") return undefined;
 	if (typeof value.servedHash !== "string" || value.servedHash.length === 0) return undefined;
 	if (!isReadCacheMode(value.mode)) return undefined;
 	if (!isNonNegativeFinite(value.baselineTokens) || !isNonNegativeFinite(value.returnedTokens)) return undefined;
@@ -90,6 +67,7 @@ function parseReadCacheMeta(value: unknown): ReadCacheMetaV1 | undefined {
 		v: 1,
 		pathKey: value.pathKey,
 		scopeKey: value.scopeKey,
+		presentation: value.presentation,
 		servedHash: value.servedHash,
 		baseHash: value.baseHash,
 		mode: value.mode,
@@ -111,7 +89,7 @@ export function readMetaFromMessage(message: unknown): ReadCacheMetaV1 | undefin
 }
 
 function replay(ctx: ExtensionContext): ReplayState {
-	const state: ReplayState = { trust: new Map(), unlockedPaths: new Set(), sequence: 0 };
+	const state: ReplayState = { trust: new Map(), unlockedPaths: new Set() };
 	const manager = ctx.sessionManager;
 	if (!manager) return state;
 	const branch = manager.getBranch();
@@ -122,12 +100,14 @@ function replay(ctx: ExtensionContext): ReplayState {
 	}
 
 	for (const entry of branch.slice(start)) {
-		if (!isRecord(entry) || entry.type !== "message" || !("message" in entry)) continue;
-		const message = entry.message;
+		if (!isRecord(entry)) continue;
+		let message: unknown;
+		if (entry.type === "message" && "message" in entry) message = entry.message;
+		else if (entry.type === "custom_message") message = entry;
+		else continue;
 		const meta = readMetaFromMessage(message);
 		if (meta) {
-			state.sequence += 1;
-			applyReadMeta(state, meta);
+			applyReadMeta(state, message, meta);
 			continue;
 		}
 		for (const path of failedPatchPaths(message, ctx.cwd)) state.unlockedPaths.add(path);
@@ -135,16 +115,39 @@ function replay(ctx: ExtensionContext): ReplayState {
 	return state;
 }
 
-function applyReadMeta(state: ReplayState, meta: ReadCacheMetaV1): void {
+function applyReadMeta(state: ReplayState, message: unknown, meta: ReadCacheMetaV1): void {
 	const existing = state.trust.get(meta.pathKey)?.get(meta.scopeKey);
 	if (meta.mode === "baseline" || meta.mode === "recovery") {
-		setTrust(state.trust, meta.pathKey, meta.scopeKey, meta.servedHash, state.sequence);
+		let text: string | undefined;
+		if (meta.scopeKey === COMPLETE_FILE_SCOPE) {
+			if (!isRecord(message)) return;
+			let pathHeader: string | undefined;
+			if (message.customType === "tau.autoread") {
+				if (!isRecord(message.details)) return;
+				if (typeof message.details.path !== "string" || typeof message.details.cwd !== "string") return;
+				if (resolve(message.details.cwd, message.details.path) !== meta.pathKey) return;
+				pathHeader = message.details.path;
+			}
+			const decoded = decodeCompleteFileSource({
+				content: message.content,
+				autoread: message.customType === "tau.autoread",
+				...(pathHeader === undefined ? {} : { pathHeader }),
+				presentation: meta.presentation,
+				servedHash: meta.servedHash,
+			});
+			if (!decoded.valid || decoded.text === undefined) return;
+			text = decoded.text;
+		}
+		setTrust(state.trust, meta.pathKey, meta.scopeKey, { hash: meta.servedHash, text });
 		state.unlockedPaths.delete(meta.pathKey);
 		return;
 	}
 	if (!meta.baseHash || existing?.hash !== meta.baseHash) return;
 	if (meta.mode === "unchanged" && meta.servedHash !== meta.baseHash) return;
-	setTrust(state.trust, meta.pathKey, meta.scopeKey, meta.servedHash, state.sequence);
+	setTrust(state.trust, meta.pathKey, meta.scopeKey, {
+		hash: meta.servedHash,
+		text: meta.mode === "unchanged" ? existing.text : undefined,
+	});
 }
 
 function failedPatchPaths(message: unknown, cwd: string): string[] {
@@ -168,32 +171,14 @@ function setTrust(
 	trust: Map<string, Map<string, ScopeTrust>>,
 	pathKey: string,
 	scopeKey: string,
-	hash: string,
-	sequence: number,
+	value: ScopeTrust,
 ): void {
 	let scopes = trust.get(pathKey);
 	if (!scopes) {
 		scopes = new Map();
 		trust.set(pathKey, scopes);
 	}
-	scopes.set(scopeKey, { hash, sequence });
-}
-
-function mergeTrust(state: ReplayState, overlay: Map<string, Map<string, ScopeTrust>>): void {
-	for (const [pathKey, scopes] of overlay) {
-		for (const [scopeKey, candidate] of scopes) {
-			const current = state.trust.get(pathKey)?.get(scopeKey);
-			if (!current || candidate.sequence > current.sequence) {
-				setTrust(state.trust, pathKey, scopeKey, candidate.hash, candidate.sequence);
-			}
-		}
-	}
-}
-
-function overlayKey(ctx: ExtensionContext): string {
-	const manager = ctx.sessionManager;
-	if (!manager) return `test:${ctx.cwd}`;
-	return `${manager.getSessionId()}:${manager.getLeafId() ?? "root"}`;
+	scopes.set(scopeKey, value);
 }
 
 function isReadCacheMode(value: unknown): value is ReadCacheMode {

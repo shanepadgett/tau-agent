@@ -56,6 +56,17 @@ export function extensionContext(cwd: string): ExtensionContext {
 	return { cwd, model: undefined } as unknown as ExtensionContext;
 }
 
+export function branchExtensionContext(cwd: string, branch: unknown[]): ExtensionContext {
+	return {
+		...extensionContext(cwd),
+		sessionManager: {
+			getBranch: () => branch,
+			getSessionId: () => "session",
+			getLeafId: () => "leaf",
+		},
+	} as unknown as ExtensionContext;
+}
+
 interface TestToolRenderContext<TArgs> {
 	args: TArgs;
 	toolCallId: string;

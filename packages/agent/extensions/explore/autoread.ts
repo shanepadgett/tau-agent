@@ -5,6 +5,7 @@ import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import { onTauEvent, type TauAgentEvents } from "../../shared/events.js";
 import type { ToolRowStateStore } from "../../shared/tool-row-state.js";
 import { Marker, type MarkerState } from "@shanepadgett/tau-tui";
+import { createCompleteFileMeta } from "./full-file-knowledge.ts";
 import type { ReadCacheMetaV1 } from "./read-cache.ts";
 
 const AUTOREAD_MESSAGE_TYPE = "tau.autoread";
@@ -23,9 +24,23 @@ interface AutoreadDetails {
 }
 
 export function registerAutoread(pi: ExtensionAPI, rowState: ToolRowStateStore): void {
+	let lifecycleGeneration = 0;
+	pi.on("session_start", () => {
+		lifecycleGeneration += 1;
+	});
+	pi.on("session_compact", () => {
+		lifecycleGeneration += 1;
+	});
+	pi.on("session_tree", () => {
+		lifecycleGeneration += 1;
+	});
+	pi.on("session_shutdown", () => {
+		lifecycleGeneration += 1;
+	});
 	onTauEvent(pi, "explore.autoread", "tau:autoread.requested", async (data) => {
 		const event = readAutoreadRequestedEvent(data);
 		if (!event) return;
+		const generation = lifecycleGeneration;
 		await Promise.all(
 			event.files.map(async (file, index) => {
 				const rowId = `${event.batchId}:${index}`;
@@ -39,26 +54,28 @@ export function registerAutoread(pi: ExtensionAPI, rowState: ToolRowStateStore):
 				try {
 					const pathKey = resolve(event.cwd, file.path);
 					const bytes = await readFile(pathKey);
-					const content = bytes.toString("utf8");
+					const content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+					const messageContent = `${file.path}\n${content}`;
 					const totalLines = content.split("\n").length;
-					const readCache = {
-						v: 1,
+					const readCache = createCompleteFileMeta({
 						pathKey,
-						scopeKey: "full:n0",
+						presentation: "plain",
 						servedHash: createHash("sha256").update(bytes).digest("hex"),
 						mode: "baseline",
-						baselineTokens: Math.ceil(content.length / 4),
-						returnedTokens: Math.ceil(content.length / 4),
+						sourceText: content,
+						returnedText: messageContent,
 						totalLines,
 						summary: `${totalLines} lines`,
-					} satisfies ReadCacheMetaV1;
+					}) satisfies ReadCacheMetaV1;
+					if (generation !== lifecycleGeneration) return;
 					pi.sendMessage({
 						customType: AUTOREAD_MESSAGE_TYPE,
-						content: `${file.path}\n${content}`,
+						content: messageContent,
 						display: true,
 						details: { ...details, status: "read", readCache },
 					});
 				} catch (error) {
+					if (generation !== lifecycleGeneration) return;
 					const message = error instanceof Error ? error.message : String(error);
 					pi.sendMessage({
 						customType: AUTOREAD_MESSAGE_TYPE,

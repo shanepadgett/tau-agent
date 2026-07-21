@@ -30,9 +30,8 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 	});
 	pi.on("session_start", () => {
 		rowState.clear();
-		readCache.clear();
 		readSnapshots.clear();
 	});
-	pi.on("session_compact", () => readCache.clear());
-	pi.on("session_tree", () => readCache.clear());
+	pi.on("session_compact", () => readSnapshots.clear());
+	pi.on("session_tree", () => readSnapshots.clear());
 }
