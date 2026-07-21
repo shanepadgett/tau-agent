@@ -28,7 +28,7 @@ describe("context validation", () => {
 		} as unknown as GitRunner;
 		const result = await validateContextCatalog(git, root, ["generated/**"]);
 		expect(result.uncovered).toEqual(["src/uncovered.ts"]);
-		expect(formatContextValidationFailure(result)).toContain("Run context_sync");
+		expect(formatContextValidationFailure(result)).toContain("/context-sync");
 	});
 
 	it("reports missing anchors as stale membership", async () => {

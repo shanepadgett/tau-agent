@@ -4,6 +4,9 @@
 		"reference": {
 			"editor": "code"
 		},
+		"context": {
+			
+		},
 		"silentCommandRunner": {
 			"commands": [
 				{

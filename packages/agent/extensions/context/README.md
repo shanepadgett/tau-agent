@@ -2,16 +2,26 @@
 
 Context stores reusable repository work scopes in `.pi/contexts`. Folder names become selector tabs, TOML files become concepts, and TOML sections become selectable entries.
 
-Use `/context` to select entries. Entry `files` are injected through Tau autoread. Entry `anchors` supply lazy navigation paths that the agent can grep or read in ranges when needed. Use `/context-sync` to reconcile affected scopes from the current Git changes. Tau validates both file classes as context membership after agent turns and asks the agent to sync uncovered changed files or stale references automatically.
+Use `/context` to select entries. Entry `files` are injected through Tau autoread. Entry `anchors` supply lazy navigation paths that the agent can grep or read in ranges when needed.
 
-Validation is disabled by default. Enable it globally or per project in Tau settings:
+After meaningful uncommitted work (new/moved ownership, not trivial already-covered polish), the coding agent should run the `context-sync` subagent so `.pi/contexts` stays aligned. Humans can also run `/context-sync` or `/context-sync <nudge>`. It walks domain → concept → entry → membership, edits only `.pi/contexts` with `patch`, and the harness verifies write scope plus catalog invariants afterward. Out-of-scope writes are restored and the run fails. Optional nudge text soft-steers judgment without skipping evidence.
+
+Sync surface is configurable:
+
+- `sync.enabled` (default true) — master switch. Off: no `/context-sync`, parent cannot call `context-sync`, validation does not auto-run sync.
+- `sync.automation` (default true) — when false with sync still enabled: manual `/context-sync` only (coding agent does not see context-sync). Validation auto-run still works if validation is enabled.
+- `validation.enabled` (default false) — after agent turns, check membership and auto-run context-sync on failure (requires `sync.enabled`).
 
 ```json
 {
   "extensions": {
     "context": {
+      "sync": {
+        "enabled": true,
+        "automation": true
+      },
       "validation": {
-  "enabled": true,
+        "enabled": true,
         "ignoreGlobs": ["generated/**"]
       }
     }

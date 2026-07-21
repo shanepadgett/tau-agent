@@ -1,4 +1,4 @@
-import { access, readFile, readdir, stat } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { parse } from "smol-toml";
@@ -81,13 +81,13 @@ export async function findProjectRoot(cwd: string): Promise<string> {
 	return gitRoot ?? resolve(cwd);
 }
 
-export function validSlug(value: string, label: string): string {
+function validSlug(value: string, label: string): string {
 	const slug = value.trim();
 	if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error(`${label} must use lowercase kebab-case: ${value}`);
 	return slug;
 }
 
-export function normalizeProjectPath(root: string, input: string): string {
+function normalizeProjectPath(root: string, input: string): string {
 	const absolute = resolve(root, input.trim().replace(/^@/, ""));
 	const path = relative(root, absolute).split(sep).join("/");
 	if (!path || path === "." || path === ".." || path.startsWith("../"))
@@ -101,18 +101,6 @@ function sortedUnique(values: readonly string[]): string[] {
 
 export function contextEntryPaths(entry: Pick<ContextEntry, "files" | "anchors">): string[] {
 	return sortedUnique([...entry.files, ...entry.anchors]);
-}
-
-export async function requireFiles(root: string, inputs: readonly string[]): Promise<string[]> {
-	const files = sortedUnique(inputs.map((input) => normalizeProjectPath(root, input)));
-	for (const file of files) {
-		try {
-			if (!(await stat(join(root, file))).isFile()) throw new Error();
-		} catch {
-			throw new Error(`Context file does not exist: ${file}`);
-		}
-	}
-	return files;
 }
 
 export async function loadContextEntries(root: string): Promise<ContextEntry[]> {

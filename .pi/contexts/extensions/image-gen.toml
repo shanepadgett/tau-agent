@@ -8,6 +8,8 @@ files = [
   "packages/agent/extensions/image-gen/client.ts",
   "packages/agent/extensions/image-gen/constants.ts",
   "packages/agent/extensions/image-gen/index.ts",
+]
+anchors = [
   "packages/agent/test/extensions/image-gen/client.test.ts",
   "packages/agent/test/extensions/image-gen/index.test.ts",
 ]

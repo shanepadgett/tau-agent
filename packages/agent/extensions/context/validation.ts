@@ -68,6 +68,9 @@ export function formatContextValidationFailure(result: ContextValidationResult):
 		);
 	if (result.uncovered.length)
 		output.push("", "Changed files with no context membership:", ...result.uncovered.map((path) => `- ${path}`));
-	output.push("", "Run context_sync to reconcile the context catalog.");
+	output.push(
+		"",
+		"With validation enabled, Tau runs context-sync automatically after agent turns. Manual: /context-sync or /context-sync <nudge>.",
+	);
 	return output.join("\n");
 }

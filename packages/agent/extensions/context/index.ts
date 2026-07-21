@@ -1,34 +1,63 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
-import { Type } from "typebox";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { emitTauEvent } from "../../shared/events.ts";
 import { createGitRunner, loadRepoStatus } from "../../shared/git.ts";
 import { createInjectedContext } from "../../shared/injected-context.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { ContextPanel } from "./panel.ts";
 import { findProjectRoot, loadContextEntries, type ContextEntry } from "./definitions.ts";
+import { hideContextSyncEvidenceTool, registerContextSyncEvidenceTool } from "./evidence.ts";
 import contextSettings from "./settings.ts";
-import { runContextSync, type ContextSyncDetails } from "./sync.ts";
+import { runContextSync } from "./sync.ts";
 import { formatContextValidationFailure, validateContextCatalog } from "./validation.ts";
 
-const contextSyncParams = Type.Object({}, { additionalProperties: false });
-
-function compactResult(details: ContextSyncDetails) {
-	const value = {
-		outcome: details.outcome,
-		summary: details.summary,
-		reason: details.reason,
-		changedContextFiles: details.changedContextFiles,
-	};
-	return { content: [{ type: "text" as const, text: JSON.stringify(value) }], details };
-}
-
 export default function contextExtension(pi: ExtensionAPI): void {
-	let validationSettings = contextSettings.defaults.validation;
+	let settings = contextSettings.defaults;
 	let lastValidationFailure: string | undefined;
-	const activeToolExecutions = new Map<string, { toolName: string; done: Promise<void>; complete: () => void }>();
+	let syncCommandRegistered = false;
+
+	registerContextSyncEvidenceTool(pi);
+
+	const refreshSettings = async (ctx: { cwd: string; isProjectTrusted(): boolean }) => {
+		settings = await loadTauExtensionSettings(ctx, contextSettings);
+		if (settings.sync.enabled) registerContextSyncCommand();
+		hideContextSyncEvidenceTool(pi);
+	};
+
+	const registerContextSyncCommand = () => {
+		if (syncCommandRegistered) return;
+		syncCommandRegistered = true;
+		pi.registerCommand("context-sync", {
+			description: "Synchronize repository context from current Git changes via context-sync subagent",
+			handler: async (args, ctx) => {
+				if (!(await loadTauExtensionSettings(ctx, contextSettings)).sync.enabled) {
+					ctx.ui.notify("Context sync is disabled in settings", "warning");
+					return;
+				}
+				if (ctx.mode !== "tui" || !ctx.isProjectTrusted()) {
+					ctx.ui.notify("/context-sync requires a trusted TUI project", "warning");
+					return;
+				}
+				await ctx.waitForIdle();
+				ctx.ui.setStatus("context-sync", "synchronizing context");
+				try {
+					const result = await runContextSync(pi, ctx, {
+						nudge: args.trim() || undefined,
+						onStatus: (status) => {
+							ctx.ui.setStatus("context-sync", status.slice(0, 120));
+						},
+					});
+					const level = result.outcome === "failed" ? "error" : "info";
+					ctx.ui.notify(result.summary, level);
+				} catch (error) {
+					ctx.ui.notify(`Context sync failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+				} finally {
+					ctx.ui.setStatus("context-sync", undefined);
+				}
+			},
+		});
+	};
 
 	pi.registerCommand("context", {
 		description: "Select repository context entries and inject their files",
@@ -85,98 +114,14 @@ export default function contextExtension(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.registerCommand("context-sync", {
-		description: "Synchronize repository context from current Git changes",
-		handler: async (args, ctx) => {
-			if (args.trim()) {
-				ctx.ui.notify("Usage: /context-sync", "warning");
-				return;
-			}
-			if (ctx.mode !== "tui" || !ctx.isProjectTrusted()) {
-				ctx.ui.notify("/context-sync requires a trusted TUI project", "warning");
-				return;
-			}
-			await ctx.waitForIdle();
-			ctx.ui.setStatus("context-sync", "synchronizing context");
-			try {
-				const result = await runContextSync(pi, ctx);
-				ctx.ui.notify(result.summary, "info");
-			} catch (error) {
-				ctx.ui.notify(`Context sync failed: ${error instanceof Error ? error.message : String(error)}`, "error");
-			} finally {
-				ctx.ui.setStatus("context-sync", undefined);
-			}
-		},
-	});
-
-	pi.registerTool(
-		defineTool<typeof contextSyncParams, ContextSyncDetails | undefined>({
-			name: "context_sync",
-			label: "context_sync",
-			description:
-				"Synchronize repository context membership after context validation reports changed, stale, or unassigned files.",
-			parameters: contextSyncParams,
-			async execute(id, _params, _signal, onUpdate, ctx) {
-				await Promise.all(
-					[...activeToolExecutions]
-						.filter(([toolCallId, execution]) => toolCallId !== id && execution.toolName !== "context_sync")
-						.map(([, execution]) => execution.done),
-				);
-				return compactResult(
-					await runContextSync(pi, ctx, (status) =>
-						onUpdate?.({ content: [{ type: "text", text: status }], details: undefined }),
-					),
-				);
-			},
-			renderCall(_args, theme, context) {
-				const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-				text.setText(theme.fg("toolTitle", "context_sync"));
-				return text;
-			},
-			renderResult(result, options, theme, context) {
-				const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-				const details = result.details;
-				const output = result.content.map((part) => (part.type === "text" ? part.text : "")).join("");
-				text.setText(
-					options.isPartial
-						? theme.fg("dim", output)
-						: context.expanded && details
-							? [
-									details.summary,
-									details.reason,
-									...details.changes.map((change) =>
-										change.action === "set-entry"
-											? `${change.action} ${change.tab}/${change.concept}/${change.entry}: ${change.files.join(", ")}`
-											: `${change.action} ${change.tab}/${change.concept}/${change.entry}`,
-									),
-									...details.changedContextFiles,
-								].join("\n")
-							: (details?.summary ?? theme.fg("error", output)),
-				);
-				return text;
-			},
-		}),
-	);
-
-	pi.on("tool_execution_start", (event) => {
-		let complete = () => {};
-		const done = new Promise<void>((resolve) => {
-			complete = resolve;
-		});
-		activeToolExecutions.set(event.toolCallId, { toolName: event.toolName, done, complete });
-	});
-
-	pi.on("tool_execution_end", (event) => {
-		const execution = activeToolExecutions.get(event.toolCallId);
-		activeToolExecutions.delete(event.toolCallId);
-		execution?.complete();
-	});
+	// Default on: register immediately so /context-sync exists before session_start in tests and early UI.
+	if (settings.sync.enabled) registerContextSyncCommand();
 
 	pi.on("session_start", async (_event, ctx) => {
-		validationSettings = (await loadTauExtensionSettings(ctx, contextSettings)).validation;
+		await refreshSettings(ctx);
 	});
 	pi.on("agent_start", async (_event, ctx) => {
-		validationSettings = (await loadTauExtensionSettings(ctx, contextSettings)).validation;
+		await refreshSettings(ctx);
 	});
 	pi.on("agent_end", async (event, ctx) => {
 		if (
@@ -191,7 +136,8 @@ export default function contextExtension(pi: ExtensionAPI): void {
 			)
 		)
 			return;
-		if (!validationSettings.enabled || !ctx.isProjectTrusted()) {
+		settings = await loadTauExtensionSettings(ctx, contextSettings);
+		if (!settings.sync.enabled || !settings.validation.enabled || !ctx.isProjectTrusted()) {
 			lastValidationFailure = undefined;
 			return;
 		}
@@ -200,25 +146,41 @@ export default function contextExtension(pi: ExtensionAPI): void {
 			const git = createGitRunner(pi, ctx);
 			if (!(await loadRepoStatus(git))) return;
 			const failure = formatContextValidationFailure(
-				await validateContextCatalog(git, root, validationSettings.ignoreGlobs),
+				await validateContextCatalog(git, root, settings.validation.ignoreGlobs),
 			);
 			if (!failure) {
 				lastValidationFailure = undefined;
 				return;
 			}
+			// Same unresolved failure fingerprint: do not re-spawn until the dirty/catalog signal changes.
 			if (failure === lastValidationFailure) return;
 			lastValidationFailure = failure;
-			ctx.ui.notify("Context catalog validation failed", "error");
-			pi.sendMessage(
-				{ customType: "tau.context-validation", content: failure, display: false },
-				{ triggerTurn: true },
-			);
+			ctx.ui.notify("Context catalog validation failed; running context-sync", "error");
+			ctx.ui.setStatus("context-sync", "synchronizing context");
+			try {
+				const result = await runContextSync(pi, ctx, {
+					onStatus: (status) => {
+						ctx.ui.setStatus("context-sync", status.slice(0, 120));
+					},
+				});
+				const afterFailure = formatContextValidationFailure(
+					await validateContextCatalog(git, root, settings.validation.ignoreGlobs),
+				);
+				if (result.outcome === "failed" || afterFailure) {
+					lastValidationFailure = afterFailure ?? `${failure}\n${result.reason}`;
+					ctx.ui.notify(
+						result.outcome === "failed" ? result.summary : "Context catalog still invalid after context-sync",
+						"error",
+					);
+					return;
+				}
+				lastValidationFailure = undefined;
+				ctx.ui.notify(result.summary, "info");
+			} finally {
+				ctx.ui.setStatus("context-sync", undefined);
+			}
 		} catch (error) {
 			ctx.ui.notify(`Context validation failed: ${error instanceof Error ? error.message : String(error)}`, "error");
 		}
-	});
-	pi.on("session_shutdown", () => {
-		for (const execution of activeToolExecutions.values()) execution.complete();
-		activeToolExecutions.clear();
 	});
 }

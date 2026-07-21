@@ -28,7 +28,7 @@ Adds `/commit` for semantic commit grouping, review, and committing selected rep
 
 ## context
 
-Adds `/context` to select reusable repository work scopes from `.pi/contexts`, and `/context-sync` to reconcile affected scopes from current Git changes. Entry `files` are autoread; entry `anchors` are unloaded navigation paths the agent can inspect when needed. Context validation is disabled by default; when enabled, Tau checks both classes for changed-file membership and stale references after agent turns. Folder names are tabs, TOML files are concepts, and TOML sections are selectable entries.
+Adds `/context` to select reusable repository work scopes from `.pi/contexts`, and `/context-sync` or `/context-sync <nudge>` for human-driven catalog sync (optional nudge). When `sync.automation` is on, the coding agent can also run the `context-sync` subagent after meaningful uncommitted work. `sync.enabled` is the master switch for command, automation, and validation auto-run. Entry `files` are autoread; entry `anchors` are unloaded navigation paths. Context validation is off by default; when on (and sync enabled), Tau auto-runs context-sync on failure. Folder names are tabs, TOML files are concepts, and TOML sections are selectable entries.
 
 ## explore
 

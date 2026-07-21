@@ -1,6 +1,8 @@
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { createToolRowStateStore } from "../../shared/tool-row-state.js";
+import contextSettings from "../context/settings.ts";
 import { discoverAgents, type AgentDefinition, type AgentDiscovery } from "./agents.ts";
 import { renderSubagentCall, renderSubagentResult } from "./render.ts";
 import {
@@ -84,13 +86,19 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 		threads.clear();
 		await Promise.all(retained.map((thread) => disposeSubagentThread(thread)));
 	};
+	const parentVisibleAgents = async (ctx: ExtensionContext, discovery: AgentDiscovery) => {
+		const sync = (await loadTauExtensionSettings(ctx, contextSettings)).sync;
+		const parentVisible = sync.enabled && sync.automation;
+		return [...discovery.agents.values()]
+			.filter((agent) => agent.name !== "context-sync" || parentVisible)
+			.sort((a, b) => a.name.localeCompare(b.name));
+	};
+
 	pi.on("before_agent_start", async (event, ctx) => {
 		if (!pi.getActiveTools().includes("subagent")) return undefined;
 		const discovery = await discoverAgents(ctx.cwd, ctx.isProjectTrusted());
 		warn(discovery, ctx);
-		const lines = [...discovery.agents.values()]
-			.sort((a, b) => a.name.localeCompare(b.name))
-			.map((agent) => `- ${agent.name}: ${agent.description}`);
+		const lines = (await parentVisibleAgents(ctx, discovery)).map((agent) => `- ${agent.name}: ${agent.description}`);
 		const activeThreads = [...threads.values()]
 			.filter((thread) => thread.cwd === ctx.cwd)
 			.sort((a, b) => a.id.localeCompare(b.id))
@@ -171,7 +179,8 @@ Delegate one focused task per call. Children do not inherit parent messages. Inc
 					const invalid = discovery.invalid.get(agent);
 					if (!definition) {
 						const reason = invalid?.map((item) => item.reason).join("; ") ?? "unknown agent";
-						const names = [...discovery.agents.keys()].sort().join(", ") || "none";
+						const names =
+							(await parentVisibleAgents(ctx, discovery)).map((item) => item.name).join(", ") || "none";
 						const error = `Agent ${agent} discovery failed: ${reason}. Runnable agents: ${names}`;
 						return {
 							content: [{ type: "text", text: error }],
@@ -186,6 +195,42 @@ Delegate one focused task per call. Children do not inherit parent messages. Inc
 								error,
 							),
 						};
+					}
+					if (definition.name === "context-sync") {
+						const sync = (await loadTauExtensionSettings(ctx, contextSettings)).sync;
+						if (!sync.enabled) {
+							const error = "Context sync is disabled in settings.";
+							return {
+								content: [{ type: "text", text: error }],
+								details: emptyDetails(
+									definition.name,
+									task,
+									"failed",
+									"discovery",
+									parentModel,
+									parentThinking,
+									undefined,
+									error,
+								),
+							};
+						}
+						if (!sync.automation) {
+							const error =
+								"Context-sync automation is disabled. Use /context-sync or enable extensions.context.sync.automation.";
+							return {
+								content: [{ type: "text", text: error }],
+								details: emptyDetails(
+									definition.name,
+									task,
+									"failed",
+									"discovery",
+									parentModel,
+									parentThinking,
+									undefined,
+									error,
+								),
+							};
+						}
 					}
 					threadId = `thread-${nextThreadId++}`;
 				}

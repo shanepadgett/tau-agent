@@ -8,6 +8,8 @@ files = [
   "packages/agent/extensions/reference/index.ts",
   "packages/agent/extensions/reference/panel.ts",
   "packages/agent/extensions/reference/settings.ts",
+]
+anchors = [
   "packages/agent/shared/git.ts",
   "packages/agent/shared/settings/define.ts",
   "packages/agent/shared/settings/load.ts",
@@ -18,11 +20,8 @@ description = "Extension runtime and direct shared dependencies"
 files = [
   "packages/agent/extensions/reference/index.ts",
   "packages/agent/extensions/reference/panel.ts",
-  "packages/agent/shared/git.ts",
-  "packages/agent/shared/settings/define.ts",
-  "packages/agent/shared/settings/load.ts",
-  "packages/agent/shared/text.ts",
 ]
+anchors = [ "packages/agent/shared/git.ts", "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts", "packages/agent/shared/text.ts" ]
 [ui]
 description = "Interactive UI and its extension integration"
 files = [
@@ -37,6 +36,5 @@ files = [
 description = "Extension settings and shared settings infrastructure"
 files = [
   "packages/agent/extensions/reference/settings.ts",
-  "packages/agent/shared/settings/define.ts",
-  "packages/agent/shared/settings/load.ts",
 ]
+anchors = [ "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts" ]

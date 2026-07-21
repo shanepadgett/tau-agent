@@ -7,20 +7,17 @@ files = [
   "packages/agent/extensions/turn-budget/README.md",
   "packages/agent/extensions/turn-budget/index.ts",
   "packages/agent/extensions/turn-budget/settings.ts",
-  "packages/agent/shared/settings/define.ts",
-  "packages/agent/shared/settings/load.ts",
 ]
+anchors = [ "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts" ]
 [runtime]
 description = "Extension runtime and direct shared dependencies"
 files = [
   "packages/agent/extensions/turn-budget/index.ts",
-  "packages/agent/shared/settings/define.ts",
-  "packages/agent/shared/settings/load.ts",
 ]
+anchors = [ "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts" ]
 [settings]
 description = "Extension settings and shared settings infrastructure"
 files = [
   "packages/agent/extensions/turn-budget/settings.ts",
-  "packages/agent/shared/settings/define.ts",
-  "packages/agent/shared/settings/load.ts",
 ]
+anchors = [ "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts" ]

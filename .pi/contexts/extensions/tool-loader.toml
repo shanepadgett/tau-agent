@@ -3,7 +3,8 @@ description = "Dynamic loading and registration of external tool extensions"
 
 [all]
 description = "Tool loader implementation, user-facing documentation, and automated tests"
-files = [ "packages/agent/extensions/tool-loader/README.md", "packages/agent/extensions/tool-loader/index.ts", "packages/agent/test/extensions/tool-loader/index.test.ts" ]
+files = [ "packages/agent/extensions/tool-loader/README.md", "packages/agent/extensions/tool-loader/index.ts" ]
+anchors = [ "packages/agent/test/extensions/tool-loader/index.test.ts" ]
 
 [runtime]
 description = "Tool loader runtime implementation"
@@ -11,4 +12,5 @@ files = [ "packages/agent/extensions/tool-loader/index.ts" ]
 
 [tests]
 description = "Tool loader implementation and automated tests"
-files = [ "packages/agent/extensions/tool-loader/index.ts", "packages/agent/test/extensions/tool-loader/index.test.ts" ]
+files = [ "packages/agent/extensions/tool-loader/index.ts" ]
+anchors = [ "packages/agent/test/extensions/tool-loader/index.test.ts" ]

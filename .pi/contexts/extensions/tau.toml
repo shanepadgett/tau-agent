@@ -6,15 +6,11 @@ description = "Every extension file, direct shared dependency, test, and user-fa
 files = [
   "packages/agent/extensions/tau/README.md",
   "packages/agent/extensions/tau/index.ts",
-  "packages/agent/shared/settings/json.ts",
-  "packages/agent/shared/settings/paths.ts",
-  "packages/agent/shared/settings/specs.ts",
 ]
+anchors = [ "packages/agent/shared/settings/json.ts", "packages/agent/shared/settings/paths.ts", "packages/agent/shared/settings/specs.ts" ]
 [runtime]
 description = "Extension runtime and direct shared dependencies"
 files = [
   "packages/agent/extensions/tau/index.ts",
-  "packages/agent/shared/settings/json.ts",
-  "packages/agent/shared/settings/paths.ts",
-  "packages/agent/shared/settings/specs.ts",
 ]
+anchors = [ "packages/agent/shared/settings/json.ts", "packages/agent/shared/settings/paths.ts", "packages/agent/shared/settings/specs.ts" ]

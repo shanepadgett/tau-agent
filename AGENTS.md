@@ -3,7 +3,7 @@
 ## General
 
 - Extension tool changes need user `/reload` before testing.
-- Keep active work files under `.working/`. Tracked dir. Use `packages/agent/docs/` only for Tau Agent user docs.
+- Keep active work files under `docs/plans/`. Tracked dir. Use `packages/agent/docs/` only for Tau Agent user docs.
 
 ## Scope and Behavior
 

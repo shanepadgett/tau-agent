@@ -15,13 +15,29 @@
 				"context": {
 					"type": "object",
 					"properties": {
+						"sync": {
+							"type": "object",
+							"properties": {
+								"enabled": {
+									"type": "boolean",
+									"default": true,
+									"description": "Master switch for context-sync. When false: no /context-sync, parent cannot call the agent, validation does not auto-run sync."
+								},
+								"automation": {
+									"type": "boolean",
+									"default": true,
+									"description": "When true with sync.enabled, the coding agent may call context-sync. When false, only manual /context-sync (validation auto-run still allowed if validation.enabled)."
+								}
+							},
+							"additionalProperties": false
+						},
 						"validation": {
 							"type": "object",
 							"properties": {
 								"enabled": {
 									"type": "boolean",
 									"default": false,
-									"description": "Validate context membership after agent turns."
+									"description": "Validate context membership after agent turns and auto-run context-sync on failure (requires sync.enabled)."
 								},
 								"ignoreGlobs": {
 									"type": "array",

@@ -7,6 +7,8 @@ files = [
   "packages/agent/extensions/branch/README.md",
   "packages/agent/extensions/branch/index.ts",
   "packages/agent/extensions/branch/panel.ts",
+]
+anchors = [
   "packages/agent/shared/git.ts",
   "packages/agent/shared/text.ts",
   "packages/agent/test/extensions/branch/index.test.ts",
@@ -17,24 +19,21 @@ description = "Extension runtime and direct shared dependencies"
 files = [
   "packages/agent/extensions/branch/index.ts",
   "packages/agent/extensions/branch/panel.ts",
-  "packages/agent/shared/git.ts",
-  "packages/agent/shared/text.ts",
 ]
+anchors = [ "packages/agent/shared/git.ts", "packages/agent/shared/text.ts" ]
 [ui]
 description = "Interactive UI and its extension integration"
 files = [
   "packages/agent/extensions/branch/index.ts",
   "packages/agent/extensions/branch/panel.ts",
-  "packages/agent/shared/git.ts",
-  "packages/agent/shared/text.ts",
 ]
+anchors = [ "packages/agent/shared/git.ts", "packages/agent/shared/text.ts" ]
 [tests]
 description = "Extension implementation and automated tests"
 files = [
   "packages/agent/extensions/branch/index.ts",
   "packages/agent/extensions/branch/panel.ts",
-  "packages/agent/shared/git.ts",
-  "packages/agent/shared/text.ts",
   "packages/agent/test/extensions/branch/index.test.ts",
   "packages/agent/test/extensions/branch/panel.test.ts",
 ]
+anchors = [ "packages/agent/shared/git.ts", "packages/agent/shared/text.ts" ]

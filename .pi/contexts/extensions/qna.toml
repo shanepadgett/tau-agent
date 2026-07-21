@@ -14,8 +14,8 @@ files = [
   "packages/agent/extensions/qna/model.ts",
   "packages/agent/extensions/qna/panel.ts",
   "packages/agent/extensions/qna/ui.ts",
-  "packages/agent/shared/agent-blocked.ts",
 ]
+anchors = [ "packages/agent/shared/agent-blocked.ts" ]
 [runtime]
 description = "Extension runtime and direct shared dependencies"
 files = [
@@ -28,8 +28,8 @@ files = [
   "packages/agent/extensions/qna/model.ts",
   "packages/agent/extensions/qna/panel.ts",
   "packages/agent/extensions/qna/ui.ts",
-  "packages/agent/shared/agent-blocked.ts",
 ]
+anchors = [ "packages/agent/shared/agent-blocked.ts" ]
 [ui]
 description = "Interactive UI and its extension integration"
 files = [
@@ -37,5 +37,5 @@ files = [
   "packages/agent/extensions/qna/index.ts",
   "packages/agent/extensions/qna/panel.ts",
   "packages/agent/extensions/qna/ui.ts",
-  "packages/agent/shared/agent-blocked.ts",
 ]
+anchors = [ "packages/agent/shared/agent-blocked.ts" ]

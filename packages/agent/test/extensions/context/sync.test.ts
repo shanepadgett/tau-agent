@@ -1,14 +1,15 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-	applyContextSyncPlan,
+	collectSyncEvidence,
 	discoverDirectDependencies,
-	normalizeContextSyncPlan,
-	type SyncEvidence,
-} from "../../../extensions/context/sync.ts";
-import { loadContextEntries } from "../../../extensions/context/definitions.ts";
+	formatEvidenceSection,
+} from "../../../extensions/context/evidence.ts";
+import { buildContextSyncTask, CONTEXT_SYNC_REQUIRED_TOOLS } from "../../../extensions/context/sync.ts";
+import { discoverAgents } from "../../../extensions/subagent/agents.ts";
+import type { GitRunner } from "../../../shared/git.ts";
 
 const roots: string[] = [];
 
@@ -23,6 +24,17 @@ async function project(): Promise<string> {
 	return root;
 }
 
+function gitWithStatus(status: string): GitRunner {
+	return {
+		cwd: "/tmp",
+		async run(args) {
+			if (args[0] === "status") return status;
+			if (args[0] === "diff") return "diff body";
+			return "";
+		},
+	};
+}
+
 describe("context sync", () => {
 	it("resolves one direct relative dependency", async () => {
 		const root = await project();
@@ -31,140 +43,47 @@ describe("context sync", () => {
 		]);
 	});
 
-	it("accepts no-change with a reason", async () => {
+	it("formats overview evidence with uncovered dirty files", async () => {
 		const root = await project();
-		const evidence: SyncEvidence = {
+		const evidence = await collectSyncEvidence(
+			gitWithStatus("1 .M N... 100644 100644 100644 deadbeef deadbeef src/player.ts"),
 			root,
-			files: [],
-			entries: [],
-			dirtyExisting: new Set(),
-			dependencies: new Set(),
-			affectedIds: new Set(),
-			affectedConcepts: new Set(),
-			eligibleFiles: new Set(),
-			missingPaths: new Set(),
-			structuralPreviews: new Map(),
-			worktreeSignature: "worktree",
-			catalogSignature: "catalog",
-		};
-		expect(normalizeContextSyncPlan({ outcome: "no-change", reason: "Already useful" }, evidence)).toEqual({
-			outcome: "no-change",
-			reason: "Already useful",
-		});
-	});
-
-	it("rejects no-change while a changed file is uncovered", async () => {
-		const root = await project();
-		const evidence: SyncEvidence = {
-			root,
-			files: [
-				{
-					id: 1,
-					path: "src/player.ts",
-					status: " M",
-					kind: "modified",
-					untracked: false,
-					memberships: [],
-					oldMemberships: [],
-					evidence: "changed",
-				},
-			],
-			entries: [],
-			dirtyExisting: new Set(["src/player.ts"]),
-			dependencies: new Set(),
-			affectedIds: new Set(),
-			affectedConcepts: new Set(),
-			eligibleFiles: new Set(["src/player.ts"]),
-			missingPaths: new Set(),
-			structuralPreviews: new Map(),
-			worktreeSignature: "worktree",
-			catalogSignature: "catalog",
-		};
-		expect(() => normalizeContextSyncPlan({ outcome: "no-change", reason: "Skip" }, evidence)).toThrow(
-			"no-change cannot leave uncovered changed files",
+			[],
 		);
+		const overview = formatEvidenceSection(evidence, "overview");
+		expect(overview).toContain("src/player.ts");
+		expect(overview).toContain("Uncovered changed files: 1");
+		expect(formatEvidenceSection(evidence, "invariants")).toContain("Uncovered changed files");
 	});
 
-	it("applies multiple desired entries without losing concept metadata", async () => {
+	it("reports holding invariants when dirty files already belong", async () => {
 		const root = await project();
-		const path = join(root, ".pi", "contexts", "gameplay", "player.toml");
 		await mkdir(join(root, ".pi", "contexts", "gameplay"), { recursive: true });
 		await writeFile(
-			path,
-			'name = "Player"\ndescription = "Player systems"\n\n[all]\ndescription = "All player code"\nfiles = ["src/player.ts"]\nanchors = ["src/math.ts"]\n',
+			join(root, ".pi", "contexts", "gameplay", "player.toml"),
+			'name = "Player"\n\n[all]\ndescription = "Player code"\nfiles = ["src/player.ts"]\n',
 		);
-		const entries = await loadContextEntries(root);
-		await applyContextSyncPlan(
+		const evidence = await collectSyncEvidence(
+			gitWithStatus("1 .M N... 100644 100644 100644 deadbeef deadbeef src/player.ts"),
 			root,
-			{
-				outcome: "apply",
-				reason: "Split durable scopes",
-				changes: [
-					{ action: "delete-entry", tab: "gameplay", concept: "player", entry: "all" },
-					{
-						action: "set-entry",
-						tab: "gameplay",
-						concept: "player",
-						conceptName: "Player",
-						conceptDescription: "Player systems",
-						entry: "movement",
-						description: "Player movement",
-						files: ["src/player.ts", "src/math.ts"],
-					},
-				],
-			},
-			entries,
-			async () => {
-				expect(
-					(await readdir(join(root, ".pi", "contexts", "gameplay"))).some((file) => file.endsWith(".tmp")),
-				).toBe(false);
-			},
+			[],
 		);
-		const output = await readFile(path, "utf8");
-		expect(output).toContain('name = "Player"');
-		expect(output).toContain("[movement]");
-		expect(output).not.toContain("[all]");
-		expect(await loadContextEntries(root)).toMatchObject([
-			{ name: "movement", files: ["src/player.ts"], anchors: ["src/math.ts"] },
-		]);
+		expect(formatEvidenceSection(evidence, "invariants")).toContain("invariants hold");
+		expect(formatEvidenceSection(evidence, "catalog")).toContain("gameplay/player/all");
 	});
 
-	it("preserves retained anchors and makes new membership eager", async () => {
-		const root = await project();
-		await writeFile(join(root, "src", "extra.ts"), "export {};\n");
-		const path = join(root, ".pi", "contexts", "gameplay", "player.toml");
-		await mkdir(join(root, ".pi", "contexts", "gameplay"), { recursive: true });
-		await writeFile(
-			path,
-			'name = "Player"\ndescription = "Player systems"\n\n[movement]\ndescription = "Player movement"\nfiles = ["src/player.ts"]\nanchors = ["src/math.ts"]\n',
+	it("includes optional nudge in the subagent task", () => {
+		expect(buildContextSyncTask("/repo")).not.toContain("Human nudge");
+		expect(buildContextSyncTask("/repo", "  prefer infrastructure  ")).toContain(
+			"Human nudge (soft steer, does not skip evidence or ladder):\nprefer infrastructure",
 		);
-		const entries = await loadContextEntries(root);
-		await applyContextSyncPlan(
-			root,
-			{
-				outcome: "apply",
-				reason: "Add related source",
-				changes: [
-					{
-						action: "set-entry",
-						tab: "gameplay",
-						concept: "player",
-						conceptName: "Player",
-						conceptDescription: "Player systems",
-						entry: "movement",
-						description: "Player movement",
-						files: ["src/extra.ts", "src/math.ts", "src/player.ts"],
-					},
-				],
-			},
-			entries,
-		);
+	});
 
-		expect(await loadContextEntries(root)).toMatchObject([
-			{
-				files: ["src/extra.ts", "src/player.ts"],
-				anchors: ["src/math.ts"],
-			},
-		]);
+	it("loads the context-sync agent with required tools", async () => {
+		const discovery = await discoverAgents(process.cwd(), true);
+		const agent = discovery.agents.get("context-sync");
+		expect(agent).toBeDefined();
+		expect(agent?.tools).toEqual([...CONTEXT_SYNC_REQUIRED_TOOLS]);
+		expect(agent?.description).toContain("meaningful uncommitted work");
 	});
 });

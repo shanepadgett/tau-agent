@@ -3,4 +3,5 @@ description = "Runtime system-context assembly for Tau extensions"
 
 [all]
 description = "Runtime-context extension implementation, documentation, and automated tests"
-files = [ "packages/agent/extensions/runtime-context/README.md", "packages/agent/extensions/runtime-context/context.ts", "packages/agent/extensions/runtime-context/index.ts", "packages/agent/test/extensions/runtime-context/context.test.ts", "packages/agent/test/extensions/runtime-context/index.test.ts" ]
+files = [ "packages/agent/extensions/runtime-context/README.md", "packages/agent/extensions/runtime-context/context.ts", "packages/agent/extensions/runtime-context/index.ts" ]
+anchors = [ "packages/agent/test/extensions/runtime-context/context.test.ts", "packages/agent/test/extensions/runtime-context/index.test.ts" ]

@@ -8,17 +8,19 @@ files = [
   "packages/agent/shared/events.ts",
   "packages/agent/shared/injected-context.ts",
   "packages/agent/shared/tool-row-state.ts",
+]
+anchors = [
+  "packages/agent/docs/extending-tau-agent.md",
   "packages/agent/test/shared/events.test.ts",
   "packages/agent/test/shared/tool-row-state.test.ts",
-  "packages/agent/docs/extending-tau-agent.md",
 ]
 
 [contracts]
 description = "Typed shared event names and payloads"
 files = [
   "packages/agent/shared/events.ts",
-  "packages/agent/docs/extending-tau-agent.md",
 ]
+anchors = [ "packages/agent/docs/extending-tau-agent.md" ]
 
 [injected-context]
 description = "Hidden context manifests and branch reconstruction"
@@ -31,5 +33,5 @@ description = "Blocked-agent notices and persistent tool-row expansion state"
 files = [
   "packages/agent/shared/agent-blocked.ts",
   "packages/agent/shared/tool-row-state.ts",
-  "packages/agent/test/shared/tool-row-state.test.ts",
 ]
+anchors = [ "packages/agent/test/shared/tool-row-state.test.ts" ]

@@ -9,6 +9,8 @@ files = [
   "packages/agent/extensions/commit/git-change-set.ts",
   "packages/agent/extensions/commit/index.ts",
   "packages/agent/extensions/commit/review-ui.ts",
+]
+anchors = [
   "packages/agent/shared/agent-blocked.ts",
   "packages/agent/shared/git.ts",
   "packages/agent/shared/model-fallback/index.ts",
@@ -21,18 +23,12 @@ files = [
   "packages/agent/extensions/commit/git-change-set.ts",
   "packages/agent/extensions/commit/index.ts",
   "packages/agent/extensions/commit/review-ui.ts",
-  "packages/agent/shared/agent-blocked.ts",
-  "packages/agent/shared/git.ts",
-  "packages/agent/shared/model-fallback/index.ts",
-  "packages/agent/shared/text.ts",
 ]
+anchors = [ "packages/agent/shared/agent-blocked.ts", "packages/agent/shared/git.ts", "packages/agent/shared/model-fallback/index.ts", "packages/agent/shared/text.ts" ]
 [ui]
 description = "Interactive UI and its extension integration"
 files = [
   "packages/agent/extensions/commit/index.ts",
   "packages/agent/extensions/commit/review-ui.ts",
-  "packages/agent/shared/agent-blocked.ts",
-  "packages/agent/shared/git.ts",
-  "packages/agent/shared/model-fallback/index.ts",
-  "packages/agent/shared/text.ts",
 ]
+anchors = [ "packages/agent/shared/agent-blocked.ts", "packages/agent/shared/git.ts", "packages/agent/shared/model-fallback/index.ts", "packages/agent/shared/text.ts" ]

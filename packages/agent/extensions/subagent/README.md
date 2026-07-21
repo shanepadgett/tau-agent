@@ -4,11 +4,12 @@ Subagent delegates one focused task to an isolated child Pi session. It keeps th
 
 Agent definitions can override the parent model and thinking level. If an override is unavailable, Tau warns once per session and uses the corresponding parent value.
 
-Tau includes three built-in agents:
+Tau includes these built-in agents:
 
 - `generalist` handles focused analysis, review, implementation, or mixed work when no narrower agent fits. Delegated tasks should state their scope and desired depth.
 - `scout` explores local files and code with `read`, `grep`, `find`, and `ls`.
 - `web-research` researches web and code sources with `websearch`, `codesearch`, and `webfetch`.
+- `context-sync` maps meaningful uncommitted work into `.pi/contexts`. Agent-driven use is `extensions.context.sync.automation` (requires `sync.enabled`). `/context-sync` is the manual/nudge path when sync is enabled. Validation can auto-run it when validation and sync are enabled.
 
 Ask Tau to delegate a task, or let it call `subagent` with an agent name and task. Children use the parent's current working directory and inherit its model and thinking level unless their definition overrides either value. They do not receive the parent conversation. Tau loads only the extensions that own a child's declared tools, so unrelated extension hooks do not run in child sessions. When a child must inspect another repository, put its exact absolute path in the delegated task.
 

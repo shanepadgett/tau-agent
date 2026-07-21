@@ -3,18 +3,11 @@ description = "Complete and bounded context for the auto-name extension"
 
 [all]
 description = "Every extension file, direct shared dependency, test, and user-facing help"
-files = [
-  "packages/agent/extensions/auto-name/README.md",
-  "packages/agent/extensions/auto-name/index.ts",
-  "packages/agent/shared/injected-context.ts",
-  "packages/agent/shared/model-fallback/index.ts",
-  "packages/agent/shared/text.ts",
-]
+files = [ "packages/agent/extensions/auto-name/README.md", "packages/agent/extensions/auto-name/index.ts" ]
+anchors = [ "packages/agent/shared/injected-context.ts", "packages/agent/shared/model-fallback/index.ts", "packages/agent/shared/text.ts" ]
 [runtime]
 description = "Extension runtime and direct shared dependencies"
 files = [
   "packages/agent/extensions/auto-name/index.ts",
-  "packages/agent/shared/injected-context.ts",
-  "packages/agent/shared/model-fallback/index.ts",
-  "packages/agent/shared/text.ts",
 ]
+anchors = [ "packages/agent/shared/injected-context.ts", "packages/agent/shared/model-fallback/index.ts", "packages/agent/shared/text.ts" ]

@@ -3,16 +3,20 @@ description = "Complete and bounded context for the soul extension"
 
 [all]
 description = "Every extension file, direct shared dependency, test, and user-facing help"
-files = [ "packages/agent/extensions/soul/README.md", "packages/agent/extensions/soul/index.ts", "packages/agent/extensions/soul/prompt.ts", "packages/agent/extensions/soul/settings.ts", "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts", "packages/agent/test/extensions/soul/index.test.ts", "packages/agent/test/extensions/soul/prompt.test.ts" ]
+files = [ "packages/agent/extensions/soul/README.md", "packages/agent/extensions/soul/index.ts", "packages/agent/extensions/soul/prompt.ts", "packages/agent/extensions/soul/settings.ts" ]
+anchors = [ "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts", "packages/agent/test/extensions/soul/index.test.ts", "packages/agent/test/extensions/soul/prompt.test.ts" ]
 
 [runtime]
 description = "Extension runtime and direct shared dependencies"
-files = [ "packages/agent/extensions/soul/index.ts", "packages/agent/extensions/soul/prompt.ts", "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts" ]
+files = [ "packages/agent/extensions/soul/index.ts", "packages/agent/extensions/soul/prompt.ts" ]
+anchors = [ "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts" ]
 
 [settings]
 description = "Extension settings and shared settings infrastructure"
-files = [ "packages/agent/extensions/soul/settings.ts", "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts" ]
+files = [ "packages/agent/extensions/soul/settings.ts" ]
+anchors = [ "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts" ]
 
 [tests]
 description = "Extension implementation and automated tests"
-files = [ "packages/agent/extensions/soul/index.ts", "packages/agent/extensions/soul/prompt.ts", "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts", "packages/agent/test/extensions/soul/index.test.ts", "packages/agent/test/extensions/soul/prompt.test.ts" ]
+files = [ "packages/agent/extensions/soul/index.ts", "packages/agent/extensions/soul/prompt.ts", "packages/agent/test/extensions/soul/index.test.ts", "packages/agent/test/extensions/soul/prompt.test.ts" ]
+anchors = [ "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts" ]

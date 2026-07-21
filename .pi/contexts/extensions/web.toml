@@ -13,6 +13,8 @@ files = [
   "packages/agent/extensions/web/tool-output.ts",
   "packages/agent/extensions/web/webfetch.ts",
   "packages/agent/extensions/web/websearch.ts",
+]
+anchors = [
   "packages/agent/shared/tool-row-state.ts",
   "packages/agent/test/extensions/web/exa.test.ts",
   "packages/agent/test/extensions/web/helpers.ts",
@@ -31,8 +33,8 @@ files = [
   "packages/agent/extensions/web/tool-output.ts",
   "packages/agent/extensions/web/webfetch.ts",
   "packages/agent/extensions/web/websearch.ts",
-  "packages/agent/shared/tool-row-state.ts",
 ]
+anchors = [ "packages/agent/shared/tool-row-state.ts" ]
 [tests]
 description = "Extension implementation and automated tests"
 files = [
@@ -44,10 +46,10 @@ files = [
   "packages/agent/extensions/web/tool-output.ts",
   "packages/agent/extensions/web/webfetch.ts",
   "packages/agent/extensions/web/websearch.ts",
-  "packages/agent/shared/tool-row-state.ts",
   "packages/agent/test/extensions/web/exa.test.ts",
   "packages/agent/test/extensions/web/helpers.ts",
   "packages/agent/test/extensions/web/html.test.ts",
   "packages/agent/test/extensions/web/tools.test.ts",
   "packages/agent/test/extensions/web/webfetch.test.ts",
 ]
+anchors = [ "packages/agent/shared/tool-row-state.ts" ]

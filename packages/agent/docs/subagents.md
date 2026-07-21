@@ -66,5 +66,6 @@ Named tools and configured models must exist in the normally loaded child Pi env
 - `generalist` — focused analysis, review, implementation, or mixed work when no narrower agent fits
 - `scout` — local exploration with `read`, `grep`, `find`, `ls`
 - `web-research` — `websearch`, `codesearch`, `webfetch`
+- `context-sync` — maps meaningful uncommitted work into `.pi/contexts`. Offered to the coding agent when `extensions.context.sync.enabled` and `sync.automation` are true. Manual `/context-sync` remains when sync is enabled with `automation` false. Validation can auto-run it when `validation.enabled` and `sync.enabled`
 
 Ask Tau to delegate, or let it call `subagent` with an agent name and task.
