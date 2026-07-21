@@ -1,0 +1,12 @@
+name = "Cache Diagnostics"
+description = "Provider prompt-cache fingerprints and usage diagnostics"
+
+[all]
+description = "Complete and bounded context for the cache-diagnostics extension"
+files = [ ".pi/extensions/cache-diagnostics/README.md", ".pi/extensions/cache-diagnostics/index.ts" ]
+anchors = []
+
+[runtime]
+description = "Extension runtime for recording provider cache diagnostics"
+files = [ ".pi/extensions/cache-diagnostics/index.ts" ]
+anchors = []
