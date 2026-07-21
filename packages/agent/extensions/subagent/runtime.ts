@@ -43,6 +43,7 @@ function emptyUsage(): SubagentDetails["usage"] {
 
 function baseDetails(options: {
 	agent: string;
+	displayName?: string;
 	task: string;
 	status: SubagentLifecycle;
 	phase: SubagentPhase;
@@ -54,6 +55,7 @@ function baseDetails(options: {
 }): SubagentDetails {
 	return {
 		agent: options.agent,
+		displayName: options.displayName ?? options.agent,
 		...(options.threadId === undefined ? {} : { threadId: options.threadId }),
 		...(options.invocationId === undefined ? {} : { invocationId: options.invocationId }),
 		status: options.status,
@@ -116,6 +118,8 @@ export class SubagentRuntime {
 	private readonly invocations = new Map<string, ActiveInvocation>();
 	private readonly observers = new Set<SnapshotObserver>();
 	private readonly runtimeWarnings = new Set<string>();
+	private readonly nameOrdinals = new Map<string, number>();
+	private readonly assignedNames = new Set<string>();
 	private readonly pi: ExtensionAPI;
 	private lifecycleChain = Promise.resolve();
 
@@ -184,6 +188,8 @@ export class SubagentRuntime {
 				this.admitHead = 1;
 				this.admitWaiters.clear();
 				this.runtimeWarnings.clear();
+				this.nameOrdinals.clear();
+				this.assignedNames.clear();
 			}
 			await this.disposeAllThreads();
 			if (!options.permanent) this.lifecycleFence = false;
@@ -286,6 +292,7 @@ export class SubagentRuntime {
 		const { task, continuing, ctx, parentModel, parentThinking, signal, onUpdate, resolveFreshDefinition } = options;
 		const { generation, invocationId, controller, startedAt, active, admitTicket } = state;
 		let agent = options.agent;
+		let displayName = options.agent;
 		let definition = options.definition;
 		let thread: TrackedThread | undefined;
 		let threadId = continuing ? options.threadKey : undefined;
@@ -311,6 +318,7 @@ export class SubagentRuntime {
 				startedAt,
 				threadId: details.threadId ?? threadId,
 				agent: details.agent || agent,
+				displayName: details.displayName || displayName,
 			};
 			current.snapshot = next;
 			this.publish(next);
@@ -334,6 +342,7 @@ export class SubagentRuntime {
 			finish(
 				baseDetails({
 					agent: overrides.agent ?? agent,
+					displayName: overrides.displayName ?? thread?.displayName ?? displayName,
 					task,
 					status: overrides.status === "aborted" ? "aborted" : "failed",
 					phase: failPhase,
@@ -354,6 +363,7 @@ export class SubagentRuntime {
 			return finish(
 				this.terminalFromAbort(
 					agent,
+					displayName,
 					task,
 					failPhase,
 					thread?.model ?? parentModel,
@@ -383,12 +393,14 @@ export class SubagentRuntime {
 				reservedThread = existing;
 				thread = existing;
 				agent = existing.definition.name;
+				displayName = existing.displayName;
 				threadId = existing.id;
 				definition = existing.definition;
 				fanOut(
 					{
 						...active.snapshot,
 						agent,
+						displayName,
 						threadId,
 						model: existing.model,
 						thinkingLevel: existing.thinkingLevel,
@@ -402,8 +414,9 @@ export class SubagentRuntime {
 				if (!resolved.ok) return fail(resolved.error, resolved.phase);
 				definition = resolved.definition;
 				agent = definition.name;
+				displayName = this.assignDisplayName(definition);
 				threadId = `thread-${this.nextThreadId++}`;
-				fanOut({ ...active.snapshot, agent, threadId }, true);
+				fanOut({ ...active.snapshot, agent, displayName, threadId }, true);
 
 				const reserved = this.reserveFreshCapacity();
 				if (!reserved.ok) return fail(reserved.error, "queue");
@@ -448,6 +461,7 @@ export class SubagentRuntime {
 				const created = asTracked(
 					await createSubagentThread({
 						id: threadId,
+						displayName,
 						definition: selectedDefinition,
 						extensionPaths: extensionPathsForTools(this.pi, selectedDefinition.tools),
 						initialTask: task,
@@ -523,7 +537,7 @@ export class SubagentRuntime {
 			if (!retained) {
 				return {
 					content: [{ type: "text", text: result.content }],
-					details: { ...result.details, invocationId, threadId: thread.id },
+					details: { ...result.details, displayName: thread.displayName, invocationId, threadId: thread.id },
 				};
 			}
 
@@ -534,7 +548,7 @@ export class SubagentRuntime {
 						text: `Thread: ${thread.id}\nReuse with subagent({ thread: "${thread.id}", task: "..." })\n\n${result.content}`,
 					},
 				],
-				details: { ...result.details, invocationId, threadId: thread.id },
+				details: { ...result.details, displayName: thread.displayName, invocationId, threadId: thread.id },
 			};
 		} catch (error) {
 			const message = error instanceof Error ? error.message : `Agent ${agent} ${phase} failed`;
@@ -546,6 +560,7 @@ export class SubagentRuntime {
 				phase,
 				model: thread?.model ?? parentModel,
 				thinkingLevel: thread?.thinkingLevel ?? parentThinking,
+				displayName: thread?.displayName ?? displayName,
 				threadId: thread?.id ?? threadId,
 				invocationId,
 				error: message,
@@ -686,6 +701,20 @@ export class SubagentRuntime {
 		return { ok: true, token, evicted };
 	}
 
+	private assignDisplayName(definition: AgentDefinition): string {
+		const ordinal = this.nameOrdinals.get(definition.name) ?? 0;
+		this.nameOrdinals.set(definition.name, ordinal + 1);
+		const base = definition.names[ordinal % definition.names.length] ?? definition.name;
+		let cycle = Math.floor(ordinal / definition.names.length) + 1;
+		let candidate = cycle === 1 ? base : `${base}-${cycle}`;
+		while (this.assignedNames.has(candidate)) {
+			cycle += 1;
+			candidate = `${base}-${cycle}`;
+		}
+		this.assignedNames.add(candidate);
+		return candidate;
+	}
+
 	private releaseReservation(token: symbol | undefined): void {
 		if (!token) return;
 		this.startupReservations.delete(token);
@@ -697,6 +726,7 @@ export class SubagentRuntime {
 
 	private terminalFromAbort(
 		agent: string,
+		displayName: string,
 		task: string,
 		phase: SubagentPhase,
 		model: string,
@@ -706,6 +736,7 @@ export class SubagentRuntime {
 	): SubagentDetails {
 		return baseDetails({
 			agent,
+			displayName,
 			task,
 			status: "aborted",
 			phase,

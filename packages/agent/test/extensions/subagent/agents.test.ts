@@ -30,6 +30,7 @@ describe("subagent discovery", () => {
 		expect(await findProjectAgentsDir(paths.cwd)).toBe(paths.agents);
 		const trusted = await discoverAgents(paths.cwd, true);
 		expect(trusted.agents.get("scout")?.description).toBe("Project scout");
+		expect(trusted.agents.get("scout")?.names).toEqual(["scout"]);
 		expect(trusted.agents.get("generalist")?.model).toBe("openai-codex/gpt-5.6-sol");
 		expect(trusted.agents.get("generalist")?.thinking).toBe("high");
 		expect(trusted.agents.has("web-research")).toBe(true);
@@ -76,5 +77,23 @@ describe("subagent discovery", () => {
 		const definition = (await discoverAgents(paths.cwd, true)).agents.get("custom");
 		expect(definition?.model).toBe("openai-codex/gpt-5.6-sol");
 		expect(definition?.thinking).toBe("medium");
+	});
+
+	it("loads and validates display-name pools", async () => {
+		const paths = await project();
+		await Promise.all([
+			writeFile(
+				join(paths.agents, "named.md"),
+				"---\nname: named\ndescription: Named\ntools:\n  - read\nnames:\n  - Beacon\n  - Compass\n---\n\nprompt\n",
+			),
+			writeFile(
+				join(paths.agents, "duplicate.md"),
+				"---\nname: duplicate-names\ndescription: Broken names\ntools:\n  - read\nnames:\n  - Echo\n  - Echo\n---\n\nprompt\n",
+			),
+		]);
+
+		const discovery = await discoverAgents(paths.cwd, true);
+		expect(discovery.agents.get("named")?.names).toEqual(["Beacon", "Compass"]);
+		expect(discovery.invalid.get("duplicate-names")?.[0]?.reason).toContain("names must be unique");
 	});
 });

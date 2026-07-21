@@ -77,6 +77,7 @@ async function runContextSyncLocked(
 	await options.onStatus?.("Running context-sync subagent");
 	const thread = await createSubagentThread({
 		id: `context-sync-${Date.now()}`,
+		displayName: definition.names[0] ?? definition.name,
 		definition,
 		extensionPaths: extensionPathsForTools(pi, definition.tools),
 		initialTask: task,

@@ -31,6 +31,10 @@ description: Inspect API declarations and usage
 tools:
   - read
   - grep
+names:
+  - Ledger
+  - Quill
+  - Beacon
 model: openai-codex/gpt-5.4-mini
 thinking: medium
 ---
@@ -46,10 +50,13 @@ Required:
 
 Optional:
 
+- `names`: a non-empty list of unique display names
 - `model` as `provider/model`
 - `thinking`: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`
 
 Named tools and configured models must exist in the normally loaded child Pi environment (including tools from installed packages such as Tau).
+
+Tau assigns one display name to each fresh child and keeps it for follow-up turns on that thread. It cycles through the list in order. When the list wraps, reused names get numeric suffixes such as `Ledger-2`, so any number of concurrent children can still have distinct names. Without `names`, the agent name is used as a one-item pool.
 
 ## Runtime rules
 
@@ -59,6 +66,7 @@ Named tools and configured models must exist in the normally loaded child Pi env
 - Children load only the extensions that own their declared tools. Unrelated extension hooks do not run in child sessions.
 - At most four children run at once; extra calls wait in order.
 - Calls to the same retained thread run one at a time.
+- Display names identify children in Tau's tool rows and cmux dashboard; thread IDs remain the identifiers used for continuation calls.
 - Returned text is capped (50 KB / 2,000 lines); full truncated output is saved to a private temp file.
 - Interactive cmux sessions get one temporary Markdown dashboard for waiting and running invocations. It is observational only: cmux latency or failure cannot delay, fail, or reorder children. The dashboard closes shortly after the active cohort finishes. Print mode never opens it.
 

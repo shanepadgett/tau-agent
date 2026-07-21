@@ -121,7 +121,7 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 		const lines = (await parentVisibleAgents(ctx, discovery)).map((agent) => `- ${agent.name}: ${agent.description}`);
 		const activeThreads = runtime.listThreads(ctx.cwd).map((thread) => {
 			const task = thread.initialTask.replace(/\s+/g, " ").trim();
-			return `- ${thread.id} (${thread.definition.name}): ${task.length <= 160 ? task : `${task.slice(0, 159)}…`}`;
+			return `- ${thread.id} (${thread.displayName} · ${thread.definition.name}): ${task.length <= 160 ? task : `${task.slice(0, 159)}…`}`;
 		});
 		const threadSection = activeThreads.length ? `\n\nActive reusable threads:\n${activeThreads.join("\n")}` : "";
 		const prompt = `## Subagents

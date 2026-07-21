@@ -4,6 +4,8 @@ Subagent delegates one focused task to an isolated child Pi session. It keeps th
 
 Agent definitions can override the parent model and thinking level. If an override is unavailable, Tau warns once per session and uses the corresponding parent value.
 
+Each fresh child also gets a display name from its agent definition. The name stays with a retained thread. Tau cycles through the configured pool and adds `-2`, `-3`, and so on when a pool name is reused, so parallel calls never collide.
+
 Tau includes these built-in agents:
 
 - `generalist` handles focused analysis, review, implementation, or mixed work when no narrower agent fits. Delegated tasks should state their scope and desired depth.
@@ -26,6 +28,10 @@ description: Inspect API declarations and usage
 tools:
   - read
   - grep
+names:
+  - Ledger
+  - Quill
+  - Beacon
 model: openai-codex/gpt-5.6-sol
 thinking: medium
 ---
@@ -33,7 +39,7 @@ thinking: medium
 Stay within the delegated task. Return exact paths and symbols.
 ```
 
-`name`, `description`, and `tools` are required. Optional `model` uses `provider/model`; optional `thinking` accepts `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. Tool names must be unique, and `subagent` cannot be delegated. Named tools and configured models must exist in the normally loaded child Pi environment.
+`name`, `description`, and `tools` are required. Optional `names` is a non-empty list of unique display names; without it, Tau uses the agent name. Optional `model` uses `provider/model`; optional `thinking` accepts `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. Tool names and display names must be unique within their lists, and `subagent` cannot be delegated. Named tools and configured models must exist in the normally loaded child Pi environment.
 
 At most four children run at once. Additional calls wait in order. Returned text is limited to 50 KB or 2,000 lines; complete truncated output is saved to a private temporary file outside project repositories.
 

@@ -13,6 +13,12 @@ tools:
   - bash
   - patch
   - context_sync_evidence
+names:
+  - Cartographer
+  - Archivist
+  - Indexer
+  - Surveyor
+  - Curator
 model: openai-codex/gpt-5.6-luna
 thinking: high
 ---

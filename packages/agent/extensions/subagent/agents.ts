@@ -8,6 +8,7 @@ export interface AgentDefinition {
 	name: string;
 	description: string;
 	tools: string[];
+	names: string[];
 	model?: string;
 	thinking?: ThinkingLevel;
 	prompt: string;
@@ -64,7 +65,7 @@ function parseDefinition(
 		const name = typeof rawName === "string" && rawName.trim() ? rawName.trim() : fallbackName;
 		const reasons: string[] = [];
 		for (const field of fields) {
-			if (!new Set(["name", "description", "tools", "model", "thinking"]).has(field))
+			if (!new Set(["name", "description", "tools", "names", "model", "thinking"]).has(field))
 				reasons.push(`unsupported field "${field}"`);
 		}
 		if (typeof rawName !== "string" || !rawName.trim()) reasons.push("name must be a non-empty string");
@@ -81,6 +82,17 @@ function parseDefinition(
 			if (new Set(tools).size !== tools.length) reasons.push("tools must be unique");
 			if (tools.includes("subagent")) reasons.push("tool subagent is forbidden");
 		}
+		const rawNames = parsed.frontmatter.names;
+		if (rawNames !== undefined) {
+			if (!Array.isArray(rawNames) || rawNames.length === 0) reasons.push("names must be a non-empty array");
+			else {
+				const names = rawNames
+					.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+					.map((item) => item.trim());
+				if (names.length !== rawNames.length) reasons.push("names must contain non-empty strings");
+				if (new Set(names).size !== names.length) reasons.push("names must be unique");
+			}
+		}
 		if (!parsed.body.trim()) reasons.push("prompt body must be non-empty");
 		const rawModel = parsed.frontmatter.model;
 		if (rawModel !== undefined && (typeof rawModel !== "string" || !/^[^/\s]+\/[^/\s]+$/.test(rawModel.trim())))
@@ -95,6 +107,7 @@ function parseDefinition(
 				name,
 				description: (rawDescription as string).trim(),
 				tools: (rawTools as string[]).map((tool) => tool.trim()),
+				names: Array.isArray(rawNames) ? (rawNames as string[]).map((item) => item.trim()) : [name],
 				model: typeof rawModel === "string" ? rawModel.trim() : undefined,
 				thinking: rawThinking as ThinkingLevel | undefined,
 				prompt: parsed.body.trim(),

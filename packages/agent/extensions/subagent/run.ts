@@ -59,6 +59,7 @@ export type SubagentPhase = "discovery" | "queue" | "startup" | "run" | "output"
 
 export interface SubagentDetails {
 	agent: string;
+	displayName: string;
 	threadId?: string;
 	invocationId?: string;
 	status: SubagentLifecycle;
@@ -94,6 +95,7 @@ export interface SubagentInvocationSnapshot extends SubagentDetails {
 
 export interface SubagentThread {
 	id: string;
+	displayName: string;
 	definition: AgentDefinition;
 	session: AgentSession;
 	cwd: string;
@@ -202,6 +204,7 @@ export function cloneInvocationSnapshot(snapshot: SubagentInvocationSnapshot): S
 
 export async function createSubagentThread(options: {
 	id: string;
+	displayName: string;
 	definition: AgentDefinition;
 	extensionPaths: readonly string[];
 	initialTask: string;
@@ -212,6 +215,7 @@ export async function createSubagentThread(options: {
 }): Promise<SubagentThread> {
 	const {
 		id,
+		displayName,
 		definition,
 		extensionPaths,
 		initialTask,
@@ -285,6 +289,7 @@ export async function createSubagentThread(options: {
 		}
 		return {
 			id,
+			displayName,
 			definition,
 			session,
 			cwd: ctx.cwd,
@@ -321,6 +326,7 @@ export async function runSubagentTurn(options: {
 	const usage: SubagentUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 0 };
 	const details: SubagentDetails = {
 		agent: definition.name,
+		displayName: thread.displayName,
 		threadId: thread.id,
 		status: "running",
 		phase: "run",

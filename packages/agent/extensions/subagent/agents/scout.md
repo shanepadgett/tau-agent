@@ -6,6 +6,12 @@ tools:
   - grep
   - find
   - ls
+names:
+  - Pathfinder
+  - Trailblazer
+  - Lookout
+  - Tracker
+  - Ranger
 model: openai-codex/gpt-5.6-luna
 thinking: high
 ---

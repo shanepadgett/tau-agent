@@ -5,6 +5,12 @@ tools:
   - websearch
   - codesearch
   - webfetch
+names:
+  - Spider
+  - Linkhound
+  - Crawler
+  - Netscout
+  - Wayfinder
 model: openai-codex/gpt-5.6-sol
 thinking: medium
 ---

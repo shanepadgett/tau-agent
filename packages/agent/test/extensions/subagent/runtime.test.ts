@@ -25,6 +25,7 @@ const definition: AgentDefinition = {
 	name: "scout",
 	description: "Scout",
 	tools: ["read"],
+	names: ["Pathfinder", "Trailblazer", "Lookout", "Tracker", "Ranger"],
 	prompt: "look",
 	path: "/agents/scout.md",
 };
@@ -45,6 +46,7 @@ function fakeSession(): AgentSession {
 function makeThread(id: string, overrides: Partial<SubagentThread> = {}): SubagentThread {
 	return {
 		id,
+		displayName: "Pathfinder",
 		definition,
 		session: fakeSession(),
 		cwd: "/project",
@@ -84,6 +86,7 @@ function pi(): ExtensionAPI {
 function completedDetails(threadId: string): SubagentDetails {
 	return {
 		agent: "scout",
+		displayName: "Pathfinder",
 		threadId,
 		status: "completed",
 		phase: "output",
@@ -506,6 +509,33 @@ describe("SubagentRuntime", () => {
 			.filter((item) => item.id === first.details.invocationId)
 			.map((item) => item.status);
 		expect(firstStatuses.filter((status) => status === "completed").length).toBeLessThanOrEqual(1);
+		await runtime.shutdown();
+	});
+
+	it("gives batched agents unique names and suffixes a reused pool name", async () => {
+		const runtime = new SubagentRuntime(pi());
+		createSubagentThread.mockImplementation(async (options: { id: string; displayName: string }) =>
+			makeThread(options.id, { displayName: options.displayName }),
+		);
+		mockCompletedTurn();
+
+		const results = await Promise.all(
+			Array.from({ length: 6 }, (_, index) => runtime.execute(execArgs(`batch-${index}`))),
+		);
+		expect(results.map((result) => result.details.displayName)).toEqual([
+			"Pathfinder",
+			"Trailblazer",
+			"Lookout",
+			"Tracker",
+			"Ranger",
+			"Pathfinder-2",
+		]);
+		expect(new Set(results.map((result) => result.details.displayName)).size).toBe(6);
+
+		const firstThread = results[0]?.details.threadId;
+		if (!firstThread) throw new Error("first batched agent was not retained");
+		const continuation = await runtime.execute(execArgs("follow-up", true, firstThread));
+		expect(continuation.details.displayName).toBe("Pathfinder");
 		await runtime.shutdown();
 	});
 

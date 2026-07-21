@@ -81,7 +81,7 @@ export function formatDashboardMarkdown(snapshots: readonly SubagentInvocationSn
 		return lines.join("\n");
 	}
 	for (const details of ordered) {
-		const identity = details.threadId ? `${details.agent} · ${details.threadId}` : details.agent;
+		const identity = `${details.displayName} (${details.agent})`;
 		lines.push(
 			`## ${identity}`,
 			"",

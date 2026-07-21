@@ -13,6 +13,7 @@ function snapshot(overrides: Partial<SubagentInvocationSnapshot> = {}): Subagent
 		invocationId: "inv-1",
 		startedAt: 1000,
 		agent: "scout",
+		displayName: "Pathfinder",
 		threadId: "thread-1",
 		status: "running",
 		phase: "run",
@@ -124,6 +125,8 @@ describe("formatDashboardMarkdown", () => {
 		]);
 		expect(md).toContain("# Subagent dashboard");
 		expect(md).toContain("../escaped");
+		expect(md).toContain("Pathfinder (../escaped)");
+		expect(md).not.toContain("thread-1");
 		expect(md).toContain("inv-1");
 		expect(md).toContain("inv-2");
 		expect(md).toContain("one");

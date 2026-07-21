@@ -22,3 +22,8 @@ files = [ "docs/plans/subagent-cmux-observability-remediation.md", "packages/age
 description = "User-facing subagent configuration and behavior"
 files = [ "packages/agent/extensions/subagent/README.md" ]
 anchors = [ "packages/agent/docs/subagents.md" ]
+
+[display-names]
+description = "Per-agent display-name pools, session-unique assignment, and surfaced child identity"
+files = [ "packages/agent/extensions/subagent/agents.ts", "packages/agent/extensions/subagent/agents/context-sync.md", "packages/agent/extensions/subagent/agents/generalist.md", "packages/agent/extensions/subagent/agents/scout.md", "packages/agent/extensions/subagent/agents/web-research.md", "packages/agent/extensions/subagent/cmux-dashboard.ts", "packages/agent/extensions/subagent/index.ts", "packages/agent/extensions/subagent/README.md", "packages/agent/extensions/subagent/render.ts", "packages/agent/extensions/subagent/run.ts", "packages/agent/extensions/subagent/runtime.ts", "packages/agent/extensions/tau-help/help.md", "packages/agent/test/extensions/subagent/cmux-dashboard.test.ts", "packages/agent/test/extensions/subagent/runtime.test.ts" ]
+anchors = [ "packages/agent/docs/subagents.md", "packages/agent/test/extensions/subagent/agents.test.ts", "packages/agent/test/extensions/subagent/run.test.ts" ]

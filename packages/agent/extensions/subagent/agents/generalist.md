@@ -7,6 +7,12 @@ tools:
    - grep
    - find
    - ls
+names:
+  - Tinker
+  - Rivet
+  - Patch
+  - Wrench
+  - Mender
 model: openai-codex/gpt-5.6-sol
 thinking: high
 ---
