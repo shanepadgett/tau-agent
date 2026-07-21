@@ -4,6 +4,7 @@ import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { createToolRowStateStore } from "../../shared/tool-row-state.js";
 import contextSettings from "../context/settings.ts";
 import { discoverAgents, type AgentDefinition, type AgentDiscovery } from "./agents.ts";
+import { openCmuxSubagentPanel, type CmuxSubagentPanel } from "./cmux-panel.ts";
 import { renderSubagentCall, renderSubagentResult } from "./render.ts";
 import {
 	createSubagentThread,
@@ -241,6 +242,8 @@ Delegate one focused task per call. Children do not inherit parent messages. Inc
 				let releaseGlobal: (() => void) | undefined;
 				let reservedThread: SubagentThread | undefined;
 				let phase: "queue" | "startup" = "queue";
+				let panel: CmuxSubagentPanel | undefined;
+				let panelDetails: SubagentDetails | undefined;
 				try {
 					const waiting = emptyDetails(
 						agent,
@@ -252,6 +255,16 @@ Delegate one focused task per call. Children do not inherit parent messages. Inc
 						threadId,
 						undefined,
 					);
+					panelDetails = waiting;
+					// Open pane before the concurrency gate so all siblings show up immediately.
+					if (threadId) {
+						panel = await openCmuxSubagentPanel({
+							agent: definition?.name ?? agent,
+							threadId,
+							task,
+							details: waiting,
+						});
+					}
 					await onUpdate?.({ content: [{ type: "text", text: `${agent}: waiting` }], details: waiting });
 					if (thread) {
 						reservedThread = thread;
@@ -296,8 +309,10 @@ Delegate one focused task per call. Children do not inherit parent messages. Inc
 						task,
 						initial: thread.turns === 0,
 						signal: combined,
-						onUpdate: (details) =>
-							onUpdate?.({
+						panel,
+						onUpdate: (details) => {
+							panelDetails = details;
+							return onUpdate?.({
 								content: [
 									{
 										type: "text",
@@ -305,8 +320,10 @@ Delegate one focused task per call. Children do not inherit parent messages. Inc
 									},
 								],
 								details,
-							}),
+							});
+						},
 					});
+					panelDetails = result.details;
 					return {
 						content: [
 							{
@@ -329,12 +346,16 @@ Delegate one focused task per call. Children do not inherit parent messages. Inc
 						thread?.id ?? threadId,
 						message,
 					);
+					panelDetails = details;
+					panel?.update(details, true);
 					return { content: [{ type: "text", text: message }], details };
 				} finally {
 					if (reservedThread) reservedThread.pendingTurns -= 1;
 					releaseGlobal?.();
 					releaseThread?.();
 					controllers.delete(controller);
+					// Flush final paint after gate release. Dismiss delay is async — does not hold the slot.
+					if (panel && panelDetails) await panel.close(panelDetails).catch(() => undefined);
 				}
 			},
 			renderCall(args, theme, context) {

@@ -17,6 +17,7 @@ import {
 	type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import type { AgentDefinition } from "./agents.ts";
+import type { CmuxSubagentPanel } from "./cmux-panel.ts";
 
 const PREVIEW_LIMIT = 600;
 const VALUE_LIMIT = 180;
@@ -279,9 +280,10 @@ export async function runSubagentTurn(options: {
 	task: string;
 	initial: boolean;
 	signal: AbortSignal;
+	panel?: CmuxSubagentPanel;
 	onUpdate?: (details: SubagentDetails) => void | Promise<void>;
 }): Promise<{ content: string; details: SubagentDetails }> {
-	const { thread, task, initial, signal, onUpdate } = options;
+	const { thread, task, initial, signal, panel, onUpdate } = options;
 	const { definition, session } = thread;
 	const started = Date.now();
 	const usage: SubagentUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 0 };
@@ -304,11 +306,13 @@ export async function runSubagentTurn(options: {
 	let updateChain = Promise.resolve();
 	let lastTextUpdate = 0;
 	const turnMessages: AssistantMessage[] = [];
+	panel?.update(structuredClone(details), true);
 	const publish = (force = false) => {
 		const now = Date.now();
 		if (!force && now - lastTextUpdate < 100) return;
 		lastTextUpdate = now;
 		details.durationMs = now - started;
+		panel?.update(structuredClone(details), force);
 		const snapshot = structuredClone(details);
 		snapshot.actions = snapshot.actions.slice(-5);
 		updateChain = updateChain.then(() => onUpdate?.(snapshot)).catch(() => undefined);
@@ -321,6 +325,9 @@ export async function runSubagentTurn(options: {
 				publish();
 			} else if (event.type === "message_end" && event.message.role === "assistant") {
 				turnMessages.push(event.message);
+				details.response = capped(textOf(event.message), PREVIEW_LIMIT);
+				details.currentActivity = undefined;
+				publish(true);
 			} else if (event.type === "tool_execution_start") {
 				details.toolCalls += 1;
 				const summary = `${event.toolName} ${capped(event.args)}`.trim();
