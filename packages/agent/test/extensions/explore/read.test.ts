@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { generateUnifiedPatch, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { createExploreReadTool } from "../../../extensions/explore/read.ts";
 import { createReadSnapshotStore } from "../../../extensions/explore/read-snapshots.ts";
 import {
 	branchExtensionContext,
 	createWorkspace,
+	executeExploreRead,
 	extensionContext,
 	firstText,
 	renderedText,
@@ -29,13 +30,21 @@ function branchContext(
 	appendRead(result: PersistedResult): void;
 } {
 	const branch = [...initial];
+	let readIndex = 0;
 	return {
 		branch,
 		ctx: branchExtensionContext(cwd, branch),
 		appendRead(result) {
+			readIndex += 1;
 			branch.push({
 				type: "message",
-				message: { role: "toolResult", toolName: "read", content: result.content, details: result.details },
+				message: {
+					role: "toolResult",
+					toolName: "read",
+					toolCallId: `read-${readIndex}`,
+					content: result.content,
+					details: result.details,
+				},
 			});
 		},
 	};
@@ -220,6 +229,7 @@ describe("explore read", () => {
 					customType: "tau.autoread",
 					content: `file.txt\n${numbered}`,
 					details: {
+						rowId: "autoread:numbered",
 						path: "file.txt",
 						cwd: workspace.dir,
 						status: "read",
@@ -277,6 +287,7 @@ describe("explore read", () => {
 					message: {
 						role: "toolResult",
 						toolName: "read",
+						toolCallId: "baseline",
 						content: [{ type: "text", text: baselineText }],
 						details: { readCache: { ...common, servedHash: baselineHash, mode: "baseline" } },
 					},
@@ -286,7 +297,13 @@ describe("explore read", () => {
 					message: {
 						role: "toolResult",
 						toolName: "read",
-						content: [{ type: "text", text: "[read diff]" }],
+						toolCallId: "diff",
+						content: [
+							{
+								type: "text",
+								text: `[read: 1 lines added, 1 removed of 100]\n${generateUnifiedPatch("file.txt", baselineText, currentText, 3)}`,
+							},
+						],
 						details: {
 							readCache: {
 								...common,
@@ -300,14 +317,10 @@ describe("explore read", () => {
 			]);
 			const nextText = currentText.replace("line fifty", "changed");
 			await workspace.write("file.txt", nextText);
-			const restarted = await createExploreReadTool(testRowState).execute(
-				"restart",
-				{ path: "file.txt" },
-				undefined,
-				undefined,
-				context.ctx,
-			);
-			expect(firstText(restarted)).toBe(nextText);
+			const restarted = await executeExploreRead(context.ctx, "restart", "file.txt");
+			expect(firstText(restarted)).toContain("-line fifty");
+			expect(firstText(restarted)).toContain("+changed");
+			expect(restarted.details?.readCache?.mode).toBe("diff");
 			await workspace.write("file.txt", currentText);
 			const unchanged = await tool.execute("same", { path: "file.txt" }, undefined, undefined, context.ctx);
 			expect(firstText(unchanged)).toBe("unchanged, 100 lines");
@@ -350,6 +363,7 @@ describe("explore read", () => {
 						customType: "tau.autoread",
 						content: "file.txt\n1: one\nnot reversible",
 						details: {
+							rowId: "autoread:malformed",
 							status: "read",
 							readCache: {
 								v: 1,
@@ -367,13 +381,7 @@ describe("explore read", () => {
 					},
 				},
 			]);
-			const result = await createExploreReadTool(testRowState).execute(
-				"read",
-				{ path: "file.txt" },
-				undefined,
-				undefined,
-				context.ctx,
-			);
+			const result = await executeExploreRead(context.ctx, "read", "file.txt");
 			expect(firstText(result)).toBe(source);
 		} finally {
 			await workspace.cleanup();
@@ -446,6 +454,9 @@ describe("explore read", () => {
 								},
 							},
 						];
+					},
+					buildContextEntries() {
+						return this.getBranch();
 					},
 					getSessionId() {
 						return "session";

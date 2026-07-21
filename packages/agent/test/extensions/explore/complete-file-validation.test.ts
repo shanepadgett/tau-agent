@@ -29,6 +29,7 @@ function baselineMessage(cwd: string, path: string, source: string, presentation
 		customType: "tau.autoread",
 		content: `${path}\n${body}`,
 		details: {
+			rowId: `autoread:${path}`,
 			path,
 			cwd,
 			status: "read",
@@ -144,6 +145,7 @@ describe("deterministic complete-file validation", () => {
 			const malformed = {
 				role: "toolResult",
 				toolName: "read",
+				toolCallId: "malformed",
 				content: [{ type: "text", text: "not the source" }],
 				details: {
 					readCache: createCompleteFileMeta({
@@ -201,7 +203,7 @@ describe("deterministic complete-file validation", () => {
 		}
 	});
 
-	it("falls back after snapshot eviction and after a lifecycle epoch changes", async () => {
+	it("reconstructs persisted diffs after snapshot eviction and falls back after a lifecycle epoch changes", async () => {
 		const workspace = await createWorkspace();
 		try {
 			const first = Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join("\n");
@@ -213,6 +215,7 @@ describe("deterministic complete-file validation", () => {
 			snapshots.set(hash(second), second, Buffer.byteLength(second), epoch);
 			for (let index = 0; index < 16; index += 1) snapshots.set(`filler-${index}`, "filler", 1024 * 1024, epoch);
 			const initial = baselineMessage(workspace.dir, "file.txt", first);
+			const diffResponse = `[read: 1 lines added, 1 removed of 100]\n${generateUnifiedPatch("file.txt", first, second, 3)}`;
 			const diffMeta = createCompleteFileMeta({
 				pathKey: resolve(workspace.dir, "file.txt"),
 				presentation: "plain",
@@ -220,7 +223,7 @@ describe("deterministic complete-file validation", () => {
 				baseHash: hash(first),
 				mode: "diff",
 				sourceText: second,
-				returnedText: "[prior diff]",
+				returnedText: diffResponse,
 				totalLines: 100,
 				summary: "+1 -1",
 			});
@@ -231,7 +234,13 @@ describe("deterministic complete-file validation", () => {
 					message: {
 						role: "toolResult",
 						toolName: "read",
-						content: [{ type: "text", text: "[prior diff]" }],
+						toolCallId: "prior-diff",
+						content: [
+							{
+								type: "text",
+								text: diffResponse,
+							},
+						],
 						details: { readCache: diffMeta },
 					},
 				},
@@ -243,8 +252,9 @@ describe("deterministic complete-file validation", () => {
 				undefined,
 				branchExtensionContext(workspace.dir, branch),
 			);
-			expect(firstText(evicted)).toBe(current);
-			expect(evicted.details?.readCache?.mode).toBe("baseline");
+			expect(firstText(evicted)).toContain("-line fifty");
+			expect(firstText(evicted)).toContain("+current line");
+			expect(evicted.details?.readCache?.mode).toBe("diff");
 
 			const staleSnapshots: ReadSnapshotStore = {
 				get: () => undefined,

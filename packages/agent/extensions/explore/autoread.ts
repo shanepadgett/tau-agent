@@ -12,7 +12,7 @@ const AUTOREAD_MESSAGE_TYPE = "tau.autoread";
 
 type AutoreadStatus = "reading" | "read" | "failed";
 
-interface AutoreadDetails {
+export interface AutoreadDetails {
 	rowId: string;
 	path: string;
 	cwd: string;
@@ -21,6 +21,59 @@ interface AutoreadDetails {
 	status: AutoreadStatus;
 	error?: string;
 	readCache?: ReadCacheMetaV1;
+}
+
+export interface PreparedAutoreadMessage {
+	customType: typeof AUTOREAD_MESSAGE_TYPE;
+	content: string;
+	display: true;
+	details: AutoreadDetails & { status: "read"; readCache: ReadCacheMetaV1 };
+}
+
+export async function prepareAutoreadMessage(options: {
+	rowId: string;
+	path: string;
+	cwd: string;
+	source: string;
+	batchId: string;
+	signal: AbortSignal | undefined;
+	isLifecycleCurrent: () => boolean;
+	maximumBytes?: number;
+}): Promise<PreparedAutoreadMessage> {
+	assertPreparationCurrent(options.signal, options.isLifecycleCurrent);
+	const pathKey = resolve(options.cwd, options.path);
+	const bytes = options.signal ? await readFile(pathKey, { signal: options.signal }) : await readFile(pathKey);
+	if (options.maximumBytes !== undefined && bytes.byteLength > options.maximumBytes) {
+		throw new Error(`File exceeds the ${options.maximumBytes}-byte complete-file snapshot limit`);
+	}
+	const content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+	const messageContent = `${options.path}\n${content}`;
+	const totalLines = content.split("\n").length;
+	const readCache = createCompleteFileMeta({
+		pathKey,
+		presentation: "plain",
+		servedHash: createHash("sha256").update(content, "utf8").digest("hex"),
+		mode: "baseline",
+		sourceText: content,
+		returnedText: messageContent,
+		totalLines,
+		summary: `${totalLines} lines`,
+	}) satisfies ReadCacheMetaV1;
+	assertPreparationCurrent(options.signal, options.isLifecycleCurrent);
+	return {
+		customType: AUTOREAD_MESSAGE_TYPE,
+		content: messageContent,
+		display: true,
+		details: {
+			rowId: options.rowId,
+			path: options.path,
+			cwd: options.cwd,
+			source: options.source,
+			batchId: options.batchId,
+			status: "read",
+			readCache,
+		},
+	};
 }
 
 export function registerAutoread(pi: ExtensionAPI, rowState: ToolRowStateStore): void {
@@ -52,28 +105,12 @@ export function registerAutoread(pi: ExtensionAPI, rowState: ToolRowStateStore):
 					batchId: event.batchId,
 				} satisfies Omit<AutoreadDetails, "status" | "error">;
 				try {
-					const pathKey = resolve(event.cwd, file.path);
-					const bytes = await readFile(pathKey);
-					const content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
-					const messageContent = `${file.path}\n${content}`;
-					const totalLines = content.split("\n").length;
-					const readCache = createCompleteFileMeta({
-						pathKey,
-						presentation: "plain",
-						servedHash: createHash("sha256").update(bytes).digest("hex"),
-						mode: "baseline",
-						sourceText: content,
-						returnedText: messageContent,
-						totalLines,
-						summary: `${totalLines} lines`,
-					}) satisfies ReadCacheMetaV1;
-					if (generation !== lifecycleGeneration) return;
-					pi.sendMessage({
-						customType: AUTOREAD_MESSAGE_TYPE,
-						content: messageContent,
-						display: true,
-						details: { ...details, status: "read", readCache },
+					const message = await prepareAutoreadMessage({
+						...details,
+						signal: undefined,
+						isLifecycleCurrent: () => generation === lifecycleGeneration,
 					});
+					pi.sendMessage(message);
 				} catch (error) {
 					if (generation !== lifecycleGeneration) return;
 					const message = error instanceof Error ? error.message : String(error);
@@ -93,6 +130,11 @@ export function registerAutoread(pi: ExtensionAPI, rowState: ToolRowStateStore):
 		if (!details) return undefined;
 		return new AutoreadMessageComponent(rowState, details.rowId, details.path, details.status, theme);
 	});
+}
+
+function assertPreparationCurrent(signal: AbortSignal | undefined, isLifecycleCurrent: () => boolean): void {
+	signal?.throwIfAborted();
+	if (!isLifecycleCurrent()) throw new Error("Autoread preparation crossed a session lifecycle boundary");
 }
 
 function readAutoreadRequestedEvent(value: unknown): TauAgentEvents["tau:autoread.requested"] | undefined {
@@ -153,6 +195,7 @@ class AutoreadMessageComponent {
 		this.path = path;
 		this.status = status;
 		this.theme = theme;
+		this.rowState.watch(this.rowId, () => this.invalidate());
 	}
 
 	render(width: number): string[] {
@@ -164,7 +207,10 @@ class AutoreadMessageComponent {
 		}).render(width);
 	}
 
-	invalidate(): void {}
+	invalidate(): void {
+		// Rendering is stateless; this watcher gives the owning custom-message row
+		// the invalidation signal needed to redraw after a row-state snapshot.
+	}
 
 	private markerState(): MarkerState {
 		if (this.rowState.get(this.rowId) === "pruned") return "warning";

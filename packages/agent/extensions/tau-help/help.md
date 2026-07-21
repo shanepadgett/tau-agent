@@ -30,6 +30,10 @@ Adds `/commit` for semantic commit grouping, review, and committing selected rep
 
 Adds `/context` to select reusable repository work scopes from `.pi/contexts`, and `/context-sync` or `/context-sync <nudge>` for human-driven catalog sync (optional nudge). Escape cancels a running manual sync. When `sync.automation` is on, the coding agent can also run the `context-sync` subagent after meaningful uncommitted work. `sync.enabled` is the master switch for command, automation, and validation auto-run. Entry `files` are autoread; entry `anchors` are unloaded navigation paths. Context validation is off by default; when on (and sync enabled), Tau auto-runs context-sync on failure. Folder names are tabs, TOML files are concepts, and TOML sections are selectable entries.
 
+## context-pruning
+
+Gives the agent `context_prune` for removing substantial stale tool evidence after broad exploration converges. The agent records durable conclusions before creating an anchor, can retain exact exchanges or current file knowledge, and continues the task automatically. Context markers occasionally steer the agent after tool-heavy growth and become more direct under pressure. Run `/prune` with no arguments to request an anchor manually. Session history remains unchanged, and anchors, markers, and pruned-row state follow the active branch.
+
 ## explore
 
 Replaces Pi’s filesystem inspection tools with compact Tau versions: `ls`, `find`, `grep`, and `read`. They produce smaller model payloads and readable tool rows. Repeated `read` calls return unchanged markers or useful diffs when branch history proves the agent already saw the base content. A failed patch unlocks one normal reread of the affected path. `/read-stats` shows estimated token and cost savings for the current chat and whole session.

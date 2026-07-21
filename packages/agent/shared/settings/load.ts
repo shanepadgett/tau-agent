@@ -1,4 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { IsObject, type TSchema } from "typebox";
 import { Value } from "typebox/value";
 import type { JsonObject, TauExtensionSettingsSpec } from "./define.ts";
 import { asObject, readJsonStatus, writeJsonObject } from "./json.ts";
@@ -22,7 +23,9 @@ export async function loadTauExtensionSettings<TDefaults extends JsonObject>(
 	if (projectStatus?.exists && projectStatus.ok)
 		merged = mergeSettings(merged, extensionSection(projectStatus.value, spec.key));
 
-	return Value.Check(spec.schema, merged) ? merged : spec.defaults;
+	if (Value.Check(spec.schema, merged)) return merged;
+	const repaired = replaceInvalidProperties(spec.schema, merged, spec.defaults);
+	return repaired !== NO_DEFAULT && Value.Check(spec.schema, repaired) ? (repaired as TDefaults) : spec.defaults;
 }
 
 export async function updateTauExtensionSettings<TDefaults extends JsonObject>(
@@ -56,4 +59,78 @@ async function updateTauSettings(
 
 function extensionSection(root: JsonObject, key: string): JsonObject | undefined {
 	return asObject(asObject(root.extensions)?.[key]);
+}
+
+const NO_DEFAULT = Symbol("no-default");
+
+function replaceInvalidProperties(
+	schema: TSchema,
+	value: unknown,
+	documentedDefault: unknown | typeof NO_DEFAULT,
+): unknown | typeof NO_DEFAULT {
+	if (Value.Check(schema, value)) return value;
+
+	const valueObject = asObject(value);
+	if (IsObject(schema) && valueObject) {
+		const defaultObject = documentedDefault === NO_DEFAULT ? undefined : asObject(documentedDefault);
+		const repaired: JsonObject = {};
+		const required = new Set(Array.isArray(schema.required) ? schema.required : []);
+		for (const [key, propertySchema] of Object.entries(schema.properties)) {
+			if (!Object.hasOwn(valueObject, key)) {
+				if (!required.has(key)) continue;
+				const requiredDefault = propertyDefault(propertySchema, defaultObject, key);
+				if (requiredDefault === NO_DEFAULT) return validatedDefault(schema, documentedDefault);
+				repaired[key] = Value.Clone(requiredDefault);
+				continue;
+			}
+
+			const propertyValue = replaceInvalidProperties(
+				propertySchema,
+				valueObject[key],
+				propertyDefault(propertySchema, defaultObject, key),
+			);
+			if (propertyValue !== NO_DEFAULT) repaired[key] = propertyValue;
+			else if (required.has(key)) return validatedDefault(schema, documentedDefault);
+		}
+
+		const schemaObject = asObject(schema);
+		const additionalProperties = schemaObject?.additionalProperties;
+		if (additionalProperties !== false) {
+			for (const [key, additionalValue] of Object.entries(valueObject)) {
+				if (Object.hasOwn(schema.properties, key)) continue;
+				if (additionalProperties === undefined || additionalProperties === true) repaired[key] = additionalValue;
+				else {
+					const repairedAdditional = replaceInvalidProperties(
+						additionalProperties as TSchema,
+						additionalValue,
+						NO_DEFAULT,
+					);
+					if (repairedAdditional !== NO_DEFAULT) repaired[key] = repairedAdditional;
+				}
+			}
+		}
+
+		if (Value.Check(schema, repaired)) return repaired;
+	}
+
+	return validatedDefault(schema, documentedDefault);
+}
+
+function propertyDefault(
+	schema: TSchema,
+	defaultObject: JsonObject | undefined,
+	key: string,
+): unknown | typeof NO_DEFAULT {
+	if (defaultObject && Object.hasOwn(defaultObject, key)) return defaultObject[key];
+	const schemaObject = asObject(schema);
+	return schemaObject && Object.hasOwn(schemaObject, "default") ? schemaObject.default : NO_DEFAULT;
+}
+
+function validatedDefault(
+	schema: TSchema,
+	documentedDefault: unknown | typeof NO_DEFAULT,
+): unknown | typeof NO_DEFAULT {
+	return documentedDefault !== NO_DEFAULT && Value.Check(schema, documentedDefault)
+		? Value.Clone(documentedDefault)
+		: NO_DEFAULT;
 }

@@ -44,6 +44,17 @@ export type TauAgentEvents = {
 		rowId: string;
 		state?: ToolRowVisualState;
 	};
+	/** @internal Complete-state replay for Tau-owned tool-row renderers. */
+	"tau:tool-row-state.snapshot.requested": {
+		requester: string;
+	};
+	/** @internal Complete-state replay for Tau-owned tool-row renderers. */
+	"tau:tool-row-state.snapshot": {
+		states: ReadonlyArray<{
+			rowId: string;
+			state: ToolRowVisualState;
+		}>;
+	};
 };
 
 export interface TauFooterItem {

@@ -1,8 +1,19 @@
-import { createEventBus, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { createHash } from "node:crypto";
+import { createEventBus, type ExtensionAPI, type Theme } from "@earendil-works/pi-coding-agent";
+import type { Component } from "@earendil-works/pi-tui";
 import { describe, expect, it, vi } from "vitest";
-import { registerAutoread } from "../../../extensions/explore/autoread.ts";
+import { prepareAutoreadMessage, registerAutoread } from "../../../extensions/explore/autoread.ts";
 import { createExploreReadTool } from "../../../extensions/explore/read.ts";
-import { branchExtensionContext, createWorkspace, firstText, testRowState } from "./helpers.ts";
+import type { ToolRowStateStore } from "../../../shared/tool-row-state.ts";
+import {
+	branchExtensionContext,
+	createWorkspace,
+	executeExploreRead,
+	firstText,
+	renderedText,
+	testRowState,
+	testTheme,
+} from "./helpers.ts";
 
 function autoreadHarness(): {
 	messages: unknown[];
@@ -47,16 +58,139 @@ function contextWithMessage(cwd: string, message: unknown) {
 }
 
 async function readWithMessage(cwd: string, path: string, message: unknown) {
-	return createExploreReadTool(testRowState).execute(
-		"read",
-		{ path },
-		undefined,
-		undefined,
-		contextWithMessage(cwd, message),
-	);
+	return executeExploreRead(contextWithMessage(cwd, message), "read", path);
 }
 
 describe("explore autoread", () => {
+	it("watches row-state snapshots so existing autoread rows can redraw as pruned", () => {
+		let watchedRowId: string | undefined;
+		let invalidate: (() => void) | undefined;
+		const visualState: { value: "pruned" | undefined } = { value: undefined };
+		const rowState: ToolRowStateStore = {
+			get: () => visualState.value,
+			watch(rowId, callback) {
+				watchedRowId = rowId;
+				invalidate = callback;
+			},
+			clear() {},
+		};
+		type Renderer = (
+			message: { details: unknown },
+			options: { expanded: boolean },
+			theme: Theme,
+		) => Component | undefined;
+		let renderer: Renderer | undefined;
+		const pi = {
+			events: createEventBus(),
+			on() {},
+			registerMessageRenderer(_type: string, candidate: Renderer) {
+				renderer = candidate;
+			},
+		} as unknown as ExtensionAPI;
+		registerAutoread(pi, rowState);
+		if (!renderer) throw new Error("expected autoread renderer");
+		const component = renderer(
+			{
+				details: {
+					rowId: "row",
+					path: "file.ts",
+					cwd: "/tmp",
+					source: "explore",
+					batchId: "batch",
+					status: "read",
+				},
+			},
+			{ expanded: false },
+			testTheme,
+		);
+		expect(watchedRowId).toBe("row");
+		const before = renderedText(component);
+		expect(before).toContain("file.ts");
+		visualState.value = "pruned";
+		if (!invalidate) throw new Error("expected row-state invalidator");
+		invalidate();
+		const after = renderedText(component);
+		expect(after).toContain("file.ts");
+		expect(after).not.toBe(before);
+	});
+
+	it("prepares a normal autoread message without publishing it", async () => {
+		const workspace = await createWorkspace();
+		try {
+			const source = "first line\nsecond line";
+			await workspace.write("file.txt", source);
+			const harness = autoreadHarness();
+			const message = await prepareAutoreadMessage({
+				rowId: "anchor:0",
+				path: "file.txt",
+				cwd: workspace.dir,
+				source: "context-pruning",
+				batchId: "anchor",
+				signal: undefined,
+				isLifecycleCurrent: () => true,
+			});
+
+			expect(harness.messages).toEqual([]);
+			expect(message).toMatchObject({
+				customType: "tau.autoread",
+				content: `file.txt\n${source}`,
+				display: true,
+				details: {
+					rowId: "anchor:0",
+					path: "file.txt",
+					cwd: workspace.dir,
+					source: "context-pruning",
+					batchId: "anchor",
+					status: "read",
+					readCache: {
+						v: 1,
+						scopeKey: "full",
+						presentation: "plain",
+						mode: "baseline",
+						servedHash: createHash("sha256").update(source).digest("hex"),
+						totalLines: 2,
+						summary: "2 lines",
+					},
+				},
+			});
+		} finally {
+			await workspace.cleanup();
+		}
+	});
+
+	it("cancels preparation and rejects stale lifecycle work", async () => {
+		const workspace = await createWorkspace();
+		try {
+			await workspace.write("file.txt", "source");
+			const controller = new AbortController();
+			controller.abort();
+			await expect(
+				prepareAutoreadMessage({
+					rowId: "abort:0",
+					path: "file.txt",
+					cwd: workspace.dir,
+					source: "context-pruning",
+					batchId: "abort",
+					signal: controller.signal,
+					isLifecycleCurrent: () => true,
+				}),
+			).rejects.toMatchObject({ name: "AbortError" });
+			await expect(
+				prepareAutoreadMessage({
+					rowId: "stale:0",
+					path: "file.txt",
+					cwd: workspace.dir,
+					source: "context-pruning",
+					batchId: "stale",
+					signal: undefined,
+					isLifecycleCurrent: () => false,
+				}),
+			).rejects.toThrow("crossed a session lifecycle boundary");
+		} finally {
+			await workspace.cleanup();
+		}
+	});
+
 	it("establishes a plain complete-file baseline for unchanged reads and diffs", async () => {
 		const workspace = await createWorkspace();
 		try {
@@ -103,7 +237,20 @@ describe("explore autoread", () => {
 				files: [{ path: "missing.txt" }],
 			});
 			const message = harness.messages[0] as Record<string, unknown>;
-			expect(message).toMatchObject({ details: { status: "failed" } });
+			expect(message).toMatchObject({
+				customType: "tau.autoread",
+				content: expect.stringMatching(/^missing\.txt\nAutoread failed: /),
+				display: true,
+				details: {
+					rowId: "batch:0",
+					path: "missing.txt",
+					cwd: workspace.dir,
+					source: "context",
+					batchId: "batch",
+					status: "failed",
+					error: expect.any(String),
+				},
+			});
 			await workspace.write("missing.txt", "current source");
 			const result = await readWithMessage(workspace.dir, "missing.txt", message);
 			expect(firstText(result)).toBe("current source");

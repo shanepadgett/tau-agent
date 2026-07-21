@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import type { Component } from "@earendil-works/pi-tui";
+import { createExploreReadTool } from "../../../extensions/explore/read.ts";
 import { firstTextContent } from "../../../extensions/explore/result.ts";
 import type { ToolRowStateStore } from "../../../shared/tool-row-state.ts";
 
@@ -61,10 +62,24 @@ export function branchExtensionContext(cwd: string, branch: unknown[]): Extensio
 		...extensionContext(cwd),
 		sessionManager: {
 			getBranch: () => branch,
+			buildContextEntries: () => {
+				let start = 0;
+				for (let index = 0; index < branch.length; index += 1) {
+					const entry = branch[index];
+					if (entry && typeof entry === "object" && (entry as Record<string, unknown>).type === "compaction") {
+						start = index + 1;
+					}
+				}
+				return branch.slice(start);
+			},
 			getSessionId: () => "session",
 			getLeafId: () => "leaf",
 		},
 	} as unknown as ExtensionContext;
+}
+
+export function executeExploreRead(ctx: ExtensionContext, toolCallId: string, path: string) {
+	return createExploreReadTool(testRowState).execute(toolCallId, { path }, undefined, undefined, ctx);
 }
 
 interface TestToolRenderContext<TArgs> {

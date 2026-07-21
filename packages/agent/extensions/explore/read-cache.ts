@@ -1,6 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { resolve } from "node:path";
-import { COMPLETE_FILE_SCOPE, decodeCompleteFileSource } from "./full-file-knowledge.ts";
+import { replayContextPruningState } from "../../shared/context-pruning-state.ts";
+import { applyCompleteFileDiff, COMPLETE_FILE_SCOPE, decodeCompleteFileSource } from "./full-file-knowledge.ts";
 
 export type ReadCacheMode = "baseline" | "recovery" | "unchanged" | "diff";
 export type ReadCachePresentation = "plain" | "line-numbered";
@@ -19,14 +20,32 @@ export interface ReadCacheMetaV1 {
 	summary: string;
 }
 
-interface ScopeTrust {
+export interface ReadCacheScopeTrust {
 	hash: string;
 	text?: string;
+	rowIds: readonly string[];
 }
 
-interface ReplayState {
-	trust: Map<string, Map<string, ScopeTrust>>;
-	unlockedPaths: Set<string>;
+export interface AcceptedReadCacheRow {
+	rowId: string;
+	pathKey: string;
+	scopeKey: string;
+	meta: ReadCacheMetaV1;
+	dependencyRowIds: readonly string[];
+}
+
+export interface CompleteFileDependencyChain {
+	pathKey: string;
+	servedHash: string;
+	rowIds: readonly string[];
+	sourceText: string;
+}
+
+export interface ReadCacheReplayResult {
+	scopeTrust: ReadonlyMap<string, ReadonlyMap<string, ReadCacheScopeTrust>>;
+	acceptedRows: readonly AcceptedReadCacheRow[];
+	completeFileChains: ReadonlyMap<string, CompleteFileDependencyChain>;
+	failedPatchRecoveryPaths: ReadonlySet<string>;
 }
 
 export interface ReadCacheDecision {
@@ -42,12 +61,18 @@ export interface ReadCacheStore {
 export function createReadCacheStore(): ReadCacheStore {
 	return {
 		decision(ctx, pathKey, scopeKey) {
-			const state = replay(ctx);
-			const trust = state.trust.get(pathKey)?.get(scopeKey);
+			const manager = ctx.sessionManager;
+			if (!manager) {
+				return { baseHash: undefined, baselineText: undefined, recovery: false };
+			}
+			const pruning = replayContextPruningState(manager.getBranch());
+			const ignoredRowIds = new Set([...pruning.prunedToolCallIds, ...pruning.prunedAutoreadRowIds]);
+			const state = replayReadCache(manager.buildContextEntries(), ctx.cwd, ignoredRowIds);
+			const trust = state.scopeTrust.get(pathKey)?.get(scopeKey);
 			return {
 				baseHash: trust?.hash,
 				baselineText: trust?.text,
-				recovery: state.unlockedPaths.has(pathKey),
+				recovery: state.failedPatchRecoveryPaths.has(pathKey),
 			};
 		},
 	};
@@ -88,44 +113,73 @@ export function readMetaFromMessage(message: unknown): ReadCacheMetaV1 | undefin
 	return parseReadCacheMeta(message.details.readCache);
 }
 
-function replay(ctx: ExtensionContext): ReplayState {
-	const state: ReplayState = { trust: new Map(), unlockedPaths: new Set() };
-	const manager = ctx.sessionManager;
-	if (!manager) return state;
-	const branch = manager.getBranch();
-	let start = 0;
-	for (let index = 0; index < branch.length; index += 1) {
-		const entry = branch[index];
-		if (isRecord(entry) && entry.type === "compaction") start = index + 1;
-	}
-
-	for (const entry of branch.slice(start)) {
+export function replayReadCache(
+	entries: readonly unknown[],
+	cwd: string,
+	ignoredRowIds: ReadonlySet<string> = new Set(),
+): ReadCacheReplayResult {
+	const trust = new Map<string, Map<string, ReadCacheScopeTrust>>();
+	const acceptedRows: AcceptedReadCacheRow[] = [];
+	const failedPatchRecoveryPaths = new Set<string>();
+	for (const entry of entries) {
 		if (!isRecord(entry)) continue;
 		let message: unknown;
 		if (entry.type === "message" && "message" in entry) message = entry.message;
 		else if (entry.type === "custom_message") message = entry;
 		else continue;
-		const meta = readMetaFromMessage(message);
-		if (meta) {
-			applyReadMeta(state, message, meta);
+		const parsedMeta = readMetaFromMessage(message);
+		if (parsedMeta) {
+			const rowId = readRowId(message);
+			if (rowId && ignoredRowIds.has(rowId)) continue;
+			const pathKey = resolve(cwd, parsedMeta.pathKey);
+			const meta = pathKey === parsedMeta.pathKey ? parsedMeta : { ...parsedMeta, pathKey };
+			if (rowId && applyReadMeta(trust, failedPatchRecoveryPaths, message, meta, rowId)) {
+				const acceptedTrust = trust.get(meta.pathKey)?.get(meta.scopeKey);
+				if (acceptedTrust) {
+					acceptedRows.push({
+						rowId,
+						pathKey: meta.pathKey,
+						scopeKey: meta.scopeKey,
+						meta,
+						dependencyRowIds: [...acceptedTrust.rowIds],
+					});
+				}
+			}
 			continue;
 		}
-		for (const path of failedPatchPaths(message, ctx.cwd)) state.unlockedPaths.add(path);
+		for (const path of failedPatchPaths(message, cwd)) failedPatchRecoveryPaths.add(path);
 	}
-	return state;
+	const completeFileChains = new Map<string, CompleteFileDependencyChain>();
+	for (const [pathKey, scopes] of trust) {
+		const complete = scopes.get(COMPLETE_FILE_SCOPE);
+		if (!complete || complete.text === undefined) continue;
+		completeFileChains.set(pathKey, {
+			pathKey,
+			servedHash: complete.hash,
+			rowIds: [...complete.rowIds],
+			sourceText: complete.text,
+		});
+	}
+	return { scopeTrust: trust, acceptedRows, completeFileChains, failedPatchRecoveryPaths };
 }
 
-function applyReadMeta(state: ReplayState, message: unknown, meta: ReadCacheMetaV1): void {
-	const existing = state.trust.get(meta.pathKey)?.get(meta.scopeKey);
+function applyReadMeta(
+	trust: Map<string, Map<string, ReadCacheScopeTrust>>,
+	failedPatchRecoveryPaths: Set<string>,
+	message: unknown,
+	meta: ReadCacheMetaV1,
+	rowId: string,
+): boolean {
+	const existing = trust.get(meta.pathKey)?.get(meta.scopeKey);
 	if (meta.mode === "baseline" || meta.mode === "recovery") {
 		let text: string | undefined;
 		if (meta.scopeKey === COMPLETE_FILE_SCOPE) {
-			if (!isRecord(message)) return;
+			if (!isRecord(message)) return false;
 			let pathHeader: string | undefined;
 			if (message.customType === "tau.autoread") {
-				if (!isRecord(message.details)) return;
-				if (typeof message.details.path !== "string" || typeof message.details.cwd !== "string") return;
-				if (resolve(message.details.cwd, message.details.path) !== meta.pathKey) return;
+				if (!isRecord(message.details)) return false;
+				if (typeof message.details.path !== "string" || typeof message.details.cwd !== "string") return false;
+				if (resolve(message.details.cwd, message.details.path) !== meta.pathKey) return false;
 				pathHeader = message.details.path;
 			}
 			const decoded = decodeCompleteFileSource({
@@ -135,19 +189,44 @@ function applyReadMeta(state: ReplayState, message: unknown, meta: ReadCacheMeta
 				presentation: meta.presentation,
 				servedHash: meta.servedHash,
 			});
-			if (!decoded.valid || decoded.text === undefined) return;
+			if (!decoded.valid || decoded.text === undefined) return false;
 			text = decoded.text;
 		}
-		setTrust(state.trust, meta.pathKey, meta.scopeKey, { hash: meta.servedHash, text });
-		state.unlockedPaths.delete(meta.pathKey);
-		return;
+		setTrust(trust, meta.pathKey, meta.scopeKey, { hash: meta.servedHash, text, rowIds: [rowId] });
+		failedPatchRecoveryPaths.delete(meta.pathKey);
+		return true;
 	}
-	if (!meta.baseHash || existing?.hash !== meta.baseHash) return;
-	if (meta.mode === "unchanged" && meta.servedHash !== meta.baseHash) return;
-	setTrust(state.trust, meta.pathKey, meta.scopeKey, {
+	if (!meta.baseHash || existing?.hash !== meta.baseHash) return false;
+	if (meta.mode === "unchanged" && meta.servedHash !== meta.baseHash) return false;
+	let text = meta.mode === "unchanged" ? existing.text : undefined;
+	if (meta.scopeKey === COMPLETE_FILE_SCOPE && meta.mode === "diff") {
+		if (existing.text === undefined) return false;
+		const decoded = applyCompleteFileDiff({
+			content: isRecord(message) ? message.content : undefined,
+			baseText: existing.text,
+			baseHash: meta.baseHash,
+			servedHash: meta.servedHash,
+		});
+		if (!decoded.valid || decoded.text === undefined) return false;
+		text = decoded.text;
+	}
+	setTrust(trust, meta.pathKey, meta.scopeKey, {
 		hash: meta.servedHash,
-		text: meta.mode === "unchanged" ? existing.text : undefined,
+		text,
+		rowIds: [...existing.rowIds, rowId],
 	});
+	return true;
+}
+
+function readRowId(message: unknown): string | undefined {
+	if (!isRecord(message)) return undefined;
+	if (message.role === "toolResult" && message.toolName === "read") {
+		return typeof message.toolCallId === "string" && message.toolCallId.length > 0 ? message.toolCallId : undefined;
+	}
+	if (message.customType !== "tau.autoread" || !isRecord(message.details)) return undefined;
+	return typeof message.details.rowId === "string" && message.details.rowId.length > 0
+		? message.details.rowId
+		: undefined;
 }
 
 function failedPatchPaths(message: unknown, cwd: string): string[] {
@@ -168,10 +247,10 @@ function failedPatchPaths(message: unknown, cwd: string): string[] {
 }
 
 function setTrust(
-	trust: Map<string, Map<string, ScopeTrust>>,
+	trust: Map<string, Map<string, ReadCacheScopeTrust>>,
 	pathKey: string,
 	scopeKey: string,
-	value: ScopeTrust,
+	value: ReadCacheScopeTrust,
 ): void {
 	let scopes = trust.get(pathKey);
 	if (!scopes) {
