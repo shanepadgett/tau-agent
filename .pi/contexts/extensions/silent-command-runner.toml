@@ -4,7 +4,6 @@ description = "Complete and bounded context for the silent-command-runner extens
 [all]
 description = "Every extension file, direct shared dependency, test, and user-facing help"
 files = [
-  "docs/plans/silent-command-runner-follow-up.md",
   "packages/agent/extensions/silent-command-runner/README.md",
   "packages/agent/extensions/silent-command-runner/index.ts",
   "packages/agent/extensions/silent-command-runner/settings.ts",
