@@ -4,7 +4,7 @@ Context stores reusable repository work scopes in `.pi/contexts`. Folder names b
 
 Use `/context` to select entries. Entry `files` are injected through Tau autoread. Entry `anchors` supply lazy navigation paths that the agent can grep or read in ranges when needed.
 
-After meaningful uncommitted work (new/moved ownership, not trivial already-covered polish), the coding agent should run the `context-sync` subagent so `.pi/contexts` stays aligned. Humans can also run `/context-sync` or `/context-sync <nudge>`. It walks domain → concept → entry → membership, edits only `.pi/contexts` with `patch`, and the harness verifies write scope plus catalog invariants afterward. Out-of-scope writes are restored and the run fails. Optional nudge text soft-steers judgment without skipping evidence.
+After meaningful uncommitted work (new/moved ownership, not trivial already-covered polish), the coding agent should run the `context-sync` subagent so `.pi/contexts` stays aligned. Humans can also run `/context-sync` or `/context-sync <nudge>` and press Escape to cancel a running sync. It walks domain → concept → entry → membership, edits only `.pi/contexts` with `patch`, and the harness verifies write scope plus catalog invariants afterward. Out-of-scope writes are restored and the run fails. Optional nudge text soft-steers judgment without skipping evidence.
 
 Sync surface is configurable:
 

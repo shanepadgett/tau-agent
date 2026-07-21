@@ -33,7 +33,7 @@ let syncQueue = Promise.resolve();
 export async function runContextSync(
 	pi: ExtensionAPI,
 	ctx: ExtensionContext,
-	options: { nudge?: string; onStatus?: (status: string) => void | Promise<void> } = {},
+	options: { nudge?: string; signal?: AbortSignal; onStatus?: (status: string) => void | Promise<void> } = {},
 ): Promise<ContextSyncDetails> {
 	return withSyncLock(() => runContextSyncLocked(pi, ctx, options));
 }
@@ -41,7 +41,7 @@ export async function runContextSync(
 async function runContextSyncLocked(
 	pi: ExtensionAPI,
 	ctx: ExtensionContext,
-	options: { nudge?: string; onStatus?: (status: string) => void | Promise<void> },
+	options: { nudge?: string; signal?: AbortSignal; onStatus?: (status: string) => void | Promise<void> },
 ): Promise<ContextSyncDetails> {
 	if (!ctx.isProjectTrusted()) throw new Error("Context sync requires a trusted project");
 	await options.onStatus?.("Inspecting repository context");
@@ -72,7 +72,7 @@ async function runContextSyncLocked(
 	}
 
 	const task = buildContextSyncTask(status.root, options.nudge);
-	const signal = ctx.signal ?? new AbortController().signal;
+	const signal = options.signal ?? ctx.signal ?? new AbortController().signal;
 
 	await options.onStatus?.("Running context-sync subagent");
 	const thread = await createSubagentThread({

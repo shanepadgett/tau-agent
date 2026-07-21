@@ -187,3 +187,63 @@ export class ContextPanel implements Component {
 		this.tui.requestRender();
 	}
 }
+
+export class ContextSyncStatusPanel implements Component {
+	private readonly tui: TUI;
+	private readonly panel: ToolPanel;
+	private readonly config: ToolPanelConfig;
+	private readonly startedAt = Date.now();
+	private readonly timer: ReturnType<typeof setInterval>;
+	private lines: string[] = [];
+	private lineCount = 0;
+
+	constructor(tui: TUI, theme: Theme, status: string) {
+		this.tui = tui;
+		this.config = {
+			title: "Context sync",
+			body: {
+				render: (width) => {
+					const visible =
+						this.lineCount > 5
+							? [`${this.lineCount - 4} earlier lines omitted`, ...this.lines.slice(-4)]
+							: this.lines;
+					return visible.map((line, index) =>
+						truncateToWidth(theme.fg(index === 0 && this.lineCount > 5 ? "dim" : "muted", line), width, "…"),
+					);
+				},
+				invalidate: () => {},
+			},
+			footer: { kind: "hints", hints: [] },
+			border: "horizontal",
+		};
+		this.panel = new ToolPanel(theme, this.config);
+		this.update(status);
+		this.timer = setInterval(() => this.tui.requestRender(), 1_000);
+		this.timer.unref();
+	}
+
+	update(status: string): void {
+		const added = status
+			.split(/\r?\n/)
+			.map((line) => line.trim())
+			.filter(Boolean);
+		this.lineCount += added.length;
+		this.lines = [...this.lines, ...added].slice(-5);
+		this.tui.requestRender();
+	}
+
+	render(width: number): string[] {
+		const elapsed = Math.floor((Date.now() - this.startedAt) / 1_000);
+		this.config.title =
+			elapsed < 60 ? `Context sync · ${elapsed}s` : `Context sync · ${Math.floor(elapsed / 60)}m ${elapsed % 60}s`;
+		return this.panel.render(width);
+	}
+
+	invalidate(): void {
+		this.panel.invalidate();
+	}
+
+	dispose(): void {
+		clearInterval(this.timer);
+	}
+}

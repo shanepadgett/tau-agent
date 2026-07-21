@@ -175,7 +175,7 @@ describe("context extension", () => {
 				cwd: string;
 				isProjectTrusted(): boolean;
 				waitForIdle(): Promise<void>;
-				ui: { notify(message: string, level?: string): void; setStatus(): void };
+				ui: { notify(message: string, level?: string): void; setWidget(): void };
 			},
 		) => Promise<void>;
 		const notifies: string[] = [];
@@ -188,7 +188,7 @@ describe("context extension", () => {
 				notify(message) {
 					notifies.push(message);
 				},
-				setStatus() {},
+				setWidget() {},
 			},
 		});
 		expect(notifies.join("\n")).toContain("/context-sync requires a trusted TUI project");

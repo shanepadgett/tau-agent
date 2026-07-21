@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { getKeybindings } from "@earendil-works/pi-tui";
 import { emitTauEvent } from "../../shared/events.ts";
 import { createGitRunner, loadRepoStatus } from "../../shared/git.ts";
 import { createInjectedContext } from "../../shared/injected-context.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
-import { ContextPanel } from "./panel.ts";
+import { ContextPanel, ContextSyncStatusPanel } from "./panel.ts";
 import { findProjectRoot, loadContextEntries, type ContextEntry } from "./definitions.ts";
 import { hideContextSyncEvidenceTool, registerContextSyncEvidenceTool } from "./evidence.ts";
 import contextSettings from "./settings.ts";
@@ -40,20 +41,38 @@ export default function contextExtension(pi: ExtensionAPI): void {
 					return;
 				}
 				await ctx.waitForIdle();
-				ctx.ui.setStatus("context-sync", "synchronizing context");
+				const controller = new AbortController();
+				const widget = showContextSyncWidget(ctx);
+				const stopListening = ctx.ui.onTerminalInput((data) => {
+					if (!getKeybindings().matches(data, "tui.select.cancel")) return;
+					if (!controller.signal.aborted) widget.update("Cancelling context sync");
+					controller.abort();
+					return { consume: true };
+				});
 				try {
 					const result = await runContextSync(pi, ctx, {
 						nudge: args.trim() || undefined,
+						signal: controller.signal,
 						onStatus: (status) => {
-							ctx.ui.setStatus("context-sync", status.slice(0, 120));
+							widget.update(status);
 						},
 					});
+					if (controller.signal.aborted) {
+						ctx.ui.notify("Context sync cancelled", "info");
+						return;
+					}
 					const level = result.outcome === "failed" ? "error" : "info";
 					ctx.ui.notify(result.summary, level);
 				} catch (error) {
-					ctx.ui.notify(`Context sync failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+					ctx.ui.notify(
+						controller.signal.aborted
+							? "Context sync cancelled"
+							: `Context sync failed: ${error instanceof Error ? error.message : String(error)}`,
+						controller.signal.aborted ? "info" : "error",
+					);
 				} finally {
-					ctx.ui.setStatus("context-sync", undefined);
+					stopListening();
+					widget.clear();
 				}
 			},
 		});
@@ -156,11 +175,11 @@ export default function contextExtension(pi: ExtensionAPI): void {
 			if (failure === lastValidationFailure) return;
 			lastValidationFailure = failure;
 			ctx.ui.notify("Context catalog validation failed; running context-sync", "error");
-			ctx.ui.setStatus("context-sync", "synchronizing context");
+			const widget = showContextSyncWidget(ctx);
 			try {
 				const result = await runContextSync(pi, ctx, {
 					onStatus: (status) => {
-						ctx.ui.setStatus("context-sync", status.slice(0, 120));
+						widget.update(status);
 					},
 				});
 				const afterFailure = formatContextValidationFailure(
@@ -177,10 +196,27 @@ export default function contextExtension(pi: ExtensionAPI): void {
 				lastValidationFailure = undefined;
 				ctx.ui.notify(result.summary, "info");
 			} finally {
-				ctx.ui.setStatus("context-sync", undefined);
+				widget.clear();
 			}
 		} catch (error) {
 			ctx.ui.notify(`Context validation failed: ${error instanceof Error ? error.message : String(error)}`, "error");
 		}
 	});
+}
+
+function showContextSyncWidget(ctx: ExtensionContext): { update(status: string): void; clear(): void } {
+	let widget: ContextSyncStatusPanel | undefined;
+	ctx.ui.setWidget("context-sync", (tui, theme) => {
+		widget = new ContextSyncStatusPanel(tui, theme, "Synchronizing repository context");
+		return widget;
+	});
+	return {
+		update(status) {
+			widget?.update(status);
+		},
+		clear() {
+			ctx.ui.setWidget("context-sync", undefined);
+			widget = undefined;
+		},
+	};
 }

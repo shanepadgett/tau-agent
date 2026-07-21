@@ -83,7 +83,7 @@ function harness(): {
 					notify(message: string, level?: string) {
 						notifies.push({ message, level });
 					},
-					setStatus() {},
+					setWidget() {},
 				},
 				...ctx,
 			};

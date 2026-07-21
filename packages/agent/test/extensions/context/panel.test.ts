@@ -1,8 +1,8 @@
 import { initTheme, type Theme } from "@earendil-works/pi-coding-agent";
-import type { TUI } from "@earendil-works/pi-tui";
+import { type TUI, visibleWidth } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { ContextEntry } from "../../../extensions/context/definitions.ts";
-import { ContextPanel } from "../../../extensions/context/panel.ts";
+import { ContextPanel, ContextSyncStatusPanel } from "../../../extensions/context/panel.ts";
 
 beforeAll(() => initTheme());
 
@@ -50,5 +50,23 @@ describe("context panel", () => {
 			.join("\n");
 		expect(output).toContain("0 selected · 0 read · 1 anchors");
 		expect(output).toContain("anchor • src/fetch.ts");
+	});
+
+	it("renders bounded context-sync progress", () => {
+		const theme = {
+			fg: (_color: string, text: string) => text,
+			bold: (text: string) => text,
+		} as unknown as Theme;
+		const tui = { requestRender: vi.fn() } as unknown as TUI;
+		const status = new ContextSyncStatusPanel(tui, theme, "Inspecting repository context");
+		status.update("first\nsecond\nthird\nfourth\nfifth\nsixth");
+		const lines = status.render(30);
+
+		expect(lines.join("\n")).toContain("Context sync");
+		expect(lines.join("\n")).toContain("3 earlier lines omitted");
+		expect(lines.join("\n")).not.toContain("first");
+		expect(lines.join("\n")).toContain("sixth");
+		expect(lines.every((line) => visibleWidth(line) <= 30)).toBe(true);
+		status.dispose();
 	});
 });

@@ -12,7 +12,7 @@ files = [ "packages/agent/extensions/context/definitions.ts" ]
 anchors = [ "packages/agent/shared/glob.ts" ]
 
 [selection]
-description = "Tabbed context selector, hover previews, and autoread injection"
+description = "Tabbed context selector, context-sync status, hover previews, and autoread injection"
 files = [ ".pi/extensions/tool-preview/widgets/context.ts", "packages/agent/extensions/context/index.ts", "packages/agent/extensions/context/panel.ts" ]
 anchors = [ "packages/agent/shared/events.ts", "packages/agent/shared/injected-context.ts" ]
 
