@@ -19,3 +19,4 @@
 {"id":"d9df8c53-19aa-41e2-8c92-fa5c21955285","text":"context injection autoread should seed Tau read cache","createdAt":1784639624639}
 {"id":"ead7fc01-aa73-4ac8-9a80-08f31a2cf1cf","text":"ability to disable certain subagents","createdAt":1784639742935}
 {"id":"f55d044d-d284-4b73-ab06-60a65923d436","text":"auto compact subagents after they complete a run so if invoked again its not running up the bill","createdAt":1784640294385}
+{"id":"ff3868b2-4052-4c9f-86b0-d15e29120464","text":"allow agent to manage its own context window with context reminder and self compaction infra","createdAt":1784642245407}
