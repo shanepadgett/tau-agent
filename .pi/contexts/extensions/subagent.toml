@@ -3,20 +3,20 @@ description = "Delegation to isolated child Tau sessions"
 
 [all]
 description = "Every Subagent file, built-in definition, direct shared dependency, test, and user-facing document"
-files = [ "docs/plans/subagent-cmux-observability-remediation.md", "packages/agent/extensions/subagent/agents.ts", "packages/agent/extensions/subagent/agents/context-sync.md", "packages/agent/extensions/subagent/agents/scout.md", "packages/agent/extensions/subagent/agents/web-research.md", "packages/agent/extensions/subagent/cmux-panel.ts", "packages/agent/extensions/subagent/index.ts", "packages/agent/extensions/subagent/README.md", "packages/agent/extensions/subagent/render.ts", "packages/agent/extensions/subagent/run.ts", "packages/agent/test/extensions/subagent/cmux-panel.test.ts" ]
+files = [ "docs/plans/subagent-cmux-observability-remediation.md", "packages/agent/extensions/subagent/agents.ts", "packages/agent/extensions/subagent/agents/context-sync.md", "packages/agent/extensions/subagent/agents/generalist.md", "packages/agent/extensions/subagent/agents/scout.md", "packages/agent/extensions/subagent/agents/web-research.md", "packages/agent/extensions/subagent/cmux-dashboard.ts", "packages/agent/extensions/subagent/index.ts", "packages/agent/extensions/subagent/README.md", "packages/agent/extensions/subagent/render.ts", "packages/agent/extensions/subagent/run.ts", "packages/agent/extensions/subagent/runtime.ts", "packages/agent/test/extensions/subagent/cmux-dashboard.test.ts", "packages/agent/test/extensions/subagent/runtime.test.ts" ]
 anchors = [ "packages/agent/docs/extending-tau-agent.md", "packages/agent/docs/subagents.md", "packages/agent/shared/tool-row-state.ts", "packages/agent/test/extensions/subagent/agents.test.ts", "packages/agent/test/extensions/subagent/index.test.ts", "packages/agent/test/extensions/subagent/run.test.ts" ]
 
 [definitions]
 description = "Built-in, user, and project agent definition discovery"
-files = [ "packages/agent/extensions/subagent/agents.ts", "packages/agent/extensions/subagent/agents/context-sync.md", "packages/agent/extensions/subagent/agents/scout.md", "packages/agent/extensions/subagent/agents/web-research.md" ]
+files = [ "packages/agent/extensions/subagent/agents.ts", "packages/agent/extensions/subagent/agents/context-sync.md", "packages/agent/extensions/subagent/agents/generalist.md", "packages/agent/extensions/subagent/agents/scout.md", "packages/agent/extensions/subagent/agents/web-research.md" ]
 
 [execution]
 description = "Child session execution, limits, and results"
-files = [ "packages/agent/extensions/subagent/index.ts", "packages/agent/extensions/subagent/run.ts" ]
+files = [ "packages/agent/extensions/subagent/index.ts", "packages/agent/extensions/subagent/run.ts", "packages/agent/extensions/subagent/runtime.ts", "packages/agent/test/extensions/subagent/runtime.test.ts" ]
 
 [observability]
-description = "cmux live progress presentation and its remediation plan"
-files = [ "docs/plans/subagent-cmux-observability-remediation.md", "packages/agent/extensions/subagent/cmux-panel.ts", "packages/agent/test/extensions/subagent/cmux-panel.test.ts" ]
+description = "cmux live progress dashboard and its remediation plan"
+files = [ "docs/plans/subagent-cmux-observability-remediation.md", "packages/agent/extensions/subagent/cmux-dashboard.ts", "packages/agent/test/extensions/subagent/cmux-dashboard.test.ts" ]
 
 [documentation]
 description = "User-facing subagent configuration and behavior"
