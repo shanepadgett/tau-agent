@@ -22,4 +22,4 @@ Configure it in Tau settings under `extensions.silentCommandRunner`:
 }
 ```
 
-Passes are notifications only. Failures are shown in chat and sent to the agent.
+Passes are notifications only. Failures are shown in chat and sent to the agent. Tau's ready-for-input notification waits for these checks and stays quiet when a failure starts another agent turn.

@@ -7,6 +7,13 @@ export type TauAgentEvents = {
 		body?: string;
 		source?: string;
 	};
+	"tau:attention.hold.acquire": {
+		id: string;
+	};
+	"tau:attention.hold.release": {
+		id: string;
+		disposition: "notify" | "discard";
+	};
 	"tau:file-mutation.applied": {
 		source: "patch";
 		toolCallId: string;

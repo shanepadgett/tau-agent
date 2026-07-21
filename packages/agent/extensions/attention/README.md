@@ -5,6 +5,7 @@ Sends a terminal-driven attention notification when Tau is ready for input, fini
 ## Behavior
 
 - Emits an attention notification after the agent settles with no automatic continuation pending.
+- Waits for automatic post-turn checks before deciding whether the agent is ready for input.
 - Emits an attention notification on `session_compact`.
 - Emits an attention notification on `session_tree` when it includes a branch summary.
 - Listens for shared event `tau:agent.blocked` when Tau is waiting on user input.

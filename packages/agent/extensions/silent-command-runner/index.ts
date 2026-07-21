@@ -2,6 +2,7 @@ import { readdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { type ExecResult, type ExtensionAPI, keyText, type Theme } from "@earendil-works/pi-coding-agent";
 import { Box, Text } from "@earendil-works/pi-tui";
+import { emitTauEvent } from "../../shared/events.ts";
 import { matchGlob, posixPath } from "../../shared/glob.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { resolveProjectRoot } from "../../shared/settings/paths.ts";
@@ -82,6 +83,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	let abortController: AbortController | undefined;
 	let lastRunAborted = false;
 	let chainActive = false;
+	let attentionHoldSequence = 0;
+	let attentionHoldId: string | undefined;
 
 	pi.registerMessageRenderer<FailureDetails>(MESSAGE_TYPE, (message, { expanded }, theme) =>
 		renderFailure(asFailureDetails(message.details), expanded, theme),
@@ -93,6 +96,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		turnPaths = new Set();
 		lastRunAborted = false;
 		chainActive = false;
+		attentionHoldSequence = 0;
+		attentionHoldId = undefined;
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
@@ -110,6 +115,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			turnPaths = new Set();
 			return;
 		}
+		attentionHoldId = `silent-command-runner:${++attentionHoldSequence}`;
+		emitTauEvent(pi, "tau:attention.hold.acquire", { id: attentionHoldId });
 		const projectRoot = await resolveProjectRoot(ctx.cwd);
 		turnPaths = new Set(await walkFiles(projectRoot));
 	});
@@ -120,14 +127,23 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 
 	pi.on("agent_settled", async (_event, ctx) => {
 		chainActive = false;
-		if (lastRunAborted) return;
-		if (run) return;
+		const holdId = attentionHoldId;
+		attentionHoldId = undefined;
+		if (lastRunAborted || run) {
+			if (holdId) emitTauEvent(pi, "tau:attention.hold.release", { id: holdId, disposition: "notify" });
+			return;
+		}
+		let disposition: "notify" | "discard" = "notify";
 		run = runChangedCommands(ctx.cwd, turnStart, ctx.ui.notify)
+			.then((triggeredTurn) => {
+				if (triggeredTurn) disposition = "discard";
+			})
 			.catch((error: unknown) => {
 				ctx.ui.notify(`silent-command-runner: ${errorMessage(error)}`, "error");
 			})
 			.finally(() => {
 				run = undefined;
+				if (holdId) emitTauEvent(pi, "tau:attention.hold.release", { id: holdId, disposition });
 			});
 		await run;
 	});
@@ -139,19 +155,20 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		turnPaths = new Set();
 		lastRunAborted = false;
 		chainActive = false;
+		attentionHoldId = undefined;
 	});
 
 	async function runChangedCommands(
 		cwd: string,
 		turnStart: number,
 		notify: (message: string, type?: "info" | "warning" | "error") => void,
-	): Promise<void> {
-		if (!settings.enabled || settings.commands.length === 0) return;
+	): Promise<boolean> {
+		if (!settings.enabled || settings.commands.length === 0) return false;
 
 		const projectRoot = await resolveProjectRoot(cwd);
 		const paths = await walkFiles(projectRoot);
 		const changed = await scanChangedCommands(projectRoot, settings.commands, paths, turnPaths, turnStart);
-		if (changed.length === 0) return;
+		if (changed.length === 0) return false;
 
 		notify(
 			changed.length === 1
@@ -172,7 +189,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		const failedNames = new Set(failures.map((failure) => failure.name));
 		const passed = changed.filter((command) => !failedNames.has(command.name));
 		if (passed.length > 0) notify(`silent-command-runner: passed ${formatCommandNames(passed)}`, "info");
-		if (failures.length === 0) return;
+		if (failures.length === 0) return false;
 
 		pi.sendMessage<FailureDetails>(
 			{
@@ -183,6 +200,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			},
 			{ triggerTurn: true },
 		);
+		return true;
 	}
 }
 
