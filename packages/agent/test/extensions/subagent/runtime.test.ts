@@ -2,10 +2,12 @@ import type { AgentSession, ExtensionAPI, ExtensionContext } from "@earendil-wor
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentDefinition } from "../../../extensions/subagent/agents.ts";
 import { FifoGate, type SubagentDetails, type SubagentThread } from "../../../extensions/subagent/run.ts";
+import type { SubagentSessionResource } from "../../../extensions/subagent/session-resource.ts";
 
 const createSubagentThread = vi.fn();
-const disposeSubagentThread = vi.fn(async () => undefined);
+const disposeSubagentThread = vi.fn<(thread: SubagentThread) => Promise<void>>(async () => undefined);
 const runSubagentTurn = vi.fn();
+const createSubagentSessionResource = vi.fn();
 
 vi.mock("../../../extensions/subagent/run.ts", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../../extensions/subagent/run.ts")>();
@@ -13,9 +15,18 @@ vi.mock("../../../extensions/subagent/run.ts", async (importOriginal) => {
 		...actual,
 		createSubagentThread: ((...args: unknown[]) =>
 			createSubagentThread(...(args as []))) as typeof actual.createSubagentThread,
-		disposeSubagentThread: ((...args: unknown[]) =>
-			disposeSubagentThread(...(args as []))) as typeof actual.disposeSubagentThread,
+		disposeSubagentThread: ((thread: SubagentThread) =>
+			disposeSubagentThread(thread)) as typeof actual.disposeSubagentThread,
 		runSubagentTurn: ((...args: unknown[]) => runSubagentTurn(...(args as []))) as typeof actual.runSubagentTurn,
+	};
+});
+
+vi.mock("../../../extensions/subagent/session-resource.ts", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../../../extensions/subagent/session-resource.ts")>();
+	return {
+		...actual,
+		createSubagentSessionResource: ((...args: unknown[]) =>
+			createSubagentSessionResource(...(args as []))) as typeof actual.createSubagentSessionResource,
 	};
 });
 
@@ -52,16 +63,27 @@ function fakeSession(): AgentSession {
 	} as unknown as AgentSession;
 }
 
+function fakeResource(session = fakeSession()): SubagentSessionResource {
+	return {
+		inputs: {} as SubagentThread["sessionInputs"],
+		session,
+		async dispose() {},
+	};
+}
+
 function makeThread(id: string, overrides: Partial<SubagentThread> = {}): SubagentThread {
 	return {
 		id,
 		displayName: "Pathfinder",
 		definition,
-		session: fakeSession(),
+		sessionInputs: {} as SubagentThread["sessionInputs"],
+		resource: fakeResource(),
 		cwd: "/project",
 		model: "provider/model",
 		thinkingLevel: "medium",
 		initialTask: "task",
+		resumeState: { records: [], relevantPaths: [] },
+		lastAssistantMessageAt: Date.now(),
 		turns: 0,
 		turnGate: new FifoGate(1),
 		pendingTurns: 0,
@@ -112,6 +134,16 @@ function completedDetails(threadId: string): SubagentDetails {
 	};
 }
 
+function completedTurn(threadId: string, content = "ok") {
+	return {
+		content,
+		details: completedDetails(threadId),
+		retainable: true,
+		terminalOutcome: "completed" as const,
+		assistantMessageEndAt: [Date.now()],
+	};
+}
+
 function execArgs(task: string, continuing = false, threadKey?: string) {
 	return {
 		agent: continuing ? (threadKey ?? task) : "scout",
@@ -127,9 +159,7 @@ function execArgs(task: string, continuing = false, threadKey?: string) {
 
 function mockCompletedTurn() {
 	runSubagentTurn.mockImplementation(async (options: { thread: SubagentThread }) => ({
-		content: "ok",
-		details: completedDetails(options.thread.id),
-		retainable: true,
+		...completedTurn(options.thread.id),
 		usage: standardUsage,
 	}));
 }
@@ -150,11 +180,7 @@ async function seedThread(runtime: InstanceType<typeof SubagentRuntime>, lastUse
 	runSubagentTurn.mockImplementationOnce(async (options: { thread: SubagentThread }) => {
 		options.thread.turns = 1;
 		options.thread.lastUsedAt = lastUsedAt;
-		return {
-			content: "ok",
-			details: completedDetails(options.thread.id),
-			retainable: true,
-		};
+		return completedTurn(options.thread.id, "ok");
 	});
 	const result = await runtime.execute(execArgs(`seed-${lastUsedAt}`));
 	const retainedId = result.details.threadId;
@@ -168,6 +194,8 @@ describe("SubagentRuntime", () => {
 		disposeSubagentThread.mockReset();
 		disposeSubagentThread.mockResolvedValue(undefined);
 		runSubagentTurn.mockReset();
+		createSubagentSessionResource.mockReset();
+		createSubagentSessionResource.mockImplementation(async () => fakeResource());
 	});
 
 	afterEach(() => {
@@ -205,11 +233,7 @@ describe("SubagentRuntime", () => {
 		runSubagentTurn.mockImplementation(async (options: { thread: SubagentThread }) => {
 			options.thread.turns = 1;
 			track();
-			return {
-				content: "ok",
-				details: completedDetails(options.thread.id),
-				retainable: true,
-			};
+			return completedTurn(options.thread.id, "ok");
 		});
 
 		const starts = Array.from({ length: 20 }, (_, index) =>
@@ -267,11 +291,7 @@ describe("SubagentRuntime", () => {
 				});
 			}
 			options.thread.turns += 1;
-			return {
-				content: "ok",
-				details: completedDetails(options.thread.id),
-				retainable: true,
-			};
+			return completedTurn(options.thread.id, "ok");
 		});
 
 		const continuation = runtime.execute({
@@ -306,6 +326,26 @@ describe("SubagentRuntime", () => {
 		await runtime.shutdown();
 	});
 
+	it("keeps the 16-thread cap by evicting the least-recently-used idle thread", async () => {
+		const runtime = new SubagentRuntime(pi());
+		const seeded: string[] = [];
+		for (let index = 0; index < 16; index += 1) seeded.push((await seedThread(runtime, index + 1)).retainedId);
+		expect(runtime.retainedCount).toBe(16);
+		disposeSubagentThread.mockClear();
+		createSubagentThread.mockImplementationOnce(async (options: { id: string }) => makeThread(options.id));
+		runSubagentTurn.mockImplementationOnce(async (options: { thread: SubagentThread }) => {
+			options.thread.turns = 1;
+			return completedTurn(options.thread.id, "new");
+		});
+
+		const fresh = await runtime.execute(execArgs("replacement"));
+		expect(fresh.details.status).toBe("completed");
+		expect(runtime.retainedCount).toBe(16);
+		expect(runtime.threadIds("/project")).not.toContain(seeded[0]);
+		expect(disposeSubagentThread).toHaveBeenCalledWith(expect.objectContaining({ id: seeded[0] }));
+		await runtime.shutdown();
+	});
+
 	it("disposes failed and aborted initial turns without advertising reuse", async () => {
 		const runtime = new SubagentRuntime(pi());
 		createSubagentThread.mockImplementation(async (options: { id: string }) => makeThread(options.id));
@@ -313,6 +353,8 @@ describe("SubagentRuntime", () => {
 			content: "boom",
 			details: { ...completedDetails("x"), status: "failed", error: "boom" },
 			retainable: true,
+			terminalOutcome: "failed",
+			assistantMessageEndAt: [Date.now()],
 		});
 		const failed = await runtime.execute({
 			agent: "scout",
@@ -331,6 +373,8 @@ describe("SubagentRuntime", () => {
 			content: "aborted",
 			details: { ...completedDetails("y"), status: "aborted", error: "aborted" },
 			retainable: true,
+			terminalOutcome: "aborted",
+			assistantMessageEndAt: [Date.now()],
 		});
 		const aborted = await runtime.execute({
 			agent: "scout",
@@ -374,11 +418,7 @@ describe("SubagentRuntime", () => {
 			await new Promise<void>((resolve) => {
 				releasePrompt = resolve;
 			});
-			return {
-				content: "ok",
-				details: completedDetails(options.thread.id),
-				retainable: true,
-			};
+			return completedTurn(options.thread.id, "ok");
 		});
 		const running = runtime.execute({
 			agent: "scout",
@@ -411,11 +451,7 @@ describe("SubagentRuntime", () => {
 			});
 			order.push(`end:${options.task}`);
 			options.thread.turns += 1;
-			return {
-				content: options.task,
-				details: completedDetails(options.thread.id),
-				retainable: true,
-			};
+			return completedTurn(options.thread.id, options.task);
 		});
 
 		const first = runtime.execute({
@@ -450,6 +486,31 @@ describe("SubagentRuntime", () => {
 		await runtime.shutdown();
 	});
 
+	it("caps globally running turns at four", async () => {
+		const runtime = new SubagentRuntime(pi());
+		createSubagentThread.mockImplementation(async (options: { id: string }) => makeThread(options.id));
+		let active = 0;
+		let maximum = 0;
+		const releases: Array<() => void> = [];
+		runSubagentTurn.mockImplementation(async (options: { thread: SubagentThread }) => {
+			active += 1;
+			maximum = Math.max(maximum, active);
+			await new Promise<void>((resolve) => releases.push(resolve));
+			active -= 1;
+			return completedTurn(options.thread.id, "ok");
+		});
+
+		const calls = Array.from({ length: 6 }, (_, index) => runtime.execute(execArgs(`global-${index}`)));
+		await vi.waitFor(() => expect(releases).toHaveLength(4));
+		expect(maximum).toBe(4);
+		for (const release of releases.splice(0, 4)) release();
+		await vi.waitFor(() => expect(releases).toHaveLength(2));
+		for (const release of releases.splice(0, 2)) release();
+		await Promise.all(calls);
+		expect(maximum).toBe(4);
+		await runtime.shutdown();
+	});
+
 	it("publishes immutable snapshots with distinct invocation ids", async () => {
 		const runtime = new SubagentRuntime(pi());
 		const snapshots: Array<{ id: string; status: string; task: string }> = [];
@@ -478,11 +539,7 @@ describe("SubagentRuntime", () => {
 					response: "ok",
 				});
 				options.thread.turns += 1;
-				return {
-					content: "ok",
-					details: completedDetails(options.thread.id),
-					retainable: true,
-				};
+				return completedTurn(options.thread.id, "ok");
 			},
 		);
 
@@ -530,11 +587,7 @@ describe("SubagentRuntime", () => {
 			async (options: { thread: SubagentThread; files?: readonly string[]; invocationId?: string }) => {
 				received = { files: options.files, invocationId: options.invocationId };
 				options.thread.turns += 1;
-				return {
-					content: "ok",
-					details: completedDetails(options.thread.id),
-					retainable: true,
-				};
+				return completedTurn(options.thread.id, "ok");
 			},
 		);
 
@@ -545,6 +598,259 @@ describe("SubagentRuntime", () => {
 
 		expect(received?.files).toEqual(["src/runtime.ts", "test/runtime.test.ts"]);
 		expect(received?.invocationId).toBe(result.details.invocationId);
+		await runtime.shutdown();
+	});
+
+	it("keeps the existing resource at exactly 299,999 ms", async () => {
+		let now = 1_000_000;
+		const runtime = new SubagentRuntime(pi(), { now: () => now });
+		createSubagentThread.mockImplementation(async (options: { id: string }) => makeThread(options.id));
+		mockCompletedTurn();
+		const fresh = await runtime.execute(execArgs("initial"));
+		const threadId = fresh.details.threadId;
+		if (!threadId) throw new Error("fresh thread was not retained");
+		const retained = runtime.listThreads("/project")[0];
+		if (!retained) throw new Error("retained thread missing");
+		const original = retained.resource;
+		retained.lastAssistantMessageAt = now;
+		now += 299_999;
+		createSubagentSessionResource.mockClear();
+		let used: SubagentSessionResource | undefined;
+		runSubagentTurn.mockImplementationOnce(async (options: { thread: SubagentThread }) => {
+			used = options.thread.resource;
+			return completedTurn(options.thread.id, "hot");
+		});
+		await runtime.execute(execArgs("follow-up", true, threadId));
+		expect(used).toBe(original);
+		expect(createSubagentSessionResource).not.toHaveBeenCalled();
+		await runtime.shutdown();
+	});
+
+	it("replaces a resource at exactly 300,000 ms before the cold turn and resumes exact data", async () => {
+		let now = 1_000_000;
+		const runtime = new SubagentRuntime(pi(), { now: () => now });
+		createSubagentThread.mockImplementation(async (options: { id: string }) => makeThread(options.id));
+		runSubagentTurn.mockImplementationOnce(async (options: { thread: SubagentThread }) =>
+			completedTurn(options.thread.id, "finding: keep {json}\n## heading exact"),
+		);
+		const fresh = await runtime.execute({ ...execArgs("review"), files: ["src/a\nodd.ts"] });
+		const threadId = fresh.details.threadId;
+		if (!threadId) throw new Error("fresh thread was not retained");
+		const retained = runtime.listThreads("/project")[0];
+		if (!retained) throw new Error("retained thread missing");
+		const events: string[] = [];
+		let resourceAtOldDisposal: SubagentSessionResource | undefined;
+		const oldDispose = vi.fn(async () => undefined);
+		retained.resource = {
+			...retained.resource,
+			dispose: vi.fn(async () => {
+				events.push("old-disposed");
+				resourceAtOldDisposal = retained.resource;
+				await oldDispose();
+			}),
+		};
+		retained.lastAssistantMessageAt = now;
+		now += 300_000;
+		const replacement = fakeResource();
+		createSubagentSessionResource.mockImplementationOnce(async () => {
+			events.push("replacement-created");
+			return replacement;
+		});
+		let turnOptions:
+			| { initial: boolean; resumePrompt?: string; files?: readonly string[]; thread: SubagentThread }
+			| undefined;
+		runSubagentTurn.mockImplementationOnce(
+			async (options: {
+				initial: boolean;
+				resumePrompt?: string;
+				files?: readonly string[];
+				thread: SubagentThread;
+			}) => {
+				events.push("cold-turn");
+				turnOptions = options;
+				return completedTurn(options.thread.id, "continued");
+			},
+		);
+		await runtime.execute({ ...execArgs("use the finding", true, threadId), files: ["src/current.ts"] });
+		expect(createSubagentSessionResource).toHaveBeenCalledWith(retained.sessionInputs, expect.any(AbortSignal));
+		expect(oldDispose).toHaveBeenCalledOnce();
+		expect(resourceAtOldDisposal).toBe(replacement);
+		expect(turnOptions?.thread.resource).toBe(replacement);
+		expect(turnOptions?.initial).toBe(true);
+		expect(turnOptions?.files).toEqual(["src/current.ts"]);
+		expect(turnOptions?.resumePrompt).toContain("finding: keep {json}\\n## heading exact");
+		expect(turnOptions?.resumePrompt).toContain("src/a\\nodd.ts");
+		expect(turnOptions?.resumePrompt).toContain('"parentFollowUp":"use the finding"');
+		expect(events).toEqual(["replacement-created", "old-disposed", "cold-turn"]);
+		await runtime.shutdown();
+	});
+
+	it("disposes old and provisional resources once when replacement is aborted before publication", async () => {
+		let now = 1_000_000;
+		const runtime = new SubagentRuntime(pi(), { now: () => now });
+		const oldDispose = vi.fn(async () => undefined);
+		createSubagentThread.mockImplementation(async (options: { id: string }) =>
+			makeThread(options.id, { resource: fakeResource() }),
+		);
+		mockCompletedTurn();
+		const fresh = await runtime.execute(execArgs("initial"));
+		const threadId = fresh.details.threadId;
+		if (!threadId) throw new Error("fresh thread was not retained");
+		const retained = runtime.listThreads("/project")[0];
+		if (!retained) throw new Error("retained thread missing");
+		retained.resource = { ...retained.resource, dispose: oldDispose };
+		retained.lastAssistantMessageAt = now;
+		now += 300_000;
+		const provisionalDispose = vi.fn(async () => undefined);
+		const provisional = { ...fakeResource(), dispose: provisionalDispose };
+		let finishConstruction: ((resource: SubagentSessionResource) => void) | undefined;
+		createSubagentSessionResource.mockImplementationOnce(
+			async () =>
+				new Promise<SubagentSessionResource>((resolve) => {
+					finishConstruction = resolve;
+				}),
+		);
+		disposeSubagentThread.mockImplementation(async (thread: SubagentThread) => thread.resource.dispose());
+		const controller = new AbortController();
+		const continued = runtime.execute({ ...execArgs("cold", true, threadId), signal: controller.signal });
+		await vi.waitFor(() => expect(finishConstruction).toBeTypeOf("function"));
+		controller.abort();
+		finishConstruction?.(provisional);
+		const result = await continued;
+		expect(result.details.status).toBe("aborted");
+		expect(provisionalDispose).toHaveBeenCalledOnce();
+		expect(oldDispose).toHaveBeenCalledOnce();
+		expect(runtime.retainedCount).toBe(0);
+		await runtime.shutdown();
+	});
+
+	it("removes an unusable thread and disposes both resources when retirement fails after publication", async () => {
+		let now = 1_000_000;
+		const runtime = new SubagentRuntime(pi(), { now: () => now });
+		createSubagentThread.mockImplementation(async (options: { id: string }) => makeThread(options.id));
+		mockCompletedTurn();
+		const fresh = await runtime.execute(execArgs("initial"));
+		const threadId = fresh.details.threadId;
+		if (!threadId) throw new Error("fresh thread was not retained");
+		const retained = runtime.listThreads("/project")[0];
+		if (!retained) throw new Error("retained thread missing");
+		const oldDispose = vi.fn(async () => {
+			throw new Error("retirement failed");
+		});
+		retained.resource = { ...retained.resource, dispose: oldDispose };
+		retained.lastAssistantMessageAt = now;
+		now += 300_000;
+		const replacementDispose = vi.fn(async () => undefined);
+		const replacement = { ...fakeResource(), dispose: replacementDispose };
+		createSubagentSessionResource.mockResolvedValueOnce(replacement);
+		disposeSubagentThread.mockImplementation(async (thread: SubagentThread) => thread.resource.dispose());
+
+		const result = await runtime.execute(execArgs("cold", true, threadId));
+		expect(result.details.status).toBe("failed");
+		expect(result.content[0]?.text).toContain("retirement failed");
+		expect(oldDispose).toHaveBeenCalledOnce();
+		expect(replacementDispose).toHaveBeenCalledOnce();
+		expect(runtime.retainedCount).toBe(0);
+		await runtime.shutdown();
+	});
+
+	it("disposes the old resource when cold construction fails", async () => {
+		let now = 1_000_000;
+		const runtime = new SubagentRuntime(pi(), { now: () => now });
+		createSubagentThread.mockImplementation(async (options: { id: string }) => makeThread(options.id));
+		mockCompletedTurn();
+		const fresh = await runtime.execute(execArgs("initial"));
+		const threadId = fresh.details.threadId;
+		if (!threadId) throw new Error("fresh thread was not retained");
+		const retained = runtime.listThreads("/project")[0];
+		if (!retained) throw new Error("retained thread missing");
+		const oldDispose = vi.fn(async () => undefined);
+		retained.resource = { ...retained.resource, dispose: oldDispose };
+		retained.lastAssistantMessageAt = now;
+		now += 300_000;
+		createSubagentSessionResource.mockRejectedValueOnce(new Error("replacement startup failed"));
+		disposeSubagentThread.mockImplementation(async (thread: SubagentThread) => thread.resource.dispose());
+
+		const result = await runtime.execute(execArgs("cold", true, threadId));
+		expect(result.details.status).toBe("failed");
+		expect(result.content[0]?.text).toContain("replacement startup failed");
+		expect(oldDispose).toHaveBeenCalledOnce();
+		expect(runtime.retainedCount).toBe(0);
+		await runtime.shutdown();
+	});
+
+	it("disposes the published cold resource when autoread or prompt work makes it non-retainable", async () => {
+		let now = 1_000_000;
+		const runtime = new SubagentRuntime(pi(), { now: () => now });
+		createSubagentThread.mockImplementation(async (options: { id: string }) => makeThread(options.id));
+		mockCompletedTurn();
+		const fresh = await runtime.execute(execArgs("initial"));
+		const threadId = fresh.details.threadId;
+		if (!threadId) throw new Error("fresh thread was not retained");
+		const retained = runtime.listThreads("/project")[0];
+		if (!retained) throw new Error("retained thread missing");
+		const oldDispose = vi.fn(async () => undefined);
+		retained.resource = { ...retained.resource, dispose: oldDispose };
+		retained.lastAssistantMessageAt = now;
+		now += 300_000;
+		const replacementDispose = vi.fn(async () => undefined);
+		createSubagentSessionResource.mockResolvedValueOnce({ ...fakeResource(), dispose: replacementDispose });
+		disposeSubagentThread.mockImplementation(async (thread: SubagentThread) => thread.resource.dispose());
+		runSubagentTurn.mockResolvedValueOnce({
+			content: "cold prompt failed",
+			details: { ...completedDetails(threadId), status: "failed", error: "cold prompt failed" },
+			retainable: false,
+			terminalOutcome: "failed",
+			assistantMessageEndAt: [],
+		});
+
+		const result = await runtime.execute({ ...execArgs("cold", true, threadId), files: ["current.txt"] });
+		expect(result.details.status).toBe("failed");
+		expect(oldDispose).toHaveBeenCalledOnce();
+		expect(replacementDispose).toHaveBeenCalledOnce();
+		expect(runtime.retainedCount).toBe(0);
+		await runtime.shutdown();
+	});
+
+	it("retains exact failed and aborted continuation terminals outside the hot session", async () => {
+		const runtime = new SubagentRuntime(pi());
+		createSubagentThread.mockImplementation(async (options: { id: string }) => makeThread(options.id));
+		mockCompletedTurn();
+		const fresh = await runtime.execute(execArgs("initial"));
+		const threadId = fresh.details.threadId;
+		if (!threadId) throw new Error("fresh thread was not retained");
+		runSubagentTurn
+			.mockResolvedValueOnce({
+				content: "failed exact\n## data",
+				details: { ...completedDetails(threadId), status: "failed", error: "failed exact\n## data" },
+				retainable: true,
+				terminalOutcome: "failed",
+				assistantMessageEndAt: [Date.now()],
+			})
+			.mockResolvedValueOnce({
+				content: 'aborted exact {"x":1}',
+				details: { ...completedDetails(threadId), status: "aborted", error: 'aborted exact {"x":1}' },
+				retainable: true,
+				terminalOutcome: "aborted",
+				assistantMessageEndAt: [Date.now()],
+			});
+		await runtime.execute(execArgs("fail task", true, threadId));
+		await runtime.execute(execArgs("abort task", true, threadId));
+		const retained = runtime.listThreads("/project")[0];
+		expect(retained?.resumeState.records.slice(-2)).toEqual([
+			{
+				task: "fail task",
+				outcome: "failed",
+				terminalText: "failed exact\n## data",
+				files: [],
+			},
+			{
+				task: "abort task",
+				outcome: "aborted",
+				terminalText: 'aborted exact {"x":1}',
+				files: [],
+			},
+		]);
 		await runtime.shutdown();
 	});
 
@@ -608,11 +914,7 @@ describe("SubagentRuntime", () => {
 				};
 			}
 			options.thread.turns += 1;
-			return {
-				content: "should-not-run",
-				details: completedDetails(options.thread.id),
-				retainable: true,
-			};
+			return completedTurn(options.thread.id, "should-not-run");
 		});
 		const first = runtime.execute({
 			agent: threadId,

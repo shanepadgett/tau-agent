@@ -23,7 +23,7 @@ subagent({ agent: "generalist", task: "Review the runtime change", files: ["src/
 
 Paths may be relative to the parent's current working directory or absolute. Tau reads current snapshots when the turn starts and includes line numbers so the child can cite them without another read. Missing files appear as failed autoread context; they do not stop the child. Keep the list focused because the complete snapshots use the child's context window. Files can also be supplied on a retained-thread follow-up.
 
-Fresh calls return a thread ID. Tau can send feedback or follow-up work to that thread, preserving the child's conversation, prior reads, and tool results. It starts a fresh thread for unrelated work or when retained context is stale or oversized. Threads live for the current parent session. Tau retains up to 16 and evicts the least recently used idle thread when needed. Calls to one thread run sequentially.
+Fresh calls return a thread ID. Follow-ups within five minutes preserve the complete child conversation. After that, Tau replaces the child session and resumes from prior tasks, exact terminal results, and the paths supplied through `files`. Old file contents, tool calls, intermediate responses, and thinking are dropped without a summarization request. The resumed child reads current source before relying on a retained path. Threads live for the current parent session. Tau retains up to 16 and evicts the least recently used idle thread when needed. Calls to one thread run sequentially.
 
 ## Agent definitions
 

@@ -9,7 +9,7 @@ subagent({ agent: "scout", task: "Trace configuration loading" })
 subagent({ thread: "thread-1", task: "Now check whether this proposed fix covers every caller" })
 ```
 
-Retained threads keep their child conversation and tool results for the current parent session. Start fresh for unrelated work or when earlier context is stale or oversized. Tau keeps up to 16 threads and evicts the least recently used idle thread when needed.
+Retained threads keep their complete child conversation for five minutes after the latest child response. A later follow-up keeps the same thread, agent, model, thinking level, tools, and cwd, but starts a clean child session. Tau supplies prior tasks, exact terminal results, and paths passed through `files`; it does not run a summarization request. Old source, tool history, intermediate responses, and thinking are absent, so the child reads current source before relying on a retained path. Start fresh for unrelated work. Tau keeps up to 16 threads and evicts the least recently used idle thread when needed.
 
 If the relevant files are already known, autoread them into a fresh or retained child turn:
 
@@ -71,7 +71,8 @@ Tau assigns one display name to each fresh child and keeps it for follow-up turn
 - Children use the parent's cwd and inherit model/thinking unless the definition overrides them.
 - Children do not receive the parent conversation.
 - Calls can include `files` to autoread line-numbered snapshots into that child turn.
-- Follow-up calls reuse the retained child's conversation, model, thinking level, tools, and cwd.
+- Follow-up calls within five minutes reuse the complete child conversation. Colder calls resume from exact prior results and relevant paths in a clean session.
+- Cold resume keeps the selected model, thinking level, tools, cwd, definition, display name, and thread ID.
 - Children load only the extensions that own their declared tools. Unrelated extension hooks do not run in child sessions.
 - At most four children run at once; extra calls wait in order.
 - Calls to the same retained thread run one at a time.

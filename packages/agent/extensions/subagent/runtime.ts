@@ -1,6 +1,7 @@
 import type { Usage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { AgentDefinition } from "./agents.ts";
+import { buildColdResumePrompt, retainSubagentTurn } from "./resume.ts";
 import {
 	cloneInvocationSnapshot,
 	createSubagentThread,
@@ -14,11 +15,17 @@ import {
 	type SubagentPhase,
 	type SubagentThread,
 } from "./run.ts";
+import { createSubagentSessionResource, type SubagentSessionResource } from "./session-resource.ts";
 
 const MAX_RETAINED_THREADS = 16;
 const GLOBAL_CONCURRENCY = 4;
+const SUBAGENT_HOT_WINDOW_MS = 5 * 60 * 1000;
 
 export type SnapshotObserver = (snapshot: SubagentInvocationSnapshot) => void;
+
+export interface SubagentRuntimeOptions {
+	now?: () => number;
+}
 
 export interface SubagentToolResult {
 	content: Array<{ type: "text"; text: string }>;
@@ -123,10 +130,12 @@ export class SubagentRuntime {
 	private readonly nameOrdinals = new Map<string, number>();
 	private readonly assignedNames = new Set<string>();
 	private readonly pi: ExtensionAPI;
+	private readonly now: () => number;
 	private lifecycleChain = Promise.resolve();
 
-	constructor(pi: ExtensionAPI) {
+	constructor(pi: ExtensionAPI, options: SubagentRuntimeOptions = {}) {
 		this.pi = pi;
+		this.now = options.now ?? Date.now;
 	}
 
 	subscribe(observer: SnapshotObserver): () => void {
@@ -219,7 +228,7 @@ export class SubagentRuntime {
 		const admitTicket = this.nextAdmitTicket++;
 		const controller = new AbortController();
 		this.controllers.add(controller);
-		const startedAt = Date.now();
+		const startedAt = this.now();
 		const initialAgent = options.agent;
 		const initialSnapshot: SubagentInvocationSnapshot = {
 			...baseDetails({
@@ -306,6 +315,7 @@ export class SubagentRuntime {
 		let releaseGlobal: (() => void) | undefined;
 		let reservedThread: TrackedThread | undefined;
 		let provisionalThread: TrackedThread | undefined;
+		let provisionalResource: SubagentSessionResource | undefined;
 		let reservationToken: symbol | undefined;
 		let admitAdvanced = false;
 		let phase: SubagentPhase = "queue";
@@ -491,12 +501,47 @@ export class SubagentRuntime {
 				reservedThread = thread;
 			}
 
+			let resumePrompt: string | undefined;
+			if (
+				continuing &&
+				thread &&
+				(thread.lastAssistantMessageAt === undefined ||
+					this.now() - thread.lastAssistantMessageAt >= SUBAGENT_HOT_WINDOW_MS)
+			) {
+				phase = "startup";
+				fanOut({ ...active.snapshot, status: "starting", phase: "startup", agent, threadId: thread.id }, true);
+				const oldResource = thread.resource;
+				provisionalResource = await createSubagentSessionResource(thread.sessionInputs, combined);
+				if (!this.isLive(generation, combined) || thread.disposed || this.threads.get(thread.id) !== thread) {
+					await provisionalResource.dispose();
+					provisionalResource = undefined;
+					if (this.threads.get(thread.id) === thread) this.threads.delete(thread.id);
+					await this.disposeThread(thread);
+					return abortNow("startup");
+				}
+				thread.resource = provisionalResource;
+				provisionalResource = undefined;
+				await oldResource.dispose();
+				if (!this.isLive(generation, combined)) {
+					if (this.threads.get(thread.id) === thread) this.threads.delete(thread.id);
+					await this.disposeThread(thread);
+					return abortNow("startup");
+				}
+				resumePrompt = buildColdResumePrompt({
+					definition: thread.definition,
+					state: thread.resumeState,
+					followUp: task,
+					hasAutoreadFiles: (options.files?.length ?? 0) > 0,
+				});
+			}
+
 			const result = await runSubagentTurn({
 				thread,
 				task,
 				files: options.files,
 				invocationId,
-				initial: thread.turns === 0,
+				initial: thread.turns === 0 || resumePrompt !== undefined,
+				...(resumePrompt === undefined ? {} : { resumePrompt }),
 				signal: combined,
 				onUpdate: (details) => {
 					fanOut({ ...details, invocationId, threadId: thread?.id ?? threadId });
@@ -528,6 +573,15 @@ export class SubagentRuntime {
 			}
 
 			lastPublishedStatus = result.details.status;
+			if (result.retainable) {
+				thread.resumeState = retainSubagentTurn(thread.resumeState, {
+					task,
+					outcome: result.terminalOutcome,
+					terminalText: result.content,
+					files: options.files ?? [],
+				});
+				thread.lastAssistantMessageAt = result.assistantMessageEndAt.at(-1);
+			}
 
 			// Drop reservation before publish so capacity never reads above 16.
 			this.releaseReservation(reservationToken);
@@ -575,6 +629,10 @@ export class SubagentRuntime {
 				error: message,
 			});
 			fanOut(details, true);
+			if (provisionalResource) {
+				await provisionalResource.dispose().catch(() => undefined);
+				provisionalResource = undefined;
+			}
 			if (provisionalThread) {
 				await this.disposeThread(provisionalThread);
 				provisionalThread = undefined;
@@ -589,6 +647,7 @@ export class SubagentRuntime {
 			if (provisionalThread && this.threads.get(provisionalThread.id) !== provisionalThread) {
 				await this.disposeThread(provisionalThread).catch(() => undefined);
 			}
+			if (provisionalResource) await provisionalResource.dispose().catch(() => undefined);
 			if (reservedThread) reservedThread.pendingTurns = Math.max(0, reservedThread.pendingTurns - 1);
 			releaseGlobal?.();
 			releaseThread?.();

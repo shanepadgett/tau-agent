@@ -93,11 +93,18 @@ function threadOf(session: AgentSession): SubagentThread {
 			path: "/agents/scout.md",
 		},
 		displayName: "Pathfinder",
-		session,
+		sessionInputs: {} as SubagentThread["sessionInputs"],
+		resource: {
+			inputs: {} as SubagentThread["sessionInputs"],
+			session,
+			async dispose() {},
+		},
 		cwd: "/project",
 		model: "openai-codex/test-model",
 		thinkingLevel: "medium",
 		initialTask: "Inspect config",
+		resumeState: { records: [], relevantPaths: [] },
+		lastAssistantMessageAt: undefined,
 		turns: 0,
 		turnGate: new FifoGate(1),
 		pendingTurns: 0,
@@ -219,7 +226,7 @@ describe("runSubagentTurn", () => {
 			signal: new AbortController().signal,
 		});
 		try {
-			expect(thread.session.modelRuntime.getProvider(model.provider)).toBe(provider);
+			expect(thread.resource.session.modelRuntime.getProvider(model.provider)).toBe(provider);
 		} finally {
 			await disposeSubagentThread(thread);
 		}
@@ -262,7 +269,7 @@ describe("runSubagentTurn", () => {
 					source: "subagent",
 					batchId: "inv-7",
 					status: "read",
-					readCache: { scopeKey: "full:n1", totalLines: 3 },
+					readCache: { scopeKey: "full", presentation: "line-numbered", totalLines: 3 },
 				},
 			});
 			expect(messages[0]?.options).toEqual({ deliverAs: "nextTurn" });
@@ -326,6 +333,41 @@ describe("runSubagentTurn", () => {
 		expect(first.retainable).toBe(true);
 		expect(second.retainable).toBe(true);
 		expect(thread.turns).toBe(2);
+		expect(first.assistantMessageEndAt).toHaveLength(1);
+		expect(second.assistantMessageEndAt).toHaveLength(1);
+	});
+
+	it("records the wall-clock time of every assistant message_end", async () => {
+		const listeners = new Set<(event: AgentSessionEvent) => void>();
+		let now = 10_000;
+		vi.spyOn(Date, "now").mockImplementation(() => now);
+		const session = {
+			isStreaming: false,
+			subscribe(listener: (event: AgentSessionEvent) => void) {
+				listeners.add(listener);
+				return () => listeners.delete(listener);
+			},
+			async prompt() {
+				now = 10_100;
+				for (const listener of listeners) listener({ type: "message_end", message: assistant("tool turn") });
+				now = 10_250;
+				for (const listener of listeners) listener({ type: "message_end", message: assistant("terminal") });
+			},
+			async abort() {},
+			dispose() {},
+		} as unknown as AgentSession;
+		try {
+			const result = await runSubagentTurn({
+				thread: threadOf(session),
+				task: "inspect",
+				initial: true,
+				signal: new AbortController().signal,
+			});
+			expect(result.assistantMessageEndAt).toEqual([10_100, 10_250]);
+			expect(result.content).toBe("terminal");
+		} finally {
+			vi.restoreAllMocks();
+		}
 	});
 
 	it("never starts a prompt when the signal is already aborted", async () => {

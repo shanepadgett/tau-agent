@@ -4,44 +4,27 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
 import {
-	createAgentSession,
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
-	DefaultResourceLoader,
 	formatSize,
-	getAgentDir,
-	ModelRuntime,
-	SessionManager,
 	truncateHead,
-	type AgentSession,
 	type AgentSessionEvent,
 	type ExtensionAPI,
 	type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { createCompleteFileMeta } from "../explore/full-file-knowledge.ts";
 import type { AgentDefinition } from "./agents.ts";
+import { emptySubagentResumeState, type RetainedTurnOutcome, type SubagentResumeState } from "./resume.ts";
+import {
+	createSubagentSessionResource,
+	resolveSubagentSessionInputs,
+	type SubagentSessionInputs,
+	type SubagentSessionResource,
+} from "./session-resource.ts";
 
 const PREVIEW_LIMIT = 600;
 const VALUE_LIMIT = 180;
 const AUTOREAD_MESSAGE_TYPE = "tau.autoread";
-
-const CHILD_UI_BLOCKED_METHODS = new Set([
-	"setEditorComponent",
-	"setFooter",
-	"setStatus",
-	"setTitle",
-	"setWidget",
-	"setWorkingIndicator",
-]);
-
-function childUiContext(ui: ExtensionContext["ui"]): ExtensionContext["ui"] {
-	return new Proxy(ui, {
-		get(target, property, receiver) {
-			if (typeof property === "string" && CHILD_UI_BLOCKED_METHODS.has(property)) return () => undefined;
-			const value = Reflect.get(target, property, receiver) as unknown;
-			return typeof value === "function" ? value.bind(target) : value;
-		},
-	});
-}
 
 export interface SubagentAction {
 	tool: string;
@@ -100,11 +83,14 @@ export interface SubagentThread {
 	id: string;
 	displayName: string;
 	definition: AgentDefinition;
-	session: AgentSession;
+	sessionInputs: SubagentSessionInputs;
+	resource: SubagentSessionResource;
 	cwd: string;
 	model: string;
 	thinkingLevel: string;
 	initialTask: string;
+	resumeState: SubagentResumeState;
+	lastAssistantMessageAt: number | undefined;
 	turns: number;
 	turnGate: FifoGate;
 	pendingTurns: number;
@@ -227,102 +213,41 @@ export async function createSubagentThread(options: {
 		signal,
 		onWarning,
 	} = options;
-	let model = ctx.model;
-	let thinkingLevel = parentThinkingLevel;
-	if (definition.model) {
-		const separator = definition.model.indexOf("/");
-		const configured = ctx.modelRegistry.find(
-			definition.model.slice(0, separator),
-			definition.model.slice(separator + 1),
-		);
-		if (!configured) onWarning?.(`model ${definition.model} is unavailable; using parent model`);
-		else {
-			const auth = await ctx.modelRegistry.getApiKeyAndHeaders(configured);
-			if (!auth.ok) onWarning?.(`model ${definition.model} is unavailable: ${auth.error}; using parent model`);
-			else model = configured;
-		}
-	}
-	if (definition.thinking) {
-		const mapped = model?.thinkingLevelMap?.[definition.thinking];
-		const unsupported =
-			!model?.reasoning ||
-			mapped === null ||
-			((definition.thinking === "xhigh" || definition.thinking === "max") && mapped === undefined);
-		if (unsupported)
-			onWarning?.(`thinking ${definition.thinking} is unavailable for the selected model; using parent thinking`);
-		else thinkingLevel = definition.thinking;
-	}
-	const modelName = model ? `${model.provider}/${model.id}` : "unavailable";
-	let session: AgentSession | undefined;
+	const sessionInputs = await resolveSubagentSessionInputs({
+		definition,
+		extensionPaths,
+		ctx,
+		parentThinkingLevel,
+		signal,
+		...(onWarning === undefined ? {} : { onWarning }),
+	});
+	const resource = await createSubagentSessionResource(sessionInputs, signal);
 	try {
-		if (!model) throw new Error(`Agent ${definition.name} startup failed: parent has no model`);
-		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
-		if (!auth.ok) throw new Error(`Agent ${definition.name} startup failed: ${auth.error}`);
-		const provider = ctx.modelRegistry.getProvider(model.provider);
-		if (!provider)
-			throw new Error(`Agent ${definition.name} startup failed: provider ${model.provider} is unavailable`);
-		if (signal.aborted) throw new Error(`Agent ${definition.name} startup aborted`);
-		const modelRuntime = await ModelRuntime.create();
-		modelRuntime.registerNativeProvider(provider);
-		if (auth.apiKey && provider.auth.apiKey && !ctx.modelRegistry.isUsingOAuth(model))
-			await modelRuntime.setRuntimeApiKey(model.provider, auth.apiKey);
-		if (signal.aborted) throw new Error(`Agent ${definition.name} startup aborted`);
-		const resourceLoader = new DefaultResourceLoader({
-			cwd: ctx.cwd,
-			agentDir: getAgentDir(),
-			noExtensions: true,
-			additionalExtensionPaths: [...extensionPaths],
-		});
-		await resourceLoader.reload();
-		if (signal.aborted) throw new Error(`Agent ${definition.name} startup aborted`);
-		const created = await createAgentSession({
-			cwd: ctx.cwd,
-			model,
-			modelRuntime,
-			thinkingLevel: thinkingLevel as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
-			tools: definition.tools,
-			excludeTools: ["subagent"],
-			resourceLoader,
-			sessionManager: SessionManager.inMemory(ctx.cwd),
-		});
-		session = created.session;
-		if (signal.aborted) throw new Error(`Agent ${definition.name} startup aborted`);
-		await session.bindExtensions(
-			ctx.mode === "tui" && ctx.hasUI ? { mode: "tui", uiContext: childUiContext(ctx.ui) } : { mode: "print" },
-		);
-		if (signal.aborted) throw new Error(`Agent ${definition.name} startup aborted`);
-		const active = session.getActiveToolNames().sort();
-		const expected = [...definition.tools].sort();
-		if (active.join("\0") !== expected.join("\0") || active.includes("subagent")) {
-			const missing = expected.filter((tool) => !active.includes(tool));
-			throw new Error(
-				`Agent ${definition.name} startup failed: unavailable tools: ${missing.join(", ") || "active tool mismatch"}`,
-			);
-		}
 		return {
 			id,
 			displayName,
 			definition,
-			session,
+			sessionInputs,
+			resource,
 			cwd: ctx.cwd,
-			model: modelName,
-			thinkingLevel,
+			model: sessionInputs.modelName,
+			thinkingLevel: sessionInputs.thinkingLevel,
 			initialTask,
+			resumeState: emptySubagentResumeState(),
+			lastAssistantMessageAt: undefined,
 			turns: 0,
 			turnGate: new FifoGate(1),
 			pendingTurns: 0,
 			lastUsedAt: Date.now(),
 		};
 	} catch (error) {
-		if (session?.isStreaming) await session.abort().catch(() => undefined);
-		session?.dispose();
+		await resource.dispose();
 		throw error;
 	}
 }
 
 export async function disposeSubagentThread(thread: SubagentThread): Promise<void> {
-	if (thread.session.isStreaming) await thread.session.abort().catch(() => undefined);
-	thread.session.dispose();
+	await thread.resource.dispose();
 }
 
 export async function runSubagentTurn(options: {
@@ -331,11 +256,20 @@ export async function runSubagentTurn(options: {
 	files?: readonly string[];
 	invocationId?: string;
 	initial: boolean;
+	resumePrompt?: string;
 	signal: AbortSignal;
 	onUpdate?: (details: SubagentDetails) => void | Promise<void>;
-}): Promise<{ content: string; details: SubagentDetails; retainable: boolean; usage?: Usage }> {
-	const { thread, task, files = [], invocationId = thread.id, initial, signal, onUpdate } = options;
-	const { definition, session } = thread;
+}): Promise<{
+	content: string;
+	details: SubagentDetails;
+	retainable: boolean;
+	terminalOutcome: RetainedTurnOutcome;
+	assistantMessageEndAt: readonly number[];
+	usage?: Usage;
+}> {
+	const { thread, task, files = [], invocationId = thread.id, initial, resumePrompt, signal, onUpdate } = options;
+	const { definition } = thread;
+	const { session } = thread.resource;
 	const started = Date.now();
 	const usage: SubagentUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 0 };
 	const toolUsage: Usage = {
@@ -365,6 +299,7 @@ export async function runSubagentTurn(options: {
 	let unsubscribe: (() => void) | undefined;
 	let lastTextUpdate = 0;
 	const turnMessages: AssistantMessage[] = [];
+	const assistantMessageEndAt: number[] = [];
 	let retainable = false;
 	const publish = (force = false) => {
 		const now = Date.now();
@@ -384,7 +319,13 @@ export async function runSubagentTurn(options: {
 			details.error = "Subagent call aborted before prompt";
 			details.durationMs = Date.now() - started;
 			publish(true);
-			return { content: details.error, details, retainable: false };
+			return {
+				content: details.error,
+				details,
+				retainable: false,
+				terminalOutcome: "aborted",
+				assistantMessageEndAt,
+			};
 		}
 		const actionById = new Map<string, string>();
 		unsubscribe = session.subscribe((event: AgentSessionEvent) => {
@@ -393,6 +334,7 @@ export async function runSubagentTurn(options: {
 				publish();
 			} else if (event.type === "message_end" && event.message.role === "assistant") {
 				turnMessages.push(event.message);
+				assistantMessageEndAt.push(Date.now());
 				usage.input += event.message.usage.input;
 				usage.output += event.message.usage.output;
 				usage.cacheRead += event.message.usage.cacheRead;
@@ -456,7 +398,7 @@ export async function runSubagentTurn(options: {
 					};
 					try {
 						const bytes = await readFile(pathKey);
-						const content = bytes.toString("utf8");
+						const content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
 						const lines = content.split("\n");
 						const numbered = lines.map((line, lineIndex) => `${lineIndex + 1}: ${line}`).join("\n");
 						return {
@@ -466,17 +408,16 @@ export async function runSubagentTurn(options: {
 							details: {
 								...common,
 								status: "read",
-								readCache: {
-									v: 1,
+								readCache: createCompleteFileMeta({
 									pathKey,
-									scopeKey: "full:n1",
+									presentation: "line-numbered",
 									servedHash: createHash("sha256").update(bytes).digest("hex"),
 									mode: "baseline",
-									baselineTokens: Math.ceil(numbered.length / 4),
-									returnedTokens: Math.ceil(numbered.length / 4),
+									sourceText: content,
+									returnedText: `${file}\n${numbered}`,
 									totalLines: lines.length,
 									summary: `${lines.length} lines`,
-								},
+								}),
 							},
 						};
 					} catch (error) {
@@ -492,12 +433,15 @@ export async function runSubagentTurn(options: {
 			);
 			if (signal.aborted) throw new Error("Subagent call aborted before prompt");
 			for (const message of autoreadMessages) {
+				if (signal.aborted) throw new Error("Subagent call aborted during autoread delivery");
 				await session.sendCustomMessage<unknown>(message, { deliverAs: "nextTurn" });
 			}
+			if (signal.aborted) throw new Error("Subagent call aborted before prompt");
 			await session.prompt(
-				initial
-					? `You are an isolated delegated child agent. Stay within the delegated task and return only the requested result.${files.length ? " Parent-supplied autoread files are included as line-numbered context for this turn." : ""}\n\n## Agent instructions\n${definition.prompt}\n\n## Delegated task\n${task}`
-					: `Continue the existing delegated work using the context already in this thread. Return only the requested result.${files.length ? " Parent-supplied autoread files are included as line-numbered context for this turn." : ""}\n\n## Parent follow-up\n${task}`,
+				resumePrompt ??
+					(initial
+						? `You are an isolated delegated child agent. Stay within the delegated task and return only the requested result.${files.length ? " Parent-supplied autoread files are included as line-numbered context for this turn." : ""}\n\n## Agent instructions\n${definition.prompt}\n\n## Delegated task\n${task}`
+						: `Continue the existing delegated work using the context already in this thread. Return only the requested result.${files.length ? " Parent-supplied autoread files are included as line-numbered context for this turn." : ""}\n\n## Parent follow-up\n${task}`),
 				{ expandPromptTemplates: false },
 			);
 		} finally {
@@ -552,6 +496,9 @@ export async function runSubagentTurn(options: {
 					: (details.error ?? `Agent ${definition.name} failed`),
 			details,
 			retainable,
+			terminalOutcome:
+				details.status === "completed" ? "completed" : details.status === "aborted" ? "aborted" : "failed",
+			assistantMessageEndAt,
 			...(usage.turns === 0 ? {} : { usage: toolUsage }),
 		};
 	} catch (error) {
@@ -561,7 +508,14 @@ export async function runSubagentTurn(options: {
 		// Prompt/session failures leave the child unsafe for reuse.
 		retainable = false;
 		publish(true);
-		return { content: details.error, details, retainable, ...(usage.turns === 0 ? {} : { usage: toolUsage }) };
+		return {
+			content: details.error,
+			details,
+			retainable,
+			terminalOutcome: details.status === "aborted" ? "aborted" : "failed",
+			assistantMessageEndAt,
+			...(usage.turns === 0 ? {} : { usage: toolUsage }),
+		};
 	} finally {
 		unsubscribe?.();
 		thread.turns += 1;
