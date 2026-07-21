@@ -1,3 +1,4 @@
+import type { Usage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { AgentDefinition } from "./agents.ts";
 import {
@@ -22,6 +23,7 @@ export type SnapshotObserver = (snapshot: SubagentInvocationSnapshot) => void;
 export interface SubagentToolResult {
 	content: Array<{ type: "text"; text: string }>;
 	details: SubagentDetails;
+	usage?: Usage;
 }
 
 interface ActiveInvocation {
@@ -521,6 +523,7 @@ export class SubagentRuntime {
 				return {
 					content: [{ type: "text", text: details.error ?? "aborted" }],
 					details,
+					...(result.usage === undefined ? {} : { usage: result.usage }),
 				};
 			}
 
@@ -542,6 +545,7 @@ export class SubagentRuntime {
 				return {
 					content: [{ type: "text", text: result.content }],
 					details: { ...result.details, displayName: thread.displayName, invocationId, threadId: thread.id },
+					...(result.usage === undefined ? {} : { usage: result.usage }),
 				};
 			}
 
@@ -553,6 +557,7 @@ export class SubagentRuntime {
 					},
 				],
 				details: { ...result.details, displayName: thread.displayName, invocationId, threadId: thread.id },
+				...(result.usage === undefined ? {} : { usage: result.usage }),
 			};
 		} catch (error) {
 			const message = error instanceof Error ? error.message : `Agent ${agent} ${phase} failed`;

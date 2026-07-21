@@ -1,10 +1,6 @@
-import { Type, type Api, type AssistantMessage, type Model, type Tool } from "@earendil-works/pi-ai";
+import { Type, type Api, type AssistantMessage, type Model, type Provider, type Tool } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const completeSimple = vi.hoisted(() => vi.fn<typeof import("@earendil-works/pi-ai/compat").completeSimple>());
-
-vi.mock("@earendil-works/pi-ai/compat", () => ({ completeSimple }));
 
 import { generateToolValidated, generateValidated } from "../../shared/model-fallback/index.ts";
 
@@ -12,7 +8,22 @@ const model = {
 	id: "test-model",
 	provider: "openai-codex",
 } as Model<Api>;
-const candidate = { model, apiKey: "key", headers: undefined, reasoning: undefined };
+const result = vi.fn<() => Promise<AssistantMessage>>();
+const streamSimple = vi.fn<Provider["streamSimple"]>(
+	() =>
+		({
+			result,
+		}) as unknown as ReturnType<Provider["streamSimple"]>,
+);
+const provider = { streamSimple } as unknown as Provider;
+const candidate = {
+	model,
+	provider,
+	apiKey: "key",
+	headers: undefined,
+	env: undefined,
+	reasoning: undefined,
+};
 const ctx = { ui: {} as ExtensionContext["ui"], signal: undefined };
 
 function response(text: string): AssistantMessage {
@@ -43,10 +54,13 @@ function toolResponse(value: string): AssistantMessage {
 }
 
 describe("model fallback", () => {
-	beforeEach(() => completeSimple.mockReset());
+	beforeEach(() => {
+		streamSimple.mockClear();
+		result.mockReset();
+	});
 
 	it("uses one isolated session ID per nested text generation", async () => {
-		completeSimple.mockResolvedValueOnce(response("bad")).mockResolvedValueOnce(response("good"));
+		result.mockResolvedValueOnce(response("bad")).mockResolvedValueOnce(response("good"));
 
 		await expect(
 			generateValidated(
@@ -61,14 +75,14 @@ describe("model fallback", () => {
 			),
 		).resolves.toBe("good");
 
-		const firstId = completeSimple.mock.calls[0]?.[2]?.sessionId;
-		const retryId = completeSimple.mock.calls[1]?.[2]?.sessionId;
+		const firstId = streamSimple.mock.calls[0]?.[2]?.sessionId;
+		const retryId = streamSimple.mock.calls[1]?.[2]?.sessionId;
 		expect(firstId).toBeTypeOf("string");
 		expect(retryId).toBe(firstId);
 
-		completeSimple.mockResolvedValueOnce(response("done"));
+		result.mockResolvedValueOnce(response("done"));
 		await generateValidated(ctx, [candidate], "another prompt", (text) => text);
-		expect(completeSimple.mock.calls[2]?.[2]?.sessionId).not.toBe(firstId);
+		expect(streamSimple.mock.calls[2]?.[2]?.sessionId).not.toBe(firstId);
 	});
 
 	it("uses one isolated session ID per nested tool generation", async () => {
@@ -77,7 +91,7 @@ describe("model fallback", () => {
 			description: "Submit the result",
 			parameters: Type.Object({ value: Type.String() }),
 		} satisfies Tool;
-		completeSimple.mockResolvedValueOnce(toolResponse("bad")).mockResolvedValueOnce(toolResponse("good"));
+		result.mockResolvedValueOnce(toolResponse("bad")).mockResolvedValueOnce(toolResponse("good"));
 
 		await expect(
 			generateToolValidated(
@@ -94,11 +108,27 @@ describe("model fallback", () => {
 			),
 		).resolves.toBe("good");
 
-		const firstId = completeSimple.mock.calls[0]?.[2]?.sessionId;
-		expect(completeSimple.mock.calls[1]?.[2]?.sessionId).toBe(firstId);
+		const firstId = streamSimple.mock.calls[0]?.[2]?.sessionId;
+		expect(streamSimple.mock.calls[1]?.[2]?.sessionId).toBe(firstId);
 
-		completeSimple.mockResolvedValueOnce(toolResponse("good"));
+		result.mockResolvedValueOnce(toolResponse("good"));
 		await generateToolValidated(ctx, [candidate], "another prompt", tool, () => "good");
-		expect(completeSimple.mock.calls[2]?.[2]?.sessionId).not.toBe(firstId);
+		expect(streamSimple.mock.calls[2]?.[2]?.sessionId).not.toBe(firstId);
+	});
+
+	it("dispatches through the candidate provider with ambient auth", async () => {
+		result.mockResolvedValueOnce(response("done"));
+		await generateValidated(
+			ctx,
+			[{ ...candidate, apiKey: undefined, env: { AWS_PROFILE: "tau" } }],
+			"prompt",
+			(text) => text,
+		);
+
+		expect(streamSimple).toHaveBeenCalledOnce();
+		expect(streamSimple.mock.calls[0]?.[2]).toMatchObject({
+			apiKey: undefined,
+			env: { AWS_PROFILE: "tau" },
+		});
 	});
 });

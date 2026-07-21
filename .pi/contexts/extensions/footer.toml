@@ -7,6 +7,7 @@ files = [
   "packages/agent/extensions/footer/README.md",
   "packages/agent/extensions/footer/index.ts",
   "packages/agent/extensions/footer/settings.ts",
+  "packages/agent/test/extensions/footer/index.test.ts",
 ]
 anchors = [
   "packages/agent/shared/events.ts",
@@ -25,3 +26,10 @@ files = [
   "packages/agent/extensions/footer/settings.ts",
 ]
 anchors = [ "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts" ]
+
+[tests]
+description = "Footer usage accounting implementation and focused tests"
+files = [
+  "packages/agent/extensions/footer/index.ts",
+  "packages/agent/test/extensions/footer/index.test.ts",
+]

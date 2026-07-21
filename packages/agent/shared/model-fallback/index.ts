@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type { Api, AssistantMessage, Message, Model, ThinkingLevel, Tool } from "@earendil-works/pi-ai";
-import { completeSimple } from "@earendil-works/pi-ai/compat";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { loadTauExtensionSettings, updateTauExtensionSettings } from "../settings/load.ts";
 import { errorText, truncAt } from "../text.ts";
@@ -38,11 +37,20 @@ export async function resolveCandidates(
 		const key = `${model.provider}/${model.id}`;
 		if (seen.has(key)) return;
 
+		const provider = ctx.modelRegistry.getProvider(model.provider);
+		if (!provider) return;
 		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
-		if (!auth.ok || !auth.apiKey) return;
+		if (!auth.ok) return;
 
 		seen.add(key);
-		candidates.push({ model, apiKey: auth.apiKey, headers: auth.headers, reasoning });
+		candidates.push({
+			model,
+			provider,
+			apiKey: auth.apiKey,
+			headers: auth.headers,
+			env: auth.env,
+			reasoning,
+		});
 	};
 
 	for (const preferred of preferredModels) {
@@ -211,13 +219,16 @@ function completeCandidate(
 	sessionId: string,
 	tools?: Tool[],
 ): Promise<AssistantMessage> {
-	return completeSimple(candidate.model, tools ? { messages: [...messages], tools } : { messages: [...messages] }, {
-		apiKey: candidate.apiKey,
-		headers: candidate.headers,
-		signal: ctx.signal,
-		reasoning: candidate.reasoning,
-		sessionId,
-	});
+	return candidate.provider
+		.streamSimple(candidate.model, tools ? { messages: [...messages], tools } : { messages: [...messages] }, {
+			apiKey: candidate.apiKey,
+			headers: candidate.headers,
+			env: candidate.env,
+			signal: ctx.signal,
+			reasoning: candidate.reasoning,
+			sessionId,
+		})
+		.result();
 }
 
 function responseText(response: AssistantMessage): string {

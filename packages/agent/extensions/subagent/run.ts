@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
 import {
 	createAgentSession,
 	DEFAULT_MAX_BYTES,
@@ -10,6 +10,7 @@ import {
 	DefaultResourceLoader,
 	formatSize,
 	getAgentDir,
+	ModelRuntime,
 	SessionManager,
 	truncateHead,
 	type AgentSession,
@@ -257,6 +258,14 @@ export async function createSubagentThread(options: {
 		if (!model) throw new Error(`Agent ${definition.name} startup failed: parent has no model`);
 		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 		if (!auth.ok) throw new Error(`Agent ${definition.name} startup failed: ${auth.error}`);
+		const provider = ctx.modelRegistry.getProvider(model.provider);
+		if (!provider)
+			throw new Error(`Agent ${definition.name} startup failed: provider ${model.provider} is unavailable`);
+		if (signal.aborted) throw new Error(`Agent ${definition.name} startup aborted`);
+		const modelRuntime = await ModelRuntime.create();
+		modelRuntime.registerNativeProvider(provider);
+		if (auth.apiKey && provider.auth.apiKey && !ctx.modelRegistry.isUsingOAuth(model))
+			await modelRuntime.setRuntimeApiKey(model.provider, auth.apiKey);
 		if (signal.aborted) throw new Error(`Agent ${definition.name} startup aborted`);
 		const resourceLoader = new DefaultResourceLoader({
 			cwd: ctx.cwd,
@@ -269,6 +278,7 @@ export async function createSubagentThread(options: {
 		const created = await createAgentSession({
 			cwd: ctx.cwd,
 			model,
+			modelRuntime,
 			thinkingLevel: thinkingLevel as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
 			tools: definition.tools,
 			excludeTools: ["subagent"],
@@ -323,11 +333,19 @@ export async function runSubagentTurn(options: {
 	initial: boolean;
 	signal: AbortSignal;
 	onUpdate?: (details: SubagentDetails) => void | Promise<void>;
-}): Promise<{ content: string; details: SubagentDetails; retainable: boolean }> {
+}): Promise<{ content: string; details: SubagentDetails; retainable: boolean; usage?: Usage }> {
 	const { thread, task, files = [], invocationId = thread.id, initial, signal, onUpdate } = options;
 	const { definition, session } = thread;
 	const started = Date.now();
 	const usage: SubagentUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 0 };
+	const toolUsage: Usage = {
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: 0,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	};
 	const details: SubagentDetails = {
 		agent: definition.name,
 		displayName: thread.displayName,
@@ -375,6 +393,26 @@ export async function runSubagentTurn(options: {
 				publish();
 			} else if (event.type === "message_end" && event.message.role === "assistant") {
 				turnMessages.push(event.message);
+				usage.input += event.message.usage.input;
+				usage.output += event.message.usage.output;
+				usage.cacheRead += event.message.usage.cacheRead;
+				usage.cacheWrite += event.message.usage.cacheWrite;
+				usage.cost += event.message.usage.cost.total;
+				usage.turns += 1;
+				toolUsage.input += event.message.usage.input;
+				toolUsage.output += event.message.usage.output;
+				toolUsage.cacheRead += event.message.usage.cacheRead;
+				toolUsage.cacheWrite += event.message.usage.cacheWrite;
+				toolUsage.totalTokens += event.message.usage.totalTokens;
+				toolUsage.cost.input += event.message.usage.cost.input;
+				toolUsage.cost.output += event.message.usage.cost.output;
+				toolUsage.cost.cacheRead += event.message.usage.cost.cacheRead;
+				toolUsage.cost.cacheWrite += event.message.usage.cost.cacheWrite;
+				toolUsage.cost.total += event.message.usage.cost.total;
+				if (event.message.usage.cacheWrite1h !== undefined)
+					toolUsage.cacheWrite1h = (toolUsage.cacheWrite1h ?? 0) + event.message.usage.cacheWrite1h;
+				if (event.message.usage.reasoning !== undefined)
+					toolUsage.reasoning = (toolUsage.reasoning ?? 0) + event.message.usage.reasoning;
 				details.response = cappedTail(textOf(event.message), PREVIEW_LIMIT);
 				details.currentActivity = undefined;
 				publish(true);
@@ -467,14 +505,6 @@ export async function runSubagentTurn(options: {
 		}
 		// Prompt returned without throw — session remains usable for retention decisions.
 		retainable = true;
-		for (const message of turnMessages) {
-			usage.input += message.usage.input;
-			usage.output += message.usage.output;
-			usage.cacheRead += message.usage.cacheRead;
-			usage.cacheWrite += message.usage.cacheWrite;
-			usage.cost += message.usage.cost.total;
-			usage.turns += 1;
-		}
 		const terminal = turnMessages.at(-1);
 		if (!terminal) throw new Error(`Agent ${definition.name} run failed: no terminal assistant response`);
 		const response = textOf(terminal);
@@ -522,6 +552,7 @@ export async function runSubagentTurn(options: {
 					: (details.error ?? `Agent ${definition.name} failed`),
 			details,
 			retainable,
+			...(usage.turns === 0 ? {} : { usage: toolUsage }),
 		};
 	} catch (error) {
 		details.status = signal.aborted ? "aborted" : "failed";
@@ -530,7 +561,7 @@ export async function runSubagentTurn(options: {
 		// Prompt/session failures leave the child unsafe for reuse.
 		retainable = false;
 		publish(true);
-		return { content: details.error, details, retainable };
+		return { content: details.error, details, retainable, ...(usage.turns === 0 ? {} : { usage: toolUsage }) };
 	} finally {
 		unsubscribe?.();
 		thread.turns += 1;

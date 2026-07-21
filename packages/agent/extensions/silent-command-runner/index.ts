@@ -79,9 +79,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	let settings: Settings = normalizeSettings(silentCommandRunnerSettings.defaults);
 	let turnStart = Date.now();
 	let turnPaths = new Set<string>();
-	let run: Promise<void> | undefined;
 	let abortController: AbortController | undefined;
-	let lastRunAborted = false;
+	let sessionActive = false;
 	let chainActive = false;
 	let attentionHoldSequence = 0;
 	let attentionHoldId: string | undefined;
@@ -92,9 +91,9 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 
 	pi.on("session_start", async (_event, ctx) => {
 		settings = normalizeSettings(await loadTauExtensionSettings(ctx, silentCommandRunnerSettings));
+		sessionActive = true;
 		turnStart = Date.now();
 		turnPaths = new Set();
-		lastRunAborted = false;
 		chainActive = false;
 		attentionHoldSequence = 0;
 		attentionHoldId = undefined;
@@ -107,53 +106,42 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("agent_start", async (_event, ctx) => {
-		lastRunAborted = false;
-		if (chainActive) return;
+		const startingChain = !chainActive;
 		chainActive = true;
 		turnStart = Date.now();
 		if (!settings.enabled || settings.commands.length === 0) {
 			turnPaths = new Set();
 			return;
 		}
-		attentionHoldId = `silent-command-runner:${++attentionHoldSequence}`;
-		emitTauEvent(pi, "tau:attention.hold.acquire", { id: attentionHoldId });
+		if (startingChain) {
+			attentionHoldId = `silent-command-runner:${++attentionHoldSequence}`;
+			emitTauEvent(pi, "tau:attention.hold.acquire", { id: attentionHoldId });
+		}
 		const projectRoot = await resolveProjectRoot(ctx.cwd);
 		turnPaths = new Set(await walkFiles(projectRoot));
 	});
 
-	pi.on("agent_end", (event) => {
-		lastRunAborted = hasAbortedAssistantMessage(event.messages);
+	pi.on("agent_end", async (event, ctx) => {
+		if (hasAbortedAssistantMessage(event.messages)) return;
+		try {
+			await runChangedCommands(ctx.cwd, turnStart, ctx.ui.notify);
+		} catch (error: unknown) {
+			ctx.ui.notify(`silent-command-runner: ${errorMessage(error)}`, "error");
+		}
 	});
 
-	pi.on("agent_settled", async (_event, ctx) => {
+	pi.on("agent_settled", () => {
 		chainActive = false;
 		const holdId = attentionHoldId;
 		attentionHoldId = undefined;
-		if (lastRunAborted || run) {
-			if (holdId) emitTauEvent(pi, "tau:attention.hold.release", { id: holdId, disposition: "notify" });
-			return;
-		}
-		let disposition: "notify" | "discard" = "notify";
-		run = runChangedCommands(ctx.cwd, turnStart, ctx.ui.notify)
-			.then((triggeredTurn) => {
-				if (triggeredTurn) disposition = "discard";
-			})
-			.catch((error: unknown) => {
-				ctx.ui.notify(`silent-command-runner: ${errorMessage(error)}`, "error");
-			})
-			.finally(() => {
-				run = undefined;
-				if (holdId) emitTauEvent(pi, "tau:attention.hold.release", { id: holdId, disposition });
-			});
-		await run;
+		if (holdId) emitTauEvent(pi, "tau:attention.hold.release", { id: holdId, disposition: "notify" });
 	});
 
 	pi.on("session_shutdown", () => {
+		sessionActive = false;
 		abortController?.abort();
 		abortController = undefined;
-		run = undefined;
 		turnPaths = new Set();
-		lastRunAborted = false;
 		chainActive = false;
 		attentionHoldId = undefined;
 	});
@@ -162,13 +150,13 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		cwd: string,
 		turnStart: number,
 		notify: (message: string, type?: "info" | "warning" | "error") => void,
-	): Promise<boolean> {
-		if (!settings.enabled || settings.commands.length === 0) return false;
+	): Promise<void> {
+		if (!settings.enabled || settings.commands.length === 0) return;
 
 		const projectRoot = await resolveProjectRoot(cwd);
 		const paths = await walkFiles(projectRoot);
 		const changed = await scanChangedCommands(projectRoot, settings.commands, paths, turnPaths, turnStart);
-		if (changed.length === 0) return false;
+		if (!sessionActive || changed.length === 0) return;
 
 		notify(
 			changed.length === 1
@@ -177,19 +165,31 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			"info",
 		);
 
-		abortController = new AbortController();
 		const failures: FailedCommandDetails[] = [];
-		for (const command of changed) {
-			if (changed.length > 1) notify(`silent-command-runner: running ${command.name}`, "info");
-			const result = await runCommand(pi, projectRoot, command, abortController.signal, settings.maxOutputBytes);
-			if (result.code !== 0 || result.killed) failures.push(result);
+		const controller = new AbortController();
+		abortController = controller;
+		try {
+			for (const command of changed) {
+				if (changed.length > 1) notify(`silent-command-runner: running ${command.name}`, "info");
+				let result: FailedCommandDetails;
+				try {
+					result = await runCommand(pi, projectRoot, command, controller.signal, settings.maxOutputBytes);
+				} catch (error: unknown) {
+					if (controller.signal.aborted) return;
+					throw error;
+				}
+				if (controller.signal.aborted) return;
+				if (result.code !== 0 || result.killed) failures.push(result);
+			}
+		} finally {
+			if (abortController === controller) abortController = undefined;
 		}
-		abortController = undefined;
+		if (!sessionActive) return;
 
 		const failedNames = new Set(failures.map((failure) => failure.name));
 		const passed = changed.filter((command) => !failedNames.has(command.name));
 		if (passed.length > 0) notify(`silent-command-runner: passed ${formatCommandNames(passed)}`, "info");
-		if (failures.length === 0) return false;
+		if (failures.length === 0) return;
 
 		pi.sendMessage<FailureDetails>(
 			{
@@ -198,9 +198,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 				display: true,
 				details: { failed: failures },
 			},
-			{ triggerTurn: true },
+			{ deliverAs: "followUp" },
 		);
-		return true;
 	}
 }
 

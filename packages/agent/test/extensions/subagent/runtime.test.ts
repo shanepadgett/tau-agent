@@ -30,6 +30,15 @@ const definition: AgentDefinition = {
 	path: "/agents/scout.md",
 };
 
+const standardUsage = {
+	input: 1,
+	output: 2,
+	cacheRead: 3,
+	cacheWrite: 4,
+	totalTokens: 10,
+	cost: { input: 0.1, output: 0.2, cacheRead: 0.03, cacheWrite: 0.04, total: 0.37 },
+};
+
 function fakeSession(): AgentSession {
 	return {
 		isStreaming: false,
@@ -121,6 +130,7 @@ function mockCompletedTurn() {
 		content: "ok",
 		details: completedDetails(options.thread.id),
 		retainable: true,
+		usage: standardUsage,
 	}));
 }
 
@@ -535,6 +545,21 @@ describe("SubagentRuntime", () => {
 
 		expect(received?.files).toEqual(["src/runtime.ts", "test/runtime.test.ts"]);
 		expect(received?.invocationId).toBe(result.details.invocationId);
+		await runtime.shutdown();
+	});
+
+	it("preserves standard usage on fresh and continued tool results", async () => {
+		const runtime = new SubagentRuntime(pi());
+		createSubagentThread.mockImplementation(async (options: { id: string }) => makeThread(options.id));
+		mockCompletedTurn();
+
+		const fresh = await runtime.execute(execArgs("fresh"));
+		const threadId = fresh.details.threadId;
+		if (!threadId) throw new Error("fresh thread was not retained");
+		const continued = await runtime.execute(execArgs("continued", true, threadId));
+
+		expect(fresh.usage).toEqual(standardUsage);
+		expect(continued.usage).toEqual(standardUsage);
 		await runtime.shutdown();
 	});
 

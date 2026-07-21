@@ -1,10 +1,17 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AssistantMessage } from "@earendil-works/pi-ai";
-import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type { Api, AssistantMessage, Model, Provider } from "@earendil-works/pi-ai";
+import type { AgentSession, AgentSessionEvent, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import { cappedTail, FifoGate, runSubagentTurn, type SubagentThread } from "../../../extensions/subagent/run.ts";
+import {
+	cappedTail,
+	createSubagentThread,
+	disposeSubagentThread,
+	FifoGate,
+	runSubagentTurn,
+	type SubagentThread,
+} from "../../../extensions/subagent/run.ts";
 
 function assistant(text: string, input = 10, stopReason: AssistantMessage["stopReason"] = "stop"): AssistantMessage {
 	return {
@@ -18,6 +25,8 @@ function assistant(text: string, input = 10, stopReason: AssistantMessage["stopR
 			output: 2,
 			cacheRead: 3,
 			cacheWrite: 4,
+			cacheWrite1h: 1,
+			reasoning: 1,
 			totalTokens: input + 9,
 			cost: { input: 0.1, output: 0.2, cacheRead: 0.03, cacheWrite: 0.04, total: 0.37 },
 		},
@@ -147,6 +156,75 @@ describe("cappedTail", () => {
 });
 
 describe("runSubagentTurn", () => {
+	it("registers the parent runtime's effective provider in the child session", async () => {
+		const model: Model<Api> = {
+			id: "tau-test-model",
+			name: "Tau test model",
+			api: "tau-test-api",
+			provider: "tau-test-provider",
+			baseUrl: "https://example.invalid",
+			reasoning: false,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: 10_000,
+			maxTokens: 1_000,
+		};
+		const provider = {
+			id: model.provider,
+			name: "Tau test provider",
+			auth: {
+				apiKey: {
+					name: "test key",
+					resolve: async ({ credential }: { credential?: { key?: string } }) =>
+						credential?.key ? { auth: { apiKey: credential.key } } : undefined,
+				},
+			},
+			getModels: () => [model],
+			stream: () => {
+				throw new Error("stream should not run during startup");
+			},
+			streamSimple: () => {
+				throw new Error("stream should not run during startup");
+			},
+		} as unknown as Provider;
+		const ctx = {
+			cwd: process.cwd(),
+			mode: "print",
+			hasUI: false,
+			model,
+			modelRegistry: {
+				find: () => model,
+				getProvider: () => provider,
+				getApiKeyAndHeaders: async () => ({ ok: true as const, apiKey: "test-key" }),
+				isUsingOAuth: () => false,
+			},
+			ui: {},
+		} as unknown as ExtensionContext;
+
+		const thread = await createSubagentThread({
+			id: "thread-provider",
+			displayName: "Pathfinder",
+			definition: {
+				name: "scout",
+				description: "Scout",
+				tools: ["read"],
+				names: ["Pathfinder"],
+				prompt: "Inspect only requested files.",
+				path: "/agents/scout.md",
+			},
+			extensionPaths: [],
+			initialTask: "Inspect config",
+			ctx,
+			thinkingLevel: "off",
+			signal: new AbortController().signal,
+		});
+		try {
+			expect(thread.session.modelRuntime.getProvider(model.provider)).toBe(provider);
+		} finally {
+			await disposeSubagentThread(thread);
+		}
+	});
+
 	it("autoreads line-numbered files into the requested child turn", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "tau-subagent-autoread-test-"));
 		const path = join(directory, "sample.ts");
@@ -235,6 +313,16 @@ describe("runSubagentTurn", () => {
 		expect(second.content).toBe("follow-up result");
 		expect(first.details.usage.input).toBe(10);
 		expect(second.details.usage.input).toBe(20);
+		expect(first.usage).toEqual({
+			input: 10,
+			output: 2,
+			cacheRead: 3,
+			cacheWrite: 4,
+			cacheWrite1h: 1,
+			reasoning: 1,
+			totalTokens: 19,
+			cost: { input: 0.1, output: 0.2, cacheRead: 0.03, cacheWrite: 0.04, total: 0.37 },
+		});
 		expect(first.retainable).toBe(true);
 		expect(second.retainable).toBe(true);
 		expect(thread.turns).toBe(2);
@@ -357,6 +445,19 @@ describe("runSubagentTurn", () => {
 		});
 		expect(result.details.status).toBe("failed");
 		expect(result.retainable).toBe(false);
+	});
+
+	it("preserves usage from terminal error responses", async () => {
+		const result = await runSubagentTurn({
+			thread: threadOf(fakeSession({ responses: [assistant("failed", 7, "error")] })),
+			task: "x",
+			initial: true,
+			signal: new AbortController().signal,
+		});
+
+		expect(result.details.status).toBe("failed");
+		expect(result.usage?.input).toBe(7);
+		expect(result.usage?.cost.total).toBe(0.37);
 	});
 });
 

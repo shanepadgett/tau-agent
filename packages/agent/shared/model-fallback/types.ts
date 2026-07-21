@@ -1,8 +1,10 @@
-import type { Api, Model, ThinkingLevel } from "@earendil-works/pi-ai";
+import type { Api, Model, Provider, ProviderEnv, ProviderHeaders, ThinkingLevel } from "@earendil-works/pi-ai";
 
 export interface ModelCandidate {
 	model: Model<Api>;
-	apiKey: string;
-	headers: Record<string, string> | undefined;
+	provider: Provider;
+	apiKey: string | undefined;
+	headers: ProviderHeaders | undefined;
+	env: ProviderEnv | undefined;
 	reasoning: ThinkingLevel | undefined;
 }

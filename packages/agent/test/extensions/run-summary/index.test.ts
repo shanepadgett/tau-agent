@@ -19,7 +19,12 @@ describe("run summary extension", () => {
 		handlers.get("agent_end")?.({
 			messages: [
 				{ role: "assistant", usage: { cost: { total: 0.12 } } },
-				{ role: "toolResult", toolName: "subagent", details: { usage: { cost: 0.03 } } },
+				{
+					role: "toolResult",
+					toolName: "subagent",
+					usage: { cost: { total: 0.03 } },
+					details: { usage: { cost: 99 } },
+				},
 			],
 		});
 		expect(appendEntry).not.toHaveBeenCalled();

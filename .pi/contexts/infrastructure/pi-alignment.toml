@@ -1,0 +1,8 @@
+name = "Pi 0.81 alignment"
+description = "Cross-cutting plan for aligning Tau with the Pi 0.81 runtime baseline"
+
+[all]
+description = "Pi 0.81 dependency, provider, subagent, and usage-accounting alignment plan"
+files = [
+  "docs/plans/pi-0.81-alignment.md",
+]

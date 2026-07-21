@@ -4,7 +4,6 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative } from "node:path";
-import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext, Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { onTauEvent } from "../../shared/events.ts";
@@ -278,17 +277,20 @@ function isConflict(x: string | undefined, y: string | undefined): boolean {
 	return x === "U" || y === "U" || (x === "A" && y === "A") || (x === "D" && y === "D");
 }
 
-function sessionCost(ctx: ExtensionContext): UsageSummary {
+export function sessionCost(ctx: Pick<ExtensionContext, "sessionManager">): UsageSummary {
 	let usage = zeroUsage();
-	for (const entry of ctx.sessionManager.getBranch()) {
-		if (entry.type !== "message") continue;
-		if (entry.message.role === "assistant") {
-			usage = addUsage(usage, normalizeUsage((entry.message as AssistantMessage).usage));
+	for (const entry of ctx.sessionManager.getEntries()) {
+		if (entry.type === "message" && entry.message.role === "assistant") {
+			usage = addUsage(usage, normalizeUsage(entry.message.usage), true);
 			continue;
 		}
-		if (entry.message.role !== "toolResult" || entry.message.toolName !== "subagent") continue;
-		const childUsage = subagentUsage(entry.message.details);
-		if (childUsage) usage = addUsage(usage, childUsage);
+		if (entry.type === "message" && entry.message.role === "toolResult" && entry.message.usage) {
+			usage = addUsage(usage, normalizeUsage(entry.message.usage), false);
+			continue;
+		}
+		if ((entry.type === "compaction" || entry.type === "branch_summary") && entry.usage) {
+			usage = addUsage(usage, normalizeUsage(entry.usage), false);
+		}
 	}
 	return usage;
 }
@@ -339,42 +341,58 @@ async function scanDailyCost(): Promise<number> {
 		try {
 			if ((await stat(path)).mtimeMs < range.startMs) continue;
 			const raw = await readFile(path, "utf8");
-			for (const line of raw.split("\n")) {
-				const entry = parseRecord(line);
-				if (!entry || entry.type !== "message") continue;
-				const message = asRecord(entry.message);
-				if (!message) continue;
-				const timestamp = timestampMs(message.timestamp, entry.timestamp);
-				if (timestamp < range.startMs || timestamp >= range.endMs) continue;
-				let usage: UsageSummary;
-				let identity: unknown[];
-				if (message.role === "assistant") {
-					usage = normalizeUsage(message.usage);
-					identity = [message.provider, message.model];
-				} else if (message.role === "toolResult" && message.toolName === "subagent") {
-					const childUsage = subagentUsage(message.details);
-					if (!childUsage) continue;
-					usage = childUsage;
-					identity = ["subagent", message.toolCallId];
-				} else continue;
-				const key = [
-					...identity,
-					timestamp,
-					usage.input,
-					usage.output,
-					usage.cacheRead,
-					usage.cacheWrite,
-					usage.cost,
-				].join(":");
-				if (seen.has(key)) continue;
-				seen.add(key);
-				total += usage.cost;
-			}
+			total += dailyCostFromJsonl(raw, range, seen);
 		} catch {
 			// One bad session file should not break the footer.
 		}
 	}
 
+	return total;
+}
+
+export function dailyCostFromJsonl(
+	raw: string,
+	range: { startMs: number; endMs: number },
+	seen: Set<string> = new Set<string>(),
+): number {
+	let total = 0;
+	for (const line of raw.split("\n")) {
+		const entry = parseRecord(line);
+		if (!entry) continue;
+		let usageValue: unknown;
+		let timestamp: number;
+		let identity: unknown[];
+		if (entry.type === "message") {
+			const message = asRecord(entry.message);
+			if (!message) continue;
+			timestamp = timestampMs(message.timestamp, entry.timestamp);
+			if (message.role === "assistant" && asRecord(message.usage)) {
+				usageValue = message.usage;
+				identity = ["assistant", message.provider, message.model];
+			} else if (message.role === "toolResult" && asRecord(message.usage)) {
+				usageValue = message.usage;
+				identity = ["toolResult", message.toolName, message.toolCallId];
+			} else continue;
+		} else if ((entry.type === "compaction" || entry.type === "branch_summary") && asRecord(entry.usage)) {
+			usageValue = entry.usage;
+			timestamp = timestampMs(undefined, entry.timestamp);
+			identity = [entry.type, entry.id];
+		} else continue;
+		if (timestamp < range.startMs || timestamp >= range.endMs) continue;
+		const usage = normalizeUsage(usageValue);
+		const key = [
+			...identity,
+			timestamp,
+			usage.input,
+			usage.output,
+			usage.cacheRead,
+			usage.cacheWrite,
+			usage.cost,
+		].join(":");
+		if (seen.has(key)) continue;
+		seen.add(key);
+		total += usage.cost;
+	}
 	return total;
 }
 
@@ -429,31 +447,15 @@ function normalizeUsage(value: unknown): UsageSummary {
 	};
 }
 
-function subagentUsage(details: unknown): UsageSummary | undefined {
-	const usage = asRecord(asRecord(details)?.usage);
-	if (!usage) return undefined;
-	const input = numberOrZero(usage.input);
-	const output = numberOrZero(usage.output);
-	const cacheRead = numberOrZero(usage.cacheRead);
-	const cacheWrite = numberOrZero(usage.cacheWrite);
-	const promptTokens = input + cacheRead + cacheWrite;
-	return {
-		input,
-		output,
-		cacheRead,
-		cacheWrite,
-		latestCacheHitRate: promptTokens > 0 ? (cacheRead / promptTokens) * 100 : undefined,
-		cost: numberOrZero(usage.cost),
-	};
-}
-
-function addUsage(left: UsageSummary, right: UsageSummary): UsageSummary {
+function addUsage(left: UsageSummary, right: UsageSummary, updateCacheHitRate: boolean): UsageSummary {
 	return {
 		input: left.input + right.input,
 		output: left.output + right.output,
 		cacheRead: left.cacheRead + right.cacheRead,
 		cacheWrite: left.cacheWrite + right.cacheWrite,
-		latestCacheHitRate: right.latestCacheHitRate ?? left.latestCacheHitRate,
+		latestCacheHitRate: updateCacheHitRate
+			? (right.latestCacheHitRate ?? left.latestCacheHitRate)
+			: left.latestCacheHitRate,
 		cost: left.cost + right.cost,
 	};
 }

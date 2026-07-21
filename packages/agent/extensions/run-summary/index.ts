@@ -49,7 +49,7 @@ export default function runSummaryExtension(pi: ExtensionAPI): void {
 				continue;
 			}
 			if (message.role !== "toolResult" || message.toolName !== "subagent") continue;
-			subagentCost += readSubagentCost(message.details);
+			subagentCost += readUsageCost(message.usage);
 		}
 	});
 
@@ -68,11 +68,11 @@ export default function runSummaryExtension(pi: ExtensionAPI): void {
 	});
 }
 
-function readSubagentCost(value: unknown): number {
+function readUsageCost(value: unknown): number {
 	if (!value || typeof value !== "object") return 0;
-	const usage = (value as Record<string, unknown>).usage;
-	if (!usage || typeof usage !== "object") return 0;
-	return finiteNonNegative((usage as Record<string, unknown>).cost);
+	const cost = (value as Record<string, unknown>).cost;
+	if (!cost || typeof cost !== "object") return 0;
+	return finiteNonNegative((cost as Record<string, unknown>).total);
 }
 
 function readRunSummary(value: unknown): RunSummary | undefined {
