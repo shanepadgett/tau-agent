@@ -75,7 +75,15 @@ export function formatDashboardMarkdown(snapshots: readonly SubagentInvocationSn
 	const ordered = [...snapshots].sort(
 		(a, b) => a.startedAt - b.startedAt || a.invocationId.localeCompare(b.invocationId),
 	);
-	const lines = ["# Subagent dashboard", "", `Active: ${ordered.length}`, ""];
+	const activeCount = ordered.filter(
+		(snapshot) => snapshot.status !== "completed" && snapshot.status !== "failed" && snapshot.status !== "aborted",
+	).length;
+	const lines = [
+		"# Subagent dashboard",
+		"",
+		`Active: ${activeCount} · Completed: ${ordered.length - activeCount}`,
+		"",
+	];
 	if (ordered.length === 0) {
 		lines.push("_No active invocations._", "");
 		return lines.join("\n");
@@ -179,6 +187,17 @@ export function createCmuxDashboard(options: CmuxDashboardOptions): CmuxDashboar
 	let writeChain = Promise.resolve();
 	let opChain = Promise.resolve();
 	const active = new Map<string, SubagentInvocationSnapshot>();
+	const hasLiveInvocations = (): boolean =>
+		[...active.values()].some(
+			(snapshot) => snapshot.status !== "completed" && snapshot.status !== "failed" && snapshot.status !== "aborted",
+		);
+	const removeTerminalInvocations = (): void => {
+		for (const [invocationId, snapshot] of active) {
+			if (snapshot.status === "completed" || snapshot.status === "failed" || snapshot.status === "aborted") {
+				active.delete(invocationId);
+			}
+		}
+	};
 
 	const enqueueOp = (fn: () => Promise<void>): Promise<void> => {
 		const next = opChain.then(fn, fn);
@@ -294,7 +313,7 @@ export function createCmuxDashboard(options: CmuxDashboardOptions): CmuxDashboar
 				};
 				directory = undefined;
 				await flushWrite();
-				if (active.size === 0) scheduleCloseIfIdle();
+				if (!hasLiveInvocations()) scheduleCloseIfIdle();
 			} catch {
 				if (openAttempted && directory && path) retainDirectory(directory, path);
 				else if (directory) await rm(directory, { recursive: true, force: true }).catch(() => undefined);
@@ -302,7 +321,7 @@ export function createCmuxDashboard(options: CmuxDashboardOptions): CmuxDashboar
 			} finally {
 				openPromise = undefined;
 				// A close may have been requested while opening; or new work arrived after a prior close race.
-				if (!shuttingDown && active.size > 0 && !owned && !disabled) ensureOpen();
+				if (!shuttingDown && hasLiveInvocations() && !owned && !disabled) ensureOpen();
 			}
 		});
 	};
@@ -316,18 +335,19 @@ export function createCmuxDashboard(options: CmuxDashboardOptions): CmuxDashboar
 		const current = owned;
 		if (!current) return;
 		// Recheck cohort immediately before RPC.
-		if (active.size > 0) return;
+		if (hasLiveInvocations()) return;
 		await writeChain.catch(() => undefined);
-		if (active.size > 0) return;
+		if (hasLiveInvocations()) return;
 		const result = await cmuxRpc("surface.close", {
 			workspace_id: current.workspaceId,
 			surface_id: current.surfaceId,
 		}).catch(() => ({ stdout: "", stderr: "close failed", code: 1, killed: false }));
-		if (active.size > 0) {
+		if (hasLiveInvocations()) {
 			// New work arrived during close RPC.
 			const closed = result.code === 0 && !result.killed;
 			if (closed || surfaceGone(result)) {
 				owned = undefined;
+				removeTerminalInvocations();
 				await rm(current.directory, { recursive: true, force: true }).catch(() => undefined);
 				ensureOpen();
 			}
@@ -337,6 +357,7 @@ export function createCmuxDashboard(options: CmuxDashboardOptions): CmuxDashboar
 		const closed = result.code === 0 && !result.killed;
 		if (closed || surfaceGone(result)) {
 			owned = undefined;
+			active.clear();
 			await rm(current.directory, { recursive: true, force: true }).catch(() => undefined);
 			return;
 		}
@@ -344,18 +365,18 @@ export function createCmuxDashboard(options: CmuxDashboardOptions): CmuxDashboar
 	};
 
 	const scheduleCloseIfIdle = (): void => {
-		if (shuttingDown || active.size > 0 || !owned || closePromise) return;
+		if (shuttingDown || hasLiveInvocations() || !owned || closePromise) return;
 		cancelCloseTimer();
 		closeTimer = clock.setTimeout(() => {
 			closeTimer = undefined;
-			if (shuttingDown || active.size > 0 || closePromise) return;
+			if (shuttingDown || hasLiveInvocations() || closePromise) return;
 			closePromise = enqueueOp(async () => {
 				try {
-					if (shuttingDown || active.size > 0) return;
+					if (shuttingDown || hasLiveInvocations()) return;
 					await closeOwned();
 				} finally {
 					closePromise = undefined;
-					if (!shuttingDown && active.size > 0 && !owned && !disabled) ensureOpen();
+					if (!shuttingDown && hasLiveInvocations() && !owned && !disabled) ensureOpen();
 				}
 			});
 		}, CLOSE_DELAY_MS);
@@ -372,14 +393,12 @@ export function createCmuxDashboard(options: CmuxDashboardOptions): CmuxDashboar
 				snapshot.status === "completed" || snapshot.status === "failed" || snapshot.status === "aborted";
 			cancelCloseTimer();
 			if (terminal) {
-				// Final paint then drop from active cohort.
+				// Keep completed work visible while the rest of the cohort runs.
 				active.set(snapshot.invocationId, snapshot);
 				ensureOpen();
 				void flushWrite().then(() => {
 					if (shuttingDown) return;
-					active.delete(snapshot.invocationId);
-					if (active.size === 0) scheduleCloseIfIdle();
-					else void flushWrite();
+					if (!hasLiveInvocations()) scheduleCloseIfIdle();
 				});
 				return;
 			}

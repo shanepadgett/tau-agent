@@ -206,6 +206,42 @@ describe("createCmuxDashboard", () => {
 		await dashboard.shutdown();
 	});
 
+	it("keeps completed responses visible while another invocation is running", async () => {
+		let path = "";
+		const exec: CmuxExec = async (_command, args) => {
+			const parsed = parseRpc(args);
+			if (parsed.method === "markdown.open") {
+				path = String(parsed.params.path);
+				return openOkResult();
+			}
+			return okResult();
+		};
+		const { dashboard, clock } = interactiveDashboard(exec);
+		dashboard.onSnapshot(snapshot({ invocationId: "inv-1", task: "fast task", status: "running" }));
+		dashboard.onSnapshot(snapshot({ invocationId: "inv-2", task: "slow task", status: "running", startedAt: 2000 }));
+		await vi.waitFor(() => expect(path).toBeTruthy());
+		dashboard.onSnapshot(
+			snapshot({
+				invocationId: "inv-1",
+				task: "fast task",
+				status: "completed",
+				phase: "output",
+				toolCalls: 4,
+				response: "fast answer",
+			}),
+		);
+		await clock.advance(150);
+		await vi.waitFor(async () => {
+			const markdown = await readFile(path, "utf8");
+			expect(markdown).toContain("Active: 1 · Completed: 1");
+			expect(markdown).toContain("inv-1");
+			expect(markdown).toContain("tools 4");
+			expect(markdown).toContain("fast answer");
+			expect(markdown).toContain("inv-2");
+		});
+		await dashboard.shutdown();
+	});
+
 	it("disables after malformed open output and keeps directory when surface id is unknown", async () => {
 		const notifications: string[] = [];
 		let openPath = "";
