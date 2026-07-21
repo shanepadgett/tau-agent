@@ -20,15 +20,12 @@ interface MarkerDetails {
 	used: number;
 	cap: number;
 	extended: boolean;
-	sequence: number;
 }
 
 export default function turnBudgetExtension(pi: ExtensionAPI): void {
 	let settings = normalizeSettings(turnBudgetSettings.defaults);
 	let turnCount = 0;
 	let softCap = settings.turnLimit;
-	let nextMarkerSequence = 1;
-	let activeMarkerSequence: number | undefined;
 
 	pi.registerMessageRenderer<MarkerDetails>(MARKER_TYPE, (message, _options, theme) => {
 		const details = readMarkerDetails(message.details);
@@ -48,7 +45,6 @@ export default function turnBudgetExtension(pi: ExtensionAPI): void {
 	pi.on("agent_start", () => {
 		turnCount = 0;
 		softCap = settings.turnLimit;
-		activeMarkerSequence = undefined;
 	});
 
 	pi.on("turn_end", (event) => {
@@ -62,46 +58,24 @@ export default function turnBudgetExtension(pi: ExtensionAPI): void {
 				previousCap: softCap,
 				newCap: turnCount + settings.softCapIncrement,
 			};
-			activeMarkerSequence = nextMarkerSequence;
-			sendTurnBudgetMessage(pi, hint, nextMarkerSequence);
-			nextMarkerSequence += 1;
+			sendTurnBudgetMessage(pi, hint);
 			softCap = hint.newCap;
 			return undefined;
 		}
 		if (turnCount % settings.nudgeEveryTurns === 0) {
 			const hint: Hint = { kind: "normal", used: turnCount, cap: softCap };
-			activeMarkerSequence = nextMarkerSequence;
-			sendTurnBudgetMessage(pi, hint, nextMarkerSequence);
-			nextMarkerSequence += 1;
+			sendTurnBudgetMessage(pi, hint);
 		}
 		return undefined;
 	});
-
-	pi.on("context", (event) => {
-		const messages = event.messages.filter(
-			(message) =>
-				message.role !== "custom" || message.customType !== MARKER_TYPE || markerIsActive(message.details),
-		);
-		if (messages.length === event.messages.length) return undefined;
-		return { messages };
-	});
-
-	pi.on("after_provider_response", () => {
-		activeMarkerSequence = undefined;
-	});
-	function markerIsActive(value: unknown): boolean {
-		if (activeMarkerSequence === undefined) return false;
-		const details = readMarkerDetails(value);
-		return details?.sequence === activeMarkerSequence;
-	}
 }
 
-function sendTurnBudgetMessage(pi: ExtensionAPI, hint: Hint, sequence: number): void {
+function sendTurnBudgetMessage(pi: ExtensionAPI, hint: Hint): void {
 	pi.sendMessage<MarkerDetails>({
 		customType: MARKER_TYPE,
 		content: formatSteeringMessage(hint),
 		display: true,
-		details: markerDetails(hint, sequence),
+		details: markerDetails(hint),
 	});
 }
 
@@ -124,10 +98,10 @@ function normalizeSettings(value: typeof turnBudgetSettings.defaults): Settings 
 	};
 }
 
-function markerDetails(hint: Hint, sequence: number): MarkerDetails {
+function markerDetails(hint: Hint): MarkerDetails {
 	return hint.kind === "extended"
-		? { used: hint.used, cap: hint.newCap, extended: true, sequence }
-		: { used: hint.used, cap: hint.cap, extended: false, sequence };
+		? { used: hint.used, cap: hint.newCap, extended: true }
+		: { used: hint.used, cap: hint.cap, extended: false };
 }
 
 function readMarkerDetails(value: unknown): MarkerDetails | undefined {
@@ -135,10 +109,8 @@ function readMarkerDetails(value: unknown): MarkerDetails | undefined {
 	const record = value as Record<string, unknown>;
 	const used = record.used;
 	const cap = record.cap;
-	const sequence = record.sequence;
 	if (typeof used !== "number" || !Number.isInteger(used) || used < 0) return undefined;
 	if (typeof cap !== "number" || !Number.isInteger(cap) || cap < 1) return undefined;
-	if (typeof sequence !== "number" || !Number.isInteger(sequence) || sequence < 1) return undefined;
 	if (typeof record.extended !== "boolean") return undefined;
-	return { used, cap, extended: record.extended, sequence };
+	return { used, cap, extended: record.extended };
 }
