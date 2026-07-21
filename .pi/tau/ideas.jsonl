@@ -15,3 +15,6 @@
 {"id":"9ca5e21b-1833-4739-aedd-df6a55fe5a57","text":"Silent runner checks should not trigger the attention notification when failed because agent is not complete yet","createdAt":1784613718749}
 {"id":"0f652d30-d314-4658-93c4-0b6618611923","text":"we need way to leverage cmux for agents to launch panels to view subagent work as its happening","createdAt":1784616529027}
 {"id":"89f091b2-26d6-47bb-9dcf-b85ede2a9810","text":"subagent need ability to cascade available models defined in them in tier","createdAt":1784616529027}
+{"id":"94c6f9c5-6ff4-46ee-9f37-b385f1474dc9","text":"we need some kind of cache observability nd stability monitoring that outputs log for the agent to notify the user when there were uses that should be resolved with the harness are werent merely things like waiting too long to respond so it went cold","createdAt":1784619620226}
+{"id":"b6c73766-bd80-4d17-906b-b921bfcd25c1","text":"subagent panels should update tab title to say done when complete","createdAt":1784619620226}
+{"id":"0097e490-f98f-40e2-b0ec-1e115f527d7d","text":"getting this weird running run output in subagent pane \"completed · output · tools 23 · 66.1s model openai-codex/gpt-5.6-luna · thinking high\"","createdAt":1784619620226}
