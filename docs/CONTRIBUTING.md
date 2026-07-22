@@ -27,9 +27,11 @@ Clone the repository, then trust its Mise configuration before installing anythi
 ```bash
 mise trust
 mise install
-npm install --ignore-scripts
+npm ci --ignore-scripts
 mise run check
 ```
+
+Run `npm ci --ignore-scripts` again after pulling changes to dependency declarations or `package-lock.json`.
 
 Tau is a Pi package. Try the whole workspace with `pi -e .`, or only the agent package with `pi -e ./packages/agent`.
 

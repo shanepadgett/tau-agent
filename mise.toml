@@ -10,9 +10,22 @@ python = "3.13"
 jobs = 1
 task_output = "quiet"
 
+[tasks.check]
+description = "Run all checks"
+depends = ["check:ts", "check:md"]
+
 [tasks."check:ts"]
 description = "TS and config checks"
-depends = ["check:schema", "check:style", "check:types", "test:unit", "check:deadcode"]
+depends = ["check:dependencies", "check:schema", "check:style", "check:types", "test:unit", "check:deadcode"]
+
+[tasks."check:dependencies"]
+description = "Check installed dependency tree"
+run = '''
+if ! npm ls --depth=0 --loglevel=silent >/dev/null 2>&1; then
+  echo "Dependency installation is stale or incomplete. Run: npm ci --ignore-scripts" >&2
+  exit 1
+fi
+'''
 
 [tasks."check:md"]
 description = "Markdown checks"
