@@ -52,7 +52,7 @@ Adds `/ideas` to log rough ideas or open the ideas browser.
 
 ## image-gen
 
-Gives the agent a Grok Imagine generation and editing tool. Run `/login xai` and choose a subscription or API-key login before use. Generated images are saved for inspection.
+Gives the agent an OpenAI GPT Image and xAI Grok Imagine generation and editing tool. It follows the parent model by default and can override the provider per request. Run `/login openai-codex` or `/login xai` before use. Generated images are saved for inspection.
 
 ## manage-sessions
 

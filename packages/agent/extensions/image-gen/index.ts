@@ -5,7 +5,13 @@ import { homedir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { type Static, Type } from "typebox";
 import { detectImageMimeType, editImage, generateImage, type EditImage, type GeneratedImage } from "./client.ts";
-import { XAI_IMAGE_MODEL, XAI_PROVIDER } from "./constants.ts";
+import {
+	OPENAI_IMAGE_MODEL,
+	OPENAI_PROVIDER,
+	XAI_IMAGE_MODEL,
+	XAI_PROVIDER,
+	type ImageProvider,
+} from "./constants.ts";
 
 const MAX_INPUT_BYTES = 50 * 1024 * 1024;
 const MAX_INLINE_BYTES = 12 * 1024 * 1024;
@@ -13,6 +19,12 @@ const MAX_INLINE_BYTES = 12 * 1024 * 1024;
 const imageGenSchema = Type.Object(
 	{
 		prompt: Type.String({ minLength: 1 }),
+		provider: Type.Optional(
+			Type.Union([Type.Literal("openai"), Type.Literal("xai")], {
+				description:
+					"Image provider override. Omit to follow the parent model, preferring OpenAI for GPT and xAI for Grok.",
+			}),
+		),
 		path: Type.Optional(
 			Type.String({ description: "Explicit image destination path; defaults to Tau's external image store" }),
 		),
@@ -25,7 +37,8 @@ type ImageGenParams = Static<typeof imageGenSchema>;
 
 interface ImageGenDetails {
 	path: string;
-	model: typeof XAI_IMAGE_MODEL;
+	provider: ImageProvider;
+	model: typeof OPENAI_IMAGE_MODEL | typeof XAI_IMAGE_MODEL;
 	operation: "generate" | "edit";
 }
 
@@ -41,7 +54,7 @@ export default function imageGenExtension(pi: ExtensionAPI): void {
 			name: "image_gen",
 			label: "Image Generation",
 			description:
-				"Generate a requested raster image or AI-edit existing images with configured xAI authentication. Omit referenced_image_paths to generate; pass one to three local paths to edit or compose. Omit path to use Tau's external image store; pass path only when the user explicitly requests a repository file or other destination. Returns the image for inspection.",
+				"Generate a requested raster image or AI-edit existing images with OpenAI GPT Image or xAI Grok Imagine. Omit provider to follow the parent model; set it to openai or xai to override. Omit referenced_image_paths to generate; pass one to three local paths to edit or compose. Omit path to use Tau's external image store; pass path only when the user explicitly requests a repository file or other destination. Returns the image for inspection.",
 			parameters: imageGenSchema,
 			async execute(_toolCallId, params: ImageGenParams, signal, onUpdate, ctx) {
 				signal?.throwIfAborted();
@@ -61,10 +74,38 @@ export default function imageGenExtension(pi: ExtensionAPI): void {
 					throw new Error("Image path must end in .jpg, .jpeg, .png, or .webp");
 				}
 
-				const token = await ctx.modelRegistry.getApiKeyForProvider(XAI_PROVIDER);
-				if (!token) {
-					throw new Error("xAI authentication is unavailable. Run /login xai and choose a login method.");
+				const parentUsesXai =
+					ctx.model?.provider.toLowerCase() === XAI_PROVIDER || ctx.model?.id.toLowerCase().includes("grok") === true;
+				const preferredProvider: ImageProvider = params.provider ?? (parentUsesXai ? "xai" : "openai");
+				const providers: readonly ImageProvider[] = params.provider
+					? [params.provider]
+					: preferredProvider === "xai"
+						? ["xai", "openai"]
+						: ["openai", "xai"];
+				let provider: ImageProvider | undefined;
+				let token: string | undefined;
+				for (const candidate of providers) {
+					const candidateToken = await ctx.modelRegistry.getApiKeyForProvider(
+						candidate === "openai" ? OPENAI_PROVIDER : XAI_PROVIDER,
+					);
+					if (candidateToken) {
+						provider = candidate;
+						token = candidateToken;
+						break;
+					}
 				}
+				if (!provider || !token) {
+					if (params.provider === "openai") {
+						throw new Error("OpenAI Codex authentication is unavailable. Run /login openai-codex.");
+					}
+					if (params.provider === "xai") {
+						throw new Error("xAI authentication is unavailable. Run /login xai and choose a login method.");
+					}
+					throw new Error(
+						"Image generation authentication is unavailable. Run /login for OpenAI Codex or xAI.",
+					);
+				}
+				const model = provider === "openai" ? OPENAI_IMAGE_MODEL : XAI_IMAGE_MODEL;
 				const images: EditImage[] = [];
 				for (const path of params.referenced_image_paths ?? []) {
 					const rawPath = path.startsWith("@") ? path.slice(1) : path;
@@ -88,16 +129,16 @@ export default function imageGenExtension(pi: ExtensionAPI): void {
 							type: "text",
 							text:
 								operation === "generate"
-									? `Generating image with ${XAI_IMAGE_MODEL}...`
-									: `Editing image with ${XAI_IMAGE_MODEL}...`,
+									? `Generating image with ${model}...`
+									: `Editing image with ${model}...`,
 						},
 					],
 					details: undefined,
 				});
 				const generated =
 					operation === "generate"
-						? await generateImage(prompt, token, signal)
-						: await editImage(prompt, images, token, signal);
+						? await generateImage(provider, prompt, token, signal)
+						: await editImage(provider, prompt, images, token, signal);
 				signal?.throwIfAborted();
 				const generatedExtension = outputExtension(generated);
 				if (requestedAbsolutePath) {
@@ -106,7 +147,9 @@ export default function imageGenExtension(pi: ExtensionAPI): void {
 						requestedExtension === generatedExtension ||
 						(generatedExtension === ".jpg" && requestedExtension === ".jpeg");
 					if (!matches)
-						throw new Error(`xAI returned ${generated.mimeType}; destination must end in ${generatedExtension}`);
+						throw new Error(
+							`${provider === "openai" ? "OpenAI Codex" : "xAI"} returned ${generated.mimeType}; destination must end in ${generatedExtension}`,
+						);
 				}
 				const absolutePath =
 					requestedAbsolutePath ??
@@ -129,13 +172,13 @@ export default function imageGenExtension(pi: ExtensionAPI): void {
 				});
 
 				const verb = operation === "generate" ? "Generated" : "Edited";
-				const details: ImageGenDetails = { path: absolutePath, model: XAI_IMAGE_MODEL, operation };
+				const details: ImageGenDetails = { path: absolutePath, provider, model, operation };
 				if (generated.bytes.length > MAX_INLINE_BYTES) {
 					return {
 						content: [
 							{
 								type: "text",
-								text: `${verb} image saved to ${absolutePath}. The PNG exceeds the 12 MiB attachment limit, so it was not added to model context.`,
+								text: `${verb} image saved to ${absolutePath}. The image exceeds the 12 MiB attachment limit, so it was not added to model context.`,
 							},
 						],
 						details,

@@ -1,10 +1,21 @@
-import { XAI_API_BASE_URL, XAI_IMAGE_MODEL } from "./constants.ts";
+import {
+	OPENAI_IMAGE_API_BASE_URL,
+	OPENAI_IMAGE_MODEL,
+	XAI_API_BASE_URL,
+	XAI_IMAGE_MODEL,
+	type ImageProvider,
+} from "./constants.ts";
 
 const MAX_ERROR_BODY_BYTES = 8192;
 const MAX_ERROR_MESSAGE_LENGTH = 2000;
 const REQUEST_TIMEOUT_MS = 60_000;
 const MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 500;
+
+export interface CodexAuth {
+	token: string;
+	accountId: string;
+}
 
 export interface EditImage {
 	mimeType: "image/png" | "image/jpeg" | "image/webp";
@@ -26,6 +37,29 @@ interface HttpResponse {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function resolveCodexAuth(token: string): CodexAuth {
+	const invalidCredential = () =>
+		new Error("The OpenAI Codex credential does not contain a usable ChatGPT account ID. Run /login again.");
+	const segments = token.split(".");
+	if (segments.length !== 3 || !segments[1]) throw invalidCredential();
+	if (!/^[A-Za-z0-9_-]+$/.test(segments[1]) || segments[1].length % 4 === 1) throw invalidCredential();
+
+	let payload: unknown;
+	try {
+		const decoded = Buffer.from(segments[1], "base64url");
+		if (decoded.toString("base64url") !== segments[1]) throw invalidCredential();
+		payload = JSON.parse(decoded.toString("utf8"));
+	} catch {
+		throw invalidCredential();
+	}
+	if (!isRecord(payload)) throw invalidCredential();
+	const authClaim = payload["https://api.openai.com/auth"];
+	if (!isRecord(authClaim)) throw invalidCredential();
+	const accountId = authClaim.chatgpt_account_id;
+	if (typeof accountId !== "string" || !accountId.trim()) throw invalidCredential();
+	return { token, accountId: accountId.trim() };
 }
 
 async function boundedError(response: HttpResponse): Promise<string> {
@@ -85,23 +119,59 @@ export function detectImageMimeType(bytes: Buffer): GeneratedImage["mimeType"] |
 	return undefined;
 }
 
-function decodeImageResponse(value: unknown): GeneratedImage {
+function decodeImageResponse(value: unknown, service: "OpenAI Codex" | "xAI", pngOnly: boolean): GeneratedImage {
 	if (!isRecord(value) || !Array.isArray(value.data) || !isRecord(value.data[0])) {
-		throw new Error("xAI returned an invalid image response");
+		throw new Error(`${service} returned an invalid image response`);
 	}
 	const encoded = value.data[0].b64_json;
-	if (typeof encoded !== "string" || !encoded.trim()) throw new Error("xAI returned an invalid image response");
+	if (typeof encoded !== "string" || !encoded.trim()) throw new Error(`${service} returned an invalid image response`);
 	const base64 = encoded.trim();
 	if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64) || base64.length % 4 === 1) {
-		throw new Error("xAI returned invalid base64 image data");
+		throw new Error(`${service} returned invalid base64 image data`);
 	}
 	const bytes = Buffer.from(base64, "base64");
 	if (bytes.toString("base64").replace(/=+$/, "") !== base64.replace(/=+$/, "")) {
-		throw new Error("xAI returned invalid base64 image data");
+		throw new Error(`${service} returned invalid base64 image data`);
 	}
 	const mimeType = detectImageMimeType(bytes);
-	if (!mimeType) throw new Error("xAI returned unsupported image data");
+	if (!mimeType || (pngOnly && mimeType !== "image/png")) {
+		throw new Error(`${service} returned unsupported image data`);
+	}
 	return { bytes, base64: bytes.toString("base64"), mimeType };
+}
+
+async function requestOpenAIImage(
+	operation: "generation" | "edit",
+	body: Record<string, unknown>,
+	auth: CodexAuth,
+	signal?: AbortSignal,
+): Promise<GeneratedImage> {
+	const route = operation === "generation" ? "generations" : "edits";
+	const response = (await fetch(`${OPENAI_IMAGE_API_BASE_URL}/${route}`, {
+		method: "POST",
+		headers: {
+			Accept: "application/json",
+			Authorization: `Bearer ${auth.token}`,
+			"chatgpt-account-id": auth.accountId,
+			"Content-Type": "application/json",
+			originator: "pi",
+		},
+		body: JSON.stringify(body),
+		signal,
+	})) as HttpResponse;
+	if (!response.ok) {
+		const message = serverErrorMessage(await boundedError(response), auth.token);
+		throw new Error(
+			`OpenAI Codex image ${operation} failed with status ${response.status}${message ? `: ${message}` : ""}`,
+		);
+	}
+	let value: unknown;
+	try {
+		value = await response.json();
+	} catch {
+		throw new Error("OpenAI Codex returned a non-JSON image response");
+	}
+	return decodeImageResponse(value, "OpenAI Codex", true);
 }
 
 function retryable(status: number): boolean {
@@ -124,7 +194,7 @@ async function delay(milliseconds: number, signal?: AbortSignal): Promise<void> 
 	});
 }
 
-async function requestImage(
+async function requestXaiImage(
 	operation: "generation" | "edit",
 	body: Record<string, unknown>,
 	token: string,
@@ -160,7 +230,7 @@ async function requestImage(
 			} catch {
 				throw new Error("xAI returned a non-JSON image response");
 			}
-			return decodeImageResponse(value);
+			return decodeImageResponse(value, "xAI", false);
 		}
 		const message = serverErrorMessage(await boundedError(response), token);
 		if (!retryable(response.status) || attempt === MAX_ATTEMPTS) {
@@ -173,8 +243,21 @@ async function requestImage(
 	throw new Error(`xAI image ${operation} failed`);
 }
 
-export function generateImage(prompt: string, token: string, signal?: AbortSignal): Promise<GeneratedImage> {
-	return requestImage(
+export function generateImage(
+	provider: ImageProvider,
+	prompt: string,
+	token: string,
+	signal?: AbortSignal,
+): Promise<GeneratedImage> {
+	if (provider === "openai") {
+		return requestOpenAIImage(
+			"generation",
+			{ prompt, model: OPENAI_IMAGE_MODEL, background: "auto", quality: "auto", size: "auto" },
+			resolveCodexAuth(token),
+			signal,
+		);
+	}
+	return requestXaiImage(
 		"generation",
 		{ model: XAI_IMAGE_MODEL, prompt, n: 1, resolution: "1k", response_format: "b64_json" },
 		token,
@@ -183,13 +266,29 @@ export function generateImage(prompt: string, token: string, signal?: AbortSigna
 }
 
 export function editImage(
+	provider: ImageProvider,
 	prompt: string,
 	images: readonly EditImage[],
 	token: string,
 	signal?: AbortSignal,
 ): Promise<GeneratedImage> {
+	if (provider === "openai") {
+		return requestOpenAIImage(
+			"edit",
+			{
+				images: images.map((image) => ({ image_url: `data:${image.mimeType};base64,${image.data}` })),
+				prompt,
+				model: OPENAI_IMAGE_MODEL,
+				background: "auto",
+				quality: "auto",
+				size: "auto",
+			},
+			resolveCodexAuth(token),
+			signal,
+		);
+	}
 	const references = images.map((image) => ({ url: `data:${image.mimeType};base64,${image.data}` }));
-	return requestImage(
+	return requestXaiImage(
 		"edit",
 		{
 			model: XAI_IMAGE_MODEL,

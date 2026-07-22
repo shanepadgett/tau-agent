@@ -28,6 +28,7 @@ interface RegisteredTool {
 		id: string,
 		params: {
 			prompt: string;
+			provider?: "openai" | "xai";
 			path?: string;
 			referenced_image_paths?: string[];
 		},
@@ -37,9 +38,15 @@ interface RegisteredTool {
 	) => Promise<{ content: Array<{ type: string; text?: string; data?: string }>; details: Record<string, unknown> }>;
 }
 
-function harness(token: string | null = "token"): { tool: RegisteredTool; apiKey: ReturnType<typeof vi.fn> } {
+const OPENAI_TOKEN = `header.${Buffer.from(
+	JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "account" } }),
+).toString("base64url")}.signature`;
+
+function harness(
+	tokens: Readonly<Record<string, string>> = { "openai-codex": OPENAI_TOKEN, xai: "xai-token" },
+): { tool: RegisteredTool; apiKey: ReturnType<typeof vi.fn> } {
 	let tool: RegisteredTool | undefined;
-	const apiKey = vi.fn(async () => token ?? undefined);
+	const apiKey = vi.fn(async (provider: string) => tokens[provider]);
 	const pi = {
 		events: createEventBus(),
 		registerTool(value: RegisteredTool) {
@@ -51,9 +58,14 @@ function harness(token: string | null = "token"): { tool: RegisteredTool; apiKey
 	return { tool, apiKey };
 }
 
-function context(cwd: string, apiKey: ReturnType<typeof vi.fn>): ExtensionContext {
+function context(
+	cwd: string,
+	apiKey: ReturnType<typeof vi.fn>,
+	model: { provider: string; id: string } | null = { provider: "xai", id: "grok-4" },
+): ExtensionContext {
 	return {
 		cwd,
+		model: model ?? undefined,
 		modelRegistry: { getApiKeyForProvider: apiKey },
 	} as unknown as ExtensionContext;
 }
@@ -74,6 +86,7 @@ describe("image_gen extension", () => {
 		expect(tool.promptGuidelines).toBeUndefined();
 		expect(tool.description).toContain("Omit referenced_image_paths");
 		expect(tool.description).toContain("explicitly requests");
+		expect(tool.description).toContain("follow the parent model");
 		expect(tool.parameters).toBeDefined();
 	});
 
@@ -90,14 +103,72 @@ describe("image_gen extension", () => {
 		}
 	});
 
-	it("requires xAI authentication", async () => {
+	it("requires explicitly selected xAI authentication", async () => {
 		const cwd = await mkdtemp(join(tmpdir(), "tau-image-gen-test-"));
 		try {
-			const { tool, apiKey } = harness(null);
-			await expect(tool.execute("id", { prompt: "x" }, undefined, undefined, context(cwd, apiKey))).rejects.toThrow(
+			const { tool, apiKey } = harness({});
+			await expect(
+				tool.execute("id", { prompt: "x", provider: "xai" }, undefined, undefined, context(cwd, apiKey)),
+			).rejects.toThrow(
 				"Run /login xai",
 			);
 			expect(apiKey).toHaveBeenCalledWith("xai");
+		} finally {
+			await rm(cwd, { recursive: true, force: true });
+		}
+	});
+
+	it("uses OpenAI for a GPT parent model", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "tau-image-gen-test-"));
+		try {
+			const { tool, apiKey } = harness();
+			const result = await tool.execute(
+				"id",
+				{ prompt: "openai", path: "openai.png" },
+				undefined,
+				undefined,
+				context(cwd, apiKey, { provider: "openai-codex", id: "gpt-5.4" }),
+			);
+			expect(apiKey).toHaveBeenCalledWith("openai-codex");
+			expect(client.generateImage).toHaveBeenCalledWith("openai", "openai", OPENAI_TOKEN, undefined);
+			expect(result.details).toMatchObject({ provider: "openai", model: "gpt-image-2" });
+		} finally {
+			await rm(cwd, { recursive: true, force: true });
+		}
+	});
+
+	it("falls back from OpenAI to xAI when automatic selection lacks OpenAI auth", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "tau-image-gen-test-"));
+		try {
+			const { tool, apiKey } = harness({ xai: "xai-token" });
+			const result = await tool.execute(
+				"id",
+				{ prompt: "fallback", path: "fallback.png" },
+				undefined,
+				undefined,
+				context(cwd, apiKey, null),
+			);
+			expect(apiKey.mock.calls).toEqual([["openai-codex"], ["xai"]]);
+			expect(client.generateImage).toHaveBeenCalledWith("xai", "fallback", "xai-token", undefined);
+			expect(result.details).toMatchObject({ provider: "xai", model: "grok-imagine-image-quality" });
+		} finally {
+			await rm(cwd, { recursive: true, force: true });
+		}
+	});
+
+	it("honors an explicit provider override", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "tau-image-gen-test-"));
+		try {
+			const { tool, apiKey } = harness();
+			await tool.execute(
+				"id",
+				{ prompt: "override", provider: "xai", path: "override.png" },
+				undefined,
+				undefined,
+				context(cwd, apiKey, { provider: "openai-codex", id: "gpt-5.4" }),
+			);
+			expect(apiKey.mock.calls).toEqual([["xai"]]);
+			expect(client.generateImage).toHaveBeenCalledWith("xai", "override", "xai-token", undefined);
 		} finally {
 			await rm(cwd, { recursive: true, force: true });
 		}
@@ -117,9 +188,13 @@ describe("image_gen extension", () => {
 				},
 				context(cwd, apiKey),
 			);
-			expect(client.generateImage).toHaveBeenCalledWith("blue whale", "token", undefined);
+			expect(client.generateImage).toHaveBeenCalledWith("xai", "blue whale", "xai-token", undefined);
 			expect(client.editImage).not.toHaveBeenCalled();
-			expect(result.details).toMatchObject({ model: "grok-imagine-image-quality", operation: "generate" });
+			expect(result.details).toMatchObject({
+				provider: "xai",
+				model: "grok-imagine-image-quality",
+				operation: "generate",
+			});
 			expect(result.content[1]).toEqual({ type: "image", data: PNG.toString("base64"), mimeType: "image/png" });
 			const path = String(result.details.path);
 			expect(await readFile(path)).toEqual(PNG);
@@ -185,12 +260,13 @@ describe("image_gen extension", () => {
 				context(cwd, apiKey),
 			);
 			expect(client.editImage).toHaveBeenCalledWith(
+				"xai",
 				"edit",
 				[
 					{ mimeType: "image/jpeg", data: jpeg.toString("base64") },
 					{ mimeType: "image/webp", data: webp.toString("base64") },
 				],
-				"token",
+				"xai-token",
 				undefined,
 			);
 			expect(result.details.operation).toBe("edit");
