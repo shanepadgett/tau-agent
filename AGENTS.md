@@ -53,6 +53,7 @@
 - Keep context small. Write commands that fetch only needed data.
 - Prefer compact, high-signal output. Avoid flood commands.
 - Batch independent reads/searches/checks when it saves turns and output stays readable.
+- Call the `review` subagent only after complex implementation work or when the user explicitly asks for it. Do not call it for documentation-only changes, trivial edits, or small localized changes.
 
 ## Tau Customization Workflow
 
