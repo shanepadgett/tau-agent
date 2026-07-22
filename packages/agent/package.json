@@ -1,6 +1,6 @@
 {
 	"name": "@shanepadgett/tau-agent",
-	"version": "0.17.0",
+	"version": "0.18.0",
 	"description": "Tau is a custom agentic harness built with pi extensions",
 	"type": "module",
 	"license": "MIT",
@@ -28,7 +28,7 @@
 		"README.md"
 	],
 	"dependencies": {
-		"@shanepadgett/tau-tui": "0.17.0",
+		"@shanepadgett/tau-tui": "0.18.0",
 		"@toon-format/toon": "2.3.0",
 		"smol-toml": "1.7.0"
 	},
