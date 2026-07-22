@@ -5,7 +5,7 @@ Tau's `subagent` tool delegates one focused task to an isolated child Pi session
 Each fresh call returns a thread ID. Continue that thread when feedback or follow-up work depends on the child's prior reads and reasoning:
 
 ```text
-subagent({ agent: "scout", task: "Trace configuration loading" })
+subagent({ agent: "review", task: "Review configuration loading" })
 subagent({ thread: "thread-1", task: "Now check whether this proposed fix covers every caller" })
 ```
 
@@ -14,7 +14,7 @@ Retained threads keep their complete child conversation for five minutes after t
 If the relevant files are already known, autoread them into a fresh or retained child turn:
 
 ```text
-subagent({ agent: "generalist", task: "Review the runtime change", files: ["src/runtime.ts", "test/runtime.test.ts"] })
+subagent({ agent: "review", task: "Review the runtime change", files: ["src/runtime.ts", "test/runtime.test.ts"] })
 ```
 
 Paths may be relative to the parent's current working directory or absolute. Tau reads current, line-numbered snapshots when the turn starts. Unreadable files produce failed context entries without stopping the child. Keep the list focused because complete snapshots consume the child's context window.
@@ -26,7 +26,7 @@ Paths may be relative to the parent's current working directory or absolute. Tau
 | **User (global)** | `~/.pi/agent/tau/agents/*.md` | You want the agent in every project |
 | **Project** | nearest trusted `.pi/tau/agents/*.md` | Repo-specific helpers |
 
-Precedence: **project overrides user**, which overrides Tau's built-ins (`scout`, `web-research`). Duplicate names in one scope are invalid.
+Precedence: **project overrides user**, which overrides Tau's built-ins (`review`, `web-research`). Duplicate names in one scope are invalid.
 
 ## Definition format
 
@@ -82,8 +82,7 @@ Tau assigns one display name to each fresh child and keeps it for follow-up turn
 
 ## Built-ins
 
-- `generalist` — focused analysis, review, implementation, or mixed work when no narrower agent fits
-- `scout` — local exploration with `read`, `grep`, `find`, `ls`
+- `review` — adversarial, read-only review for correctness, runtime risks, duplication, and over- or under-engineering
 - `web-research` — `websearch`, `codesearch`, `webfetch`
 - `context-sync` — maps meaningful uncommitted work into `.pi/contexts`. Offered to the coding agent when `extensions.context.sync.enabled` and `sync.automation` are true. Manual `/context-sync` remains when sync is enabled with `automation` false. Validation can auto-run it when `validation.enabled` and `sync.enabled`
 

@@ -23,33 +23,37 @@ describe("subagent discovery", () => {
 	it("loads built-ins and uses the nearest trusted project override", async () => {
 		const paths = await project();
 		await writeFile(
-			join(paths.agents, "scout.md"),
-			"---\nname: scout\ndescription: Project scout\ntools:\n  - read\n---\n\nProject-only prompt.\n",
+			join(paths.agents, "review.md"),
+			"---\nname: review\ndescription: Project review\ntools:\n  - read\n---\n\nProject-only prompt.\n",
 		);
 
 		expect(await findProjectAgentsDir(paths.cwd)).toBe(paths.agents);
 		const trusted = await discoverAgents(paths.cwd, true);
-		expect(trusted.agents.get("scout")?.description).toBe("Project scout");
-		expect(trusted.agents.get("scout")?.names).toEqual(["scout"]);
-		expect(trusted.agents.get("generalist")?.model).toBe("openai-codex/gpt-5.6-sol");
-		expect(trusted.agents.get("generalist")?.thinking).toBe("high");
+		expect(trusted.agents.get("review")?.description).toBe("Project review");
+		expect(trusted.agents.get("review")?.names).toEqual(["review"]);
+		expect(trusted.agents.has("generalist")).toBe(false);
+		expect(trusted.agents.has("scout")).toBe(false);
 		expect(trusted.agents.has("web-research")).toBe(true);
 
 		const untrusted = await discoverAgents(paths.cwd, false);
-		expect(untrusted.agents.get("scout")?.description).not.toBe("Project scout");
+		expect(untrusted.agents.get("review")?.description).not.toBe("Project review");
+		expect(untrusted.agents.get("review")?.model).toBe("openai-codex/gpt-5.6-sol");
+		expect(untrusted.agents.get("review")?.thinking).toBe("xhigh");
+		expect(untrusted.agents.has("generalist")).toBe(false);
+		expect(untrusted.agents.has("scout")).toBe(false);
 	});
 
 	it("blocks a malformed higher-precedence definition without blocking unrelated agents", async () => {
 		const paths = await project();
 		await writeFile(
-			join(paths.agents, "scout.md"),
-			"---\nname: scout\ndescription: Broken\ntools:\n  - subagent\nextra: nope\n---\n\nprompt\n",
+			join(paths.agents, "review.md"),
+			"---\nname: review\ndescription: Broken\ntools:\n  - subagent\nextra: nope\n---\n\nprompt\n",
 		);
 
 		const discovery = await discoverAgents(paths.cwd, true);
-		expect(discovery.agents.has("scout")).toBe(false);
-		expect(discovery.invalid.get("scout")?.[0]?.reason).toContain("unsupported field");
-		expect(discovery.invalid.get("scout")?.[0]?.reason).toContain("forbidden");
+		expect(discovery.agents.has("review")).toBe(false);
+		expect(discovery.invalid.get("review")?.[0]?.reason).toContain("unsupported field");
+		expect(discovery.invalid.get("review")?.[0]?.reason).toContain("forbidden");
 		expect(discovery.agents.has("web-research")).toBe(true);
 	});
 

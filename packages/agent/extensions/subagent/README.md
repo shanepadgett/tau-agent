@@ -8,8 +8,7 @@ Each fresh child also gets a display name from its agent definition. The name st
 
 Tau includes these built-in agents:
 
-- `generalist` handles focused analysis, review, implementation, or mixed work when no narrower agent fits. Delegated tasks should state their scope and desired depth.
-- `scout` explores local files and code with `read`, `grep`, `find`, and `ls`.
+- `review` performs adversarial, read-only code review for correctness, runtime risks, duplication, and over- or under-engineering.
 - `web-research` researches web and code sources with `websearch`, `codesearch`, and `webfetch`.
 - `context-sync` maps meaningful uncommitted work into `.pi/contexts`. Agent-driven use is `extensions.context.sync.automation` (requires `sync.enabled`). `/context-sync` is the manual/nudge path when sync is enabled. Validation can auto-run it when validation and sync are enabled.
 
@@ -18,7 +17,7 @@ Ask Tau to delegate a task, or let it call `subagent` with an agent name and tas
 When the relevant files are already known, pass them with the call so Tau can autoread them into that child turn:
 
 ```text
-subagent({ agent: "generalist", task: "Review the runtime change", files: ["src/runtime.ts", "test/runtime.test.ts"] })
+subagent({ agent: "review", task: "Review the runtime change", files: ["src/runtime.ts", "test/runtime.test.ts"] })
 ```
 
 Paths may be relative to the parent's current working directory or absolute. Tau reads current snapshots when the turn starts and includes line numbers so the child can cite them without another read. Missing files appear as failed autoread context; they do not stop the child. Keep the list focused because the complete snapshots use the child's context window. Files can also be supplied on a retained-thread follow-up.

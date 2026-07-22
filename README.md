@@ -27,7 +27,7 @@ Restart Pi or run `/reload` after installation.
 
 - **Compact exploration tools** — Tau replaces `ls`, `find`, `grep`, and `read` with bounded output and focused reads. Less directory noise enters the model context.
 - **One patch tool** — Multi-file edits use a structured patch format instead of separate write and edit wrappers.
-- **Focused delegation** — `subagent` sends one bounded job to an isolated child session. Built-in `scout` and `web-research` keep the parent conversation small.
+- **Focused delegation** — `subagent` sends one bounded job to an isolated child session. Built-in `review` and `web-research` agents handle adversarial code review and external research.
 - **External references** — `/reference` keeps comparison repositories outside the working tree. Select one when it matters; Tau gives the agent the exact path and reason instead of letting it browse unrelated code.
 - **Git flow** — `/commit` builds and reviews semantic commit groups.
 - **Useful TUI flows** — Branch switching, session management, question panels, idea capture, stashed drafts, and status information live in Pi-native interfaces.
