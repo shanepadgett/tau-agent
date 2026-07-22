@@ -5,7 +5,11 @@
 			"editor": "code"
 		},
 		"context": {
-			
+			"validation": {
+				"ignoreGlobs": [
+					"docs/plans/**"
+				]
+			}
 		},
 		"silentCommandRunner": {
 			"commands": [

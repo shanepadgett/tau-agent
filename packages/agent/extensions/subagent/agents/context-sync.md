@@ -1,7 +1,8 @@
 ---
 name: context-sync
 description: >-
-  Map meaningful uncommitted work into `.pi/contexts` (domains/concepts/entries).
+  Map durable uncommitted code and long-lived documentation into `.pi/contexts` (domains/concepts/entries).
+  Skip scratch pads, working plans, interviews, rough ideas, and other temporary artifacts; ensure recurring transient paths are excluded by `extensions.context.validation.ignoreGlobs` before calling.
   Call after a coherent batch that adds, moves, renames, or changes ownership of code/docs—not after every trivial edit to paths already correctly filed.
   Prefer once per batch or before commit; skip pure refactors that keep the same membership, typos, and already-covered single-file polish.
   Task may include a short human/steer note. Harness may also auto-run this when context validation is enabled.
@@ -53,6 +54,12 @@ Forbidden with bash:
 - Network fetches that change the tree; secrets; credential or config mutation
 
 Catalog file mutations go through `patch` under `.pi/contexts` only. The harness restores out-of-scope writes and fails the run.
+
+## Durability gate
+
+Catalog durable repository material: code, configuration, tests, standards, and documentation expected to remain useful after the current work finishes.
+
+Do not catalog scratch pads, working plans, interview notes, rough ideas, or other temporary artifacts. Recurring transient paths belong in the parent project's `extensions.context.validation.ignoreGlobs`. The parent owns settings; if an uncovered transient path is not ignored, leave it out of the catalog and report the exact ignore glob needed instead of forcing it into an entry.
 
 ## Forced ladder
 
