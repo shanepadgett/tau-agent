@@ -18,6 +18,10 @@ Names sessions from their first request so saved sessions remain findable.
 
 Adds `/branch` to create and switch Git branches from the TUI.
 
+## cache-diagnostics
+
+Records private prompt-cache fingerprints without storing prompt content. Run `/cache-debug` after suspicious cache misses to write a bounded investigation report under `~/.pi/agent/cache-diagnostics/reports/`.
+
 ## clear-screen
 
 Adds `/clear-screen` to clear terminal output without changing the session.
