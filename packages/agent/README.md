@@ -25,6 +25,7 @@ pi -e .
 
 ## Docs
 
+- [Context management](./docs/context.md) — repository context structure and taxonomy
 - [Extending Tau Agent](./docs/extending-tau-agent.md) — public events and integration
 - [Subagents](./docs/subagents.md) — custom agent definitions
 - [TUI](./docs/tui.md) — shared UI components
