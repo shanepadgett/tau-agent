@@ -404,6 +404,36 @@ describe("context pruning extension wiring", () => {
 		expect(snapshots.at(-1)).toEqual({ states: [{ rowId: "old", state: "pruned" }] });
 	});
 
+	it("prunes after an aborted assistant response left an unmatched tool call", async () => {
+		settings.minimumReclaimTokens = 1;
+		const noiseCall = fauxAssistantMessage(fauxToolCall("grep", {}, { id: "noise" }));
+		const noiseResult = result("noise", "grep", "x".repeat(40_000));
+		const abandoned = fauxAssistantMessage(fauxToolCall("bash", { command: "blocked" }, { id: "abandoned" }), {
+			stopReason: "aborted",
+			errorMessage: "Operation aborted",
+		});
+		const anchorCall = fauxAssistantMessage(fauxToolCall("context_prune", {}, { id: "anchor" }));
+		const activeBranch = [
+			{ type: "message", message: noiseCall },
+			{ type: "message", message: noiseResult },
+			{ type: "message", message: abandoned },
+			{ type: "message", message: anchorCall },
+		];
+		const test = harness(activeBranch);
+		await start(test);
+		const projected = (await test.run("context", {
+			type: "context",
+			messages: [noiseCall, noiseResult, abandoned],
+		})) as { messages: ContextEvent["messages"] };
+		expect(projected.messages).toEqual([noiseCall, noiseResult]);
+
+		const execution = await executeEmptyPrune(test);
+		expect(execution.details).toMatchObject({
+			status: "applied",
+			newlyPrunedToolCallIds: ["noise"],
+		});
+	});
+
 	it("replays and clears complete row snapshots across start, tree, compact, and shutdown", async () => {
 		const activeBranch = appliedBranch();
 		const test = harness(activeBranch);

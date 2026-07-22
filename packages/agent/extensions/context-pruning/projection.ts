@@ -10,7 +10,8 @@ export function projectContext(
 	messages: readonly ContextMessage[],
 	state: ActiveContextPruningState,
 ): ContextMessage[] {
-	const inputPairs = indexToolPairs(messages);
+	const abandonedToolCallIds = new Set<string>();
+	const inputPairs = indexToolPairs(messages, abandonedToolCallIds);
 	const anchorBoundary = visibleAnchorBoundary(messages, state.latestAnchorToolCallId, inputPairs);
 	const prunedToolCallIds = state.latestAnchorToolCallId === undefined ? new Set<string>() : state.prunedToolCallIds;
 	const prunedAutoreadRowIds =
@@ -43,7 +44,7 @@ export function projectContext(
 		const content = message.content.filter((block) => {
 			const remove =
 				(removeThinking && block.type === "thinking") ||
-				(block.type === "toolCall" && prunedToolCallIds.has(block.id));
+				(block.type === "toolCall" && (prunedToolCallIds.has(block.id) || abandonedToolCallIds.has(block.id)));
 			if (remove) changed = true;
 			return !remove;
 		});
@@ -77,8 +78,11 @@ function visibleAnchorBoundary(
 	return block?.type === "toolCall" && block.name === "context_prune" ? pair.resultIndex : undefined;
 }
 
-function indexToolPairs(messages: readonly ContextMessage[]): Map<string, { callIndex: number; resultIndex: number }> {
-	const calls = new Map<string, number>();
+function indexToolPairs(
+	messages: readonly ContextMessage[],
+	abandonedToolCallIds?: Set<string>,
+): Map<string, { callIndex: number; resultIndex: number }> {
+	const calls = new Map<string, { index: number; aborted: boolean }>();
 	const results = new Map<string, number>();
 	for (let index = 0; index < messages.length; index += 1) {
 		const message = messages[index];
@@ -86,7 +90,7 @@ function indexToolPairs(messages: readonly ContextMessage[]): Map<string, { call
 			for (const block of message.content) {
 				if (block.type !== "toolCall") continue;
 				if (calls.has(block.id)) throw new Error(`Duplicate tool call in projected context: ${block.id}`);
-				calls.set(block.id, index);
+				calls.set(block.id, { index, aborted: message.stopReason === "aborted" });
 			}
 		} else if (message.role === "toolResult") {
 			if (results.has(message.toolCallId))
@@ -96,10 +100,16 @@ function indexToolPairs(messages: readonly ContextMessage[]): Map<string, { call
 	}
 
 	const pairs = new Map<string, { callIndex: number; resultIndex: number }>();
-	for (const [id, callIndex] of calls) {
+	for (const [id, call] of calls) {
 		const resultIndex = results.get(id);
-		if (resultIndex === undefined) throw new Error(`Orphaned tool call in projected context: ${id}`);
-		pairs.set(id, { callIndex, resultIndex });
+		if (resultIndex === undefined) {
+			if (call.aborted && abandonedToolCallIds) {
+				abandonedToolCallIds.add(id);
+				continue;
+			}
+			throw new Error(`Orphaned tool call in projected context: ${id}`);
+		}
+		pairs.set(id, { callIndex: call.index, resultIndex });
 	}
 	for (const id of results.keys()) {
 		if (!calls.has(id)) throw new Error(`Orphaned tool result in projected context: ${id}`);

@@ -117,6 +117,19 @@ describe("context pruning projection", () => {
 		expect(() => projectContext([result("orphan", "read")], state([]))).toThrow(/Orphaned tool result/);
 	});
 
+	it("drops an unmatched tool call from an aborted assistant response", () => {
+		const abandoned = fauxAssistantMessage(fauxToolCall("bash", { command: "blocked" }, { id: "abandoned" }), {
+			stopReason: "aborted",
+			errorMessage: "Operation aborted",
+		});
+		const ordinary = fauxAssistantMessage(fauxToolCall("bash", { command: "blocked" }, { id: "ordinary" }));
+		const anchor = fauxAssistantMessage(fauxToolCall("context_prune", {}, { id: "anchor" }));
+		const anchorResult = result("anchor", "context_prune");
+
+		expect(projectContext([abandoned, anchor, anchorResult], state([]))).toEqual([anchor, anchorResult]);
+		expect(() => projectContext([ordinary, anchor, anchorResult], state([]))).toThrow(/Orphaned tool call.*ordinary/);
+	});
+
 	it("preserves user bash, branch summary, compaction summary, and unknown custom messages", () => {
 		const preserved: Message[] = [
 			{ role: "user", content: "keep", timestamp: 1 },
