@@ -84,6 +84,6 @@ describe("context sync", () => {
 		const agent = discovery.agents.get("context-sync");
 		expect(agent).toBeDefined();
 		expect(agent?.tools).toEqual([...CONTEXT_SYNC_REQUIRED_TOOLS]);
-		expect(agent?.description).toContain("meaningful uncommitted work");
+		expect(agent?.description).toContain("durable uncommitted code");
 	});
 });
