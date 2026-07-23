@@ -135,18 +135,13 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 		const discovery = await discoverAgents(ctx.cwd, ctx.isProjectTrusted());
 		warn(discovery, ctx);
 		const lines = (await parentVisibleAgents(ctx, discovery)).map((agent) => `- ${agent.name}: ${agent.description}`);
-		const activeThreads = runtime.listThreads(ctx.cwd).map((thread) => {
-			const task = thread.initialTask.replace(/\s+/g, " ").trim();
-			return `- ${thread.id} (${thread.displayName} · ${thread.definition.name}): ${task.length <= 160 ? task : `${task.slice(0, 159)}…`}`;
-		});
-		const threadSection = activeThreads.length ? `\n\nActive reusable threads:\n${activeThreads.join("\n")}` : "";
 		const prompt = `## Subagents
 Use \`subagent\` when an available agent matches a focused part of the task.
 
 Available agents for this turn:
 ${lines.join("\n")}
 
-Start a fresh thread with \`agent\` and \`task\`. Continue an existing thread with \`thread\` and \`task\`. Reuse a thread when feedback or follow-up work depends on its prior reads and reasoning. Start fresh for unrelated work or when its context is stale or oversized.${threadSection}
+Start a fresh thread with \`agent\` and \`task\`. Continue an existing thread with \`thread\` and \`task\`. Reuse a thread when feedback or follow-up work depends on its prior reads and reasoning. Start fresh for unrelated work or when its context is stale or oversized.
 
 Pass \`files\` when exact relevant files are already known. Tau autoreads current line-numbered snapshots into that child turn before it starts.
 
