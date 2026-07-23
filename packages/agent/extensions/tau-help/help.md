@@ -46,6 +46,10 @@ Replaces Pi’s filesystem inspection tools with compact Tau versions: `ls`, `fi
 
 Adds `/footer` to toggle and refresh Tau’s status footer.
 
+## handoff
+
+Adds `/handoff <goal>` to start a fresh linked session from the current conversation. Tau generates an opening prompt, autoreads the relevant project files it already knows about, and leaves the prompt in the editor for review instead of submitting it.
+
 ## ideas
 
 Adds `/ideas` to log rough ideas or open the ideas browser.
