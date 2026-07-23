@@ -5,13 +5,7 @@ import { homedir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { type Static, Type } from "typebox";
 import { detectImageMimeType, editImage, generateImage, type EditImage, type GeneratedImage } from "./client.ts";
-import {
-	OPENAI_IMAGE_MODEL,
-	OPENAI_PROVIDER,
-	XAI_IMAGE_MODEL,
-	XAI_PROVIDER,
-	type ImageProvider,
-} from "./constants.ts";
+import { OPENAI_IMAGE_MODEL, OPENAI_PROVIDER, XAI_IMAGE_MODEL, XAI_PROVIDER, type ImageProvider } from "./constants.ts";
 
 const MAX_INPUT_BYTES = 50 * 1024 * 1024;
 const MAX_INLINE_BYTES = 12 * 1024 * 1024;
@@ -75,7 +69,8 @@ export default function imageGenExtension(pi: ExtensionAPI): void {
 				}
 
 				const parentUsesXai =
-					ctx.model?.provider.toLowerCase() === XAI_PROVIDER || ctx.model?.id.toLowerCase().includes("grok") === true;
+					ctx.model?.provider.toLowerCase() === XAI_PROVIDER ||
+					ctx.model?.id.toLowerCase().includes("grok") === true;
 				const preferredProvider: ImageProvider = params.provider ?? (parentUsesXai ? "xai" : "openai");
 				const providers: readonly ImageProvider[] = params.provider
 					? [params.provider]
@@ -101,9 +96,7 @@ export default function imageGenExtension(pi: ExtensionAPI): void {
 					if (params.provider === "xai") {
 						throw new Error("xAI authentication is unavailable. Run /login xai and choose a login method.");
 					}
-					throw new Error(
-						"Image generation authentication is unavailable. Run /login for OpenAI Codex or xAI.",
-					);
+					throw new Error("Image generation authentication is unavailable. Run /login for OpenAI Codex or xAI.");
 				}
 				const model = provider === "openai" ? OPENAI_IMAGE_MODEL : XAI_IMAGE_MODEL;
 				const images: EditImage[] = [];

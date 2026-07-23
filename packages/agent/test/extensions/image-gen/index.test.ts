@@ -42,9 +42,10 @@ const OPENAI_TOKEN = `header.${Buffer.from(
 	JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "account" } }),
 ).toString("base64url")}.signature`;
 
-function harness(
-	tokens: Readonly<Record<string, string>> = { "openai-codex": OPENAI_TOKEN, xai: "xai-token" },
-): { tool: RegisteredTool; apiKey: ReturnType<typeof vi.fn> } {
+function harness(tokens: Readonly<Record<string, string>> = { "openai-codex": OPENAI_TOKEN, xai: "xai-token" }): {
+	tool: RegisteredTool;
+	apiKey: ReturnType<typeof vi.fn>;
+} {
 	let tool: RegisteredTool | undefined;
 	const apiKey = vi.fn(async (provider: string) => tokens[provider]);
 	const pi = {
@@ -109,9 +110,7 @@ describe("image_gen extension", () => {
 			const { tool, apiKey } = harness({});
 			await expect(
 				tool.execute("id", { prompt: "x", provider: "xai" }, undefined, undefined, context(cwd, apiKey)),
-			).rejects.toThrow(
-				"Run /login xai",
-			);
+			).rejects.toThrow("Run /login xai");
 			expect(apiKey).toHaveBeenCalledWith("xai");
 		} finally {
 			await rm(cwd, { recursive: true, force: true });

@@ -166,9 +166,9 @@ describe("image generation clients", () => {
 		const fetchMock = vi.fn(async (_url: string | URL, _init?: FetchCallInit) => imageResponse());
 		vi.stubGlobal("fetch", fetchMock);
 		await editImage("xai", "add hat", [{ mimeType: "image/png", data: "cG5n" }], XAI_TOKEN);
-		let [url, init] = fetchMock.mock.calls[0] ?? [];
+		const [url, initialInit] = fetchMock.mock.calls[0] ?? [];
 		expect(url).toBe("https://api.x.ai/v1/images/edits");
-		expect(JSON.parse(String(init?.body))).toMatchObject({
+		expect(JSON.parse(String(initialInit?.body))).toMatchObject({
 			image: { url: "data:image/png;base64,cG5n" },
 			prompt: "add hat",
 		});
@@ -182,7 +182,7 @@ describe("image generation clients", () => {
 			],
 			XAI_TOKEN,
 		);
-		[, init] = fetchMock.mock.calls[1] ?? [];
+		const [, init] = fetchMock.mock.calls[1] ?? [];
 		expect(JSON.parse(String(init?.body))).toMatchObject({
 			images: [{ url: "data:image/png;base64,cG5n" }, { url: "data:image/jpeg;base64,anBlZw==" }],
 		});
