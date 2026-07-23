@@ -22,3 +22,4 @@
 {"id":"ff3868b2-4052-4c9f-86b0-d15e29120464","text":"allow agent to manage its own context window with context reminder and self compaction infra","createdAt":1784642245407}
 {"id":"208aaaf1-1cb8-431f-a161-f70fd2fec188","text":"injected context files need exposed on subagent dashboard","createdAt":1784647675244}
 {"id":"fe1336d4-75e6-402b-a3f6-cf9176586835","text":"we need to stop the agent from logging plans into context with context sync as they are ephemeral","createdAt":1784647772427}
+{"id":"2c623ddb-500a-48d4-ab6d-bccca990e203","text":"create a handoff slash command that starts a new chat from a generated handoff from the chat the command was run in based on the argument the user gives for what should be in the handoff","createdAt":1784823436281}
