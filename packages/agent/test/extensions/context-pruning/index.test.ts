@@ -8,7 +8,7 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { setContextPruningEnabled, type ContextPruneDetailsV1 } from "../../../shared/context-pruning-state.ts";
+import { setContextPruningEnabled, type ContextPruneDetailsV2 } from "../../../shared/context-pruning-state.ts";
 
 const settings = vi.hoisted(() => ({
 	enabled: true,
@@ -18,7 +18,6 @@ const settings = vi.hoisted(() => ({
 		"Move toward a pruning point now. Finish the current coherent step, then prune before starting another broad exploration. Managed context is materially increasing model cost.",
 		"Prune now before further tool work. Continuing with stale managed context is wasting money.",
 	],
-	minimumReclaimTokens: 8_000,
 }));
 vi.mock("../../../shared/settings/load.ts", () => ({
 	loadTauExtensionSettings: async () => ({ ...settings }),
@@ -28,20 +27,17 @@ import contextPruningExtension from "../../../extensions/context-pruning/index.t
 
 type Handler = (...args: unknown[]) => unknown;
 
-function persistedDetails(): ContextPruneDetailsV1 {
+function persistedDetails(): ContextPruneDetailsV2 {
 	return {
-		v: 1,
-		status: "applied",
+		v: 2,
 		anchorToolCallId: "anchor",
-		newlyPrunedToolCallIds: ["old"],
-		newlyPrunedAutoreadRowIds: [],
+		prunedToolCallIds: ["old"],
+		prunedAutoreadRowIds: [],
 		retainedToolCallIds: [],
 		retainedAutoreadRowIds: [],
 		refreshedFiles: [],
 		deferredFiles: [],
-		tokensBefore: 20,
-		tokensAfter: 10,
-		tokensReclaimed: 10,
+		warnings: [],
 	};
 }
 
@@ -217,7 +213,6 @@ afterEach(() => {
 		"Move toward a pruning point now. Finish the current coherent step, then prune before starting another broad exploration. Managed context is materially increasing model cost.",
 		"Prune now before further tool work. Continuing with stale managed context is wasting money.",
 	];
-	settings.minimumReclaimTokens = 8_000;
 });
 
 describe("context pruning extension wiring", () => {
@@ -291,9 +286,6 @@ describe("context pruning extension wiring", () => {
 		expect(test.sent).toEqual([]);
 		expect(test.notifications.at(-1)).toEqual({ message: "Context pruning is disabled.", type: "info" });
 
-		const execution = await executeEmptyPrune(test);
-		expect(execution.details).toMatchObject({ status: "skipped" });
-		expect(execution.content[0]).toMatchObject({ type: "text", text: expect.stringContaining("disabled") });
 	});
 
 	it("emits the strongest newly crossed boundary with an escalating instruction", async () => {
@@ -482,7 +474,6 @@ describe("context pruning extension wiring", () => {
 	});
 
 	it("does not publish planned visual state before the applied tool result is branch-visible", async () => {
-		settings.minimumReclaimTokens = 1;
 		const oldCall = fauxAssistantMessage(fauxToolCall("grep", {}, { id: "old" }));
 		const anchorCall = fauxAssistantMessage(fauxToolCall("context_prune", {}, { id: "anchor" }));
 		const activeBranch = [
@@ -498,7 +489,7 @@ describe("context pruning extension wiring", () => {
 			messages: [oldCall, result("old", "grep", "x".repeat(40_000))],
 		});
 		const execution = await executeEmptyPrune(test);
-		expect(execution.details).toMatchObject({ status: "applied", newlyPrunedToolCallIds: ["old"] });
+		expect(execution.details).toMatchObject({ prunedToolCallIds: ["old"] });
 		expect(snapshots.at(-1)).toEqual({ states: [] });
 		activeBranch.push({ type: "message", message: result("anchor", "context_prune", execution.details) });
 		await test.run("context", {
@@ -508,8 +499,7 @@ describe("context pruning extension wiring", () => {
 		expect(snapshots.at(-1)).toEqual({ states: [{ rowId: "old", state: "pruned" }] });
 	});
 
-	it("prunes after an aborted assistant response left an unmatched tool call", async () => {
-		settings.minimumReclaimTokens = 1;
+	it("prunes ordinary and aborted calls without requiring complete exchanges", async () => {
 		const noiseCall = fauxAssistantMessage(fauxToolCall("grep", {}, { id: "noise" }));
 		const noiseResult = result("noise", "grep", "x".repeat(40_000));
 		const abandoned = fauxAssistantMessage(fauxToolCall("bash", { command: "blocked" }, { id: "abandoned" }), {
@@ -525,16 +515,9 @@ describe("context pruning extension wiring", () => {
 		];
 		const test = harness(activeBranch);
 		await start(test);
-		const projected = (await test.run("context", {
-			type: "context",
-			messages: [noiseCall, noiseResult, abandoned],
-		})) as { messages: ContextEvent["messages"] };
-		expect(projected.messages).toEqual([noiseCall, noiseResult]);
-
 		const execution = await executeEmptyPrune(test);
 		expect(execution.details).toMatchObject({
-			status: "applied",
-			newlyPrunedToolCallIds: ["noise"],
+			prunedToolCallIds: ["noise", "abandoned"],
 		});
 	});
 

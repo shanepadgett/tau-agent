@@ -83,12 +83,6 @@
 							"minItems": 1,
 							"maxItems": 5,
 							"description": "Ordered automatic pruning instructions. Later reminders repeat the final instruction, and the final tier requires an anchor before further tool work."
-						},
-						"minimumReclaimTokens": {
-							"type": "integer",
-							"default": 8000,
-							"minimum": 1,
-							"description": "Minimum estimated tokens a prune must reclaim."
 						}
 					},
 					"additionalProperties": false

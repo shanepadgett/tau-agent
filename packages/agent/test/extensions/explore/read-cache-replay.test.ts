@@ -5,7 +5,7 @@ import { generateUnifiedPatch, SessionManager, type ExtensionContext } from "@ea
 import { describe, expect, it } from "vitest";
 import { createCompleteFileMeta } from "../../../extensions/explore/full-file-knowledge.ts";
 import { createReadCacheStore, replayReadCache } from "../../../extensions/explore/read-cache.ts";
-import { setContextPruningEnabled, type ContextPruneDetailsV1 } from "../../../shared/context-pruning-state.ts";
+import { setContextPruningEnabled, type ContextPruneDetailsV2 } from "../../../shared/context-pruning-state.ts";
 
 function hash(text: string): string {
 	return createHash("sha256").update(text).digest("hex");
@@ -106,19 +106,16 @@ describe("read-cache replay", () => {
 				baselineText: source,
 			});
 			manager.appendMessage(fauxAssistantMessage(fauxToolCall("context_prune", {}, { id: "anchor" })));
-			const details: ContextPruneDetailsV1 = {
-				v: 1,
-				status: "applied",
+			const details: ContextPruneDetailsV2 = {
+				v: 2,
 				anchorToolCallId: "anchor",
-				newlyPrunedToolCallIds: ["read-row"],
-				newlyPrunedAutoreadRowIds: [],
+				prunedToolCallIds: ["read-row"],
+				prunedAutoreadRowIds: [],
 				retainedToolCallIds: [],
 				retainedAutoreadRowIds: [],
 				refreshedFiles: [],
 				deferredFiles: [],
-				tokensBefore: 20,
-				tokensAfter: 10,
-				tokensReclaimed: 10,
+				warnings: [],
 			};
 			const result: ToolResultMessage = {
 				role: "toolResult",
@@ -154,6 +151,42 @@ describe("read-cache replay", () => {
 		expect(replay.acceptedRows.map((row) => row.rowId)).toEqual(["retained"]);
 		expect(replay.completeFileChains.has(resolve(cwd, "retained.txt"))).toBe(true);
 		expect(replay.completeFileChains.has(resolve(cwd, "pruned.txt"))).toBe(false);
+	});
+
+	it("replays a checkpoint file directly from its atomic tool result", () => {
+		const cwd = "/workspace";
+		const snapshot = autoreadEntry(cwd, "retained.txt", "anchor:0", "retained source");
+		const replay = replayReadCache(
+			[
+				{
+					type: "message",
+					message: {
+						role: "toolResult",
+						toolName: "context_prune",
+						toolCallId: "anchor",
+						content: [{ type: "text", text: "checkpoint applied" }, { type: "text", text: snapshot.content }],
+						details: {
+							v: 2,
+							refreshedFiles: [
+								{
+									path: "retained.txt",
+									rowId: "anchor:0",
+									servedHash: hash("retained source"),
+									autoreadDetails: snapshot.details,
+								},
+							],
+						},
+					},
+				},
+			],
+			cwd,
+		);
+
+		expect(replay.completeFileChains.get(resolve(cwd, "retained.txt"))).toMatchObject({
+			servedHash: hash("retained source"),
+			rowIds: ["anchor:0"],
+			sourceText: "retained source",
+		});
 	});
 
 	it("returns accepted rows and a reconstructible complete-file dependency chain", () => {

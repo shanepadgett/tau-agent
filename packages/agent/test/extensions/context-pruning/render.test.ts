@@ -5,23 +5,22 @@ import {
 	renderContextPruneResult,
 	renderContextPruningNudge,
 } from "../../../extensions/context-pruning/render.ts";
-import type { ContextPruneDetailsV1 } from "../../../shared/context-pruning-state.ts";
+import type { ContextPruneDetailsV2 } from "../../../shared/context-pruning-state.ts";
 import { renderedText, testRowState, testTheme } from "../explore/helpers.ts";
 
-function details(status: "applied" | "skipped" = "applied"): ContextPruneDetailsV1 {
+function details(): ContextPruneDetailsV2 {
 	return {
-		v: 1,
-		status,
+		v: 2,
 		anchorToolCallId: "anchor",
-		newlyPrunedToolCallIds: status === "applied" ? ["grep-1", "read-2"] : [],
-		newlyPrunedAutoreadRowIds: status === "applied" ? ["auto-1"] : [],
+		prunedToolCallIds: ["grep-1", "read-2"],
+		prunedAutoreadRowIds: ["auto-1"],
 		retainedToolCallIds: ["patch-1"],
 		retainedAutoreadRowIds: [],
-		refreshedFiles: [{ path: "src/current.ts", rowId: "anchor:0", servedHash: "hash" }],
+		refreshedFiles: [
+			{ path: "src/current.ts", rowId: "anchor:0", servedHash: "hash", autoreadDetails: {} },
+		],
 		deferredFiles: [{ path: "src/later.ts", reason: "cold", relevantWhen: "fallback fails" }],
-		tokensBefore: 10_000,
-		tokensAfter: 1_000,
-		tokensReclaimed: 9_000,
+		warnings: [],
 	};
 }
 
@@ -118,13 +117,13 @@ describe("context prune rendering", () => {
 			testTheme,
 			undefined,
 		);
-		expect(renderedText(result)).toContain("Pruned 3 · retained 1 · refreshed 1 · deferred 1");
+		expect(renderedText(result)).toContain("Checkpoint · pruned 3 · retained 1 · refreshed 1 · deferred 1");
 		expect(renderedText(result)).not.toContain("grep-1");
 	});
 
 	it("lists bounded IDs and paths only when expanded", () => {
 		const many = details();
-		many.newlyPrunedToolCallIds = Array.from({ length: 30 }, (_, index) => `tool-${index}`);
+		many.prunedToolCallIds = Array.from({ length: 30 }, (_, index) => `tool-${index}`);
 		const result = renderContextPruneResult(
 			{ content: [{ type: "text", text: "applied" }], details: many },
 			true,
@@ -169,14 +168,17 @@ describe("context prune rendering", () => {
 		expect(warning).not.toContain("warning-tail");
 	});
 
-	it("renders skipped and malformed results as warnings", () => {
-		const skipped = renderContextPruneResult(
-			{ content: [{ type: "text", text: "Prune skipped: too small" }], details: details("skipped") },
+	it("renders applied warnings and malformed results as warnings", () => {
+		const warningDetails = details();
+		warningDetails.warnings.push("missing.ts: file not found");
+		const warned = renderContextPruneResult(
+			{ content: [{ type: "text", text: "Checkpoint applied with a warning" }], details: warningDetails },
 			false,
 			testTheme,
 			undefined,
 		);
-		expect(renderedText(skipped)).toContain("<warning>Prune skipped: too small</warning>");
+		expect(renderedText(warned)).toContain("<warning>Checkpoint");
+		expect(renderedText(warned)).toContain("warnings 1");
 
 		const malformed = renderContextPruneResult(
 			{ content: [{ type: "text", text: "bad details" }], details: {} },

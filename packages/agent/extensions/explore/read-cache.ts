@@ -67,6 +67,7 @@ export function createReadCacheStore(): ReadCacheStore {
 			}
 			const pruning = replayContextPruningState(manager.getBranch());
 			const ignoredRowIds = new Set([...pruning.prunedToolCallIds, ...pruning.prunedAutoreadRowIds]);
+			for (const id of pruning.retainedToolCallIds) ignoredRowIds.delete(id);
 			const state = replayReadCache(manager.buildContextEntries(), ctx.cwd, ignoredRowIds);
 			const trust = state.scopeTrust.get(pathKey)?.get(scopeKey);
 			return {
@@ -127,17 +128,21 @@ export function replayReadCache(
 		if (entry.type === "message" && "message" in entry) message = entry.message;
 		else if (entry.type === "custom_message") message = entry;
 		else continue;
-		const parsedMeta = readMetaFromMessage(message);
-		if (parsedMeta) {
-			const rowId = readRowId(message);
-			if (rowId && ignoredRowIds.has(rowId)) continue;
+		const candidates = carriedFileMessages(message);
+		let acceptedCarryForward = false;
+		for (const candidate of candidates ?? [message]) {
+			const parsedMeta = readMetaFromMessage(candidate);
+			if (!parsedMeta) continue;
+			acceptedCarryForward = true;
+			const candidateRowId = readRowId(candidate);
+			if (candidateRowId && ignoredRowIds.has(candidateRowId)) continue;
 			const pathKey = resolve(cwd, parsedMeta.pathKey);
 			const meta = pathKey === parsedMeta.pathKey ? parsedMeta : { ...parsedMeta, pathKey };
-			if (rowId && applyReadMeta(trust, failedPatchRecoveryPaths, message, meta, rowId)) {
+			if (candidateRowId && applyReadMeta(trust, failedPatchRecoveryPaths, candidate, meta, candidateRowId)) {
 				const acceptedTrust = trust.get(meta.pathKey)?.get(meta.scopeKey);
 				if (acceptedTrust) {
 					acceptedRows.push({
-						rowId,
+						rowId: candidateRowId,
 						pathKey: meta.pathKey,
 						scopeKey: meta.scopeKey,
 						meta,
@@ -145,8 +150,8 @@ export function replayReadCache(
 					});
 				}
 			}
-			continue;
 		}
+		if (acceptedCarryForward) continue;
 		for (const path of failedPatchPaths(message, cwd)) failedPatchRecoveryPaths.add(path);
 	}
 	const completeFileChains = new Map<string, CompleteFileDependencyChain>();
@@ -161,6 +166,25 @@ export function replayReadCache(
 		});
 	}
 	return { scopeTrust: trust, acceptedRows, completeFileChains, failedPatchRecoveryPaths };
+}
+
+function carriedFileMessages(message: unknown): unknown[] | undefined {
+	if (!isRecord(message) || message.role !== "toolResult" || message.toolName !== "context_prune") return undefined;
+	if (!isRecord(message.details) || message.details.v !== 2 || !Array.isArray(message.details.refreshedFiles)) {
+		return undefined;
+	}
+	if (!Array.isArray(message.content)) {
+		return undefined;
+	}
+	const messages: unknown[] = [];
+	for (let index = 0; index < message.details.refreshedFiles.length; index += 1) {
+		const file = message.details.refreshedFiles[index];
+		const part = message.content[index + 1];
+		if (!isRecord(file) || !isRecord(file.autoreadDetails)) continue;
+		if (!isRecord(part) || part.type !== "text" || typeof part.text !== "string") continue;
+		messages.push({ customType: "tau.autoread", content: part.text, details: file.autoreadDetails });
+	}
+	return messages;
 }
 
 function applyReadMeta(

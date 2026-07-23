@@ -1,6 +1,5 @@
 import {
 	defineTool,
-	type ContextEvent,
 	type ExtensionAPI,
 	type ExtensionContext,
 	type SessionEntry,
@@ -8,7 +7,7 @@ import {
 import {
 	replayContextPruningState,
 	setContextPruningEnabled,
-	type ContextPruneDetailsV1,
+	type ContextPruneDetailsV2,
 } from "../../shared/context-pruning-state.ts";
 import { emitTauEvent, onTauEvent } from "../../shared/events.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
@@ -24,15 +23,8 @@ import {
 } from "./render.ts";
 import contextPruningSettings from "./settings.ts";
 
-interface ProjectionCache {
-	generation: number;
-	input: ContextEvent["messages"];
-	stateKey: string;
-	messages: ContextEvent["messages"];
-}
-
 const TOOL_DESCRIPTION =
-	"Create a context anchor after broad exploration converges, when a context-pruning nudge directs it, or when substantial irrelevant tool evidence has accumulated. Do not use after routine tool batches or when expected savings are small. Immediately before calling, state retained conclusions, conditional relevance, and the next action in visible prose. Call context_prune alone in its tool batch.";
+	"Create a hard context checkpoint after broad exploration converges, when a context-pruning nudge directs it, or when stale evidence has accumulated. Everything before the checkpoint is removed from future model context unless selected for retention. Immediately before calling, state durable conclusions, conditional relevance, and the next action in visible prose.";
 const NUDGE_MESSAGE_TYPE = "tau.context-pruning.nudge";
 const NUDGE_BASELINE_ENTRY_TYPE = "tau.context-pruning.nudge-baseline";
 
@@ -47,8 +39,6 @@ interface NudgeState {
 export default function contextPruningExtension(pi: ExtensionAPI): void {
 	let enabled = false;
 	let lifecycleGeneration = 0;
-	let projectionCache: ProjectionCache | undefined;
-	let minimumReclaimTokens = contextPruningSettings.defaults.minimumReclaimTokens;
 	let nudgeEveryPercent = contextPruningSettings.defaults.nudgeEveryPercent;
 	let nudgeInstructions = contextPruningSettings.defaults.nudgeInstructions;
 	let toolRegistered = false;
@@ -80,7 +70,6 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 
 	const clearEphemeralState = () => {
 		lifecycleGeneration += 1;
-		projectionCache = undefined;
 	};
 	const setContextPruneToolActive = (active: boolean) => {
 		if (!toolRegistered) return;
@@ -109,13 +98,12 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 		const settings = await loadTauExtensionSettings(ctx, contextPruningSettings);
 		if (generation !== lifecycleGeneration) return;
 		enabled = settings.enabled;
-		minimumReclaimTokens = settings.minimumReclaimTokens;
 		nudgeEveryPercent = settings.nudgeEveryPercent;
 		nudgeInstructions = settings.nudgeInstructions;
 		setContextPruningEnabled(enabled);
 		if (enabled && !toolRegistered) {
 			pi.registerTool(
-				defineTool<typeof contextPruneParameters, ContextPruneDetailsV1>({
+				defineTool<typeof contextPruneParameters, ContextPruneDetailsV2>({
 					name: "context_prune",
 					label: "context_prune",
 					description: TOOL_DESCRIPTION,
@@ -124,23 +112,18 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 					promptGuidelines: [
 						"Use context_prune after broad exploration converges, when a context-pruning nudge directs it, or when substantial irrelevant evidence has accumulated.",
 						"A final-tier context-pruning nudge means preserve durable conclusions and prune before further tool work.",
-						"Do not use context_prune after routine tool batches or when expected savings are small.",
-						"Immediately before context_prune, write visible prose with retained conclusions, conditional relevance, and the next action, then call context_prune alone in its tool batch.",
+						"Everything before context_prune leaves future model context unless selected in keepFiles or keepToolCalls, so preserve durable conclusions, user constraints, conditional relevance, and the next action in visible prose immediately before calling it.",
 					],
 					parameters: contextPruneParameters,
 					executionMode: "sequential",
 					async execute(toolCallId, params, signal, _onUpdate, executionContext) {
-						const cache = projectionCache;
 						return executeContextPrune({
-							pi,
 							toolCallId,
 							params,
 							signal,
 							ctx: executionContext,
-							projection: cache && { generation: cache.generation, messages: cache.messages },
+							generation: lifecycleGeneration,
 							currentGeneration: () => lifecycleGeneration,
-							currentEnabled: () => enabled,
-							minimumReclaimTokens,
 						});
 					},
 					renderCall(args, theme, context) {
@@ -287,32 +270,13 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 	pi.on("context", (event, ctx) => {
 		if (!enabled) return undefined;
 		const state = replayContextPruningState(ctx.sessionManager.getBranch(), true);
-		const stateKey = JSON.stringify([
-			state.latestAnchorToolCallId,
-			[...state.prunedToolCallIds],
-			[...state.prunedAutoreadRowIds],
-		]);
-		if (
-			projectionCache?.generation === lifecycleGeneration &&
-			projectionCache.input === event.messages &&
-			projectionCache.stateKey === stateKey
-		) {
-			return { messages: projectionCache.messages };
+		const messages = projectContext(event.messages, state);
+		const nextRows = new Set([...state.prunedToolCallIds, ...state.prunedAutoreadRowIds]);
+		if (!setsEqual(visualRows, nextRows)) {
+			visualRows = nextRows;
+			pushVisualSnapshot();
 		}
-
-		try {
-			const messages = projectContext(event.messages, state);
-			projectionCache = { generation: lifecycleGeneration, input: event.messages, stateKey, messages };
-			const nextRows = new Set([...state.prunedToolCallIds, ...state.prunedAutoreadRowIds]);
-			if (!setsEqual(visualRows, nextRows)) {
-				visualRows = nextRows;
-				pushVisualSnapshot();
-			}
-			return { messages };
-		} catch {
-			projectionCache = undefined;
-			return undefined;
-		}
+		return { messages };
 	});
 }
 
@@ -404,12 +368,12 @@ function automaticPruneSteeringMessage(instruction: string, finalTier: boolean):
 	const silent =
 		"Internal context-management instruction. Follow it silently. Do not mention or acknowledge context percentages, prune messages, or internal context management.";
 	const protocol =
-		"When pruning, first preserve durable conclusions, conditional relevance, and the next action in visible prose, then call context_prune alone. If a prune is skipped, continue work without immediately retrying.";
+		"When pruning, first preserve durable conclusions, user constraints, conditional relevance, and the next action in visible prose, then call context_prune.";
 	return finalTier
 		? `${silent} ${instruction} This is the final reminder tier. Create a context anchor before further tool work. ${protocol}`
 		: `${silent} ${instruction} ${protocol}`;
 }
 
 function manualPruneSteeringMessage(): string {
-	return "Internal context-management instruction. Follow it silently without mentioning this request. Create a context anchor with context_prune, then continue unfinished work. First preserve durable conclusions, conditional relevance, and the next action in visible prose. Call context_prune alone. If projected savings are too small, continue work without immediately retrying.";
+	return "Internal context-management instruction. Follow it silently without mentioning this request. Create a hard context checkpoint with context_prune, then continue unfinished work. First preserve durable conclusions, user constraints, conditional relevance, and the next action in visible prose.";
 }

@@ -1,7 +1,7 @@
 import type { AgentToolResult, Theme } from "@earendil-works/pi-coding-agent";
 import { Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { Marker } from "@shanepadgett/tau-tui";
-import { parseContextPruneDetailsV1 } from "../../shared/context-pruning-state.ts";
+import { parseContextPruneDetailsV2 } from "../../shared/context-pruning-state.ts";
 import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.ts";
 import type { ContextPruneInput } from "./prune.ts";
 
@@ -166,7 +166,7 @@ export function renderContextPruneResult(
 	lastComponent: unknown,
 ): Text {
 	const component = lastComponent instanceof Text ? lastComponent : new Text("", 0, 0);
-	const details = parseContextPruneDetailsV1(result.details);
+	const details = parseContextPruneDetailsV2(result.details);
 	if (!details) {
 		component.setText(
 			theme.fg(
@@ -176,27 +176,21 @@ export function renderContextPruneResult(
 		);
 		return component;
 	}
-	if (details.status === "skipped") {
-		component.setText(
-			theme.fg("warning", boundedText(firstResultText(result) || "Prune skipped", MAX_WARNING_CHARACTERS)),
-		);
-		return component;
-	}
-
-	const pruned = details.newlyPrunedToolCallIds.length + details.newlyPrunedAutoreadRowIds.length;
+	const pruned = details.prunedToolCallIds.length + details.prunedAutoreadRowIds.length;
 	const retained = details.retainedToolCallIds.length + details.retainedAutoreadRowIds.length;
 	let text = theme.fg(
-		"success",
-		`Pruned ${pruned} · retained ${retained} · refreshed ${details.refreshedFiles.length} · deferred ${details.deferredFiles.length}`,
+		details.warnings.length === 0 ? "success" : "warning",
+		`Checkpoint · pruned ${pruned} · retained ${retained} · refreshed ${details.refreshedFiles.length} · deferred ${details.deferredFiles.length}${details.warnings.length === 0 ? "" : ` · warnings ${details.warnings.length}`}`,
 	);
 	if (expanded) {
 		const lines = [
-			...details.newlyPrunedToolCallIds.map((id) => `pruned tool: ${id}`),
-			...details.newlyPrunedAutoreadRowIds.map((id) => `pruned autoread: ${id}`),
+			...details.prunedToolCallIds.map((id) => `pruned tool: ${id}`),
+			...details.prunedAutoreadRowIds.map((id) => `pruned autoread: ${id}`),
 			...details.retainedToolCallIds.map((id) => `retained tool: ${id}`),
 			...details.retainedAutoreadRowIds.map((id) => `retained autoread: ${id}`),
 			...details.refreshedFiles.map((file) => `refreshed: ${file.path} (${file.rowId})`),
 			...details.deferredFiles.map((file) => `deferred: ${file.path} — ${file.reason}; when ${file.relevantWhen}`),
+			...details.warnings.map((warning) => `warning: ${warning}`),
 		];
 		const shown = lines.slice(0, MAX_EXPANDED_ITEMS).map((line) => boundedText(line, MAX_EXPANDED_LINE_CHARACTERS));
 		if (lines.length > shown.length) shown.push(`… ${lines.length - shown.length} more`);

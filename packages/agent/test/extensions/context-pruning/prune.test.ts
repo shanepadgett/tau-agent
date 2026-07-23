@@ -1,9 +1,8 @@
-import { fauxAssistantMessage, fauxText, fauxToolCall, type ToolResultMessage } from "@earendil-works/pi-ai";
-import { symlink, writeFile } from "node:fs/promises";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it, vi } from "vitest";
+import { fauxAssistantMessage, fauxToolCall, type ToolResultMessage } from "@earendil-works/pi-ai";
+import { writeFile } from "node:fs/promises";
+import type { ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
+import { describe, expect, it } from "vitest";
 import { executeContextPrune } from "../../../extensions/context-pruning/prune.ts";
-import { prepareAutoreadMessage } from "../../../extensions/explore/autoread.ts";
 import { createWorkspace } from "../explore/helpers.ts";
 
 function result(id: string, name: string, text = "result"): ToolResultMessage {
@@ -17,247 +16,159 @@ function result(id: string, name: string, text = "result"): ToolResultMessage {
 	};
 }
 
-function context(anchor: ReturnType<typeof fauxAssistantMessage>, cwd = "/tmp"): ExtensionContext {
-	const branch = [{ type: "message", message: anchor }];
-	return {
-		cwd,
-		sessionManager: { getBranch: () => branch, buildContextEntries: () => branch },
-	} as unknown as ExtensionContext;
-}
-
 function options(overrides: Partial<Parameters<typeof executeContextPrune>[0]> = {}) {
-	const anchor = fauxAssistantMessage([
-		fauxText("The retained conclusion is durable. Next I will implement it."),
-		fauxToolCall("context_prune", {}, { id: "anchor" }),
+	const batch = fauxAssistantMessage([
+		fauxToolCall("read", { path: "keep.ts" }, { id: "keep" }),
+		fauxToolCall("read", { path: "huge.ts" }, { id: "drop" }),
 	]);
-	const old = fauxAssistantMessage(fauxToolCall("grep", { query: "noise" }, { id: "old" }));
-	const sendMessage = vi.fn();
+	const anchor = fauxAssistantMessage(fauxToolCall("context_prune", {}, { id: "anchor" }));
+	const branch = [
+		{ type: "message", message: batch },
+		{ type: "message", message: result("keep", "read") },
+		{ type: "message", message: result("drop", "read", "x".repeat(40_000)) },
+		{
+			type: "custom_message",
+			customType: "tau.autoread",
+			content: "old snapshot",
+			display: true,
+			details: { rowId: "old-autoread" },
+		},
+		{
+			type: "message",
+			message: {
+				...result("older-anchor", "context_prune"),
+				details: { refreshedFiles: [{ rowId: "older-carried" }] },
+			},
+		},
+		{ type: "message", message: anchor },
+	] as unknown as SessionEntry[];
+	const ctx = {
+		cwd: "/tmp",
+		sessionManager: { getBranch: () => branch },
+	} as unknown as ExtensionContext;
 	return {
-		anchor,
-		sendMessage,
+		branch,
 		value: {
-			pi: { sendMessage },
 			toolCallId: "anchor",
 			params: { keepFiles: [], keepToolCalls: [], deferFiles: [] },
 			signal: undefined,
-			ctx: context(anchor),
-			projection: { generation: 1, messages: [old, result("old", "grep", "x".repeat(40_000))] },
+			ctx,
+			generation: 1,
 			currentGeneration: () => 1,
-			currentEnabled: () => true,
-			minimumReclaimTokens: 1,
 			...overrides,
 		},
 	};
 }
 
-describe("context prune planning", () => {
-	it("applies a deterministic prune and publishes deferred context only at commit", async () => {
-		const harness = options({
-			params: {
-				keepFiles: [],
-				keepToolCalls: [],
-				deferFiles: [{ path: "later.ts", reason: "cold", relevantWhen: "the fallback fails" }],
-			},
-		});
+describe("context checkpoint execution", () => {
+	it("always applies and records unreserved tool calls and autoreads", async () => {
+		const harness = options();
 		const execution = await executeContextPrune(harness.value);
-		expect(execution.details).toMatchObject({
-			status: "applied",
+		expect(execution.details).toEqual({
+			v: 2,
 			anchorToolCallId: "anchor",
-			newlyPrunedToolCallIds: ["old"],
-			newlyPrunedAutoreadRowIds: [],
-			deferredFiles: [{ path: "later.ts", reason: "cold", relevantWhen: "the fallback fails" }],
+			prunedToolCallIds: ["keep", "drop"],
+			prunedAutoreadRowIds: ["old-autoread", "older-carried"],
+			retainedToolCallIds: [],
+			retainedAutoreadRowIds: [],
+			refreshedFiles: [],
+			deferredFiles: [],
+			warnings: [],
 		});
-		expect(execution.details.tokensReclaimed).toBeGreaterThan(0);
-		expect(harness.sendMessage).toHaveBeenCalledOnce();
-		expect(harness.sendMessage).toHaveBeenCalledWith(
-			expect.objectContaining({ customType: "tau.context-pruning.deferred", display: false }),
-			{ deliverAs: "steer" },
-		);
+		expect(execution.content[0]?.text).toContain("checkpoint applied");
 	});
 
-	it("rejects sibling calls and unknown retained exchanges without side effects", async () => {
-		const siblingAnchor = fauxAssistantMessage([
-			fauxToolCall("context_prune", {}, { id: "anchor" }),
-			fauxToolCall("read", { path: "x" }, { id: "sibling" }),
-		]);
-		const sibling = options({ ctx: context(siblingAnchor) });
-		const siblingResult = await executeContextPrune(sibling.value);
-		expect(siblingResult.details.status).toBe("skipped");
-		expect(siblingResult.content[0]?.text).toContain("only tool call");
-		expect(sibling.sendMessage).not.toHaveBeenCalled();
-
-		const unknown = options({
-			params: {
-				keepFiles: [],
-				keepToolCalls: [{ toolCallId: "missing", relevance: "needed" }],
-				deferFiles: [],
-			},
-		});
-		const unknownResult = await executeContextPrune(unknown.value);
-		expect(unknownResult.details.status).toBe("skipped");
-		expect(unknownResult.content[0]?.text).toContain("complete currently projected exchange");
-		expect(unknown.sendMessage).not.toHaveBeenCalled();
-	});
-
-	it("keeps exact exchanges and returns an atomic no-op below threshold", async () => {
+	it("retains one call from a parallel batch and harmlessly deduplicates IDs", async () => {
 		const harness = options({
 			params: {
 				keepFiles: [],
-				keepToolCalls: [{ toolCallId: "old", relevance: "chronology matters" }],
+				keepToolCalls: [
+					{ toolCallId: "keep", relevance: "needed" },
+					{ toolCallId: "keep", relevance: "same selection" },
+					{ toolCallId: "missing", relevance: "already absent" },
+				],
 				deferFiles: [],
 			},
-			minimumReclaimTokens: 8_000,
 		});
 		const execution = await executeContextPrune(harness.value);
-		expect(execution.details.status).toBe("skipped");
-		expect(execution.details.newlyPrunedToolCallIds).toEqual([]);
-		expect(execution.content[0]?.text).toContain("without immediately retrying");
-		expect(harness.sendMessage).not.toHaveBeenCalled();
+		expect(execution.details.retainedToolCallIds).toEqual(["keep", "missing"]);
+		expect(execution.details.prunedToolCallIds).toEqual(["drop"]);
+		expect(execution.details.warnings).toEqual([]);
 	});
 
-	it("throws on pre-commit cancellation without publishing", async () => {
-		const controller = new AbortController();
-		controller.abort();
-		const harness = options({ signal: controller.signal });
-		await expect(executeContextPrune(harness.value)).rejects.toMatchObject({ name: "AbortError" });
-		expect(harness.sendMessage).not.toHaveBeenCalled();
-	});
-
-	it("rejects canonical duplicate selections and incomplete projected exchanges", async () => {
+	it("creates fresh snapshots without prior reads and reports per-file failures without blocking", async () => {
 		const workspace = await createWorkspace();
 		try {
-			await workspace.write("real.ts", "source");
-			await symlink(workspace.path("real.ts"), workspace.path("alias.ts"));
-			const duplicate = options({
-				ctx: context(options().anchor, workspace.dir),
-				params: {
-					keepFiles: [{ path: "real.ts", relevance: "active" }],
-					keepToolCalls: [],
-					deferFiles: [{ path: "alias.ts", reason: "cold", relevantWhen: "fallback" }],
-				},
-			});
-			const duplicateResult = await executeContextPrune(duplicate.value);
-			expect(duplicateResult.details.status).toBe("skipped");
-			expect(duplicateResult.content[0]?.text).toContain("Duplicate file selection");
-			expect(duplicate.sendMessage).not.toHaveBeenCalled();
-
-			const incompleteCall = fauxAssistantMessage(fauxToolCall("grep", {}, { id: "incomplete" }));
-			const incomplete = options({ projection: { generation: 1, messages: [incompleteCall] } });
-			const incompleteResult = await executeContextPrune(incomplete.value);
-			expect(incompleteResult.details.status).toBe("skipped");
-			expect(incompleteResult.content[0]?.text).toContain("Incomplete projected tool exchange");
-			expect(incomplete.sendMessage).not.toHaveBeenCalled();
-		} finally {
-			await workspace.cleanup();
-		}
-	});
-
-	it("publishes nothing when a later file refresh fails after an earlier refresh prepared", async () => {
-		const workspace = await createWorkspace();
-		try {
-			await workspace.write("first.ts", "old first");
-			await workspace.write("second.ts", "old second");
-			const first = await prepareAutoreadMessage({
-				rowId: "first",
-				path: "first.ts",
-				cwd: workspace.dir,
-				source: "explore",
-				batchId: "reads",
-				signal: undefined,
-				isLifecycleCurrent: () => true,
-			});
-			const second = await prepareAutoreadMessage({
-				rowId: "second",
-				path: "second.ts",
-				cwd: workspace.dir,
-				source: "explore",
-				batchId: "reads",
-				signal: undefined,
-				isLifecycleCurrent: () => true,
-			});
-			await workspace.write("first.ts", "new first");
-			await writeFile(workspace.path("second.ts"), Buffer.from([0xc3, 0x28]));
-			const anchor = options().anchor;
+			await workspace.write("current.ts", "export const current = true;\n");
 			const harness = options({
-				ctx: context(anchor, workspace.dir),
+				ctx: {
+					cwd: workspace.dir,
+					sessionManager: { getBranch: () => options().branch },
+				} as unknown as ExtensionContext,
 				params: {
 					keepFiles: [
-						{ path: "first.ts", relevance: "active" },
-						{ path: "second.ts", relevance: "active" },
+						{ path: "current.ts", relevance: "active" },
+						{ path: "current.ts", relevance: "duplicate" },
+						{ path: "missing.ts", relevance: "wanted" },
 					],
 					keepToolCalls: [],
-					deferFiles: [],
-				},
-				projection: {
-					generation: 1,
-					messages: [
-						{ role: "custom", ...first, timestamp: 1 },
-						{ role: "custom", ...second, timestamp: 1 },
-						fauxAssistantMessage(fauxToolCall("grep", {}, { id: "noise" })),
-						result("noise", "grep", "x".repeat(40_000)),
+					deferFiles: [
+						{ path: "current.ts", reason: "duplicate", relevantWhen: "never" },
+						{ path: "later.ts", reason: "cold", relevantWhen: "fallback fails" },
 					],
 				},
 			});
 			const execution = await executeContextPrune(harness.value);
-			expect(execution.details.status).toBe("skipped");
-			expect(harness.sendMessage).not.toHaveBeenCalled();
+			expect(execution.details.refreshedFiles).toHaveLength(1);
+			expect(execution.details.retainedAutoreadRowIds).toEqual(["anchor:0"]);
+			expect(execution.details.deferredFiles).toEqual([
+				{ path: "later.ts", reason: "cold", relevantWhen: "fallback fails" },
+			]);
+			expect(execution.details.warnings[0]).toContain("missing.ts");
+			expect(execution.content[1]?.text).toContain("current.ts");
+			expect(execution.content[2]?.text).toContain("later.ts");
 		} finally {
 			await workspace.cleanup();
 		}
 	});
 
-	it("propagates commit publication failures instead of returning skipped details", async () => {
-		const firstFailure = options({
-			params: {
-				keepFiles: [],
-				keepToolCalls: [],
-				deferFiles: [{ path: "later.ts", reason: "cold", relevantWhen: "fallback" }],
-			},
-		});
-		firstFailure.sendMessage.mockImplementation(() => {
-			throw new Error("enqueue failed");
-		});
-		await expect(executeContextPrune(firstFailure.value)).rejects.toThrow("enqueue failed");
-
+	it("continues when one selected file is invalid UTF-8", async () => {
 		const workspace = await createWorkspace();
 		try {
-			await workspace.write("file.ts", "old");
-			const baseline = await prepareAutoreadMessage({
-				rowId: "baseline",
-				path: "file.ts",
-				cwd: workspace.dir,
-				source: "explore",
-				batchId: "reads",
-				signal: undefined,
-				isLifecycleCurrent: () => true,
-			});
-			await workspace.write("file.ts", "new");
-			const anchor = options().anchor;
-			const secondFailure = options({
-				ctx: context(anchor, workspace.dir),
+			await workspace.write("good.ts", "good");
+			await writeFile(workspace.path("bad.bin"), Buffer.from([0xc3, 0x28]));
+			const base = options();
+			const execution = await executeContextPrune({
+				...base.value,
+				ctx: {
+					cwd: workspace.dir,
+					sessionManager: { getBranch: () => base.branch },
+				} as unknown as ExtensionContext,
 				params: {
-					keepFiles: [{ path: "file.ts", relevance: "active" }],
-					keepToolCalls: [],
-					deferFiles: [{ path: "later.ts", reason: "cold", relevantWhen: "fallback" }],
-				},
-				projection: {
-					generation: 1,
-					messages: [
-						{ role: "custom", ...baseline, timestamp: 1 },
-						fauxAssistantMessage(fauxToolCall("grep", {}, { id: "noise" })),
-						result("noise", "grep", "x".repeat(40_000)),
+					keepFiles: [
+						{ path: "bad.bin", relevance: "binary" },
+						{ path: "good.ts", relevance: "source" },
 					],
+					keepToolCalls: [],
+					deferFiles: [],
 				},
 			});
-			secondFailure.sendMessage
-				.mockImplementationOnce(() => undefined)
-				.mockImplementationOnce(() => {
-					throw new Error("second enqueue failed");
-				});
-			await expect(executeContextPrune(secondFailure.value)).rejects.toThrow("second enqueue failed");
-			expect(secondFailure.sendMessage).toHaveBeenCalledTimes(2);
+			expect(execution.details.refreshedFiles.map((file) => file.path)).toEqual(["good.ts"]);
+			expect(execution.details.warnings).toHaveLength(1);
+			expect(execution.content[1]?.text).toContain("good.ts");
 		} finally {
 			await workspace.cleanup();
 		}
+	});
+
+	it("only throws for cancellation or a session lifecycle boundary", async () => {
+		const controller = new AbortController();
+		controller.abort();
+		await expect(executeContextPrune(options({ signal: controller.signal }).value)).rejects.toMatchObject({
+			name: "AbortError",
+		});
+		await expect(
+			executeContextPrune(options({ generation: 1, currentGeneration: () => 2 }).value),
+		).rejects.toThrow("lifecycle boundary");
 	});
 });

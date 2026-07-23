@@ -13,7 +13,6 @@ export default defineTauExtensionSettings({
 		enabled: true as boolean,
 		nudgeEveryPercent: 20 as number,
 		nudgeInstructions: DEFAULT_NUDGE_INSTRUCTIONS,
-		minimumReclaimTokens: 8000 as number,
 	},
 	schema: Type.Object(
 		{
@@ -33,13 +32,6 @@ export default defineTauExtensionSettings({
 					maxItems: 5,
 					description:
 						"Ordered automatic pruning instructions. Later reminders repeat the final instruction, and the final tier requires an anchor before further tool work.",
-				}),
-			),
-			minimumReclaimTokens: Type.Optional(
-				Type.Integer({
-					default: 8000,
-					minimum: 1,
-					description: "Minimum estimated tokens a prune must reclaim.",
 				}),
 			),
 		},

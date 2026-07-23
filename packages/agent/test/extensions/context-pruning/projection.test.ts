@@ -1,10 +1,4 @@
-import {
-	fauxAssistantMessage,
-	fauxText,
-	fauxThinking,
-	fauxToolCall,
-	type ToolResultMessage,
-} from "@earendil-works/pi-ai";
+import { fauxAssistantMessage, fauxText, fauxThinking, fauxToolCall, type ToolResultMessage } from "@earendil-works/pi-ai";
 import type { ContextEvent } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { projectContext } from "../../../extensions/context-pruning/projection.ts";
@@ -23,133 +17,82 @@ function result(id: string, name: string): ToolResultMessage {
 	};
 }
 
-function custom(customType: string, content: string): Message {
-	return { role: "custom", customType, content, display: false, timestamp: 1 };
-}
-
-function state(pruned: string[], prunedAutoreads: string[] = []): ActiveContextPruningState {
+function state(retainedToolCallIds: string[], anchor = "anchor"): ActiveContextPruningState {
 	return {
-		latestAnchorToolCallId: "anchor",
-		prunedToolCallIds: new Set(pruned),
-		prunedAutoreadRowIds: new Set(prunedAutoreads),
+		latestAnchorToolCallId: anchor,
+		retainedToolCallIds: new Set(retainedToolCallIds),
+		prunedToolCallIds: new Set(),
+		prunedAutoreadRowIds: new Set(),
 		deferredFiles: [],
 	};
 }
 
 describe("context pruning projection", () => {
-	it("filters pre-anchor thinking and one parallel exchange while preserving untouched identity and post-anchor evidence", () => {
-		const keptCall = fauxToolCall("read", { path: "keep.ts" }, { id: "keep" });
-		const droppedCall = fauxToolCall("grep", { query: "old" }, { id: "drop" });
-		const pre = fauxAssistantMessage([
-			fauxThinking("old reasoning"),
-			fauxText("visible conclusion"),
-			keptCall,
-			droppedCall,
-		]);
+	it("turns the latest anchor into a hard checkpoint and retains one parallel exchange exactly", () => {
+		const keep = fauxToolCall("read", { path: "keep.ts" }, { id: "keep" });
+		const drop = fauxToolCall("read", { path: "huge.ts" }, { id: "drop" });
+		const batch = fauxAssistantMessage([fauxThinking("old"), fauxText("old prose"), keep, drop]);
 		const keptResult = result("keep", "read");
-		const droppedResult = result("drop", "grep");
 		const anchor = fauxAssistantMessage([
-			fauxThinking("anchor reasoning"),
-			fauxText("next action"),
+			fauxText("Durable conclusions and next action"),
 			fauxToolCall("context_prune", {}, { id: "anchor" }),
 		]);
 		const anchorResult = result("anchor", "context_prune");
-		const currentDeferred = custom("tau.context-pruning.deferred", "current");
-		const oldAutoread = {
-			...custom("tau.autoread", "old snapshot"),
-			details: { rowId: "old-autoread" },
-		} as Message;
-		const post = fauxAssistantMessage([
-			fauxThinking("new reasoning"),
-			fauxToolCall("read", { path: "new.ts" }, { id: "post" }),
-		]);
-		const postResult = result("post", "read");
-		const unknown = custom("unknown.extension", "keep me");
+		const later = fauxAssistantMessage(fauxText("continued"));
 		const messages: Message[] = [
-			{ role: "user", content: "work", timestamp: 1 },
-			custom("tau.context-pruning.nudge", "old"),
-			custom("tau.context-pruning.deferred", "superseded"),
-			oldAutoread,
-			pre,
+			{ role: "user", content: "old request", timestamp: 1 },
+			{ role: "custom", customType: "tau.autoread", content: "huge", display: true, timestamp: 1 },
+			batch,
 			keptResult,
-			droppedResult,
+			result("drop", "read"),
 			anchor,
 			anchorResult,
-			currentDeferred,
-			post,
-			postResult,
-			unknown,
+			later,
 		];
 
-		const projected = projectContext(messages, state(["drop"], ["old-autoread"]));
-		expect(projected.map((message) => message.role)).toEqual([
-			"user",
-			"assistant",
-			"toolResult",
-			"assistant",
-			"toolResult",
-			"custom",
-			"assistant",
-			"toolResult",
-			"custom",
-		]);
-		const projectedPre = projected[1];
-		expect(projectedPre?.role).toBe("assistant");
-		if (projectedPre?.role !== "assistant") throw new Error("expected assistant");
-		expect(projectedPre.content).toEqual([pre.content[1], keptCall]);
-		expect(projectedPre.content[0]).toBe(pre.content[1]);
-		expect(projected[2]).toBe(keptResult);
-		expect(projected[4]).toBe(anchorResult);
-		expect(projected[5]).toBe(currentDeferred);
-		expect(projected[6]).toBe(post);
-		expect(projected[8]).toBe(unknown);
-		expect(projectContext(messages, state(["drop"], ["old-autoread"]))).toEqual(projected);
+		const projected = projectContext(messages, state(["keep"]));
+		expect(projected).toHaveLength(5);
+		const retainedBatch = projected[0];
+		expect(retainedBatch?.role).toBe("assistant");
+		if (retainedBatch?.role !== "assistant") throw new Error("expected assistant");
+		expect(retainedBatch.content).toEqual([keep]);
+		expect(projected[1]).toBe(keptResult);
+		expect(projected.slice(2)).toEqual([anchor, anchorResult, later]);
 	});
 
-	it("drops an assistant message made empty by filtering and rejects orphaned output", () => {
-		const empty = fauxAssistantMessage([fauxThinking("discard"), fauxToolCall("read", {}, { id: "drop" })]);
-		const anchor = fauxAssistantMessage(fauxToolCall("context_prune", {}, { id: "anchor" }));
-		const projected = projectContext(
-			[empty, result("drop", "read"), anchor, result("anchor", "context_prune")],
-			state(["drop"]),
-		);
-		expect(projected).toEqual([anchor, result("anchor", "context_prune")]);
-		expect(() => projectContext([result("orphan", "read")], state([]))).toThrow(/Orphaned tool result/);
-	});
-
-	it("drops an unmatched tool call from an aborted assistant response", () => {
-		const abandoned = fauxAssistantMessage(fauxToolCall("bash", { command: "blocked" }, { id: "abandoned" }), {
+	it("drops every unreserved pre-anchor message without validating unrelated history", () => {
+		const abandoned = fauxAssistantMessage(fauxToolCall("bash", {}, { id: "abandoned" }), {
 			stopReason: "aborted",
-			errorMessage: "Operation aborted",
 		});
-		const ordinary = fauxAssistantMessage(fauxToolCall("bash", { command: "blocked" }, { id: "ordinary" }));
 		const anchor = fauxAssistantMessage(fauxToolCall("context_prune", {}, { id: "anchor" }));
 		const anchorResult = result("anchor", "context_prune");
-
-		expect(projectContext([abandoned, anchor, anchorResult], state([]))).toEqual([anchor, anchorResult]);
-		expect(() => projectContext([ordinary, anchor, anchorResult], state([]))).toThrow(/Orphaned tool call.*ordinary/);
+		expect(
+			projectContext(
+				[
+					{ role: "user", content: "old", timestamp: 1 },
+					result("orphan", "read"),
+					abandoned,
+					anchor,
+					anchorResult,
+				],
+				state([]),
+			),
+		).toEqual([anchor, anchorResult]);
 	});
 
-	it("preserves user bash, branch summary, compaction summary, and unknown custom messages", () => {
-		const preserved: Message[] = [
-			{ role: "user", content: "keep", timestamp: 1 },
-			{
-				role: "bashExecution",
-				command: "pwd",
-				output: "/tmp",
-				exitCode: 0,
-				cancelled: false,
-				truncated: false,
-				timestamp: 1,
-			},
-			{ role: "branchSummary", summary: "branch", fromId: "entry", timestamp: 1 },
-			{ role: "compactionSummary", summary: "compact", tokensBefore: 10, timestamp: 1 },
-			custom("unknown.before-anchor", "keep"),
-		];
+	it("harmlessly omits a selected ID without a complete matching exchange", () => {
+		const incomplete = fauxAssistantMessage(fauxToolCall("read", {}, { id: "incomplete" }));
 		const anchor = fauxAssistantMessage(fauxToolCall("context_prune", {}, { id: "anchor" }));
-		const anchorResult = result("anchor", "context_prune");
-		const projected = projectContext([...preserved, anchor, anchorResult], state([]));
-		expect(projected.slice(0, preserved.length)).toEqual(preserved);
-		for (let index = 0; index < preserved.length; index += 1) expect(projected[index]).toBe(preserved[index]);
+		expect(projectContext([incomplete, anchor, result("anchor", "context_prune")], state(["incomplete"]))).toEqual([
+			anchor,
+			result("anchor", "context_prune"),
+		]);
+	});
+
+	it("leaves context untouched when the active anchor is absent", () => {
+		const messages: Message[] = [{ role: "user", content: "current compacted context", timestamp: 1 }];
+		const projected = projectContext(messages, state(["missing"], "missing-anchor"));
+		expect(projected).toEqual(messages);
+		expect(projected).not.toBe(messages);
 	});
 });
