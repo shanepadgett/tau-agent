@@ -8,7 +8,7 @@ import {
 	renderContextPruneCall,
 	renderContextPruneResult,
 	renderContextPruningNudge,
-	type ContextPruningNudgeDetailsV1,
+	type ContextPruningNudgeDetailsV2,
 } from "../../../../packages/agent/extensions/context-pruning/render.ts";
 import type { ContextPruneDetailsV1 } from "../../../../packages/agent/shared/context-pruning-state.ts";
 import type { ToolRowStateStore } from "../../../../packages/agent/shared/tool-row-state.ts";
@@ -59,29 +59,50 @@ export function createContextPruningPreviewWidget(tui: TUI, cwd: string, theme: 
 	const container = new Container();
 	addPageTitle(container, theme, "Context Pruning Preview");
 	addNudgeStory(container, theme, "Informational Nudge", {
-		v: 1,
+		v: 2,
 		kind: "automatic",
-		percent: 40,
-		boundary: 40,
-		pressure: false,
+		percent: 20,
+		boundary: 20,
+		reminder: 1,
+		tier: 1,
+		tierCount: 3,
+		tierFloor: 0,
 		anchorToolCallId: null,
 		growthBaselinePercent: 0,
 	});
-	addNudgeStory(container, theme, "Pressure Nudge", {
-		v: 1,
+	addNudgeStory(container, theme, "Prune Soon Nudge", {
+		v: 2,
 		kind: "automatic",
-		percent: 61,
+		percent: 40,
+		boundary: 40,
+		reminder: 2,
+		tier: 2,
+		tierCount: 3,
+		tierFloor: 1,
+		anchorToolCallId: null,
+		growthBaselinePercent: 0,
+	});
+	addNudgeStory(container, theme, "Prune Now Nudge", {
+		v: 2,
+		kind: "automatic",
+		percent: 60,
 		boundary: 60,
-		pressure: true,
+		reminder: 3,
+		tier: 3,
+		tierCount: 3,
+		tierFloor: 2,
 		anchorToolCallId: null,
 		growthBaselinePercent: 0,
 	});
 	addNudgeStory(container, theme, "Manual Request", {
-		v: 1,
+		v: 2,
 		kind: "manual",
 		percent: null,
 		boundary: null,
-		pressure: false,
+		reminder: null,
+		tier: null,
+		tierCount: null,
+		tierFloor: null,
 		anchorToolCallId: null,
 		growthBaselinePercent: null,
 	});
@@ -91,7 +112,7 @@ export function createContextPruningPreviewWidget(tui: TUI, cwd: string, theme: 
 	return container;
 }
 
-function addNudgeStory(container: Container, theme: Theme, title: string, details: ContextPruningNudgeDetailsV1): void {
+function addNudgeStory(container: Container, theme: Theme, title: string, details: ContextPruningNudgeDetailsV2): void {
 	addSampleTitle(container, theme, title);
 	addMessageBox(
 		container,

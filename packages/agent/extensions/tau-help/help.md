@@ -36,7 +36,7 @@ Adds `/context` to select reusable repository work scopes from `.pi/contexts`, a
 
 ## context-pruning
 
-Gives the agent `context_prune` for removing substantial stale tool evidence after broad exploration converges. The agent records durable conclusions before creating an anchor, can retain exact exchanges or current file knowledge, and continues the task automatically. Context markers occasionally steer the agent after tool-heavy growth and become more direct under pressure. Run `/prune` with no arguments to request an anchor manually. Session history remains unchanged, and anchors, markers, and pruned-row state follow the active branch.
+Gives the agent `context_prune` for removing substantial stale tool evidence after broad exploration converges. The agent records durable conclusions before creating an anchor, can retain exact exchanges or current file knowledge, and continues the task automatically. Context markers use an ordered instruction ladder that escalates from informational guidance to pruning before further tool work. Run `/prune` with no arguments to request an anchor manually. Session history remains unchanged, and anchors, markers, and pruned-row state follow the active branch.
 
 ## explore
 

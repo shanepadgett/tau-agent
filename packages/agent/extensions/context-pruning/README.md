@@ -12,7 +12,7 @@ Context usage and pruning are separate decisions.
 - A `context_prune` call decides what old evidence the agent wants to remove or retain.
 - Tau then checks whether that exact removal is safe and whether it saves enough tokens.
 
-Being at 70% context does not force Tau to apply a prune. With the default settings, 70% is high enough for a pressure hint, but every prune still has to pass the checks below.
+Being at 70% context does not force Tau to apply a prune. The instruction tier depends on context growth since the latest successful anchor, and every prune still has to pass the checks below.
 
 ## What happens when the agent calls `context_prune`
 
@@ -101,11 +101,13 @@ Tau checks context usage only after a turn that produced at least one tool resul
 With the defaults:
 
 - `nudgeEveryPercent: 20` allows markers after enough context growth to cross 20% intervals.
-- `pressurePercent: 50` makes a marker a pressure hint only when raw usage is greater than 50%.
+- `nudgeInstructions` supplies three increasingly direct instructions. The first is informational, the second tells the agent to finish its current coherent step and move toward pruning, and the third tells it to prune before further tool work because stale managed context is wasting money.
 
-Below the pressure threshold, the hidden instruction says no prune is required unless broad exploration has converged or substantial evidence is already irrelevant. Above it, the instruction asks the agent to finish the current coherent step and prune when the projected saving is substantial. A hint never calls the tool or bypasses its checks.
+The reminder number comes from context growth since the latest successful anchor. With the default interval, the three instructions apply at 20%, 40%, and 60% growth. If one turn crosses several boundaries, Tau emits only the strongest newly crossed reminder. After the final configured instruction, later boundaries repeat it. A hint never calls the tool or bypasses its checks.
 
-After a successful prune, the first later tool-using turn records a new usage baseline and emits no automatic marker. Tau waits for context usage to grow by another `nudgeEveryPercent` from that baseline. The baseline and crossed boundaries are stored with the active branch so compaction and branch navigation do not immediately repeat hints.
+The configured instruction is included verbatim in a fixed hidden protocol. That protocol tells the agent to keep context management private, preserve durable conclusions and the next action in visible prose, call `context_prune` alone, and avoid immediately retrying a skipped prune. At the final configured tier, the protocol also requires an anchor before further tool work. Reducing the instruction count therefore reaches mandatory pruning sooner.
+
+After a successful prune, the first later tool-using turn records a new usage baseline and emits no automatic marker. Tau waits for context usage to grow by another `nudgeEveryPercent` from that baseline. The baseline, reminder tier, and crossed boundaries are stored with the active branch so compaction and branch navigation do not immediately repeat hints. If `nudgeEveryPercent` changes, existing boundaries remain crossed and future reminders use the new interval.
 
 The visible marker is compact. The full instruction stays hidden, and the agent is told not to discuss internal context management.
 
@@ -131,5 +133,5 @@ Settings live under `extensions.contextPruning` in Tau settings.
 
 - `enabled`: enables the tool, `/prune`, automatic markers, branch replay, context filtering, and pruned-row display. Defaults to `true`.
 - `nudgeEveryPercent`: integer context-growth interval between automatic hints. Allowed range: `1` through `100`. Defaults to `20`.
-- `pressurePercent`: integer usage percentage above which hints use pressure wording. Allowed range: `1` through `99`. Defaults to `50`.
+- `nudgeInstructions`: ordered list of one through five nonempty instructions, each at most 2,000 characters. Later reminders repeat the final instruction, whose fixed protocol requires pruning before further tool work. Defaults to three instructions escalating from informational at the first boundary to mandatory pruning at the third.
 - `minimumReclaimTokens`: positive integer minimum estimated saving required to apply a prune. Defaults to `8000`.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-	parseContextPruningNudgeDetailsV1,
+	parseContextPruningNudgeDetailsV2,
 	renderContextPruneCall,
 	renderContextPruneResult,
 	renderContextPruningNudge,
@@ -26,25 +26,39 @@ function details(status: "applied" | "skipped" = "applied"): ContextPruneDetails
 }
 
 describe("context prune rendering", () => {
-	it("renders informational, pressure, and manual context markers from strict details", () => {
+	it("renders informational, escalating, final-tier, and manual context markers from strict details", () => {
 		const automatic = {
-			v: 1 as const,
+			v: 2 as const,
 			kind: "automatic" as const,
-			percent: 40,
-			boundary: 40,
-			pressure: false,
+			percent: 20,
+			boundary: 20,
+			reminder: 1,
+			tier: 1,
+			tierCount: 3,
+			tierFloor: 0,
 			anchorToolCallId: null,
 			growthBaselinePercent: 0,
 		};
 		const informational = renderedText(renderContextPruningNudge(automatic, testTheme));
 		expect(informational).toContain("Context:");
-		expect(informational).toContain("40%");
-		const pressure = renderedText(
-			renderContextPruningNudge({ ...automatic, percent: 61, boundary: 60, pressure: true }, testTheme),
+		expect(informational).toContain("20%");
+		expect(informational).not.toContain("Prune soon.");
+		const escalating = renderedText(
+			renderContextPruningNudge(
+				{ ...automatic, percent: 40, boundary: 40, reminder: 2, tier: 2, tierFloor: 1 },
+				testTheme,
+			),
 		);
-		expect(pressure).toContain("Context:");
-		expect(pressure).toContain("61%");
-		expect(pressure).toContain("Prune suggested.");
+		expect(escalating).toContain("40%");
+		expect(escalating).toContain("Prune soon.");
+		const finalTier = renderedText(
+			renderContextPruningNudge(
+				{ ...automatic, percent: 60, boundary: 60, reminder: 3, tier: 3, tierFloor: 2 },
+				testTheme,
+			),
+		);
+		expect(finalTier).toContain("60%");
+		expect(finalTier).toContain("Prune now.");
 		const manual = renderedText(
 			renderContextPruningNudge(
 				{
@@ -52,6 +66,10 @@ describe("context prune rendering", () => {
 					kind: "manual",
 					percent: null,
 					boundary: null,
+					reminder: null,
+					tier: null,
+					tierCount: null,
+					tierFloor: null,
 					growthBaselinePercent: null,
 				},
 				testTheme,
@@ -59,8 +77,26 @@ describe("context prune rendering", () => {
 		);
 		expect(manual).toContain("Context:");
 		expect(manual).toContain("Prune requested.");
-		expect(parseContextPruningNudgeDetailsV1({ ...automatic, extra: true })).toBeUndefined();
+		expect(parseContextPruningNudgeDetailsV2({ ...automatic, extra: true })).toBeUndefined();
 		expect(renderContextPruningNudge({ ...automatic, percent: 101 }, testTheme)).toBeUndefined();
+		expect(
+			renderContextPruningNudge(
+				{ ...automatic, percent: 40, boundary: 40, reminder: 2, tier: 1, tierFloor: 0 },
+				testTheme,
+			),
+		).toBeUndefined();
+		expect(
+			renderContextPruningNudge(
+				{ ...automatic, percent: 100, reminder: 100, tier: 3, tierFloor: 0 },
+				testTheme,
+			),
+		).toBeUndefined();
+		expect(
+			renderContextPruningNudge(
+				{ ...automatic, anchorToolCallId: null, growthBaselinePercent: 10 },
+				testTheme,
+			),
+		).toBeUndefined();
 	});
 
 	it("renders a compact call and applied result counts", () => {

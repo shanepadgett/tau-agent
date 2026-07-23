@@ -16,11 +16,11 @@ import { createToolRowStateStore } from "../../shared/tool-row-state.ts";
 import { contextPruneParameters, executeContextPrune } from "./prune.ts";
 import { projectContext } from "./projection.ts";
 import {
-	parseContextPruningNudgeDetailsV1,
+	parseContextPruningNudgeDetailsV2,
 	renderContextPruneCall,
 	renderContextPruneResult,
 	renderContextPruningNudge,
-	type ContextPruningNudgeDetailsV1,
+	type ContextPruningNudgeDetailsV2,
 } from "./render.ts";
 import contextPruningSettings from "./settings.ts";
 
@@ -32,7 +32,7 @@ interface ProjectionCache {
 }
 
 const TOOL_DESCRIPTION =
-	"Create a context anchor after broad exploration converges, after a context-pressure nudge, or when substantial irrelevant tool evidence has accumulated. Do not use after routine tool batches or when expected savings are small. Immediately before calling, state retained conclusions, conditional relevance, and the next action in visible prose. Call context_prune alone in its tool batch.";
+	"Create a context anchor after broad exploration converges, when a context-pruning nudge directs it, or when substantial irrelevant tool evidence has accumulated. Do not use after routine tool batches or when expected savings are small. Immediately before calling, state retained conclusions, conditional relevance, and the next action in visible prose. Call context_prune alone in its tool batch.";
 const NUDGE_MESSAGE_TYPE = "tau.context-pruning.nudge";
 const NUDGE_BASELINE_ENTRY_TYPE = "tau.context-pruning.nudge-baseline";
 
@@ -40,6 +40,8 @@ interface NudgeState {
 	anchorToolCallId: string | undefined;
 	growthBaselinePercent: number | undefined;
 	highestBoundary: number;
+	highestTier: number;
+	terminalTierReached: boolean;
 }
 
 export default function contextPruningExtension(pi: ExtensionAPI): void {
@@ -48,7 +50,7 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 	let projectionCache: ProjectionCache | undefined;
 	let minimumReclaimTokens = contextPruningSettings.defaults.minimumReclaimTokens;
 	let nudgeEveryPercent = contextPruningSettings.defaults.nudgeEveryPercent;
-	let pressurePercent = contextPruningSettings.defaults.pressurePercent;
+	let nudgeInstructions = contextPruningSettings.defaults.nudgeInstructions;
 	let toolRegistered = false;
 	let commandRegistered = false;
 	let visualRows = new Set<string>();
@@ -56,9 +58,11 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 		anchorToolCallId: undefined,
 		growthBaselinePercent: 0,
 		highestBoundary: 0,
+		highestTier: 0,
+		terminalTierReached: false,
 	};
 	const rowState = createToolRowStateStore(pi, "context-pruning.tool-row-state");
-	pi.registerMessageRenderer<ContextPruningNudgeDetailsV1>(NUDGE_MESSAGE_TYPE, (message, _options, theme) =>
+	pi.registerMessageRenderer<ContextPruningNudgeDetailsV2>(NUDGE_MESSAGE_TYPE, (message, _options, theme) =>
 		renderContextPruningNudge(message.details, theme),
 	);
 
@@ -107,7 +111,7 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 		enabled = settings.enabled;
 		minimumReclaimTokens = settings.minimumReclaimTokens;
 		nudgeEveryPercent = settings.nudgeEveryPercent;
-		pressurePercent = settings.pressurePercent;
+		nudgeInstructions = settings.nudgeInstructions;
 		setContextPruningEnabled(enabled);
 		if (enabled && !toolRegistered) {
 			pi.registerTool(
@@ -118,7 +122,8 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 					promptSnippet:
 						"Prune substantial stale tool evidence after stating durable conclusions and the next action",
 					promptGuidelines: [
-						"Use context_prune after broad exploration converges, after a context-pressure nudge, or when substantial irrelevant evidence has accumulated.",
+						"Use context_prune after broad exploration converges, when a context-pruning nudge directs it, or when substantial irrelevant evidence has accumulated.",
+						"A final-tier context-pruning nudge means preserve durable conclusions and prune before further tool work.",
 						"Do not use context_prune after routine tool batches or when expected savings are small.",
 						"Immediately before context_prune, write visible prose with retained conclusions, conditional relevance, and the next action, then call context_prune alone in its tool batch.",
 					],
@@ -170,17 +175,20 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 						commandContext.sessionManager.getBranch(),
 						true,
 					).latestAnchorToolCallId;
-					pi.sendMessage<ContextPruningNudgeDetailsV1>(
+					pi.sendMessage<ContextPruningNudgeDetailsV2>(
 						{
 							customType: NUDGE_MESSAGE_TYPE,
 							content: manualPruneSteeringMessage(),
 							display: true,
 							details: {
-								v: 1,
+								v: 2,
 								kind: "manual",
 								percent: null,
 								boundary: null,
-								pressure: false,
+								reminder: null,
+								tier: null,
+								tierCount: null,
+								tierFloor: null,
 								anchorToolCallId: anchorToolCallId ?? null,
 								growthBaselinePercent: null,
 							},
@@ -207,7 +215,13 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 		enabled = false;
 		setContextPruneToolActive(false);
 		visualRows.clear();
-		nudgeState = { anchorToolCallId: undefined, growthBaselinePercent: 0, highestBoundary: 0 };
+		nudgeState = {
+			anchorToolCallId: undefined,
+			growthBaselinePercent: 0,
+			highestBoundary: 0,
+			highestTier: 0,
+			terminalTierReached: false,
+		};
 		setContextPruningEnabled(false);
 		pushVisualSnapshot();
 	});
@@ -233,29 +247,40 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 			return undefined;
 		}
 		const baseline = nudgeState.growthBaselinePercent ?? 0;
-		if (percent - baseline < nudgeEveryPercent) return undefined;
-		const boundary = Math.floor(percent / nudgeEveryPercent) * nudgeEveryPercent;
+		const reminder = Math.floor((percent - baseline) / nudgeEveryPercent);
+		if (reminder < 1) return undefined;
+		const boundary = baseline + reminder * nudgeEveryPercent;
 		if (boundary <= nudgeState.highestBoundary) return undefined;
-		const pressure = rawPercent > pressurePercent;
-		const details: ContextPruningNudgeDetailsV1 = {
-			v: 1,
+		const tierCount = nudgeInstructions.length;
+		const tierFloor = nudgeState.terminalTierReached
+			? tierCount
+			: Math.min(nudgeState.highestTier, tierCount);
+		const tier = Math.max(Math.min(reminder, tierCount), tierFloor);
+		const instruction = nudgeInstructions[tier - 1] ?? nudgeInstructions[0];
+		const details: ContextPruningNudgeDetailsV2 = {
+			v: 2,
 			kind: "automatic",
 			percent,
 			boundary,
-			pressure,
+			reminder,
+			tier,
+			tierCount,
+			tierFloor,
 			anchorToolCallId: activeAnchor ?? null,
 			growthBaselinePercent: baseline,
 		};
-		pi.sendMessage<ContextPruningNudgeDetailsV1>(
+		pi.sendMessage<ContextPruningNudgeDetailsV2>(
 			{
 				customType: NUDGE_MESSAGE_TYPE,
-				content: automaticPruneSteeringMessage(pressure),
+				content: automaticPruneSteeringMessage(instruction, tier === tierCount),
 				display: true,
 				details,
 			},
 			{ deliverAs: "steer" },
 		);
 		nudgeState.highestBoundary = boundary;
+		nudgeState.highestTier = Math.max(nudgeState.highestTier, tier);
+		nudgeState.terminalTierReached ||= tier === tierCount;
 		return undefined;
 	});
 
@@ -300,6 +325,8 @@ function setsEqual(left: ReadonlySet<string>, right: ReadonlySet<string>): boole
 function reconstructNudgeState(branch: readonly SessionEntry[], anchorToolCallId: string | undefined): NudgeState {
 	let growthBaselinePercent = anchorToolCallId === undefined ? 0 : undefined;
 	let highestBoundary = 0;
+	let highestTier = 0;
+	let terminalTierReached = false;
 	let anchorResultIndex = -1;
 	if (anchorToolCallId !== undefined) {
 		anchorResultIndex = branch.findIndex(
@@ -326,19 +353,27 @@ function reconstructNudgeState(branch: readonly SessionEntry[], anchorToolCallId
 			continue;
 		}
 		if (entry.type !== "custom_message" || entry.customType !== NUDGE_MESSAGE_TYPE) continue;
-		const details = parseContextPruningNudgeDetailsV1(entry.details);
+		const details = parseContextPruningNudgeDetailsV2(entry.details);
 		if (
 			!details ||
 			details.kind !== "automatic" ||
+			index <= anchorResultIndex ||
 			details.anchorToolCallId !== (anchorToolCallId ?? null) ||
 			details.boundary === null ||
-			details.growthBaselinePercent === null
+			details.growthBaselinePercent === null ||
+			(growthBaselinePercent !== undefined && details.growthBaselinePercent !== growthBaselinePercent)
 		)
 			continue;
+		const expectedTierFloor = terminalTierReached
+			? details.tierCount
+			: Math.min(highestTier, details.tierCount);
+		if (details.boundary <= highestBoundary || details.tierFloor !== expectedTierFloor) continue;
 		highestBoundary = Math.max(highestBoundary, details.boundary);
+		highestTier = Math.max(highestTier, details.tier);
+		terminalTierReached ||= details.tier === details.tierCount;
 		growthBaselinePercent = details.growthBaselinePercent;
 	}
-	return { anchorToolCallId, growthBaselinePercent, highestBoundary };
+	return { anchorToolCallId, growthBaselinePercent, highestBoundary, highestTier, terminalTierReached };
 }
 
 function parseNudgeBaseline(value: unknown): { v: 1; anchorToolCallId: string; baselinePercent: number } | undefined {
@@ -365,13 +400,14 @@ function parseNudgeBaseline(value: unknown): { v: 1; anchorToolCallId: string; b
 	};
 }
 
-function automaticPruneSteeringMessage(pressure: boolean): string {
+function automaticPruneSteeringMessage(instruction: string, finalTier: boolean): string {
 	const silent =
 		"Internal context-management instruction. Follow it silently. Do not mention or acknowledge context percentages, prune messages, or internal context management.";
-	if (pressure) {
-		return `${silent} Finish the current coherent step. When projected savings are substantial, preserve durable conclusions and the next action in visible prose, then call context_prune alone. Do not prune after a routine tool batch or retry immediately after a skipped prune.`;
-	}
-	return `${silent} No prune is required unless broad exploration has converged or substantial evidence is already irrelevant. Continue coherent work. If pruning becomes worthwhile, preserve durable conclusions and the next action in visible prose, then call context_prune alone.`;
+	const protocol =
+		"When pruning, first preserve durable conclusions, conditional relevance, and the next action in visible prose, then call context_prune alone. If a prune is skipped, continue work without immediately retrying.";
+	return finalTier
+		? `${silent} ${instruction} This is the final reminder tier. Create a context anchor before further tool work. ${protocol}`
+		: `${silent} ${instruction} ${protocol}`;
 }
 
 function manualPruneSteeringMessage(): string {

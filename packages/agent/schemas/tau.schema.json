@@ -68,12 +68,21 @@
 							"maximum": 100,
 							"description": "Context growth interval between automatic pruning hints."
 						},
-						"pressurePercent": {
-							"type": "integer",
-							"default": 50,
-							"minimum": 1,
-							"maximum": 99,
-							"description": "Context usage above which pruning hints become urgent."
+						"nudgeInstructions": {
+							"type": "array",
+							"items": {
+								"type": "string",
+								"minLength": 1,
+								"maxLength": 2000
+							},
+							"default": [
+								"No prune is required yet unless broad exploration has converged or substantial evidence is already irrelevant. Continue coherent work.",
+								"Move toward a pruning point now. Finish the current coherent step, then prune before starting another broad exploration. Managed context is materially increasing model cost.",
+								"Prune now before further tool work. Continuing with stale managed context is wasting money."
+							],
+							"minItems": 1,
+							"maxItems": 5,
+							"description": "Ordered automatic pruning instructions. Later reminders repeat the final instruction, and the final tier requires an anchor before further tool work."
 						},
 						"minimumReclaimTokens": {
 							"type": "integer",

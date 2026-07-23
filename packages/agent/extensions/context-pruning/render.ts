@@ -10,22 +10,48 @@ const MAX_EXPANDED_LINE_CHARACTERS = 240;
 const MAX_EXPANDED_TEXT_CHARACTERS = 3_000;
 const MAX_WARNING_CHARACTERS = 1_000;
 
-export interface ContextPruningNudgeDetailsV1 {
-	v: 1;
-	kind: "automatic" | "manual";
-	percent: number | null;
-	boundary: number | null;
-	pressure: boolean;
-	anchorToolCallId: string | null;
-	growthBaselinePercent: number | null;
-}
+export type ContextPruningNudgeDetailsV2 =
+	| {
+			v: 2;
+			kind: "automatic";
+			percent: number;
+			boundary: number;
+			reminder: number;
+			tier: number;
+			tierCount: number;
+			tierFloor: number;
+			anchorToolCallId: string | null;
+			growthBaselinePercent: number;
+	  }
+	| {
+			v: 2;
+			kind: "manual";
+			percent: null;
+			boundary: null;
+			reminder: null;
+			tier: null;
+			tierCount: null;
+			tierFloor: null;
+			anchorToolCallId: string | null;
+			growthBaselinePercent: null;
+	  };
 
-export function parseContextPruningNudgeDetailsV1(value: unknown): ContextPruningNudgeDetailsV1 | undefined {
+export function parseContextPruningNudgeDetailsV2(value: unknown): ContextPruningNudgeDetailsV2 | undefined {
 	if (!isRecord(value)) return undefined;
-	const keys = ["v", "kind", "percent", "boundary", "pressure", "anchorToolCallId", "growthBaselinePercent"];
+	const keys = [
+		"v",
+		"kind",
+		"percent",
+		"boundary",
+		"reminder",
+		"tier",
+		"tierCount",
+		"tierFloor",
+		"anchorToolCallId",
+		"growthBaselinePercent",
+	];
 	if (Object.keys(value).length !== keys.length || !keys.every((key) => Object.hasOwn(value, key))) return undefined;
-	if (value.v !== 1 || (value.kind !== "automatic" && value.kind !== "manual")) return undefined;
-	if (typeof value.pressure !== "boolean") return undefined;
+	if (value.v !== 2 || (value.kind !== "automatic" && value.kind !== "manual")) return undefined;
 	if (
 		value.anchorToolCallId !== null &&
 		(typeof value.anchorToolCallId !== "string" || value.anchorToolCallId.length === 0)
@@ -33,14 +59,25 @@ export function parseContextPruningNudgeDetailsV1(value: unknown): ContextPrunin
 		return undefined;
 	}
 	if (value.kind === "manual") {
-		if (value.percent !== null || value.boundary !== null || value.growthBaselinePercent !== null || value.pressure)
+		if (
+			value.percent !== null ||
+			value.boundary !== null ||
+			value.reminder !== null ||
+			value.tier !== null ||
+			value.tierCount !== null ||
+			value.tierFloor !== null ||
+			value.growthBaselinePercent !== null
+		)
 			return undefined;
 		return {
-			v: 1,
+			v: 2,
 			kind: "manual",
 			percent: null,
 			boundary: null,
-			pressure: false,
+			reminder: null,
+			tier: null,
+			tierCount: null,
+			tierFloor: null,
 			anchorToolCallId: value.anchorToolCallId,
 			growthBaselinePercent: null,
 		};
@@ -48,25 +85,39 @@ export function parseContextPruningNudgeDetailsV1(value: unknown): ContextPrunin
 	if (
 		!isPercent(value.percent) ||
 		!isBoundary(value.boundary) ||
+		!isReminder(value.reminder) ||
+		!isTier(value.tier) ||
+		!isTier(value.tierCount) ||
+		!isTierFloor(value.tierFloor) ||
 		!isPercent(value.growthBaselinePercent) ||
 		value.boundary > value.percent ||
-		value.growthBaselinePercent > value.percent
+		value.boundary <= value.growthBaselinePercent ||
+		value.tier > value.tierCount ||
+		value.tierFloor > value.tierCount ||
+		value.tier !== Math.max(Math.min(value.reminder, value.tierCount), value.tierFloor) ||
+		(value.anchorToolCallId === null && value.growthBaselinePercent !== 0)
 	) {
 		return undefined;
 	}
+	const interval = (value.boundary - value.growthBaselinePercent) / value.reminder;
+	if (!Number.isInteger(interval) || interval < 1 || interval > 100 || value.percent - value.boundary >= interval)
+		return undefined;
 	return {
-		v: 1,
+		v: 2,
 		kind: "automatic",
 		percent: value.percent,
 		boundary: value.boundary,
-		pressure: value.pressure,
+		reminder: value.reminder,
+		tier: value.tier,
+		tierCount: value.tierCount,
+		tierFloor: value.tierFloor,
 		anchorToolCallId: value.anchorToolCallId,
 		growthBaselinePercent: value.growthBaselinePercent,
 	};
 }
 
 export function renderContextPruningNudge(details: unknown, theme: Theme): Marker | undefined {
-	const parsed = parseContextPruningNudgeDetailsV1(details);
+	const parsed = parseContextPruningNudgeDetailsV2(details);
 	if (!parsed) return undefined;
 	return new Marker({
 		theme,
@@ -75,7 +126,14 @@ export function renderContextPruningNudge(details: unknown, theme: Theme): Marke
 		parts:
 			parsed.kind === "manual"
 				? ["Prune requested."]
-				: [`${parsed.percent}%`, ...(parsed.pressure ? ["Prune suggested."] : [])],
+				: [
+						`${parsed.percent}%`,
+						...(parsed.tier === parsed.tierCount
+							? ["Prune now."]
+							: parsed.tier > 1
+								? ["Prune soon."]
+								: []),
+					],
 	});
 }
 
@@ -172,6 +230,18 @@ function isPercent(value: unknown): value is number {
 
 function isBoundary(value: unknown): value is number {
 	return isPercent(value) && value > 0;
+}
+
+function isReminder(value: unknown): value is number {
+	return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 100;
+}
+
+function isTier(value: unknown): value is number {
+	return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 5;
+}
+
+function isTierFloor(value: unknown): value is number {
+	return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 5;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
