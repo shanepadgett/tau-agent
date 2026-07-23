@@ -54,6 +54,8 @@
 - Prefer compact, high-signal output. Avoid flood commands.
 - Batch independent reads/searches/checks when it saves turns and output stays readable.
 - Call the `review` subagent only after complex implementation work or when the user explicitly asks for it. Do not call it for documentation-only changes, trivial edits, or small localized changes.
+- Hard limit per user task or coherent implementation batch: one initial `review` call, then at most one follow-up in the same retained review thread to check fixes from that initial review. Never call `review` a third time for the same task.
+- Do not spend the follow-up review on micro-adjustments. Verify trivial review fixes directly with focused inspection and tests. After the optional follow-up, handle all remaining adjustments without another review call.
 
 ## Tau Customization Workflow
 

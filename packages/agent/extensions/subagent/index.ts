@@ -145,7 +145,9 @@ Start a fresh thread with \`agent\` and \`task\`. Continue an existing thread wi
 
 Pass \`files\` when exact relevant files are already known. Tau autoreads current line-numbered snapshots into that child turn before it starts.
 
-Delegate one focused task per call. Children do not inherit parent messages. Include exact absolute reference paths when a child must inspect a repository outside the current working directory.`;
+Delegate one focused task per call. Children do not inherit parent messages. Include exact absolute reference paths when a child must inspect a repository outside the current working directory.
+
+Review limit: for one user task or coherent implementation batch, call the \`review\` agent at most twice. The first call is the initial review. The only permitted second call is a follow-up in the same retained thread to check fixes from that initial review. Never call \`review\` a third time for the same task. Do not call it for documentation-only work, trivial edits, small localized changes, or micro-adjustments after review; inspect and test those directly.`;
 		return { systemPrompt: `${event.systemPrompt}\n\n${prompt}` };
 	});
 	pi.registerTool(
