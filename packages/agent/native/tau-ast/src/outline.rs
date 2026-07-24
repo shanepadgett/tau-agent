@@ -126,7 +126,7 @@ pub enum SymbolType {
     TypeParameter,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OutlineEntry {
     pub role: EntryRole,
@@ -138,7 +138,7 @@ pub struct OutlineEntry {
     pub locator: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OutlineItem {
     #[serde(flatten)]
@@ -148,7 +148,7 @@ pub struct OutlineItem {
     pub members: Vec<OutlineMember>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OutlineMember {
     #[serde(flatten)]
@@ -387,30 +387,32 @@ impl OutlineEngine {
         include_private: bool,
         names: &[String],
     ) -> Result<OutlineFileResult, Box<dyn Error>> {
-        let source_bytes = fs::read(&path)?;
+        let source_bytes = fs::read(path)?;
         let source = str::from_utf8(&source_bytes)?;
         let path = path.to_string_lossy().into_owned();
         let source_fingerprint = source_fingerprint(&source_bytes);
         let (diagnostics, mut items) = match language {
             LanguageId::TypeScript => {
                 let grep = SupportLang::TypeScript.ast_grep(source);
-                (
-                    diagnostics(grep.root()),
-                    self.typescript
-                        .extract(grep.root())
-                        .map(|item| outline_item(item, &path, language, &source_fingerprint))
-                        .collect::<Result<Vec<_>, _>>()?,
-                )
+                let diagnostics = diagnostics(grep.root());
+                let mut items = self
+                    .typescript
+                    .extract(grep.root())
+                    .map(|item| outline_item(item, &path, language, &source_fingerprint))
+                    .collect::<Result<Vec<_>, _>>()?;
+                resolve_typescript_local_exports(grep.root(), &mut items);
+                (diagnostics, items)
             }
             LanguageId::Tsx => {
                 let grep = SupportLang::Tsx.ast_grep(source);
-                (
-                    diagnostics(grep.root()),
-                    self.tsx
-                        .extract(grep.root())
-                        .map(|item| outline_item(item, &path, language, &source_fingerprint))
-                        .collect::<Result<Vec<_>, _>>()?,
-                )
+                let diagnostics = diagnostics(grep.root());
+                let mut items = self
+                    .tsx
+                    .extract(grep.root())
+                    .map(|item| outline_item(item, &path, language, &source_fingerprint))
+                    .collect::<Result<Vec<_>, _>>()?;
+                resolve_typescript_local_exports(grep.root(), &mut items);
+                (diagnostics, items)
             }
             LanguageId::Odin => {
                 let grep = OdinLanguage::Odin.ast_grep(source);
@@ -654,6 +656,178 @@ impl OutlineEngine {
             declarations,
             blocks,
         })
+    }
+}
+
+fn resolve_typescript_local_exports<D: ast_grep_core::Doc>(
+    root: Node<D>,
+    items: &mut Vec<OutlineItem>,
+) {
+    struct ResolvedSpecifier {
+        local_name: String,
+        exported_name: String,
+        item_indexes: Vec<usize>,
+    }
+
+    struct ResolvedClause {
+        start_byte: usize,
+        end_byte: usize,
+        specifiers: Vec<ResolvedSpecifier>,
+    }
+
+    let top_level_item_indexes = items
+        .iter()
+        .enumerate()
+        .filter_map(|(index, item)| {
+            let item_range = item.entry.range.start_byte..item.entry.range.end_byte;
+            root.children()
+                .any(|statement| {
+                    if statement.range() == item_range {
+                        return statement.kind() != "export_statement"
+                            || statement.field("declaration").is_some();
+                    }
+                    let declaration = if statement.kind() == "export_statement" {
+                        statement.field("declaration")
+                    } else {
+                        Some(statement)
+                    };
+                    declaration.is_some_and(|declaration| {
+                        declaration.range() == item_range
+                            || matches!(
+                                declaration.kind().as_ref(),
+                                "lexical_declaration" | "variable_declaration"
+                            ) && declaration
+                                .children()
+                                .any(|child| child.range() == item_range)
+                    })
+                })
+                .then_some(index)
+        })
+        .collect::<BTreeSet<_>>();
+
+    let mut clauses = Vec::new();
+    for statement in root
+        .children()
+        .filter(|node| node.kind() == "export_statement")
+    {
+        let named_children = statement
+            .children()
+            .filter(|node| node.is_named())
+            .collect::<Vec<_>>();
+        if named_children.len() != 1 || named_children[0].kind() != "export_clause" {
+            continue;
+        }
+
+        let mut specifiers = Vec::new();
+        let mut supported = true;
+        for specifier in named_children[0].children().filter(|node| node.is_named()) {
+            if specifier.kind() != "export_specifier" {
+                supported = false;
+                break;
+            }
+            let Some(local_name) = specifier.field("name") else {
+                supported = false;
+                break;
+            };
+            if local_name.kind() != "identifier" {
+                supported = false;
+                break;
+            }
+            let exported_name = specifier.field("alias");
+            if exported_name
+                .as_ref()
+                .is_some_and(|name| name.kind() != "identifier")
+            {
+                supported = false;
+                break;
+            }
+            if exported_name
+                .as_ref()
+                .is_some_and(|name| name.text() == "default")
+            {
+                supported = false;
+                break;
+            }
+            specifiers.push((
+                local_name.text().into_owned(),
+                exported_name
+                    .map(|name| name.text().into_owned())
+                    .unwrap_or_else(|| local_name.text().into_owned()),
+            ));
+        }
+        if !supported || specifiers.is_empty() {
+            continue;
+        }
+
+        let mut resolved = Vec::new();
+        for (local_name, exported_name) in specifiers {
+            let item_indexes = items
+                .iter()
+                .enumerate()
+                .filter_map(|(index, item)| {
+                    (!item.is_import
+                        && top_level_item_indexes.contains(&index)
+                        && item.entry.name == local_name)
+                        .then_some(index)
+                })
+                .collect::<Vec<_>>();
+            if item_indexes.is_empty() {
+                supported = false;
+                break;
+            }
+            resolved.push(ResolvedSpecifier {
+                local_name,
+                exported_name,
+                item_indexes,
+            });
+        }
+        if supported {
+            let range = statement.range();
+            clauses.push(ResolvedClause {
+                start_byte: range.start,
+                end_byte: range.end,
+                specifiers: resolved,
+            });
+        }
+    }
+
+    let mut exported_indexes = BTreeSet::new();
+    let mut projections = BTreeMap::<usize, Vec<OutlineItem>>::new();
+    let mut resolved_ranges = BTreeSet::new();
+    for clause in clauses {
+        resolved_ranges.insert((clause.start_byte, clause.end_byte));
+        for specifier in clause.specifiers {
+            for item_index in specifier.item_indexes {
+                if specifier.local_name == specifier.exported_name {
+                    exported_indexes.insert(item_index);
+                    continue;
+                }
+                let mut projection = items[item_index].clone();
+                projection.entry.name = specifier.exported_name.clone();
+                projection.entry.signature = format!(
+                    "{} → {}",
+                    specifier.exported_name, projection.entry.signature
+                );
+                projection.is_exported = true;
+                projections.entry(item_index).or_default().push(projection);
+            }
+        }
+    }
+
+    let original = std::mem::take(items);
+    for (index, mut item) in original.into_iter().enumerate() {
+        if item.entry.ast_kind == "export_statement"
+            && resolved_ranges.contains(&(item.entry.range.start_byte, item.entry.range.end_byte))
+        {
+            continue;
+        }
+        if exported_indexes.contains(&index) {
+            item.is_exported = true;
+        }
+        items.push(item);
+        if let Some(item_projections) = projections.remove(&index) {
+            items.extend(item_projections);
+        }
     }
 }
 
@@ -1137,6 +1311,278 @@ mod tests {
             .symbol(std::slice::from_ref(&item.entry.locator), 0)
             .expect_err("changed source should make the locator stale");
         assert_eq!(error.code, "stale_locator");
+
+        fs::remove_file(temporary).expect("temporary fixture should be removable");
+    }
+
+    #[test]
+    fn resolves_typescript_local_export_clauses_before_filtering() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let temporary = std::env::temp_dir().join(format!(
+            "tau-ast-local-exports-fixture-{}.ts",
+            std::process::id()
+        ));
+        let source = r#"function localFunction(): number {
+    return 1;
+}
+
+function buildThing(name: string): string {
+    return name;
+}
+
+export function alreadyPublic(): number {
+    return 2;
+}
+
+function mixedLocal(): number {
+    return 3;
+}
+
+function defaultCandidate(): number {
+    return 4;
+}
+
+function duplicateName(): number {
+    return 5;
+}
+
+function container(): number {
+    function duplicateName(): number {
+        return 6;
+    }
+    return duplicateName();
+}
+
+type LocalType = { value: string };
+
+interface MergedThing {
+    first: string;
+}
+
+interface MergedThing {
+    second: number;
+}
+
+import { importedThing } from "./other.ts";
+
+export { localFunction };
+export { buildThing as createThing, buildThing as makeThing };
+export { alreadyPublic as publicAgain };
+export type { LocalType };
+export type { MergedThing as PublicMergedThing };
+export { remoteThing } from "./other.ts";
+export { mixedLocal, importedThing };
+export { defaultCandidate as default };
+export { duplicateName };
+"#;
+        fs::write(&temporary, source).expect("temporary fixture should be writable");
+
+        let public = engine
+            .outline(
+                OutlineTarget::File {
+                    path: temporary.to_string_lossy().into_owned(),
+                    language: LanguageId::TypeScript,
+                },
+                false,
+                &[],
+            )
+            .expect("public outline should parse")
+            .files
+            .into_iter()
+            .next()
+            .expect("file target should return one file");
+        let local_function = public
+            .items
+            .iter()
+            .find(|item| item.entry.name == "localFunction")
+            .expect("unaliased local export should expose its declaration");
+        assert_eq!(
+            &source[local_function.entry.range.start_byte..local_function.entry.range.end_byte],
+            "function localFunction(): number {\n    return 1;\n}"
+        );
+        assert!(!public.items.iter().any(|item| {
+            &source[item.entry.range.start_byte..item.entry.range.end_byte]
+                == "export { localFunction };"
+        }));
+        assert!(
+            public
+                .items
+                .iter()
+                .any(|item| item.entry.name == "LocalType")
+        );
+
+        let create_thing = public
+            .items
+            .iter()
+            .find(|item| item.entry.name == "createThing")
+            .expect("first alias should be public");
+        let make_thing = public
+            .items
+            .iter()
+            .find(|item| item.entry.name == "makeThing")
+            .expect("second alias should be public");
+        assert_eq!(
+            create_thing.entry.range.start_byte,
+            make_thing.entry.range.start_byte
+        );
+        assert_eq!(create_thing.entry.locator, make_thing.entry.locator);
+        let private = outline_file(&engine, &temporary, LanguageId::TypeScript);
+        let build_thing = private
+            .items
+            .iter()
+            .find(|item| item.entry.name == "buildThing")
+            .expect("private outline should retain the local declaration");
+        assert_eq!(
+            create_thing.entry.signature,
+            format!("createThing → {}", build_thing.entry.signature)
+        );
+        assert!(
+            !public
+                .items
+                .iter()
+                .any(|item| item.entry.name == "buildThing")
+        );
+        let public_again = public
+            .items
+            .iter()
+            .find(|item| item.entry.name == "publicAgain")
+            .expect("an exported declaration should support another local alias");
+        assert_eq!(
+            &source[public_again.entry.range.start_byte..public_again.entry.range.end_byte],
+            "export function alreadyPublic(): number {\n    return 2;\n}"
+        );
+        assert!(
+            !public
+                .items
+                .iter()
+                .any(|item| item.entry.name == "mixedLocal")
+        );
+        assert!(!public.items.iter().any(|item| item.entry.name == "default"));
+        assert_eq!(
+            public
+                .items
+                .iter()
+                .filter(|item| item.entry.name == "duplicateName")
+                .count(),
+            1,
+            "only the module-level declaration should become public"
+        );
+
+        let public_merged_declarations = public
+            .items
+            .iter()
+            .filter(|item| item.entry.name == "PublicMergedThing")
+            .count();
+        assert!(
+            public_merged_declarations > 1,
+            "all merged declarations should be projected"
+        );
+        assert!(public.items.iter().any(|item| {
+            &source[item.entry.range.start_byte..item.entry.range.end_byte]
+                == "export { remoteThing } from \"./other.ts\";"
+        }));
+        assert!(public.items.iter().any(|item| {
+            &source[item.entry.range.start_byte..item.entry.range.end_byte]
+                == "export { mixedLocal, importedThing };"
+        }));
+        assert!(public.items.iter().any(|item| {
+            &source[item.entry.range.start_byte..item.entry.range.end_byte]
+                == "export { defaultCandidate as default };"
+        }));
+
+        let symbol = engine
+            .symbol(std::slice::from_ref(&local_function.entry.locator), 0)
+            .expect("resolved locator should retrieve the local declaration");
+        assert_eq!(
+            symbol.blocks[0].source,
+            "function localFunction(): number {\n    return 1;\n}"
+        );
+
+        for (include_private, name, expected_names) in [
+            (false, "createThing", vec!["createThing"]),
+            (false, "buildThing", vec![]),
+            (true, "buildThing", vec!["buildThing"]),
+        ] {
+            let filtered = engine
+                .outline(
+                    OutlineTarget::File {
+                        path: temporary.to_string_lossy().into_owned(),
+                        language: LanguageId::TypeScript,
+                    },
+                    include_private,
+                    &[name.to_owned()],
+                )
+                .expect("filtered outline should parse");
+            assert_eq!(
+                filtered.files[0]
+                    .items
+                    .iter()
+                    .filter(|item| !item.is_import)
+                    .map(|item| item.entry.name.as_str())
+                    .collect::<Vec<_>>(),
+                expected_names
+            );
+        }
+        assert!(
+            private
+                .items
+                .iter()
+                .any(|item| item.entry.name == "buildThing")
+        );
+        assert!(
+            private
+                .items
+                .iter()
+                .any(|item| item.entry.name == "createThing")
+        );
+        let build_index = private
+            .items
+            .iter()
+            .position(|item| item.entry.name == "buildThing")
+            .expect("private outline should contain buildThing");
+        assert_eq!(private.items[build_index + 1].entry.name, "createThing");
+        assert_eq!(private.items[build_index + 2].entry.name, "makeThing");
+
+        fs::write(&temporary, format!("{source}\n// changed\n"))
+            .expect("temporary fixture should be mutable");
+        let error = engine
+            .symbol(std::slice::from_ref(&local_function.entry.locator), 0)
+            .expect_err("resolved locator should become stale after mutation");
+        assert_eq!(error.code, "stale_locator");
+
+        fs::remove_file(temporary).expect("temporary fixture should be removable");
+    }
+
+    #[test]
+    fn resolves_tsx_local_export_clauses() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let temporary = std::env::temp_dir().join(format!(
+            "tau-ast-local-exports-fixture-{}.tsx",
+            std::process::id()
+        ));
+        let source = "function View() {\n    return <div />;\n}\n\nexport { View };\n";
+        fs::write(&temporary, source).expect("temporary fixture should be writable");
+
+        let result = engine
+            .outline(
+                OutlineTarget::File {
+                    path: temporary.to_string_lossy().into_owned(),
+                    language: LanguageId::Tsx,
+                },
+                false,
+                &[],
+            )
+            .expect("TSX outline should parse");
+        let view = result.files[0]
+            .items
+            .iter()
+            .find(|item| item.entry.name == "View")
+            .expect("TSX local export should expose its declaration");
+        assert_eq!(
+            &source[view.entry.range.start_byte..view.entry.range.end_byte],
+            "function View() {\n    return <div />;\n}"
+        );
+        assert_eq!(result.files[0].items.len(), 1);
 
         fs::remove_file(temporary).expect("temporary fixture should be removable");
     }

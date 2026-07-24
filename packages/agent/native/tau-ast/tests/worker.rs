@@ -190,6 +190,64 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         );
     }
 
+    let local_export_path = std::env::temp_dir().join(format!(
+        "tau-ast-worker-local-export-{}.ts",
+        std::process::id()
+    ));
+    std::fs::write(
+        &local_export_path,
+        "function createThing(name: string): string {\n    return name;\n}\n\nexport { createThing };\n",
+    )
+    .expect("local export fixture should be writable");
+    send_request(
+        &mut worker,
+        json!({
+            "operation": "outline",
+            "requestId": 12,
+            "protocolVersion": 2,
+            "target": { "kind": "file", "path": local_export_path, "language": "typeScript" },
+            "includePrivate": false,
+            "names": []
+        }),
+    );
+    let local_export = read_response(&mut stdout);
+    assert_eq!(local_export["success"], true);
+    let local_item = &local_export["result"]["files"][0]["items"][0];
+    assert_eq!(local_item["name"], "createThing");
+    let local_locator = local_item["locator"]
+        .as_str()
+        .expect("resolved local export should have a locator");
+    let local_start = local_item["range"]["startByte"]
+        .as_u64()
+        .expect("resolved local export should have a start byte") as usize;
+    let local_end = local_item["range"]["endByte"]
+        .as_u64()
+        .expect("resolved local export should have an end byte") as usize;
+    let local_source = std::fs::read_to_string(&local_export_path)
+        .expect("local export source should remain readable");
+    assert_eq!(
+        &local_source[local_start..local_end],
+        "function createThing(name: string): string {\n    return name;\n}"
+    );
+
+    send_request(
+        &mut worker,
+        json!({
+            "operation": "symbol",
+            "requestId": 13,
+            "protocolVersion": 2,
+            "locators": [local_locator],
+            "contextLines": 0
+        }),
+    );
+    let local_symbol = read_response(&mut stdout);
+    assert_eq!(local_symbol["success"], true);
+    assert_eq!(
+        local_symbol["result"]["blocks"][0]["source"],
+        &local_source[local_start..local_end]
+    );
+    std::fs::remove_file(local_export_path).expect("local export fixture should be removable");
+
     drop(worker.stdin.take());
     let output = worker
         .wait_with_output()

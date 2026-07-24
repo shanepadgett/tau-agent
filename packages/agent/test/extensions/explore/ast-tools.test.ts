@@ -103,6 +103,7 @@ describe("AST exploration tools", () => {
 			extensionContext(workspace.dir),
 		);
 		expect(firstText(outlined)).toContain("public function\n1-3(1): function parse(): void");
+		expect(firstText(outlined)).not.toContain("parser.ts (typeScript");
 
 		const symbolArgs = { locators: [1], contextLines: 2 };
 		const symbolCall = ast.symbol.renderCall?.(symbolArgs, testTheme, renderContext(symbolArgs, false));
@@ -121,6 +122,7 @@ describe("AST exploration tools", () => {
 		);
 		expect(firstText(symbol)).toContain("1-3(1): parse");
 		expect(firstText(symbol)).toContain(source);
+		expect(firstText(symbol)).not.toContain("parser.ts");
 	});
 
 	it("sends directories and public-surface options to the worker", async () => {
@@ -142,6 +144,52 @@ describe("AST exploration tools", () => {
 
 		expect(client.outline).toHaveBeenCalledWith({ kind: "directory", path }, true, ["Foo", "bar"], undefined);
 		expect(firstText(result)).toContain("No matching declarations");
+	});
+
+	it("keeps distinct numeric IDs for public aliases sharing one native locator", async () => {
+		const path = workspace.path("src/parser.ts");
+		const result = outlineResult(path);
+		const first = result.files[0]?.items[0];
+		if (!first) throw new Error("outline fixture omitted its declaration");
+		first.name = "createThing";
+		result.files[0]?.items.push({ ...first, name: "makeThing" });
+		const symbolResult: SymbolBatchResult = {
+			declarations: [
+				{
+					locator: "native-locator",
+					path,
+					language: "typeScript",
+					sourceFingerprint: "blake3:test",
+					declarationRange: range,
+				},
+			],
+			blocks: [{ path, returnedRange: range, declarationIndexes: [0], source: "function buildThing() {}" }],
+		};
+		const client: AstClient = {
+			outline: vi.fn(async () => result),
+			symbol: vi.fn(async () => symbolResult),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(client, testRowState);
+		const outlined = await ast.outline.execute(
+			"outline-aliases",
+			{ path: "src/parser.ts" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		expect(firstText(outlined)).toContain("1-3(1): createThing function parse(): void");
+		expect(firstText(outlined)).toContain("1-3(2): makeThing function parse(): void");
+
+		const symbol = await ast.symbol.execute(
+			"symbol-aliases",
+			{ locators: [1, 2] },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		expect(client.symbol).toHaveBeenCalledWith(["native-locator"], 0, undefined);
+		expect(firstText(symbol)).toContain("1-3(1,2): createThing, makeThing");
 	});
 
 	it("renders one Errata-style call row and a separate parenthesized result summary", async () => {
@@ -210,6 +258,16 @@ describe("AST exploration tools", () => {
 			undefined,
 			extensionContext(workspace.dir),
 		);
+		await expect(
+			ast.symbol.execute(
+				"symbol-unknown",
+				{ locators: [1, 999] },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			),
+		).rejects.toThrow("Unknown symbol locator: 999");
+		expect(client.symbol).not.toHaveBeenCalled();
 		ast.invalidate([path]);
 		await expect(
 			ast.symbol.execute("symbol-1", { locators: [1] }, undefined, undefined, extensionContext(workspace.dir)),

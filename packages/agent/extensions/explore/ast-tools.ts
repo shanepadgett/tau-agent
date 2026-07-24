@@ -125,10 +125,12 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 		return `${indent}${lines}(${locator(entry, path)}): ${label}`;
 	}
 
-	function renderOutlineFile(file: OutlineFileResult, cwd: string): string[] {
-		const lines = [
-			`${formatPathForDisplay(file.path, cwd)} (${file.language}, ${file.lineCount} lines, ${formatSize(file.byteLength)})`,
-		];
+	function renderOutlineFile(file: OutlineFileResult, cwd: string, includeHeader: boolean): string[] {
+		const lines = includeHeader
+			? [
+					`${formatPathForDisplay(file.path, cwd)} (${file.language}, ${file.lineCount} lines, ${formatSize(file.byteLength)})`,
+				]
+			: [];
 		if (file.diagnostics.errorNodes > 0 || file.diagnostics.missingNodes > 0) {
 			lines.push(
 				`warning: parser recovered with ${file.diagnostics.errorNodes} ERROR and ${file.diagnostics.missingNodes} MISSING nodes`,
@@ -144,7 +146,8 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 			else groups.set(key, [item]);
 		}
 		for (const [label, items] of groups) {
-			lines.push("", label);
+			if (lines.length > 0) lines.push("");
+			lines.push(label);
 			for (const item of items) {
 				lines.push(renderEntry(item, file.path, file.language, ""));
 				for (const member of item.members) {
@@ -178,7 +181,7 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 			const result = await client.outline(target, params.includePrivate ?? false, names, signal);
 			const lines = result.files.flatMap((file, index) => [
 				...(index === 0 ? [] : [""]),
-				...renderOutlineFile(file, ctx.cwd),
+				...renderOutlineFile(file, ctx.cwd, result.files.length > 1),
 			]);
 			const declarationCount = result.files.reduce(
 				(count, file) =>
@@ -219,7 +222,7 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 		promptSnippet: "Retrieve exact declaration source for several outline locators",
 		parameters: symbolParams,
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-			const records = params.locators.map((id) => {
+			const records = [...new Set(params.locators)].map((id) => {
 				const record = locators.get(id);
 				if (!record) throw new Error(`Unknown symbol locator: ${id}. Run outline again.`);
 				if (record.stale) throw new Error(`Symbol locator ${id} is stale. Run outline again.`);
@@ -230,14 +233,19 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 				params.contextLines ?? 0,
 				signal,
 			);
-			const requestedByToken = new Map(records.map((record) => [record.token, record]));
+			const requestedByToken = new Map<string, LocatorRecord[]>();
+			for (const record of records) {
+				const requested = requestedByToken.get(record.token);
+				if (requested) requested.push(record);
+				else requestedByToken.set(record.token, [record]);
+			}
 			const lines: string[] = [];
+			const includePaths = new Set(result.blocks.map((block) => block.path)).size > 1;
 			for (const [blockIndex, block] of result.blocks.entries()) {
 				if (blockIndex > 0) lines.push("");
 				const represented = block.declarationIndexes.flatMap((index) => {
 					const declaration = result.declarations[index];
-					const record = declaration ? requestedByToken.get(declaration.locator) : undefined;
-					return record ? [record] : [];
+					return declaration ? (requestedByToken.get(declaration.locator) ?? []) : [];
 				});
 				const range = block.returnedRange;
 				const lineRange =
@@ -245,7 +253,7 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 						? `${range.start.line + 1}`
 						: `${range.start.line + 1}-${range.end.line + 1}`;
 				lines.push(
-					formatPathForDisplay(block.path, ctx.cwd),
+					...(includePaths ? [formatPathForDisplay(block.path, ctx.cwd)] : []),
 					`${lineRange}(${represented.map((record) => record.id).join(",")}): ${represented.map((record) => record.name).join(", ")}`,
 					block.source,
 				);
