@@ -15,9 +15,7 @@ export function projectContext(
 			message?.role === "assistant" &&
 			message.content.some(
 				(block) =>
-					block.type === "toolCall" &&
-					block.id === state.latestAnchorToolCallId &&
-					block.name === "context_prune",
+					block.type === "toolCall" && block.id === state.latestAnchorToolCallId && block.name === "context_prune",
 			)
 		) {
 			anchorIndex = index;

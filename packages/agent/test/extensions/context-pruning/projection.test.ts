@@ -1,4 +1,10 @@
-import { fauxAssistantMessage, fauxText, fauxThinking, fauxToolCall, type ToolResultMessage } from "@earendil-works/pi-ai";
+import {
+	fauxAssistantMessage,
+	fauxText,
+	fauxThinking,
+	fauxToolCall,
+	type ToolResultMessage,
+} from "@earendil-works/pi-ai";
 import type { ContextEvent } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { projectContext } from "../../../extensions/context-pruning/projection.ts";
@@ -68,13 +74,7 @@ describe("context pruning projection", () => {
 		const anchorResult = result("anchor", "context_prune");
 		expect(
 			projectContext(
-				[
-					{ role: "user", content: "old", timestamp: 1 },
-					result("orphan", "read"),
-					abandoned,
-					anchor,
-					anchorResult,
-				],
+				[{ role: "user", content: "old", timestamp: 1 }, result("orphan", "read"), abandoned, anchor, anchorResult],
 				state([]),
 			),
 		).toEqual([anchor, anchorResult]);

@@ -164,7 +164,10 @@ describe("read-cache replay", () => {
 						role: "toolResult",
 						toolName: "context_prune",
 						toolCallId: "anchor",
-						content: [{ type: "text", text: "checkpoint applied" }, { type: "text", text: snapshot.content }],
+						content: [
+							{ type: "text", text: "checkpoint applied" },
+							{ type: "text", text: snapshot.content },
+						],
 						details: {
 							v: 2,
 							refreshedFiles: [

@@ -235,9 +235,7 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 		const boundary = baseline + reminder * nudgeEveryPercent;
 		if (boundary <= nudgeState.highestBoundary) return undefined;
 		const tierCount = nudgeInstructions.length;
-		const tierFloor = nudgeState.terminalTierReached
-			? tierCount
-			: Math.min(nudgeState.highestTier, tierCount);
+		const tierFloor = nudgeState.terminalTierReached ? tierCount : Math.min(nudgeState.highestTier, tierCount);
 		const tier = Math.max(Math.min(reminder, tierCount), tierFloor);
 		const instruction = nudgeInstructions[tier - 1] ?? nudgeInstructions[0];
 		const details: ContextPruningNudgeDetailsV2 = {
@@ -328,7 +326,7 @@ function reconstructNudgeState(branch: readonly SessionEntry[], anchorToolCallId
 			(growthBaselinePercent !== undefined && details.growthBaselinePercent !== growthBaselinePercent)
 		)
 			continue;
-		const expectedTierFloor = terminalTierReached
+		const expectedTierFloor: number = terminalTierReached
 			? details.tierCount
 			: Math.min(highestTier, details.tierCount);
 		if (details.boundary <= highestBoundary || details.tierFloor !== expectedTierFloor) continue;

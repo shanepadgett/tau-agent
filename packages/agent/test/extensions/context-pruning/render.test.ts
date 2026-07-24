@@ -16,9 +16,7 @@ function details(): ContextPruneDetailsV2 {
 		prunedAutoreadRowIds: ["auto-1"],
 		retainedToolCallIds: ["patch-1"],
 		retainedAutoreadRowIds: [],
-		refreshedFiles: [
-			{ path: "src/current.ts", rowId: "anchor:0", servedHash: "hash", autoreadDetails: {} },
-		],
+		refreshedFiles: [{ path: "src/current.ts", rowId: "anchor:0", servedHash: "hash", autoreadDetails: {} }],
 		deferredFiles: [{ path: "src/later.ts", reason: "cold", relevantWhen: "fallback fails" }],
 		warnings: [],
 	};
@@ -85,16 +83,10 @@ describe("context prune rendering", () => {
 			),
 		).toBeUndefined();
 		expect(
-			renderContextPruningNudge(
-				{ ...automatic, percent: 100, reminder: 100, tier: 3, tierFloor: 0 },
-				testTheme,
-			),
+			renderContextPruningNudge({ ...automatic, percent: 100, reminder: 100, tier: 3, tierFloor: 0 }, testTheme),
 		).toBeUndefined();
 		expect(
-			renderContextPruningNudge(
-				{ ...automatic, anchorToolCallId: null, growthBaselinePercent: 10 },
-				testTheme,
-			),
+			renderContextPruningNudge({ ...automatic, anchorToolCallId: null, growthBaselinePercent: 10 }, testTheme),
 		).toBeUndefined();
 	});
 

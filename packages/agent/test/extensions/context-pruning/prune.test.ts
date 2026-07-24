@@ -167,8 +167,8 @@ describe("context checkpoint execution", () => {
 		await expect(executeContextPrune(options({ signal: controller.signal }).value)).rejects.toMatchObject({
 			name: "AbortError",
 		});
-		await expect(
-			executeContextPrune(options({ generation: 1, currentGeneration: () => 2 }).value),
-		).rejects.toThrow("lifecycle boundary");
+		await expect(executeContextPrune(options({ generation: 1, currentGeneration: () => 2 }).value)).rejects.toThrow(
+			"lifecycle boundary",
+		);
 	});
 });

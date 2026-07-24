@@ -285,7 +285,6 @@ describe("context pruning extension wiring", () => {
 		await command.handler("", test.ctx as unknown as ExtensionCommandContext);
 		expect(test.sent).toEqual([]);
 		expect(test.notifications.at(-1)).toEqual({ message: "Context pruning is disabled.", type: "info" });
-
 	});
 
 	it("emits the strongest newly crossed boundary with an escalating instruction", async () => {
@@ -346,7 +345,9 @@ describe("context pruning extension wiring", () => {
 		await toolTurn(test, 20, "read-20");
 
 		expect(test.sent[0]?.message).toMatchObject({ details: { reminder: 1, tier: 1, tierCount: 1 } });
-		const message = (test.sent[0]?.message as { content: string }).content;
+		const sent = test.sent[0];
+		if (!sent) throw new Error("expected single-tier nudge");
+		const message = (sent.message as { content: string }).content;
 		expect(message).toContain("custom instruction");
 		expect(message).toContain("Create a context anchor before further tool work");
 	});
@@ -362,7 +363,9 @@ describe("context pruning extension wiring", () => {
 		expect(test.sent[0]?.message).toMatchObject({
 			details: { boundary: 100, reminder: 1, tier: 3, tierCount: 3 },
 		});
-		expect((test.sent[0]?.message as { content: string }).content).toContain(
+		const sent = test.sent[0];
+		if (!sent) throw new Error("expected non-deescalating nudge");
+		expect((sent.message as { content: string }).content).toContain(
 			"Create a context anchor before further tool work",
 		);
 	});

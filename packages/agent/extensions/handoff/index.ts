@@ -35,10 +35,7 @@ export default function handoffExtension(pi: ExtensionAPI): void {
 				ctx.ui.notify("The current session must be persisted before handoff.", "error");
 				return;
 			}
-			const messages = buildSessionContext(
-				ctx.sessionManager.getEntries(),
-				ctx.sessionManager.getLeafId(),
-			).messages;
+			const messages = buildSessionContext(ctx.sessionManager.getEntries(), ctx.sessionManager.getLeafId()).messages;
 			if (messages.length === 0) {
 				ctx.ui.notify("No conversation context to hand off.", "error");
 				return;
@@ -53,7 +50,13 @@ export default function handoffExtension(pi: ExtensionAPI): void {
 						const thinking = pi.getThinkingLevel();
 						const candidates = await resolveCandidates(
 							ctx,
-							[{ provider: model.provider, model: model.id, reasoning: thinking === "off" ? undefined : thinking }],
+							[
+								{
+									provider: model.provider,
+									model: model.id,
+									reasoning: thinking === "off" ? undefined : thinking,
+								},
+							],
 							false,
 						);
 						const conversation = serializeConversation(convertToLlm(messages));
@@ -82,7 +85,10 @@ export default function handoffExtension(pi: ExtensionAPI): void {
 			});
 
 			if (!draft) {
-				ctx.ui.notify(generationError ? `Handoff failed: ${generationError}` : "Handoff cancelled.", generationError ? "error" : "info");
+				ctx.ui.notify(
+					generationError ? `Handoff failed: ${generationError}` : "Handoff cancelled.",
+					generationError ? "error" : "info",
+				);
 				return;
 			}
 

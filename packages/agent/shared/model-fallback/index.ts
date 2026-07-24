@@ -24,7 +24,7 @@ interface ModelFallbackOptions {
 
 export async function resolveCandidates(
 	ctx: Pick<ExtensionContext, "modelRegistry" | "model" | "cwd" | "isProjectTrusted">,
-	preferredModels: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }>,
+	preferredModels: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel | undefined }>,
 	includeParentModel: boolean,
 ): Promise<ModelCandidate[]> {
 	const settings = await loadTauExtensionSettings(ctx, modelFallbackSettings);

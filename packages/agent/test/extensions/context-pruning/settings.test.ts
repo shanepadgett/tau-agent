@@ -16,9 +16,7 @@ describe("context pruning settings", () => {
 
 	it("rejects empty, oversized, empty-string, and overlong nudge instruction lists", () => {
 		expect(Value.Check(contextPruningSettings.schema, settingsWith([]))).toBe(false);
-		expect(Value.Check(contextPruningSettings.schema, settingsWith(["1", "2", "3", "4", "5", "6"]))).toBe(
-			false,
-		);
+		expect(Value.Check(contextPruningSettings.schema, settingsWith(["1", "2", "3", "4", "5", "6"]))).toBe(false);
 		expect(Value.Check(contextPruningSettings.schema, settingsWith([""]))).toBe(false);
 		expect(Value.Check(contextPruningSettings.schema, settingsWith(["x".repeat(2_001)]))).toBe(false);
 	});

@@ -1,13 +1,7 @@
 import { resolve } from "node:path";
-import {
-	type ExtensionContext,
-	type SessionEntry,
-} from "@earendil-works/pi-coding-agent";
+import { type ExtensionContext, type SessionEntry } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
-import type {
-	ContextPruneDeferredFileV2,
-	ContextPruneDetailsV2,
-} from "../../shared/context-pruning-state.ts";
+import type { ContextPruneDeferredFileV2, ContextPruneDetailsV2 } from "../../shared/context-pruning-state.ts";
 import { prepareAutoreadMessage, type PreparedAutoreadMessage } from "../explore/autoread.ts";
 import { MAX_COMPLETE_FILE_SNAPSHOT_BYTES } from "../explore/full-file-knowledge.ts";
 
@@ -119,9 +113,7 @@ export async function executeContextPrune(options: ContextPruneExecutionOptions)
 		content: [
 			{ type: "text", text: status },
 			...preparedSnapshots.map((snapshot) => ({ type: "text" as const, text: snapshot.content })),
-			...(deferredFiles.length === 0
-				? []
-				: [{ type: "text" as const, text: deferredFileText(deferredFiles) }]),
+			...(deferredFiles.length === 0 ? [] : [{ type: "text" as const, text: deferredFileText(deferredFiles) }]),
 		],
 		details,
 	};
@@ -169,7 +161,8 @@ function collectPrunedRows(
 		if (entry.message.toolName !== "context_prune" || !isRecord(entry.message.details)) continue;
 		const files = entry.message.details.refreshedFiles;
 		if (!Array.isArray(files)) continue;
-		for (const file of files) if (isRecord(file) && typeof file.rowId === "string") prunedAutoreadRowIds.add(file.rowId);
+		for (const file of files)
+			if (isRecord(file) && typeof file.rowId === "string") prunedAutoreadRowIds.add(file.rowId);
 	}
 	return { prunedToolCallIds: [...prunedToolCallIds], prunedAutoreadRowIds: [...prunedAutoreadRowIds] };
 }

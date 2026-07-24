@@ -128,11 +128,7 @@ export function renderContextPruningNudge(details: unknown, theme: Theme): Marke
 				? ["Prune requested."]
 				: [
 						`${parsed.percent}%`,
-						...(parsed.tier === parsed.tierCount
-							? ["Prune now."]
-							: parsed.tier > 1
-								? ["Prune soon."]
-								: []),
+						...(parsed.tier === parsed.tierCount ? ["Prune now."] : parsed.tier > 1 ? ["Prune soon."] : []),
 					],
 	});
 }
