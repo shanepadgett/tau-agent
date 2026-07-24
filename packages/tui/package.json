@@ -1,6 +1,6 @@
 {
 	"name": "@shanepadgett/tau-tui",
-	"version": "0.22.1",
+	"version": "0.23.0",
 	"description": "Shared TUI components and helpers for Tau Agent",
 	"type": "module",
 	"license": "MIT",
