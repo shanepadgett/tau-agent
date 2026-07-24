@@ -9,6 +9,7 @@ Each fresh child also gets a display name from its agent definition. The name st
 Tau includes these built-in agents:
 
 - `review` performs adversarial, read-only code review for correctness, runtime risks, duplication, and over- or under-engineering.
+- `scout` finds local files, symbols, data flow, constraints, and unknowns without changing anything.
 - `web-research` researches web and code sources with `websearch`, `codesearch`, and `webfetch`.
 - `context-sync` maps meaningful uncommitted work into `.pi/contexts`. Agent-driven use is `extensions.context.sync.automation` (requires `sync.enabled`). `/context-sync` is the manual/nudge path when sync is enabled. Validation can auto-run it when validation and sync are enabled.
 

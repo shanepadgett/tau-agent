@@ -32,7 +32,7 @@ describe("subagent discovery", () => {
 		expect(trusted.agents.get("review")?.description).toBe("Project review");
 		expect(trusted.agents.get("review")?.names).toEqual(["review"]);
 		expect(trusted.agents.has("generalist")).toBe(false);
-		expect(trusted.agents.has("scout")).toBe(false);
+		expect(trusted.agents.has("scout")).toBe(true);
 		expect(trusted.agents.has("web-research")).toBe(true);
 
 		const untrusted = await discoverAgents(paths.cwd, false);
@@ -40,7 +40,7 @@ describe("subagent discovery", () => {
 		expect(untrusted.agents.get("review")?.model).toBe("openai-codex/gpt-5.6-sol");
 		expect(untrusted.agents.get("review")?.thinking).toBe("xhigh");
 		expect(untrusted.agents.has("generalist")).toBe(false);
-		expect(untrusted.agents.has("scout")).toBe(false);
+		expect(untrusted.agents.has("scout")).toBe(true);
 	});
 
 	it("blocks a malformed higher-precedence definition without blocking unrelated agents", async () => {

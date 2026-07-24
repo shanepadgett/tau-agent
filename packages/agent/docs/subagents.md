@@ -26,7 +26,7 @@ Paths may be relative to the parent's current working directory or absolute. Tau
 | **User (global)** | `~/.pi/agent/tau/agents/*.md` | You want the agent in every project |
 | **Project** | nearest trusted `.pi/tau/agents/*.md` | Repo-specific helpers |
 
-Precedence: **project overrides user**, which overrides Tau's built-ins (`review`, `web-research`). Duplicate names in one scope are invalid.
+Precedence: **project overrides user**, which overrides Tau's built-ins (`review`, `scout`, `web-research`). Duplicate names in one scope are invalid.
 
 ## Definition format
 
@@ -83,6 +83,7 @@ Tau assigns one display name to each fresh child and keeps it for follow-up turn
 ## Built-ins
 
 - `review` — adversarial, read-only review for correctness, runtime risks, duplication, and over- or under-engineering
+- `scout` — find local files, symbols, data flow, constraints, and unknowns without changing anything
 - `web-research` — `websearch`, `codesearch`, `webfetch`
 - `context-sync` — maps meaningful uncommitted work into `.pi/contexts`. Offered to the coding agent when `extensions.context.sync.enabled` and `sync.automation` are true. Manual `/context-sync` remains when sync is enabled with `automation` false. Validation can auto-run it when `validation.enabled` and `sync.enabled`
 
