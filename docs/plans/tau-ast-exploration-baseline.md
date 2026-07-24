@@ -34,6 +34,73 @@ The native spike measured roughly 5.9 ms cold startup and 0.15-0.17 ms warm extr
 
 Structural search, cross-language executable-scope extraction, callers and callees, impact analysis, context packing, read enforcement, persistent indexing, and rewriting remain future work. None is approved for implementation by this document.
 
+## Deno TypeScript agent usability findings
+
+An agent trial in a Deno TypeScript repository tested a stricter target than discovery: doing real implementation work without whole-file `read`. The current `outline` and `symbol` tools reduced discovery reads, but they did not provide enough information or editing control to avoid whole-file reads safely.
+
+The strongest practical target from this trial is:
+
+> Navigate and modify source by symbols, reading only the exact implementations being changed.
+
+Source signatures alone cannot meet that target. Symbol discovery, dependency provenance, references, selective retrieval, and structural edits need to work together.
+
+### First priority: complete declarations
+
+Outlines must preserve complete declarations rather than one-line approximations. For TypeScript, this includes:
+
+- multiline parameters and return types;
+- generics and constraints;
+- overloads;
+- constructors and methods;
+- complete type aliases;
+- function-valued properties and callback types; and
+- relevant modifiers and decorators.
+
+This is the first usability gap to close. The trial found cases where `outline` returned too little signature information and `symbol` jumped to roughly 170 lines of implementation. Neither result gave the agent the narrow contract it needed.
+
+### Capabilities needed before avoiding whole-file reads
+
+1. **Import and dependency provenance.** A declaration result should identify the source module for each referenced type and value. For example:
+
+   ```text
+   Database → ../platform/database/mod.ts
+   Principal → ../authentication/mod.ts
+   SearchCatalogInput → ./types.ts
+   ```
+
+   A useful retrieval mode would return a declaration with only the imports it depends on. Otherwise the agent must open the module to reconstruct a valid edit.
+
+2. **Repository-wide symbol discovery.** Agents need exact-name, prefix, fuzzy-name, and kind queries without knowing a path first. Path-scoped `outline(names: ...)` remains useful after discovery. It does not replace a symbol index. Useful queries include exported functions, names containing `cursor`, and interfaces extending a named type.
+
+3. **References and relationships.** Impact analysis needs references, callers, callees, implementations, and type usages. Results should distinguish production, test, generated, and re-export references, plus exact, inferred, and ambiguous relationships where resolution is approximate.
+
+4. **Reliable export resolution.** Resolve declarations through Deno-style `mod.ts` files and chained re-exports. Report separately whether a declaration is exported from its source file, belongs to the package or module public surface, or is only an internal export between sibling modules. The trial's `initiative.ts` parser-recovery case lost this information.
+
+5. **Explicit parser degradation.** Recovery is acceptable only when the result identifies declarations that may be omitted or uncertain. A plausible incomplete outline is unsafe input for an edit. File-level warning counts alone may be insufficient if Tau can localize the affected ranges or declarations.
+
+6. **Focused module structure.** Outlines should represent imports, top-level side effects, declaration order, and export statements. This gives an agent enough placement context for adding code without retrieving the module.
+
+7. **Selective symbol retrieval.** Retrieval should support signature only, body only, complete declaration, declaration plus required imports, one selected member, and a chosen range within a large declaration. The contract should avoid forcing a choice between an incomplete outline row and an entire large declaration.
+
+8. **Stable symbol identity.** Numeric locators work within one snapshot. Editing invalidates them. Future edit-capable identities should include path, qualified name, declaration kind, and source fingerprint, then report exactly which identities became stale.
+
+9. **Symbol-aware edits.** Avoiding whole-file reads during modification requires structural operations such as replacing a declaration or function body, inserting before or after a declaration, updating imports or exports, and renaming with reference updates. Every operation should carry an expected source fingerprint and fail on stale source. Without this, `patch` still needs surrounding source context.
+
+### High-value follow-ups
+
+- Include attached JSDoc and deprecation annotations. Types do not express every contract needed for safe reuse.
+- Add nested outlines for framework-shaped objects, such as router handlers with `GET` and `POST` members, configuration objects, test suites, and callback registries.
+- Omit files with no matches from names-filtered directory outlines.
+- Support change-oriented queries: symbols affected by an uncommitted diff, references outside the owning package, exported symbols with no callers, and declarations using a changed type.
+
+### What generalizes beyond the trial
+
+Complete declarations, explicit parser uncertainty, focused module structure, selective retrieval, stale-safe identity, and structural edits are language-independent requirements. Import provenance, export resolution, symbol search, and references also generalize, but their accuracy depends on language-specific module and type semantics. Deno's `mod.ts` convention is one TypeScript-specific fixture for a broader re-export requirement.
+
+Framework-aware nested outlines require adapter or configuration work for each common source shape. Repository-wide semantic queries may need a language service or compiler-backed index for TypeScript; Tree-sitter alone cannot reliably resolve every alias, overload, inferred type, or dynamic call.
+
+The no-whole-file target should remain scoped to supported source languages. SQL migrations, JSON, YAML, CSS, Markdown, generated artifacts, and other non-source formats still need equivalent structural tools or ordinary reads.
+
 ## Goals
 
 - Make structural code exploration a built-in Tau capability.
