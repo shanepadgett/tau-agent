@@ -1,6 +1,7 @@
 mod language;
 mod outline;
 mod protocol;
+mod typescript;
 
 use crate::{
     outline::{LanguageId, OutlineEngine},
@@ -112,6 +113,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 }
                 Request::Symbol {
                     locators,
+                    view,
                     context_lines,
                     ..
                 } => {
@@ -134,7 +136,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                     match engine
                         .as_ref()
                         .expect("engine is initialized above")
-                        .symbol(&locators, context_lines)
+                        .symbol(&locators, view, context_lines)
                     {
                         Ok(symbol) => Response::Success(SuccessResponse {
                             request_id,

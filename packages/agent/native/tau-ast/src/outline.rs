@@ -1,4 +1,7 @@
 use crate::language::OdinLanguage;
+use crate::typescript::{
+    extract_typescript_items, filter_typescript_items, finalize_typescript_signatures,
+};
 use ast_grep_config::GlobalRules;
 use ast_grep_core::{Node, tree_sitter::LanguageExt};
 use ast_grep_language::SupportLang;
@@ -21,7 +24,7 @@ use std::{
     str,
 };
 
-const LOCATOR_VERSION: u32 = 1;
+const LOCATOR_VERSION: u32 = 2;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -88,14 +91,14 @@ pub struct SourceRange {
     pub end: SourcePosition,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum EntryRole {
     Item,
     Member,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SymbolType {
     File,
@@ -132,10 +135,25 @@ pub struct OutlineEntry {
     pub role: EntryRole,
     pub symbol_type: SymbolType,
     pub name: String,
+    pub qualified_name: String,
     pub range: SourceRange,
+    pub name_range: SourceRange,
+    pub body_range: Option<SourceRange>,
     pub signature: String,
     pub ast_kind: String,
-    pub locator: String,
+    pub certainty: ParseCertainty,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub certainty_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub locator: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ParseCertainty {
+    Certain,
+    Recovered,
+    NearRecovery,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -143,9 +161,19 @@ pub struct OutlineEntry {
 pub struct OutlineItem {
     #[serde(flatten)]
     pub entry: OutlineEntry,
+    pub row_kind: OutlineRowKind,
     pub is_import: bool,
     pub is_exported: bool,
     pub members: Vec<OutlineMember>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OutlineRowKind {
+    Import,
+    Declaration,
+    Export,
+    SideEffect,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -182,6 +210,14 @@ pub struct SymbolBlock {
     pub source: String,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SymbolView {
+    Signature,
+    Declaration,
+    DeclarationWithImports,
+}
+
 #[derive(Debug)]
 pub struct SymbolError {
     pub code: &'static str,
@@ -203,12 +239,24 @@ struct SourceLocator {
     path: String,
     language: LanguageId,
     source_fingerprint: String,
+    locator_kind: LocatorKind,
+    qualified_name: String,
+    declaration_kind: String,
     range: SourceRange,
+    name_range: SourceRange,
+    body_range: Option<SourceRange>,
+    certainty: ParseCertainty,
+    signature: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum LocatorKind {
+    Declaration,
+    ExecutableScope,
 }
 
 pub struct OutlineEngine {
-    typescript: CombinedExtractors<SupportLang>,
-    tsx: CombinedExtractors<SupportLang>,
     go: CombinedExtractors<SupportLang>,
     rust: CombinedExtractors<SupportLang>,
     c_sharp: CombinedExtractors<SupportLang>,
@@ -221,16 +269,6 @@ pub struct OutlineEngine {
 impl OutlineEngine {
     pub fn new() -> Result<Self, Box<dyn Error>> {
         let default_rules = parse_outline_rules::<SupportLang>(DEFAULT_OUTLINE_RULES)?;
-        let typescript_rules = default_rules
-            .iter()
-            .filter(|rule| rule.common().language == SupportLang::TypeScript)
-            .cloned()
-            .collect();
-        let tsx_rules = default_rules
-            .iter()
-            .filter(|rule| rule.common().language == SupportLang::Tsx)
-            .cloned()
-            .collect();
         let go_rules = default_rules
             .iter()
             .filter(|rule| rule.common().language == SupportLang::Go)
@@ -265,8 +303,6 @@ impl OutlineEngine {
         let globals = GlobalRules::default();
 
         Ok(Self {
-            typescript: CombinedExtractors::try_from(typescript_rules, &globals)?,
-            tsx: CombinedExtractors::try_from(tsx_rules, &globals)?,
             go: CombinedExtractors::try_from(go_rules, &globals)?,
             rust: CombinedExtractors::try_from(rust_rules, &globals)?,
             c_sharp: CombinedExtractors::try_from(c_sharp_rules, &globals)?,
@@ -283,7 +319,7 @@ impl OutlineEngine {
         include_private: bool,
         names: &[String],
     ) -> Result<OutlineTargetResult, Box<dyn Error>> {
-        let (path, files) = match target {
+        let (path, mut files) = match target {
             OutlineTarget::File { path, language } => {
                 let path = fs::canonicalize(&path)?;
                 if !path.is_file() {
@@ -371,6 +407,13 @@ impl OutlineEngine {
         };
         let total_byte_length = files.iter().map(|file| file.byte_length).sum();
         let total_line_count = files.iter().map(|file| file.line_count).sum();
+        if !names.is_empty() {
+            files.retain(|file| {
+                file.items
+                    .iter()
+                    .any(|item| item.row_kind == OutlineRowKind::Declaration)
+            });
+        }
 
         Ok(OutlineTargetResult {
             path: path.to_string_lossy().into_owned(),
@@ -391,28 +434,20 @@ impl OutlineEngine {
         let source = str::from_utf8(&source_bytes)?;
         let path = path.to_string_lossy().into_owned();
         let source_fingerprint = source_fingerprint(&source_bytes);
-        let (diagnostics, mut items) = match language {
+        let (diagnostics, mut items, typescript_filtered) = match language {
             LanguageId::TypeScript => {
                 let grep = SupportLang::TypeScript.ast_grep(source);
                 let diagnostics = diagnostics(grep.root());
-                let mut items = self
-                    .typescript
-                    .extract(grep.root())
-                    .map(|item| outline_item(item, &path, language, &source_fingerprint))
-                    .collect::<Result<Vec<_>, _>>()?;
-                resolve_typescript_local_exports(grep.root(), &mut items);
-                (diagnostics, items)
+                let mut items = extract_typescript_items(grep.root(), source);
+                filter_typescript_items(grep.root(), &mut items, include_private, names);
+                (diagnostics, items, true)
             }
             LanguageId::Tsx => {
                 let grep = SupportLang::Tsx.ast_grep(source);
                 let diagnostics = diagnostics(grep.root());
-                let mut items = self
-                    .tsx
-                    .extract(grep.root())
-                    .map(|item| outline_item(item, &path, language, &source_fingerprint))
-                    .collect::<Result<Vec<_>, _>>()?;
-                resolve_typescript_local_exports(grep.root(), &mut items);
-                (diagnostics, items)
+                let mut items = extract_typescript_items(grep.root(), source);
+                filter_typescript_items(grep.root(), &mut items, include_private, names);
+                (diagnostics, items, true)
             }
             LanguageId::Odin => {
                 let grep = OdinLanguage::Odin.ast_grep(source);
@@ -422,6 +457,7 @@ impl OutlineEngine {
                         .extract(grep.root())
                         .map(|item| outline_item(item, &path, language, &source_fingerprint))
                         .collect::<Result<Vec<_>, _>>()?,
+                    false,
                 )
             }
             LanguageId::Go => {
@@ -432,6 +468,7 @@ impl OutlineEngine {
                         .extract(grep.root())
                         .map(|item| outline_item(item, &path, language, &source_fingerprint))
                         .collect::<Result<Vec<_>, _>>()?,
+                    false,
                 )
             }
             LanguageId::Rust => {
@@ -442,6 +479,7 @@ impl OutlineEngine {
                         .extract(grep.root())
                         .map(|item| outline_item(item, &path, language, &source_fingerprint))
                         .collect::<Result<Vec<_>, _>>()?,
+                    false,
                 )
             }
             LanguageId::CSharp => {
@@ -452,6 +490,7 @@ impl OutlineEngine {
                         .extract(grep.root())
                         .map(|item| outline_item(item, &path, language, &source_fingerprint))
                         .collect::<Result<Vec<_>, _>>()?,
+                    false,
                 )
             }
             LanguageId::Java => {
@@ -462,6 +501,7 @@ impl OutlineEngine {
                         .extract(grep.root())
                         .map(|item| outline_item(item, &path, language, &source_fingerprint))
                         .collect::<Result<Vec<_>, _>>()?,
+                    false,
                 )
             }
             LanguageId::Kotlin => {
@@ -472,6 +512,7 @@ impl OutlineEngine {
                         .extract(grep.root())
                         .map(|item| outline_item(item, &path, language, &source_fingerprint))
                         .collect::<Result<Vec<_>, _>>()?,
+                    false,
                 )
             }
             LanguageId::Swift => {
@@ -482,6 +523,7 @@ impl OutlineEngine {
                         .extract(grep.root())
                         .map(|item| outline_item(item, &path, language, &source_fingerprint))
                         .collect::<Result<Vec<_>, _>>()?,
+                    false,
                 )
             }
         };
@@ -490,7 +532,13 @@ impl OutlineEngine {
         } else {
             source.bytes().filter(|byte| *byte == b'\n').count() + 1
         };
-        filter_items(&mut items, include_private, names);
+        if !typescript_filtered {
+            filter_items(&mut items, include_private, names);
+        }
+        if matches!(language, LanguageId::TypeScript | LanguageId::Tsx) {
+            finalize_typescript_signatures(&mut items);
+            finalize_locators(&mut items, &path, language, &source_fingerprint)?;
+        }
 
         Ok(OutlineFileResult {
             path,
@@ -506,8 +554,15 @@ impl OutlineEngine {
     pub fn symbol(
         &self,
         encoded_locators: &[String],
+        view: SymbolView,
         context_lines: usize,
     ) -> Result<SymbolBatchResult, SymbolError> {
+        if context_lines > 0 && !matches!(view, SymbolView::Declaration) {
+            return Err(SymbolError {
+                code: "unsupported_symbol_view",
+                message: "contextLines is supported only with the declaration view".to_owned(),
+            });
+        }
         if encoded_locators.is_empty() {
             return Err(SymbolError {
                 code: "invalid_locator",
@@ -550,6 +605,18 @@ impl OutlineEngine {
                 .to_string_lossy()
                 .into_owned();
             locators.push((encoded_locator.clone(), locator));
+        }
+
+        if !matches!(view, SymbolView::Declaration)
+            && locators.iter().any(|(_, locator)| {
+                !matches!(locator.language, LanguageId::TypeScript | LanguageId::Tsx)
+            })
+        {
+            return Err(SymbolError {
+                code: "unsupported_symbol_view",
+                message: "signature, body, and declarationWithImports views support TypeScript and TSX only"
+                    .to_owned(),
+            });
         }
         locators.sort_by(|left, right| {
             left.1
@@ -599,8 +666,9 @@ impl OutlineEngine {
                     ),
                 });
             }
+            let selected_range = locator.range.clone();
             source
-                .get(locator.range.start_byte..locator.range.end_byte)
+                .get(selected_range.start_byte..selected_range.end_byte)
                 .ok_or_else(|| SymbolError {
                     code: "invalid_locator",
                     message: "locator range is outside the source or splits a UTF-8 character"
@@ -624,8 +692,12 @@ impl OutlineEngine {
                 code: "symbol_failed",
                 message: format!("failed to retain source for {}", locator.path),
             })?;
-            let (start_byte, end_byte) =
-                padded_range(source.as_bytes(), &locator.range, context_lines);
+            let selected = locator.range.clone();
+            let (start_byte, end_byte) = if matches!(view, SymbolView::Signature) {
+                (selected.start_byte, selected.end_byte)
+            } else {
+                padded_range(source.as_bytes(), &selected, context_lines)
+            };
             if let Some((path, _, previous_end, declaration_indexes)) = padded.last_mut()
                 && *path == locator.path
                 && start_byte <= *previous_end
@@ -643,11 +715,26 @@ impl OutlineEngine {
                     code: "symbol_failed",
                     message: format!("failed to retain source for {path}"),
                 })?;
+                let block_source = if matches!(view, SymbolView::Signature) {
+                    declaration_indexes
+                        .iter()
+                        .map(|index| locators[*index].1.signature.as_str())
+                        .collect::<Vec<_>>()
+                        .join("\n\n")
+                } else if matches!(view, SymbolView::DeclarationWithImports) {
+                    declaration_indexes
+                        .iter()
+                        .map(|index| declaration_with_imports(source, &locators[*index].1))
+                        .collect::<Vec<_>>()
+                        .join("\n\n")
+                } else {
+                    source[start_byte..end_byte].to_owned()
+                };
                 Ok(SymbolBlock {
                     path,
                     returned_range: source_range(source.as_bytes(), start_byte, end_byte),
                     declaration_indexes,
-                    source: source[start_byte..end_byte].to_owned(),
+                    source: block_source,
                 })
             })
             .collect::<Result<Vec<_>, SymbolError>>()?;
@@ -656,178 +743,6 @@ impl OutlineEngine {
             declarations,
             blocks,
         })
-    }
-}
-
-fn resolve_typescript_local_exports<D: ast_grep_core::Doc>(
-    root: Node<D>,
-    items: &mut Vec<OutlineItem>,
-) {
-    struct ResolvedSpecifier {
-        local_name: String,
-        exported_name: String,
-        item_indexes: Vec<usize>,
-    }
-
-    struct ResolvedClause {
-        start_byte: usize,
-        end_byte: usize,
-        specifiers: Vec<ResolvedSpecifier>,
-    }
-
-    let top_level_item_indexes = items
-        .iter()
-        .enumerate()
-        .filter_map(|(index, item)| {
-            let item_range = item.entry.range.start_byte..item.entry.range.end_byte;
-            root.children()
-                .any(|statement| {
-                    if statement.range() == item_range {
-                        return statement.kind() != "export_statement"
-                            || statement.field("declaration").is_some();
-                    }
-                    let declaration = if statement.kind() == "export_statement" {
-                        statement.field("declaration")
-                    } else {
-                        Some(statement)
-                    };
-                    declaration.is_some_and(|declaration| {
-                        declaration.range() == item_range
-                            || matches!(
-                                declaration.kind().as_ref(),
-                                "lexical_declaration" | "variable_declaration"
-                            ) && declaration
-                                .children()
-                                .any(|child| child.range() == item_range)
-                    })
-                })
-                .then_some(index)
-        })
-        .collect::<BTreeSet<_>>();
-
-    let mut clauses = Vec::new();
-    for statement in root
-        .children()
-        .filter(|node| node.kind() == "export_statement")
-    {
-        let named_children = statement
-            .children()
-            .filter(|node| node.is_named())
-            .collect::<Vec<_>>();
-        if named_children.len() != 1 || named_children[0].kind() != "export_clause" {
-            continue;
-        }
-
-        let mut specifiers = Vec::new();
-        let mut supported = true;
-        for specifier in named_children[0].children().filter(|node| node.is_named()) {
-            if specifier.kind() != "export_specifier" {
-                supported = false;
-                break;
-            }
-            let Some(local_name) = specifier.field("name") else {
-                supported = false;
-                break;
-            };
-            if local_name.kind() != "identifier" {
-                supported = false;
-                break;
-            }
-            let exported_name = specifier.field("alias");
-            if exported_name
-                .as_ref()
-                .is_some_and(|name| name.kind() != "identifier")
-            {
-                supported = false;
-                break;
-            }
-            if exported_name
-                .as_ref()
-                .is_some_and(|name| name.text() == "default")
-            {
-                supported = false;
-                break;
-            }
-            specifiers.push((
-                local_name.text().into_owned(),
-                exported_name
-                    .map(|name| name.text().into_owned())
-                    .unwrap_or_else(|| local_name.text().into_owned()),
-            ));
-        }
-        if !supported || specifiers.is_empty() {
-            continue;
-        }
-
-        let mut resolved = Vec::new();
-        for (local_name, exported_name) in specifiers {
-            let item_indexes = items
-                .iter()
-                .enumerate()
-                .filter_map(|(index, item)| {
-                    (!item.is_import
-                        && top_level_item_indexes.contains(&index)
-                        && item.entry.name == local_name)
-                        .then_some(index)
-                })
-                .collect::<Vec<_>>();
-            if item_indexes.is_empty() {
-                supported = false;
-                break;
-            }
-            resolved.push(ResolvedSpecifier {
-                local_name,
-                exported_name,
-                item_indexes,
-            });
-        }
-        if supported {
-            let range = statement.range();
-            clauses.push(ResolvedClause {
-                start_byte: range.start,
-                end_byte: range.end,
-                specifiers: resolved,
-            });
-        }
-    }
-
-    let mut exported_indexes = BTreeSet::new();
-    let mut projections = BTreeMap::<usize, Vec<OutlineItem>>::new();
-    let mut resolved_ranges = BTreeSet::new();
-    for clause in clauses {
-        resolved_ranges.insert((clause.start_byte, clause.end_byte));
-        for specifier in clause.specifiers {
-            for item_index in specifier.item_indexes {
-                if specifier.local_name == specifier.exported_name {
-                    exported_indexes.insert(item_index);
-                    continue;
-                }
-                let mut projection = items[item_index].clone();
-                projection.entry.name = specifier.exported_name.clone();
-                projection.entry.signature = format!(
-                    "{} → {}",
-                    specifier.exported_name, projection.entry.signature
-                );
-                projection.is_exported = true;
-                projections.entry(item_index).or_default().push(projection);
-            }
-        }
-    }
-
-    let original = std::mem::take(items);
-    for (index, mut item) in original.into_iter().enumerate() {
-        if item.entry.ast_kind == "export_statement"
-            && resolved_ranges.contains(&(item.entry.range.start_byte, item.entry.range.end_byte))
-        {
-            continue;
-        }
-        if exported_indexes.contains(&index) {
-            item.is_exported = true;
-        }
-        items.push(item);
-        if let Some(item_projections) = projections.remove(&index) {
-            items.extend(item_projections);
-        }
     }
 }
 
@@ -972,8 +887,18 @@ fn outline_item(
         item.entry.name.as_ref(),
         item.entry.signature.as_ref(),
     );
+    let row_kind = if item.is_import {
+        OutlineRowKind::Import
+    } else {
+        OutlineRowKind::Declaration
+    };
+    let mut entry = outline_entry(item.entry, path, language, source_fingerprint)?;
+    if row_kind != OutlineRowKind::Declaration {
+        entry.locator = None;
+    }
     Ok(OutlineItem {
-        entry: outline_entry(item.entry, path, language, source_fingerprint)?,
+        entry,
+        row_kind,
         is_import: item.is_import,
         is_exported,
         members: item
@@ -1026,7 +951,14 @@ fn outline_entry(
         path: path.to_owned(),
         language,
         source_fingerprint: source_fingerprint.to_owned(),
+        locator_kind: LocatorKind::Declaration,
+        qualified_name: entry.name.to_string(),
+        declaration_kind: entry.ast_kind.to_string(),
         range: range.clone(),
+        name_range: range.clone(),
+        body_range: None,
+        certainty: ParseCertainty::Certain,
+        signature: entry.signature.to_string(),
     };
 
     Ok(OutlineEntry {
@@ -1035,12 +967,149 @@ fn outline_entry(
             AstEntryRole::Member => EntryRole::Member,
         },
         symbol_type: entry.symbol_type.into(),
-        name: entry.name.into_owned(),
+        name: entry.name.clone().into_owned(),
+        qualified_name: entry.name.into_owned(),
+        name_range: range.clone(),
+        body_range: None,
+        certainty: ParseCertainty::Certain,
+        certainty_reason: None,
         range,
         signature: entry.signature.into_owned(),
         ast_kind: entry.ast_kind.into_owned(),
-        locator: URL_SAFE_NO_PAD.encode(serde_json::to_vec(&locator)?),
+        locator: Some(URL_SAFE_NO_PAD.encode(serde_json::to_vec(&locator)?)),
     })
+}
+
+fn finalize_locators(
+    items: &mut [OutlineItem],
+    path: &str,
+    language: LanguageId,
+    source_fingerprint: &str,
+) -> Result<(), serde_json::Error> {
+    for item in items {
+        if item.row_kind != OutlineRowKind::Declaration {
+            item.entry.locator = None;
+            continue;
+        }
+        item.entry.locator = Some(encode_locator(
+            &item.entry,
+            path,
+            language,
+            source_fingerprint,
+        )?);
+        for member in &mut item.members {
+            member.entry.locator = Some(encode_locator(
+                &member.entry,
+                path,
+                language,
+                source_fingerprint,
+            )?);
+        }
+    }
+    Ok(())
+}
+
+fn encode_locator(
+    entry: &OutlineEntry,
+    path: &str,
+    language: LanguageId,
+    source_fingerprint: &str,
+) -> Result<String, serde_json::Error> {
+    Ok(URL_SAFE_NO_PAD.encode(serde_json::to_vec(&SourceLocator {
+        version: LOCATOR_VERSION,
+        path: path.to_owned(),
+        language,
+        source_fingerprint: source_fingerprint.to_owned(),
+        locator_kind: LocatorKind::Declaration,
+        qualified_name: entry.qualified_name.clone(),
+        declaration_kind: entry.ast_kind.clone(),
+        range: entry.range.clone(),
+        name_range: entry.name_range.clone(),
+        body_range: entry.body_range.clone(),
+        certainty: entry.certainty,
+        signature: entry.signature.clone(),
+    })?))
+}
+
+fn declaration_with_imports(source: &str, locator: &SourceLocator) -> String {
+    let declaration = &source[locator.range.start_byte..locator.range.end_byte];
+    let imports = match locator.language {
+        LanguageId::TypeScript => {
+            let grep = SupportLang::TypeScript.ast_grep(source);
+            matching_imports(grep.root(), source, locator)
+        }
+        LanguageId::Tsx => {
+            let grep = SupportLang::Tsx.ast_grep(source);
+            matching_imports(grep.root(), source, locator)
+        }
+        _ => Vec::new(),
+    };
+    if imports.is_empty() {
+        return declaration.to_owned();
+    }
+    format!("{}\n\n{declaration}", imports.join("\n"))
+}
+
+fn matching_imports<'a, D: ast_grep_core::Doc>(
+    root: Node<D>,
+    source: &'a str,
+    locator: &SourceLocator,
+) -> Vec<&'a str> {
+    let locally_bound_names = root
+        .dfs()
+        .filter(|node| {
+            let node_range = node.range();
+            node_range.start >= locator.range.start_byte && node_range.end <= locator.range.end_byte
+        })
+        .filter_map(|node| match node.kind().as_ref() {
+            "required_parameter"
+            | "optional_parameter"
+            | "variable_declarator"
+            | "type_parameter" => node.field("name").map(|name| name.text().into_owned()),
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
+    let used_names = root
+        .dfs()
+        .filter(|node| {
+            let node_range = node.range();
+            node_range.start >= locator.range.start_byte
+                && node_range.end <= locator.range.end_byte
+                && matches!(node.kind().as_ref(), "identifier" | "type_identifier")
+        })
+        .map(|node| node.text().into_owned())
+        .filter(|name| !locally_bound_names.contains(name))
+        .collect::<BTreeSet<_>>();
+
+    root.children()
+        .filter(|node| node.kind() == "import_statement")
+        .filter_map(|import| {
+            let bindings = import
+                .dfs()
+                .filter_map(|node| match node.kind().as_ref() {
+                    "import_specifier" => node
+                        .field("alias")
+                        .or_else(|| node.field("name"))
+                        .map(|name| name.text().into_owned()),
+                    "identifier"
+                        if node.parent().is_some_and(|parent| {
+                            matches!(parent.kind().as_ref(), "import_clause" | "namespace_import")
+                        }) =>
+                    {
+                        Some(node.text().into_owned())
+                    }
+                    _ => None,
+                })
+                .collect::<BTreeSet<_>>();
+            bindings
+                .iter()
+                .any(|name| used_names.contains(name))
+                .then(|| {
+                    let import_range = import.range();
+                    &source[import_range.start..import_range.end]
+                })
+        })
+        .collect()
 }
 
 fn source_fingerprint(source: &[u8]) -> String {
@@ -1126,7 +1195,244 @@ mod tests {
             result
                 .items
                 .iter()
-                .all(|item| !item.entry.locator.is_empty())
+                .filter(|item| item.row_kind == OutlineRowKind::Declaration)
+                .all(|item| item
+                    .entry
+                    .locator
+                    .as_ref()
+                    .is_some_and(|locator| !locator.is_empty()))
+        );
+    }
+
+    #[test]
+    fn extracts_complete_typescript_declarations_and_selective_views() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/typescript-complete.ts");
+        let source = fs::read_to_string(&fixture).expect("fixture should be readable");
+        let public = engine
+            .outline(
+                OutlineTarget::File {
+                    path: fixture.to_string_lossy().into_owned(),
+                    language: LanguageId::TypeScript,
+                },
+                false,
+                &[],
+            )
+            .expect("fixture should parse")
+            .files
+            .into_iter()
+            .next()
+            .expect("file target should return one file");
+
+        assert_eq!(public.diagnostics.error_nodes, 0);
+        assert_eq!(public.diagnostics.missing_nodes, 0);
+        assert_eq!(public.items[0].row_kind, OutlineRowKind::Import);
+        assert_eq!(public.items[1].row_kind, OutlineRowKind::Import);
+        assert!(public.items[0].entry.locator.is_none());
+        assert!(
+            public
+                .items
+                .iter()
+                .any(|item| item.row_kind == OutlineRowKind::SideEffect
+                    && item.entry.name == "call registerService(...)")
+        );
+        assert!(public.items.iter().any(|item| {
+            item.row_kind == OutlineRowKind::Export
+                && item.entry.signature == "export { makeService as createService };"
+                && item.entry.locator.is_none()
+        }));
+
+        let overloads = public
+            .items
+            .iter()
+            .filter(|item| item.entry.name == "refresh")
+            .collect::<Vec<_>>();
+        assert_eq!(overloads.len(), 3);
+        assert!(
+            overloads[0]
+                .entry
+                .signature
+                .contains("@deprecated Use refreshMany.")
+        );
+        assert!(overloads[0].entry.body_range.is_none());
+        assert!(overloads[1].entry.body_range.is_none());
+        let implementation = overloads[2];
+        let implementation_body = implementation
+            .entry
+            .body_range
+            .as_ref()
+            .expect("implementation should expose its body");
+        assert_eq!(
+            &source[implementation_body.start_byte..implementation_body.end_byte],
+            "{\n\treturn Promise.resolve({ value });\n}"
+        );
+        assert_eq!(
+            overloads
+                .iter()
+                .filter_map(|item| item.entry.locator.as_ref())
+                .collect::<BTreeSet<_>>()
+                .len(),
+            3
+        );
+
+        let ambient = public
+            .items
+            .iter()
+            .find(|item| item.entry.name == "ambient")
+            .expect("ambient declaration should be extracted");
+        assert_eq!(
+            &source[ambient.entry.range.start_byte..ambient.entry.range.end_byte],
+            "export declare function ambient(value: Input): Output;"
+        );
+
+        let service = public
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Service")
+            .expect("abstract class should be extracted");
+        assert!(
+            service
+                .entry
+                .signature
+                .starts_with("@sealed\nexport abstract class")
+        );
+        assert!(!service.entry.signature.contains("protected cache"));
+        assert!(!service.entry.signature.contains("return true"));
+        assert!(
+            service
+                .members
+                .iter()
+                .any(|member| member.entry.symbol_type == SymbolType::Constructor)
+        );
+        assert!(
+            service
+                .members
+                .iter()
+                .any(|member| member.entry.name == "run" && member.entry.body_range.is_none())
+        );
+        assert!(
+            service
+                .members
+                .iter()
+                .any(|member| member.entry.name == "callback" && member.entry.body_range.is_some())
+        );
+
+        let mapper = public
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Mapper")
+            .expect("multiline type alias should be extracted");
+        assert_eq!(
+            mapper.entry.signature,
+            "export type Mapper<T extends Input = Input> = (\n    _value: T,\n) => Promise<Output>;"
+        );
+        let make_service = public
+            .items
+            .iter()
+            .find(|item| item.entry.name == "makeService")
+            .expect("callable variable should be extracted");
+        assert_eq!(
+            make_service.entry.signature,
+            "export const makeService = <T extends Input>(_value: T): Service<T> => …"
+        );
+        assert_eq!(
+            service
+                .members
+                .iter()
+                .find(|member| member.entry.name == "callback")
+                .expect("callback property should be extracted")
+                .entry
+                .signature,
+            "callback = (value: T): T => …"
+        );
+        assert!(
+            source[make_service.entry.range.start_byte..make_service.entry.range.end_byte]
+                .starts_with("export const makeService")
+        );
+        assert!(
+            source[make_service.entry.range.start_byte..make_service.entry.range.end_byte]
+                .ends_with(';')
+        );
+
+        let with_imports = engine
+            .symbol(
+                std::slice::from_ref(
+                    implementation
+                        .entry
+                        .locator
+                        .as_ref()
+                        .expect("implementation should have a locator"),
+                ),
+                SymbolView::DeclarationWithImports,
+                0,
+            )
+            .expect("declaration-with-imports should resolve");
+        assert!(
+            with_imports.blocks[0]
+                .source
+                .contains("import type {\n    Input,\n    Output,")
+        );
+        assert!(!with_imports.blocks[0].source.contains("unused"));
+
+        let filtered = engine
+            .outline(
+                OutlineTarget::File {
+                    path: fixture.to_string_lossy().into_owned(),
+                    language: LanguageId::TypeScript,
+                },
+                false,
+                &["refresh".to_owned()],
+            )
+            .expect("filtered fixture should parse");
+        assert_eq!(
+            filtered.files[0]
+                .items
+                .iter()
+                .filter(|item| item.row_kind == OutlineRowKind::Declaration)
+                .count(),
+            3
+        );
+        assert_eq!(
+            filtered.files[0]
+                .items
+                .iter()
+                .filter(|item| item.row_kind == OutlineRowKind::Import)
+                .count(),
+            1
+        );
+        assert!(
+            !filtered.files[0]
+                .items
+                .iter()
+                .any(|item| item.row_kind == OutlineRowKind::SideEffect)
+        );
+
+        let filtered_service = engine
+            .outline(
+                OutlineTarget::File {
+                    path: fixture.to_string_lossy().into_owned(),
+                    language: LanguageId::TypeScript,
+                },
+                false,
+                &["Service".to_owned()],
+            )
+            .expect("top-level class filter should parse");
+        let filtered_service = filtered_service.files[0]
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Service")
+            .expect("top-level class match should remain");
+        assert!(
+            filtered_service
+                .members
+                .iter()
+                .any(|member| member.entry.name == "callback")
+        );
+        assert!(
+            filtered_service
+                .members
+                .iter()
+                .all(|member| member.entry.name != "cache")
         );
     }
 
@@ -1220,7 +1526,16 @@ mod tests {
                 .find(|item| !item.is_import)
                 .expect("fixture should contain a declaration");
             let symbol = engine
-                .symbol(std::slice::from_ref(&item.entry.locator), 0)
+                .symbol(
+                    std::slice::from_ref(
+                        item.entry
+                            .locator
+                            .as_ref()
+                            .expect("declaration should have a locator"),
+                    ),
+                    SymbolView::Declaration,
+                    0,
+                )
                 .expect("fresh locator should resolve");
             assert_eq!(
                 symbol.blocks[0].source,
@@ -1293,7 +1608,16 @@ mod tests {
             .find(|item| item.entry.name == "FileParser")
             .expect("fixture should contain FileParser");
         let symbol = engine
-            .symbol(std::slice::from_ref(&item.entry.locator), 0)
+            .symbol(
+                std::slice::from_ref(
+                    item.entry
+                        .locator
+                        .as_ref()
+                        .expect("declaration should have a locator"),
+                ),
+                SymbolView::Declaration,
+                0,
+            )
             .expect("fresh locator should resolve");
 
         assert_eq!(
@@ -1308,7 +1632,16 @@ mod tests {
         fs::write(&temporary, format!("// changed\n{source}"))
             .expect("temporary fixture should be mutable");
         let error = engine
-            .symbol(std::slice::from_ref(&item.entry.locator), 0)
+            .symbol(
+                std::slice::from_ref(
+                    item.entry
+                        .locator
+                        .as_ref()
+                        .expect("declaration should have a locator"),
+                ),
+                SymbolView::Declaration,
+                0,
+            )
             .expect_err("changed source should make the locator stale");
         assert_eq!(error.code, "stale_locator");
 
@@ -1316,7 +1649,32 @@ mod tests {
     }
 
     #[test]
-    fn resolves_typescript_local_export_clauses_before_filtering() {
+    fn marks_declarations_uncertain_when_their_owner_contains_recovery() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let temporary = std::env::temp_dir().join(format!(
+            "tau-ast-recovered-declaration-{}.ts",
+            std::process::id()
+        ));
+        fs::write(&temporary, "export const good = 1, broken: = 2;\n")
+            .expect("temporary fixture should be writable");
+
+        let result = outline_file(&engine, &temporary, LanguageId::TypeScript);
+        let good = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "good")
+            .expect("valid sibling declarator should still be extracted");
+        assert!(matches!(good.entry.certainty, ParseCertainty::Recovered));
+        assert_eq!(
+            good.entry.certainty_reason.as_deref(),
+            Some("parser recovery intersects the declaration or its owning structure")
+        );
+
+        fs::remove_file(temporary).expect("temporary fixture should be removable");
+    }
+
+    #[test]
+    fn retains_local_export_statements_and_marks_their_declarations_public() {
         let engine = OutlineEngine::new().expect("outline rules should compile");
         let temporary = std::env::temp_dir().join(format!(
             "tau-ast-local-exports-fixture-{}.ts",
@@ -1330,50 +1688,12 @@ function buildThing(name: string): string {
     return name;
 }
 
-export function alreadyPublic(): number {
+function hiddenThing(): number {
     return 2;
 }
 
-function mixedLocal(): number {
-    return 3;
-}
-
-function defaultCandidate(): number {
-    return 4;
-}
-
-function duplicateName(): number {
-    return 5;
-}
-
-function container(): number {
-    function duplicateName(): number {
-        return 6;
-    }
-    return duplicateName();
-}
-
-type LocalType = { value: string };
-
-interface MergedThing {
-    first: string;
-}
-
-interface MergedThing {
-    second: number;
-}
-
-import { importedThing } from "./other.ts";
-
 export { localFunction };
 export { buildThing as createThing, buildThing as makeThing };
-export { alreadyPublic as publicAgain };
-export type { LocalType };
-export type { MergedThing as PublicMergedThing };
-export { remoteThing } from "./other.ts";
-export { mixedLocal, importedThing };
-export { defaultCandidate as default };
-export { duplicateName };
 "#;
         fs::write(&temporary, source).expect("temporary fixture should be writable");
 
@@ -1391,162 +1711,94 @@ export { duplicateName };
             .into_iter()
             .next()
             .expect("file target should return one file");
+        let declarations = public
+            .items
+            .iter()
+            .filter(|item| item.row_kind == OutlineRowKind::Declaration)
+            .map(|item| item.entry.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(declarations, ["localFunction", "buildThing"]);
+        assert_eq!(
+            public
+                .items
+                .iter()
+                .filter(|item| item.row_kind == OutlineRowKind::Export)
+                .count(),
+            2
+        );
+        assert!(
+            public
+                .items
+                .iter()
+                .filter(|item| item.row_kind != OutlineRowKind::Declaration)
+                .all(|item| item.entry.locator.is_none())
+        );
+
         let local_function = public
             .items
             .iter()
             .find(|item| item.entry.name == "localFunction")
             .expect("unaliased local export should expose its declaration");
-        assert_eq!(
-            &source[local_function.entry.range.start_byte..local_function.entry.range.end_byte],
-            "function localFunction(): number {\n    return 1;\n}"
-        );
-        assert!(!public.items.iter().any(|item| {
-            &source[item.entry.range.start_byte..item.entry.range.end_byte]
-                == "export { localFunction };"
-        }));
-        assert!(
-            public
-                .items
-                .iter()
-                .any(|item| item.entry.name == "LocalType")
-        );
-
-        let create_thing = public
-            .items
-            .iter()
-            .find(|item| item.entry.name == "createThing")
-            .expect("first alias should be public");
-        let make_thing = public
-            .items
-            .iter()
-            .find(|item| item.entry.name == "makeThing")
-            .expect("second alias should be public");
-        assert_eq!(
-            create_thing.entry.range.start_byte,
-            make_thing.entry.range.start_byte
-        );
-        assert_eq!(create_thing.entry.locator, make_thing.entry.locator);
-        let private = outline_file(&engine, &temporary, LanguageId::TypeScript);
-        let build_thing = private
-            .items
-            .iter()
-            .find(|item| item.entry.name == "buildThing")
-            .expect("private outline should retain the local declaration");
-        assert_eq!(
-            create_thing.entry.signature,
-            format!("createThing → {}", build_thing.entry.signature)
-        );
-        assert!(
-            !public
-                .items
-                .iter()
-                .any(|item| item.entry.name == "buildThing")
-        );
-        let public_again = public
-            .items
-            .iter()
-            .find(|item| item.entry.name == "publicAgain")
-            .expect("an exported declaration should support another local alias");
-        assert_eq!(
-            &source[public_again.entry.range.start_byte..public_again.entry.range.end_byte],
-            "export function alreadyPublic(): number {\n    return 2;\n}"
-        );
-        assert!(
-            !public
-                .items
-                .iter()
-                .any(|item| item.entry.name == "mixedLocal")
-        );
-        assert!(!public.items.iter().any(|item| item.entry.name == "default"));
-        assert_eq!(
-            public
-                .items
-                .iter()
-                .filter(|item| item.entry.name == "duplicateName")
-                .count(),
-            1,
-            "only the module-level declaration should become public"
-        );
-
-        let public_merged_declarations = public
-            .items
-            .iter()
-            .filter(|item| item.entry.name == "PublicMergedThing")
-            .count();
-        assert!(
-            public_merged_declarations > 1,
-            "all merged declarations should be projected"
-        );
-        assert!(public.items.iter().any(|item| {
-            &source[item.entry.range.start_byte..item.entry.range.end_byte]
-                == "export { remoteThing } from \"./other.ts\";"
-        }));
-        assert!(public.items.iter().any(|item| {
-            &source[item.entry.range.start_byte..item.entry.range.end_byte]
-                == "export { mixedLocal, importedThing };"
-        }));
-        assert!(public.items.iter().any(|item| {
-            &source[item.entry.range.start_byte..item.entry.range.end_byte]
-                == "export { defaultCandidate as default };"
-        }));
-
         let symbol = engine
-            .symbol(std::slice::from_ref(&local_function.entry.locator), 0)
+            .symbol(
+                std::slice::from_ref(
+                    local_function
+                        .entry
+                        .locator
+                        .as_ref()
+                        .expect("declaration should have a locator"),
+                ),
+                SymbolView::Declaration,
+                0,
+            )
             .expect("resolved locator should retrieve the local declaration");
         assert_eq!(
             symbol.blocks[0].source,
             "function localFunction(): number {\n    return 1;\n}"
         );
 
-        for (include_private, name, expected_names) in [
-            (false, "createThing", vec!["createThing"]),
-            (false, "buildThing", vec![]),
-            (true, "buildThing", vec!["buildThing"]),
-        ] {
-            let filtered = engine
-                .outline(
-                    OutlineTarget::File {
-                        path: temporary.to_string_lossy().into_owned(),
-                        language: LanguageId::TypeScript,
-                    },
-                    include_private,
-                    &[name.to_owned()],
-                )
-                .expect("filtered outline should parse");
-            assert_eq!(
-                filtered.files[0]
-                    .items
-                    .iter()
-                    .filter(|item| !item.is_import)
-                    .map(|item| item.entry.name.as_str())
-                    .collect::<Vec<_>>(),
-                expected_names
-            );
-        }
-        assert!(
-            private
+        let filtered = engine
+            .outline(
+                OutlineTarget::File {
+                    path: temporary.to_string_lossy().into_owned(),
+                    language: LanguageId::TypeScript,
+                },
+                false,
+                &["buildThing".to_owned()],
+            )
+            .expect("filtered outline should parse");
+        assert_eq!(
+            filtered.files[0]
                 .items
                 .iter()
-                .any(|item| item.entry.name == "buildThing")
+                .filter(|item| item.row_kind == OutlineRowKind::Declaration)
+                .map(|item| item.entry.name.as_str())
+                .collect::<Vec<_>>(),
+            ["buildThing"]
         );
-        assert!(
-            private
+        assert_eq!(
+            filtered.files[0]
                 .items
                 .iter()
-                .any(|item| item.entry.name == "createThing")
+                .filter(|item| item.row_kind == OutlineRowKind::Export)
+                .count(),
+            1
         );
-        let build_index = private
-            .items
-            .iter()
-            .position(|item| item.entry.name == "buildThing")
-            .expect("private outline should contain buildThing");
-        assert_eq!(private.items[build_index + 1].entry.name, "createThing");
-        assert_eq!(private.items[build_index + 2].entry.name, "makeThing");
 
         fs::write(&temporary, format!("{source}\n// changed\n"))
             .expect("temporary fixture should be mutable");
         let error = engine
-            .symbol(std::slice::from_ref(&local_function.entry.locator), 0)
+            .symbol(
+                std::slice::from_ref(
+                    local_function
+                        .entry
+                        .locator
+                        .as_ref()
+                        .expect("declaration should have a locator"),
+                ),
+                SymbolView::Declaration,
+                0,
+            )
             .expect_err("resolved locator should become stale after mutation");
         assert_eq!(error.code, "stale_locator");
 
@@ -1582,7 +1834,9 @@ export { duplicateName };
             &source[view.entry.range.start_byte..view.entry.range.end_byte],
             "function View() {\n    return <div />;\n}"
         );
-        assert_eq!(result.files[0].items.len(), 1);
+        assert_eq!(result.files[0].items.len(), 2);
+        assert_eq!(result.files[0].items[1].row_kind, OutlineRowKind::Export);
+        assert!(result.files[0].items[1].entry.locator.is_none());
 
         fs::remove_file(temporary).expect("temporary fixture should be removable");
     }
@@ -1630,6 +1884,19 @@ export { duplicateName };
                 .map(|file| file.line_count)
                 .sum::<usize>()
         );
+
+        let filtered = engine
+            .outline(
+                OutlineTarget::Directory {
+                    path: temporary.to_string_lossy().into_owned(),
+                },
+                true,
+                &["A".to_owned()],
+            )
+            .expect("filtered directory should parse");
+        assert_eq!(filtered.files.len(), 1);
+        assert!(filtered.files[0].path.ends_with("a.ts"));
+        assert_eq!(filtered.total_byte_length, result.total_byte_length);
 
         fs::remove_dir_all(temporary).expect("temporary directory should be removable");
     }

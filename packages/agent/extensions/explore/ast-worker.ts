@@ -23,13 +23,21 @@ export interface OutlineEntry {
 	role: "item" | "member";
 	symbolType: string;
 	name: string;
+	qualifiedName: string;
 	range: SourceRange;
+	nameRange: SourceRange;
+	bodyRange?: SourceRange;
 	signature: string;
 	astKind: string;
-	locator: string;
+	certainty: "certain" | "recovered" | "nearRecovery";
+	certaintyReason?: string;
+	locator?: string;
 }
 
+export type SymbolView = "signature" | "declaration" | "declarationWithImports";
+
 export interface OutlineItem extends OutlineEntry {
+	rowKind: "import" | "declaration" | "export" | "sideEffect";
 	isImport: boolean;
 	isExported: boolean;
 	members: Array<OutlineEntry & { isPublic: boolean }>;
@@ -73,20 +81,26 @@ export interface SymbolBatchResult {
 }
 
 export interface AstClient {
+	getGeneration(): number;
 	outline(
 		target: OutlineTarget,
 		includePrivate: boolean,
 		names: string[],
 		signal: AbortSignal | undefined,
 	): Promise<OutlineTargetResult>;
-	symbol(locators: string[], contextLines: number, signal: AbortSignal | undefined): Promise<SymbolBatchResult>;
+	symbol(
+		locators: string[],
+		view: SymbolView,
+		contextLines: number,
+		signal: AbortSignal | undefined,
+	): Promise<SymbolBatchResult>;
 	shutdown(): Promise<void>;
 }
 
 type WorkerRequestPayload =
 	| { operation: "handshake" }
 	| { operation: "outline"; target: OutlineTarget; includePrivate: boolean; names: string[] }
-	| { operation: "symbol"; locators: string[]; contextLines: number };
+	| { operation: "symbol"; locators: string[]; view: SymbolView; contextLines: number };
 
 interface WorkerResponse {
 	requestId: number;
@@ -102,7 +116,7 @@ interface PendingRequest {
 	removeAbortListener(): void;
 }
 
-const PROTOCOL_VERSION = 2;
+const PROTOCOL_VERSION = 3;
 const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 const STDERR_BYTES = 16 * 1024;
 
@@ -142,10 +156,15 @@ export class AstWorkerClient implements AstClient {
 	private nextRequestId = 1;
 	private incoming = Buffer.alloc(0);
 	private stderr = "";
+	private generation = 0;
 
 	constructor(command: string | undefined = undefined, args: readonly string[] = []) {
 		this.command = command;
 		this.args = args;
+	}
+
+	getGeneration(): number {
+		return this.generation;
 	}
 
 	async outline(
@@ -159,8 +178,13 @@ export class AstWorkerClient implements AstClient {
 		return result as unknown as OutlineTargetResult;
 	}
 
-	async symbol(locators: string[], contextLines: number, signal: AbortSignal | undefined): Promise<SymbolBatchResult> {
-		const result = await this.request({ operation: "symbol", locators, contextLines }, signal);
+	async symbol(
+		locators: string[],
+		view: SymbolView,
+		contextLines: number,
+		signal: AbortSignal | undefined,
+	): Promise<SymbolBatchResult> {
+		const result = await this.request({ operation: "symbol", locators, view, contextLines }, signal);
 		if (result.kind !== "symbol") throw new Error("tau-ast returned the wrong result for symbol");
 		return result as unknown as SymbolBatchResult;
 	}
@@ -206,6 +230,7 @@ export class AstWorkerClient implements AstClient {
 			: resolveAstWorkerCommand(fileURLToPath(new URL("../../", import.meta.url)), process.platform, process.arch);
 		if ("error" in resolution) throw resolution.error;
 		const child = spawn(resolution.command, this.args, { stdio: ["pipe", "pipe", "pipe"] });
+		this.generation += 1;
 		this.child = child;
 		this.incoming = Buffer.alloc(0);
 		this.stderr = "";
@@ -302,6 +327,7 @@ export class AstWorkerClient implements AstClient {
 	private fail(child: ChildProcessWithoutNullStreams, error: Error, kill = true): void {
 		if (this.child !== child) return;
 		this.child = undefined;
+		this.generation += 1;
 		this.incoming = Buffer.alloc(0);
 		this.rejectPending(error);
 		if (kill && child.exitCode === null) child.kill();

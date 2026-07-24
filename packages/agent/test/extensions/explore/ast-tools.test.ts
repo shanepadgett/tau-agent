@@ -36,12 +36,16 @@ function outlineResult(path: string): OutlineTargetResult {
 				diagnostics: { errorNodes: 0, missingNodes: 0 },
 				items: [
 					{
+						rowKind: "declaration",
 						role: "item",
 						symbolType: "function",
 						name: "parse",
+						qualifiedName: "parse",
 						range,
+						nameRange: range,
 						signature: "function parse(): void",
 						astKind: "function_declaration",
+						certainty: "certain",
 						locator: "native-locator",
 						isImport: false,
 						isExported: true,
@@ -80,14 +84,16 @@ describe("AST exploration tools", () => {
 			blocks: [{ path, returnedRange: range, declarationIndexes: [0], source }],
 		};
 		const client: AstClient = {
+			getGeneration: () => 1,
 			outline: vi.fn(async (target, includePrivate, names) => {
 				expect(target).toEqual({ kind: "file", path, language: "typeScript" });
 				expect(includePrivate).toBe(false);
 				expect(names).toEqual([]);
 				return outlineResult(path);
 			}),
-			symbol: vi.fn(async (locators, contextLines) => {
+			symbol: vi.fn(async (locators, view, contextLines) => {
 				expect(locators).toEqual(["native-locator"]);
+				expect(view).toBe("declaration");
 				expect(contextLines).toBe(2);
 				return symbolResult;
 			}),
@@ -102,15 +108,15 @@ describe("AST exploration tools", () => {
 			undefined,
 			extensionContext(workspace.dir),
 		);
-		expect(firstText(outlined)).toContain("public function\n1-3(1): function parse(): void");
+		expect(firstText(outlined)).toContain("declarations\n1-3(1): function parse(): void");
 		expect(firstText(outlined)).not.toContain("parser.ts (typeScript");
 
-		const symbolArgs = { locators: [1], contextLines: 2 };
+		const symbolArgs = { locators: [1], view: "declaration" as const, contextLines: 2 };
 		const symbolCall = ast.symbol.renderCall?.(symbolArgs, testTheme, renderContext(symbolArgs, false));
 		const symbolCallLine = symbolCall?.render(200).join("\n") ?? "";
 		expect(symbolCallLine).toContain("symbol");
 		expect(symbolCallLine).toContain("parser.ts: parse");
-		expect(symbolCallLine).toContain("[context=2]");
+		expect(symbolCallLine).toContain("[declaration context=2]");
 		expect(symbolCallLine).not.toContain("ast:");
 
 		const symbol = await ast.symbol.execute(
@@ -129,6 +135,7 @@ describe("AST exploration tools", () => {
 		await workspace.mkdir("src/package");
 		const path = workspace.path("src/package");
 		const client: AstClient = {
+			getGeneration: () => 1,
 			outline: vi.fn(async () => ({ path, files: [], totalByteLength: 0, totalLineCount: 0 })),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
@@ -144,6 +151,211 @@ describe("AST exploration tools", () => {
 
 		expect(client.outline).toHaveBeenCalledWith({ kind: "directory", path }, true, ["Foo", "bar"], undefined);
 		expect(firstText(result)).toContain("No matching declarations");
+	});
+
+	it("does not expose a disconnected body-only symbol view", () => {
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outline: vi.fn(),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(client, testRowState);
+		const schema = ast.symbol.parameters as unknown as {
+			properties?: { view?: { enum?: string[] } };
+		};
+		expect(schema.properties?.view?.enum).toEqual(["signature", "declaration", "declarationWithImports"]);
+	});
+
+	it("renders source-order TypeScript structure without fake locators", async () => {
+		const path = workspace.path("src/parser.ts");
+		const result = outlineResult(path);
+		const declaration = result.files[0]?.items[0];
+		if (!declaration) throw new Error("outline fixture omitted its declaration");
+		const { locator: _locator, ...structuralEntry } = declaration;
+		result.files[0]?.items.unshift({
+			...structuralEntry,
+			rowKind: "import",
+			name: '"./types.ts"',
+			qualifiedName: '"./types.ts"',
+			signature: 'import type { Input } from "./types.ts";',
+			astKind: "import_statement",
+			isImport: true,
+			isExported: false,
+			members: [],
+		});
+		result.files[0]?.items.push({
+			...structuralEntry,
+			rowKind: "sideEffect",
+			name: "call register(...) ",
+			qualifiedName: "call register(...) ",
+			signature: "register(parse);",
+			astKind: "expression_statement",
+			isImport: false,
+			isExported: false,
+			members: [],
+		});
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outline: vi.fn(async () => result),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(client, testRowState);
+		const outlined = await ast.outline.execute(
+			"outline-structure",
+			{ path: "src/parser.ts" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		const text = firstText(outlined);
+		expect(text).toContain('imports\n1-3: import type { Input } from "./types.ts";');
+		expect(text).toContain("declarations\n1-3(1): function parse(): void");
+		expect(text).toContain("side effects\n1-3: register(parse);");
+	});
+
+	it("keeps attached documentation before the locator and renders container members once", async () => {
+		const path = workspace.path("src/parser.ts");
+		const result = outlineResult(path);
+		const declaration = result.files[0]?.items[0];
+		if (!declaration) throw new Error("outline fixture omitted its declaration");
+		declaration.range = {
+			startByte: 0,
+			endByte: 70,
+			start: { line: 0, column: 0 },
+			end: { line: 4, column: 0 },
+		};
+		declaration.nameRange = {
+			startByte: 55,
+			endByte: 60,
+			start: { line: 3, column: 16 },
+			end: { line: 3, column: 21 },
+		};
+		declaration.signature = "/**\n * Parse input.\n */\nexport function parse(): void";
+		result.files[0]?.items.push({
+			rowKind: "declaration",
+			role: "item",
+			symbolType: "class",
+			name: "Worker",
+			qualifiedName: "Worker",
+			range: {
+				startByte: 71,
+				endByte: 120,
+				start: { line: 5, column: 0 },
+				end: { line: 8, column: 1 },
+			},
+			nameRange: {
+				startByte: 84,
+				endByte: 90,
+				start: { line: 5, column: 13 },
+				end: { line: 5, column: 19 },
+			},
+			signature: "export class Worker {\n  reset(): void\n}",
+			astKind: "class_declaration",
+			certainty: "certain",
+			locator: "worker-locator",
+			isImport: false,
+			isExported: true,
+			members: [
+				{
+					role: "member",
+					symbolType: "method",
+					name: "reset",
+					qualifiedName: "Worker.reset",
+					range: {
+						startByte: 95,
+						endByte: 108,
+						start: { line: 6, column: 1 },
+						end: { line: 6, column: 14 },
+					},
+					nameRange: {
+						startByte: 96,
+						endByte: 101,
+						start: { line: 6, column: 2 },
+						end: { line: 6, column: 7 },
+					},
+					signature: "reset(): void",
+					astKind: "method_definition",
+					certainty: "certain",
+					locator: "reset-locator",
+					isPublic: true,
+				},
+			],
+		});
+		const interfaceSignature = "export interface Contract {\n\trun(): void;\n}";
+		const interfaceStart = 121;
+		result.files[0]?.items.push({
+			rowKind: "declaration",
+			role: "item",
+			symbolType: "interface",
+			name: "Contract",
+			qualifiedName: "Contract",
+			range: {
+				startByte: interfaceStart,
+				endByte: interfaceStart + Buffer.byteLength(interfaceSignature),
+				start: { line: 9, column: 0 },
+				end: { line: 11, column: 1 },
+			},
+			nameRange: {
+				startByte: interfaceStart + 17,
+				endByte: interfaceStart + 25,
+				start: { line: 9, column: 17 },
+				end: { line: 9, column: 25 },
+			},
+			signature: interfaceSignature,
+			astKind: "interface_declaration",
+			certainty: "certain",
+			locator: "contract-locator",
+			isImport: false,
+			isExported: true,
+			members: [
+				{
+					role: "member",
+					symbolType: "method",
+					name: "run",
+					qualifiedName: "Contract.run",
+					range: {
+						startByte: interfaceStart + Buffer.byteLength("export interface Contract {\n\t"),
+						endByte: interfaceStart + Buffer.byteLength("export interface Contract {\n\trun(): void;"),
+						start: { line: 10, column: 1 },
+						end: { line: 10, column: 13 },
+					},
+					nameRange: {
+						startByte: interfaceStart + Buffer.byteLength("export interface Contract {\n\t"),
+						endByte: interfaceStart + Buffer.byteLength("export interface Contract {\n\trun"),
+						start: { line: 10, column: 1 },
+						end: { line: 10, column: 4 },
+					},
+					signature: "run(): void;",
+					astKind: "method_signature",
+					certainty: "certain",
+					locator: "run-locator",
+					isPublic: true,
+				},
+			],
+		});
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outline: vi.fn(async () => result),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(client, testRowState);
+		const outlined = await ast.outline.execute(
+			"outline-contracts",
+			{ path: "src/parser.ts" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		const text = firstText(outlined);
+		expect(text).toContain("/**\n * Parse input.\n */\n1-5(1): export function parse(): void");
+		expect(text).not.toContain("parse /**");
+		expect(text).toContain("6-9(2): export class Worker {\n  7(3): reset(): void\n}");
+		expect(text.match(/reset\(\): void/g)).toHaveLength(1);
+		expect(text).toContain("10-12(4): export interface Contract {\n  11(5): run(): void;\n}");
+		expect(text.match(/run\(\): void;/g)).toHaveLength(1);
 	});
 
 	it("keeps distinct numeric IDs for public aliases sharing one native locator", async () => {
@@ -166,6 +378,7 @@ describe("AST exploration tools", () => {
 			blocks: [{ path, returnedRange: range, declarationIndexes: [0], source: "function buildThing() {}" }],
 		};
 		const client: AstClient = {
+			getGeneration: () => 1,
 			outline: vi.fn(async () => result),
 			symbol: vi.fn(async () => symbolResult),
 			shutdown: vi.fn(async () => {}),
@@ -183,18 +396,19 @@ describe("AST exploration tools", () => {
 
 		const symbol = await ast.symbol.execute(
 			"symbol-aliases",
-			{ locators: [1, 2] },
+			{ locators: [1, 2], view: "declaration" },
 			undefined,
 			undefined,
 			extensionContext(workspace.dir),
 		);
-		expect(client.symbol).toHaveBeenCalledWith(["native-locator"], 0, undefined);
+		expect(client.symbol).toHaveBeenCalledWith(["native-locator"], "declaration", 0, undefined);
 		expect(firstText(symbol)).toContain("1-3(1,2): createThing, makeThing");
 	});
 
 	it("renders one Errata-style call row and a separate parenthesized result summary", async () => {
 		const path = workspace.path("src/parser.ts");
 		const client: AstClient = {
+			getGeneration: () => 1,
 			outline: vi.fn(async () => outlineResult(path)),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
@@ -234,7 +448,7 @@ describe("AST exploration tools", () => {
 		const expanded = renderedText(
 			ast.outline.renderResult?.(result, { expanded: true, isPartial: false }, testTheme, renderContext(args, true)),
 		);
-		expect(expanded).toContain("public function");
+		expect(expanded).toContain("declarations");
 		expect(expanded).not.toContain("to expand");
 	});
 
@@ -242,6 +456,7 @@ describe("AST exploration tools", () => {
 		await workspace.write("README.md", "docs\n");
 		const path = resolve(workspace.dir, "src/parser.ts");
 		const client: AstClient = {
+			getGeneration: () => 1,
 			outline: vi.fn(async () => outlineResult(path)),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
@@ -261,7 +476,7 @@ describe("AST exploration tools", () => {
 		await expect(
 			ast.symbol.execute(
 				"symbol-unknown",
-				{ locators: [1, 999] },
+				{ locators: [1, 999], view: "declaration" },
 				undefined,
 				undefined,
 				extensionContext(workspace.dir),
@@ -270,7 +485,13 @@ describe("AST exploration tools", () => {
 		expect(client.symbol).not.toHaveBeenCalled();
 		ast.invalidate([path]);
 		await expect(
-			ast.symbol.execute("symbol-1", { locators: [1] }, undefined, undefined, extensionContext(workspace.dir)),
+			ast.symbol.execute(
+				"symbol-1",
+				{ locators: [1], view: "declaration" },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			),
 		).rejects.toThrow("is stale");
 		expect(client.symbol).not.toHaveBeenCalled();
 	});

@@ -1,8 +1,10 @@
-use crate::outline::{LanguageId, OutlineTarget, OutlineTargetResult, SymbolBatchResult};
+use crate::outline::{
+    LanguageId, OutlineTarget, OutlineTargetResult, SymbolBatchResult, SymbolView,
+};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
 
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
@@ -30,6 +32,7 @@ pub enum Request {
         #[serde(rename = "protocolVersion")]
         protocol_version: u32,
         locators: Vec<String>,
+        view: SymbolView,
         #[serde(rename = "contextLines")]
         context_lines: usize,
     },

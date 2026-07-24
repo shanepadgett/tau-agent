@@ -21,7 +21,7 @@ process.stdin.on("data", (chunk) => {
     const request = JSON.parse(incoming.subarray(4, length + 4));
     incoming = incoming.subarray(length + 4);
     if (request.operation === "handshake") {
-      send({ requestId: request.requestId, protocolVersion: 2, success: true, result: { kind: "handshake" } });
+      send({ requestId: request.requestId, protocolVersion: 3, success: true, result: { kind: "handshake" } });
       continue;
     }
     if (request.target?.path === "crash") process.exit(2);
@@ -29,7 +29,7 @@ process.stdin.on("data", (chunk) => {
     if (request.operation === "outline") {
       send({
         requestId: request.requestId,
-        protocolVersion: 2,
+        protocolVersion: 3,
         success: true,
         result: {
           kind: "outline",
@@ -43,7 +43,7 @@ process.stdin.on("data", (chunk) => {
     }
     send({
       requestId: request.requestId,
-      protocolVersion: 2,
+      protocolVersion: 3,
       success: true,
       result: {
         kind: "symbol",
@@ -92,7 +92,7 @@ describe("AST worker client", () => {
 			]);
 			expect(typescript.path).toBe("one.ts");
 			expect(odin.path).toBe("two.odin");
-			expect((await worker.symbol(["locator"], 2, undefined)).blocks[0]?.source).toBe("x");
+			expect((await worker.symbol(["locator"], "declaration", 2, undefined)).blocks[0]?.source).toBe("x");
 		} finally {
 			await worker.shutdown();
 		}

@@ -7,6 +7,7 @@ import {
 	truncateHead,
 	type Theme,
 } from "@earendil-works/pi-coding-agent";
+import { StringEnum } from "@earendil-works/pi-ai";
 import { Text, truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
 import { stat } from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
@@ -21,6 +22,7 @@ import type {
 	OutlineTarget,
 	OutlineTargetResult,
 	SymbolBatchResult,
+	SymbolView,
 } from "./ast-worker.ts";
 
 const outlineParams = Type.Object(
@@ -43,6 +45,9 @@ const symbolParams = Type.Object(
 		locators: Type.Array(Type.Integer({ minimum: 1 }), {
 			minItems: 1,
 			description: "Numeric locators shown in parentheses by outline",
+		}),
+		view: StringEnum(["signature", "declaration", "declarationWithImports"] as const, {
+			description: "Source view to retrieve; non-TypeScript languages support declaration only",
 		}),
 		contextLines: Type.Optional(
 			Type.Integer({ minimum: 0, description: "Lines of source context before and after each declaration" }),
@@ -67,6 +72,8 @@ interface LocatorRecord {
 	path: string;
 	name: string;
 	stale: boolean;
+	declarationRetrieved: boolean;
+	generation: number;
 }
 
 type OutlineArgs = { path: string; includePrivate?: boolean; names?: string[] };
@@ -102,18 +109,54 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 	}
 
 	function locator(entry: OutlineEntry, path: string): number {
+		if (!entry.locator) throw new Error(`Structural outline row ${entry.name} has no symbol locator`);
 		const id = nextLocator++;
-		const record = { id, token: entry.locator, path: resolve(path), name: entry.name, stale: false };
+		const record = {
+			id,
+			token: entry.locator,
+			path: resolve(path),
+			name: entry.name,
+			stale: false,
+			declarationRetrieved: false,
+			generation: client.getGeneration(),
+		};
 		locators.set(id, record);
 		return id;
 	}
 
-	function renderEntry(entry: OutlineEntry, path: string, language: AstLanguage, indent: string): string {
+	function renderEntry(
+		entry: OutlineEntry,
+		path: string,
+		language: AstLanguage,
+		indent: string,
+		signatureOverride?: string,
+	): string {
 		const lines =
 			entry.range.start.line === entry.range.end.line
 				? `${entry.range.start.line + 1}`
 				: `${entry.range.start.line + 1}-${entry.range.end.line + 1}`;
-		let signature = entry.signature.replace(/\s+/g, " ").trim();
+		let signature = (signatureOverride ?? entry.signature).trim();
+		if (language === "typeScript" || language === "tsx") {
+			const signatureLines = signature.split("\n");
+			const relativeNameLine = entry.nameRange.start.line - entry.range.start.line;
+			const nameLine =
+				relativeNameLine >= 0 && relativeNameLine < signatureLines.length
+					? relativeNameLine
+					: signatureLines.findIndex((line) => line.includes(entry.name));
+			const declarationLine = nameLine >= 0 ? nameLine : 0;
+			const sourceLine = signatureLines[declarationLine] ?? entry.name;
+			const first = sourceLine.includes(entry.name) ? sourceLine : `${entry.name} ${sourceLine}`;
+			const warning =
+				entry.certainty === "certain"
+					? ""
+					: ` [${entry.certainty}${entry.certaintyReason ? `: ${entry.certaintyReason}` : ""}]`;
+			return [
+				...signatureLines.slice(0, declarationLine).map((line) => `${indent}${line}`),
+				`${indent}${lines}(${locator(entry, path)}): ${first}${warning}`,
+				...signatureLines.slice(declarationLine + 1).map((line) => `${indent}${line}`),
+			].join("\n");
+		}
+		signature = signature.replace(/\s+/g, " ");
 		if (language === "odin") {
 			signature = signature
 				.replace(/\s*([(),:])\s*/g, "$1")
@@ -123,6 +166,38 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 		}
 		const label = signature && signature.includes(entry.name) ? signature : `${entry.name} ${signature}`.trim();
 		return `${indent}${lines}(${locator(entry, path)}): ${label}`;
+	}
+
+	function renderStructuralEntry(entry: OutlineEntry, indent: string): string {
+		const lines =
+			entry.range.start.line === entry.range.end.line
+				? `${entry.range.start.line + 1}`
+				: `${entry.range.start.line + 1}-${entry.range.end.line + 1}`;
+		return `${indent}${lines}: ${entry.signature.trim().replace(/\s+/g, " ")}`;
+	}
+
+	function containerHeader(item: OutlineFileResult["items"][number]): string | undefined {
+		const firstMember = item.members[0];
+		if (!firstMember) return undefined;
+		if (item.symbolType === "class") {
+			const members = item.members
+				.map((member) =>
+					member.signature
+						.split("\n")
+						.map((line) => `  ${line}`)
+						.join("\n"),
+				)
+				.join("\n");
+			const suffix = ` {\n${members}\n}`;
+			if (item.signature.endsWith(suffix)) return `${item.signature.slice(0, -suffix.length)} {`;
+			return undefined;
+		}
+
+		const memberOffset = firstMember.range.startByte - item.range.startByte;
+		const signature = Buffer.from(item.signature);
+		if (memberOffset <= 0 || memberOffset > signature.byteLength) return undefined;
+		const header = signature.subarray(0, memberOffset).toString("utf8").trimEnd();
+		return header.endsWith("{") ? header : undefined;
 	}
 
 	function renderOutlineFile(file: OutlineFileResult, cwd: string, includeHeader: boolean): string[] {
@@ -136,7 +211,34 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 				`warning: parser recovered with ${file.diagnostics.errorNodes} ERROR and ${file.diagnostics.missingNodes} MISSING nodes`,
 			);
 		}
-		const declarations = file.items.filter((item) => !item.isImport);
+		const declarations = file.items.filter((item) => item.rowKind === "declaration");
+		if (file.language === "typeScript" || file.language === "tsx") {
+			let previousSection = "";
+			for (const item of file.items) {
+				const section =
+					item.rowKind === "import"
+						? "imports"
+						: item.rowKind === "export"
+							? "exports"
+							: item.rowKind === "sideEffect"
+								? "side effects"
+								: "declarations";
+				if (section !== previousSection) {
+					if (lines.length > 0) lines.push("");
+					lines.push(section);
+					previousSection = section;
+				}
+				const header = item.rowKind === "declaration" ? containerHeader(item) : undefined;
+				lines.push(
+					item.rowKind !== "declaration"
+						? renderStructuralEntry(item, "")
+						: renderEntry(item, file.path, file.language, "", header),
+				);
+				for (const member of item.members) lines.push(renderEntry(member, file.path, file.language, "  "));
+				if (header) lines.push("}");
+			}
+			return lines;
+		}
 		const groups = new Map<string, typeof declarations>();
 		for (const item of declarations) {
 			const visibility = item.isExported ? "public" : "private";
@@ -186,7 +288,10 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 			const declarationCount = result.files.reduce(
 				(count, file) =>
 					count +
-					file.items.reduce((fileCount, item) => fileCount + (item.isImport ? 0 : 1 + item.members.length), 0),
+					file.items.reduce(
+						(fileCount, item) => fileCount + (item.rowKind === "declaration" ? 1 + item.members.length : 0),
+						0,
+					),
 				0,
 			);
 			if (declarationCount === 0) lines.push(names.length > 0 ? "No matching declarations" : "No declarations");
@@ -222,14 +327,21 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 		promptSnippet: "Retrieve exact declaration source for several outline locators",
 		parameters: symbolParams,
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+			if (params.contextLines !== undefined && params.view !== "declaration") {
+				throw new Error("contextLines is supported only with view=declaration");
+			}
 			const records = [...new Set(params.locators)].map((id) => {
 				const record = locators.get(id);
 				if (!record) throw new Error(`Unknown symbol locator: ${id}. Run outline again.`);
 				if (record.stale) throw new Error(`Symbol locator ${id} is stale. Run outline again.`);
+				if (record.generation !== client.getGeneration()) {
+					throw new Error(`Symbol locator ${id} is stale because the AST worker restarted. Run outline again.`);
+				}
 				return record;
 			});
 			const result = await client.symbol(
 				[...new Set(records.map((record) => record.token))],
+				params.view,
 				params.contextLines ?? 0,
 				signal,
 			);
@@ -260,6 +372,10 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 			}
 			const sourceBytes = result.blocks.reduce((count, block) => count + Buffer.byteLength(block.source), 0);
 			const output = compact(lines.join("\n"), sourceBytes, result.declarations.length, "symbol", result);
+			if (output.details.truncated) {
+				throw new Error("Symbol result exceeded the output limit. Request fewer locators.");
+			}
+			if (params.view === "declaration") for (const record of records) record.declarationRetrieved = true;
 			return { content: [{ type: "text", text: output.text }], details: output.details };
 		},
 		renderCall(args, theme, context) {
@@ -272,10 +388,10 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 					context.toolCallId,
 					"symbol",
 					targets,
-					[args.contextLines === undefined ? "" : `[context=${args.contextLines}]`],
+					[symbolOptions(args.view, args.contextLines)],
 					theme,
 				);
-			component.set(targets, [args.contextLines === undefined ? "" : `[context=${args.contextLines}]`], theme);
+			component.set(targets, [symbolOptions(args.view, args.contextLines)], theme);
 			return component;
 		},
 		renderResult(result, options, theme, context) {
@@ -298,6 +414,10 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 			}
 		},
 	};
+}
+
+function symbolOptions(view: SymbolView, contextLines: number | undefined): string {
+	return `[${view}${contextLines === undefined ? "" : ` context=${contextLines}`}]`;
 }
 
 function renderAstResult(

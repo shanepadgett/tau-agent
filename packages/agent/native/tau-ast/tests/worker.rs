@@ -49,7 +49,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 1,
-            "protocolVersion": 2,
+            "protocolVersion": 3,
             "target": { "kind": "file", "path": typescript_path, "language": "typeScript" },
             "includePrivate": true,
             "names": []
@@ -64,7 +64,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "handshake",
             "requestId": 2,
-            "protocolVersion": 2
+            "protocolVersion": 3
         }),
     );
     let handshake = read_response(&mut stdout);
@@ -82,7 +82,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 3,
-            "protocolVersion": 2,
+            "protocolVersion": 3,
             "target": { "kind": "file", "path": typescript_path, "language": "typeScript" },
             "includePrivate": true,
             "names": []
@@ -97,7 +97,10 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
             .as_array()
             .is_some_and(|items| !items.is_empty())
     );
-    let item = &typescript_file["items"][0];
+    let item = typescript_file["items"]
+        .as_array()
+        .and_then(|items| items.iter().find(|item| item["locator"].is_string()))
+        .expect("outline should contain a declaration locator");
     let locator = item["locator"]
         .as_str()
         .expect("outline item should have a locator");
@@ -113,8 +116,9 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 4,
-            "protocolVersion": 2,
+            "protocolVersion": 3,
             "locators": [locator],
+            "view": "declaration",
             "contextLines": 0
         }),
     );
@@ -137,7 +141,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 5,
-            "protocolVersion": 2,
+            "protocolVersion": 3,
             "target": { "kind": "file", "path": odin_path, "language": "odin" },
             "includePrivate": true,
             "names": []
@@ -166,7 +170,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
             json!({
                 "operation": "outline",
                 "requestId": index + 6,
-                "protocolVersion": 2,
+                "protocolVersion": 3,
                 "target": {
                     "kind": "file",
                     "path": manifest_dir.join("fixtures").join(fixture),
@@ -204,7 +208,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 12,
-            "protocolVersion": 2,
+            "protocolVersion": 3,
             "target": { "kind": "file", "path": local_export_path, "language": "typeScript" },
             "includePrivate": false,
             "names": []
@@ -235,8 +239,9 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 13,
-            "protocolVersion": 2,
+            "protocolVersion": 3,
             "locators": [local_locator],
+            "view": "declaration",
             "contextLines": 0
         }),
     );
