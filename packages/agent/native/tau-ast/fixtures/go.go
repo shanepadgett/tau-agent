@@ -22,3 +22,7 @@ func (parser *FileParser) Parse(source string) Result {
 func NewParser() Parser {
 	return &FileParser{}
 }
+
+func hiddenParser() Parser {
+	return &FileParser{}
+}

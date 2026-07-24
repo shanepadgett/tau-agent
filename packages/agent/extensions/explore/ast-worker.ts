@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 
 export type AstLanguage = "typeScript" | "tsx" | "odin" | "go" | "rust" | "cSharp" | "java" | "kotlin" | "swift";
 
+export type OutlineTarget = { kind: "file"; path: string; language: AstLanguage } | { kind: "directory"; path: string };
+
 export interface SourcePosition {
 	line: number;
 	column: number;
@@ -31,7 +33,7 @@ export interface OutlineItem extends OutlineEntry {
 	members: Array<OutlineEntry & { isPublic: boolean }>;
 }
 
-export interface OutlineResult {
+export interface OutlineFileResult {
 	path: string;
 	language: AstLanguage;
 	sourceFingerprint: string;
@@ -41,24 +43,48 @@ export interface OutlineResult {
 	items: OutlineItem[];
 }
 
-export interface SymbolResult {
+export interface OutlineTargetResult {
+	path: string;
+	files: OutlineFileResult[];
+	totalByteLength: number;
+	totalLineCount: number;
+}
+
+export interface SymbolDeclaration {
+	locator: string;
 	path: string;
 	language: AstLanguage;
 	sourceFingerprint: string;
-	range: SourceRange;
+	declarationRange: SourceRange;
+}
+
+export interface SymbolBlock {
+	path: string;
+	returnedRange: SourceRange;
+	declarationIndexes: number[];
 	source: string;
 }
 
+export interface SymbolBatchResult {
+	declarations: SymbolDeclaration[];
+	blocks: SymbolBlock[];
+}
+
 export interface AstClient {
-	outline(path: string, language: AstLanguage, signal: AbortSignal | undefined): Promise<OutlineResult>;
-	symbol(locator: string, signal: AbortSignal | undefined): Promise<SymbolResult>;
+	outline(
+		target: OutlineTarget,
+		includePrivate: boolean,
+		names: string[],
+		signal: AbortSignal | undefined,
+	): Promise<OutlineTargetResult>;
+	symbol(locators: string[], contextLines: number, signal: AbortSignal | undefined): Promise<SymbolBatchResult>;
 	shutdown(): Promise<void>;
 }
 
 type WorkerRequestPayload =
 	| { operation: "handshake" }
-	| { operation: "outline"; path: string; language: AstLanguage }
-	| { operation: "symbol"; locator: string };
+	| { operation: "outline"; target: OutlineTarget; includePrivate: boolean; names: string[] }
+	| { operation: "symbol"; locators: string[]; contextLines: number };
 
 interface WorkerResponse {
 	requestId: number;
@@ -74,7 +100,7 @@ interface PendingRequest {
 	removeAbortListener(): void;
 }
 
-const PROTOCOL_VERSION = 1;
+const PROTOCOL_VERSION = 2;
 const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 const STDERR_BYTES = 16 * 1024;
 
@@ -101,16 +127,21 @@ export class AstWorkerClient implements AstClient {
 		this.args = args;
 	}
 
-	async outline(path: string, language: AstLanguage, signal: AbortSignal | undefined): Promise<OutlineResult> {
-		const result = await this.request({ operation: "outline", path, language }, signal);
+	async outline(
+		target: OutlineTarget,
+		includePrivate: boolean,
+		names: string[],
+		signal: AbortSignal | undefined,
+	): Promise<OutlineTargetResult> {
+		const result = await this.request({ operation: "outline", target, includePrivate, names }, signal);
 		if (result.kind !== "outline") throw new Error("tau-ast returned the wrong result for outline");
-		return result as unknown as OutlineResult;
+		return result as unknown as OutlineTargetResult;
 	}
 
-	async symbol(locator: string, signal: AbortSignal | undefined): Promise<SymbolResult> {
-		const result = await this.request({ operation: "symbol", locator }, signal);
+	async symbol(locators: string[], contextLines: number, signal: AbortSignal | undefined): Promise<SymbolBatchResult> {
+		const result = await this.request({ operation: "symbol", locators, contextLines }, signal);
 		if (result.kind !== "symbol") throw new Error("tau-ast returned the wrong result for symbol");
-		return result as unknown as SymbolResult;
+		return result as unknown as SymbolBatchResult;
 	}
 
 	async shutdown(): Promise<void> {

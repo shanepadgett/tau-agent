@@ -1,8 +1,8 @@
-use crate::outline::{LanguageId, OutlineResult, SymbolResult};
+use crate::outline::{LanguageId, OutlineTarget, OutlineTargetResult, SymbolBatchResult};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
 
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
@@ -19,15 +19,19 @@ pub enum Request {
         request_id: u64,
         #[serde(rename = "protocolVersion")]
         protocol_version: u32,
-        path: String,
-        language: LanguageId,
+        target: OutlineTarget,
+        #[serde(rename = "includePrivate")]
+        include_private: bool,
+        names: Vec<String>,
     },
     Symbol {
         #[serde(rename = "requestId")]
         request_id: u64,
         #[serde(rename = "protocolVersion")]
         protocol_version: u32,
-        locator: String,
+        locators: Vec<String>,
+        #[serde(rename = "contextLines")]
+        context_lines: usize,
     },
 }
 
@@ -91,11 +95,11 @@ pub enum ResponseResult {
     },
     Outline {
         #[serde(flatten)]
-        outline: OutlineResult,
+        outline: OutlineTargetResult,
     },
     Symbol {
         #[serde(flatten)]
-        symbol: SymbolResult,
+        symbol: SymbolBatchResult,
     },
 }
 
@@ -126,7 +130,24 @@ pub fn read_frame(reader: &mut impl Read) -> io::Result<Option<Vec<u8>>> {
 }
 
 pub fn write_frame(writer: &mut impl Write, response: &Response) -> Result<(), serde_json::Error> {
-    let payload = serde_json::to_vec(response)?;
+    let mut payload = serde_json::to_vec(response)?;
+    if payload.len() > MAX_FRAME_BYTES {
+        let request_id = match response {
+            Response::Success(response) => response.request_id,
+            Response::Error(response) => response.request_id,
+        };
+        payload = serde_json::to_vec(&Response::Error(ErrorResponse {
+            request_id,
+            protocol_version: PROTOCOL_VERSION,
+            success: false,
+            error: ProtocolError {
+                code: "response_too_large",
+                message: format!(
+                    "response frame exceeds the {MAX_FRAME_BYTES}-byte protocol limit; narrow the target"
+                ),
+            },
+        }))?;
+    }
     let length = u32::try_from(payload.len()).map_err(|_| {
         serde_json::Error::io(io::Error::new(
             io::ErrorKind::InvalidData,

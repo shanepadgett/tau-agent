@@ -49,9 +49,10 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 1,
-            "protocolVersion": 1,
-            "path": typescript_path,
-            "language": "typeScript"
+            "protocolVersion": 2,
+            "target": { "kind": "file", "path": typescript_path, "language": "typeScript" },
+            "includePrivate": true,
+            "names": []
         }),
     );
     let before_handshake = read_response(&mut stdout);
@@ -63,7 +64,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "handshake",
             "requestId": 2,
-            "protocolVersion": 1
+            "protocolVersion": 2
         }),
     );
     let handshake = read_response(&mut stdout);
@@ -81,20 +82,22 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 3,
-            "protocolVersion": 1,
-            "path": typescript_path,
-            "language": "typeScript"
+            "protocolVersion": 2,
+            "target": { "kind": "file", "path": typescript_path, "language": "typeScript" },
+            "includePrivate": true,
+            "names": []
         }),
     );
     let typescript = read_response(&mut stdout);
     assert_eq!(typescript["success"], true);
-    assert_eq!(typescript["result"]["diagnostics"]["errorNodes"], 0);
+    let typescript_file = &typescript["result"]["files"][0];
+    assert_eq!(typescript_file["diagnostics"]["errorNodes"], 0);
     assert!(
-        typescript["result"]["items"]
+        typescript_file["items"]
             .as_array()
             .is_some_and(|items| !items.is_empty())
     );
-    let item = &typescript["result"]["items"][0];
+    let item = &typescript_file["items"][0];
     let locator = item["locator"]
         .as_str()
         .expect("outline item should have a locator");
@@ -110,8 +113,9 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 4,
-            "protocolVersion": 1,
-            "locator": locator
+            "protocolVersion": 2,
+            "locators": [locator],
+            "contextLines": 0
         }),
     );
     let symbol = read_response(&mut stdout);
@@ -119,10 +123,13 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         .expect("TypeScript source should remain readable");
     assert_eq!(symbol["success"], true);
     assert_eq!(symbol["result"]["kind"], "symbol");
-    assert_eq!(symbol["result"]["source"], &typescript_source[start..end]);
     assert_eq!(
-        symbol["result"]["sourceFingerprint"],
-        typescript["result"]["sourceFingerprint"]
+        symbol["result"]["blocks"][0]["source"],
+        &typescript_source[start..end]
+    );
+    assert_eq!(
+        symbol["result"]["declarations"][0]["sourceFingerprint"],
+        typescript_file["sourceFingerprint"]
     );
 
     send_request(
@@ -130,16 +137,17 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 5,
-            "protocolVersion": 1,
-            "path": odin_path,
-            "language": "odin"
+            "protocolVersion": 2,
+            "target": { "kind": "file", "path": odin_path, "language": "odin" },
+            "includePrivate": true,
+            "names": []
         }),
     );
     let odin = read_response(&mut stdout);
     assert_eq!(odin["success"], true);
-    assert_eq!(odin["result"]["diagnostics"]["errorNodes"], 0);
+    assert_eq!(odin["result"]["files"][0]["diagnostics"]["errorNodes"], 0);
     assert!(
-        odin["result"]["items"]
+        odin["result"]["files"][0]["items"]
             .as_array()
             .is_some_and(|items| items.iter().any(|item| item["name"] == "Circle"))
     );
@@ -158,16 +166,24 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
             json!({
                 "operation": "outline",
                 "requestId": index + 6,
-                "protocolVersion": 1,
-                "path": manifest_dir.join("fixtures").join(fixture),
-                "language": language
+                "protocolVersion": 2,
+                "target": {
+                    "kind": "file",
+                    "path": manifest_dir.join("fixtures").join(fixture),
+                    "language": language
+                },
+                "includePrivate": true,
+                "names": []
             }),
         );
         let response = read_response(&mut stdout);
         assert_eq!(response["success"], true, "{fixture}");
-        assert_eq!(response["result"]["language"], language, "{fixture}");
+        assert_eq!(
+            response["result"]["files"][0]["language"], language,
+            "{fixture}"
+        );
         assert!(
-            response["result"]["items"]
+            response["result"]["files"][0]["items"]
                 .as_array()
                 .is_some_and(|items| items.iter().any(|item| item["name"] == expected_name)),
             "{fixture} omitted {expected_name}"

@@ -21,3 +21,7 @@ impl Parser for FileParser {
 pub fn create_parser() -> FileParser {
     FileParser
 }
+
+pub(crate) fn internal_parser() -> FileParser {
+    FileParser
+}

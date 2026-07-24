@@ -9,7 +9,7 @@ use crate::{
         SuccessResponse, read_frame, write_frame,
     },
 };
-use std::{error::Error, io, path::Path};
+use std::{error::Error, io};
 
 fn main() {
     if let Err(error) = run() {
@@ -72,7 +72,12 @@ fn run() -> Result<(), Box<dyn Error>> {
                     "handshake_required",
                     "complete the protocol handshake before symbol requests".to_owned(),
                 ),
-                Request::Outline { path, language, .. } => {
+                Request::Outline {
+                    target,
+                    include_private,
+                    names,
+                    ..
+                } => {
                     if engine.is_none() {
                         match OutlineEngine::new() {
                             Ok(new_engine) => engine = Some(new_engine),
@@ -92,7 +97,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                     match engine
                         .as_ref()
                         .expect("engine is initialized above")
-                        .outline(Path::new(&path), language)
+                        .outline(target, include_private, &names)
                     {
                         Ok(outline) => Response::Success(SuccessResponse {
                             request_id,
@@ -105,7 +110,11 @@ fn run() -> Result<(), Box<dyn Error>> {
                         }
                     }
                 }
-                Request::Symbol { locator, .. } => {
+                Request::Symbol {
+                    locators,
+                    context_lines,
+                    ..
+                } => {
                     if engine.is_none() {
                         match OutlineEngine::new() {
                             Ok(new_engine) => engine = Some(new_engine),
@@ -125,7 +134,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                     match engine
                         .as_ref()
                         .expect("engine is initialized above")
-                        .symbol(&locator)
+                        .symbol(&locators, context_lines)
                     {
                         Ok(symbol) => Response::Success(SuccessResponse {
                             request_id,

@@ -1,13 +1,13 @@
 # Tau AST Exploration Baseline
 
-Status: research baseline; no implementation approved yet  
+Status: outline and targeted symbol retrieval implemented; later capabilities unapproved
 Captured: 24 July 2026
 
 ## Purpose
 
 Tau should have first-party, AST-based code exploration tools. They should be real Pi tools with strict schemas, bounded outputs, custom rendering, lifecycle control, and enforceable interaction with Tau's existing `read` tool. Users should not have to install a separate CLI, edit an agent prompt, or trust a model to remember when structural exploration is appropriate.
 
-This document preserves the current research and architectural baseline. It covers four reference repositories, Tau and Pi integration points, the current Tree-sitter and native-packaging landscape, a recommended initial architecture, known risks, and unresolved decisions.
+This document preserves the research and architectural baseline. It covers four reference repositories, Tau and Pi integration points, the Tree-sitter and native-packaging landscape, the implemented foundation, known risks, and unresolved future decisions. Proposal language later in the document remains as historical design context; this status section records what shipped.
 
 The reference repositories are read-only examples:
 
@@ -15,6 +15,24 @@ The reference repositories are read-only examples:
 - `ast-grep`: `/Users/shanepadgett/.local/share/tau-agent/references/ast-grep`
 - `ast-outline`: `/Users/shanepadgett/.local/share/tau-agent/references/ast-outline`
 - `errata`: `/Users/shanepadgett/.local/share/tau-agent/references/errata`
+
+## Current implementation
+
+Tau ships a package-private Rust worker and first-party `outline` and `symbol` tools. The worker uses a versioned framed protocol and supports TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, and Swift.
+
+Implemented behavior includes:
+
+- file and non-recursive package-directory outlines;
+- public surfaces by default, private expansion, and exact-name filtering;
+- deterministic grouped output with numeric declaration locators;
+- batched exact-source retrieval with optional context lines and merged overlapping ranges;
+- atomic stale-locator rejection through source fingerprints;
+- worker lifecycle, cancellation, bounded output, mutation invalidation, and Tau tool rendering; and
+- real-package validation against Errata, Bubble Tea, ast-grep, Guava, Okio, and Swift Collections.
+
+The native spike measured roughly 5.9 ms cold startup and 0.15-0.17 ms warm extraction on macOS arm64. Real-package trials confirmed two-name filtering followed by two-locator retrieval across all validation repositories. Those trials also exposed and fixed Go capitalization and restricted Rust visibility handling.
+
+Structural search, cross-language executable-scope extraction, callers and callees, impact analysis, context packing, read enforcement, persistent indexing, and rewriting remain future work. None is approved for implementation by this document.
 
 ## Goals
 
@@ -1164,7 +1182,7 @@ Building from source during installation should not be the normal path. It requi
 
 Each slice should leave a wired, testable result.
 
-### Slice 1: native feasibility spike
+### Slice 1: native feasibility spike (complete)
 
 - Create the Rust worker skeleton.
 - Add framed protocol handshake and one outline request.
@@ -1175,7 +1193,7 @@ Each slice should leave a wired, testable result.
 
 Exit condition: warm calls are fast enough, current Odin fixtures parse acceptably, and the worker boundary functions under Tau's supported runtime.
 
-### Slice 2: canonical outline and locators
+### Slice 2: canonical outline and locators (complete)
 
 - Define Tau's declaration representation.
 - Implement TypeScript and Odin adapters.
@@ -1186,7 +1204,7 @@ Exit condition: warm calls are fast enough, current Odin fixtures parse acceptab
 
 Exit condition: outline plus symbol can replace common discovery reads without hiding parser errors.
 
-### Slice 3: Pi integration
+### Slice 3: Pi integration (complete)
 
 - Register the initial tools from Tau's exploration surface.
 - Start the worker lazily.
@@ -1197,7 +1215,7 @@ Exit condition: outline plus symbol can replace common discovery reads without h
 
 Exit condition: Tau owns installation, lifecycle, invocation, and rendering. No user-facing CLI setup exists.
 
-### Slice 4: structural search
+### Slice 4: structural search (future; unapproved)
 
 - Integrate `ast-grep-core` behind Tau's contract.
 - Add Odin metavariable preprocessing.
@@ -1207,7 +1225,7 @@ Exit condition: Tau owns installation, lifecycle, invocation, and rendering. No 
 
 Exit condition: repository scans are bounded, fast, and return precise follow-up targets.
 
-### Slice 5: read enforcement
+### Slice 5: read enforcement (future; unapproved)
 
 - Measure savings and failure cases in real agent sessions.
 - Define the supported-code and parse-health criteria.
@@ -1222,12 +1240,15 @@ Exit condition: enforcement reduces context without preventing correct investiga
 Only observed workflows should justify:
 
 - dependency extraction
-- callers and callees
-- context packing
+- callers, callees, and impact analysis that return both reference locations and locators for their enclosing editable scopes
+- addressable executable scopes across every supported language, including standard test declarations, test containers, and labelled callback scopes
+- context packing built from selected declarations, callers, tests, and other enclosing scopes
 - persistent cache
 - embeddings
 - rewrites
 - more languages
+
+The dashboard-edit trial exposed a concrete acceptance case for these slices. Given a declaration locator, Tau should discover its direct callers and tests, retrieve the complete implementation and affected enclosing test scopes, and make the edit without `grep`, ranged `read`, or whole-file `read`. Reference results must distinguish exact, inferred, and ambiguous relationships. A reference location alone is insufficient; each result needs the nearest safe editable scope locator.
 
 ## Testing strategy
 
@@ -1293,6 +1314,9 @@ Do not make the TypeScript wrapper parse human-formatted native output as `errat
 - parser diagnostics visible to the model
 - ambiguous result behavior
 - read-policy fallback
+- cross-language test scopes remain discoverable and retrievable by locator
+- impact results identify direct callers and tests and include enclosing editable scope locators
+- an implementation-plus-test change can be completed through AST tools without textual search or source-range reads
 
 ### Performance regression tests
 
@@ -1496,4 +1520,4 @@ Tree-sitter's Rust API is mature. Current crate research found version 0.26.11 r
 
 ## Immediate next step
 
-Write a focused implementation plan for Slice 1 only: Rust worker layout, exact protocol handshake, selected TypeScript and Odin grammar crates, fixture corpus, release-free local build path, and benchmark commands. Do not design the later graph, semantic-search, or enforcement systems into that spike.
+Choose and approve one future slice before implementation. The strongest observed workflow is AST-directed change discovery: structural search plus cross-language executable scopes, followed by impact results that identify callers and tests and return locators for their enclosing editable scopes. Its acceptance case is an implementation-plus-test edit completed without textual search or source-range reads.
