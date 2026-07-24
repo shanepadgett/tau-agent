@@ -40,7 +40,7 @@ Gives the agent `context_prune` for creating a hard context checkpoint after bro
 
 ## explore
 
-Replaces Pi’s filesystem inspection tools with compact Tau versions: `ls`, `find`, `grep`, and `read`. They produce smaller model payloads and readable tool rows. Repeated `read` calls return unchanged markers or useful diffs when branch history proves the agent already saw the base content. A failed patch unlocks one normal reread of the affected path. `/read-stats` shows estimated token and cost savings for the current chat and whole session.
+Replaces Pi’s filesystem inspection tools with compact Tau versions: `ls`, `find`, `grep`, and `read`. It also adds `outline` for TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, and Swift declarations and `symbol` for exact source retrieval from an outline locator. They produce smaller model payloads and readable tool rows. Repeated `read` calls return unchanged markers or useful diffs when branch history proves the agent already saw the base content. A failed patch unlocks one normal reread of the affected path. `/read-stats` shows estimated token and cost savings for the current chat and whole session.
 
 ## footer
 
@@ -100,7 +100,7 @@ Adds `Alt+S` to stash the current prompt draft and `/pop` to browse stashed draf
 
 ## subagent
 
-Gives Tau a subagent delegation tool for isolated, focused work. The built-in `review` agent performs adversarial, read-only code reviews; `web-research` handles external research. Known files can be autoread as line-numbered snapshots into a fresh or retained child turn. Tau can continue a retained child thread when follow-up work depends on its prior reads and reasoning. You can also create your own subagents in the supported subagent directories. Ask Tau how to do it and have it consult the extension’s own documentation; the built-in agents show the pattern. Each subagent can register its own model, tools, and pool of display names. Reused pool names get numeric suffixes. In interactive cmux sessions, Tau opens one temporary Markdown dashboard for live subagent progress; it does not change how children run and closes shortly after the active cohort finishes.
+Gives Tau a subagent delegation tool for isolated, focused work. The built-in `review` agent performs adversarial, read-only code reviews; `scout` finds local files, symbols, data flow, constraints, and unknowns without changing anything; `web-research` handles external research. Known files can be autoread as line-numbered snapshots into a fresh or retained child turn. Tau can continue a retained child thread when follow-up work depends on its prior reads and reasoning. You can also create your own subagents in the supported subagent directories. Ask Tau how to do it and have it consult the extension’s own documentation; the built-in agents show the pattern. Each subagent can register its own model, tools, and pool of display names. Reused pool names get numeric suffixes. In interactive cmux sessions, Tau opens one temporary Markdown dashboard for live subagent progress; it does not change how children run and closes shortly after the active cohort finishes.
 
 ## tau-help
 

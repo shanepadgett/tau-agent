@@ -1,6 +1,7 @@
 [tools]
 node = "24.18.0"
 python = "3.13"
+rust = "1.88.0"
 "npm:oxfmt" = "0.57.0"
 "npm:oxlint" = "1.72.0"
 "npm:markdownlint-cli2" = "0.22.1"
@@ -12,7 +13,7 @@ task_output = "quiet"
 
 [tasks.check]
 description = "Run all checks"
-depends = ["check:ts", "check:md"]
+depends = ["check:ts", "check:rust", "check:md"]
 
 [tasks."check:ts"]
 description = "TS and config checks"
@@ -30,6 +31,31 @@ fi
 [tasks."check:md"]
 description = "Markdown checks"
 depends = ["check:markdown"]
+
+[tasks."check:rust"]
+description = "Rust checks"
+depends = ["check:rust-format", "check:rust-clippy", "test:rust"]
+
+[tasks."check:rust-format"]
+description = "Check Rust formatting"
+run = "cargo fmt --manifest-path packages/agent/native/tau-ast/Cargo.toml --all -- --check"
+
+[tasks."check:rust-clippy"]
+description = "Run Rust Clippy"
+run = "cargo clippy --manifest-path packages/agent/native/tau-ast/Cargo.toml --all-targets --all-features -- -D warnings"
+
+[tasks."test:rust"]
+description = "Run Rust tests"
+run = "cargo test --manifest-path packages/agent/native/tau-ast/Cargo.toml --all-targets --all-features"
+
+[tasks."benchmark:ast"]
+description = "Benchmark cold and warm tau-ast outlines"
+run = '''
+cargo build --release --manifest-path packages/agent/native/tau-ast/Cargo.toml
+python packages/agent/native/tau-ast/scripts/benchmark.py \
+  packages/agent/extensions/explore/index.ts \
+  packages/agent/native/tau-ast/fixtures/odin.odin
+'''
 
 [tasks.generate-schema]
 description = "Generate Tau settings schema"

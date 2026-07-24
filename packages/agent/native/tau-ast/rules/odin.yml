@@ -1,0 +1,185 @@
+id: odin-import
+language: Odin
+role: item
+symbolType: module
+rule:
+  kind: import_declaration
+name: import
+isImport: true
+isExported: false
+---
+id: odin-procedure
+language: Odin
+role: item
+symbolType: function
+rule:
+  kind: procedure_declaration
+  has:
+    stopBy: neighbor
+    kind: identifier
+    pattern: $NAME
+name: $NAME
+isExported:
+  not:
+    has:
+      stopBy: neighbor
+      kind: attributes
+      regex: private
+---
+id: odin-overloaded-procedure
+language: Odin
+role: item
+symbolType: function
+rule:
+  kind: overloaded_procedure_declaration
+  has:
+    stopBy: neighbor
+    kind: identifier
+    pattern: $NAME
+name: $NAME
+isExported:
+  not:
+    has:
+      stopBy: neighbor
+      kind: attributes
+      regex: private
+---
+id: odin-struct
+language: Odin
+role: item
+symbolType: struct
+rule:
+  kind: struct_declaration
+  has:
+    stopBy: neighbor
+    kind: identifier
+    pattern: $NAME
+name: $NAME
+isExported:
+  not:
+    has:
+      stopBy: neighbor
+      kind: attributes
+      regex: private
+---
+id: odin-enum
+language: Odin
+role: item
+symbolType: enum
+rule:
+  kind: enum_declaration
+  has:
+    stopBy: neighbor
+    kind: identifier
+    pattern: $NAME
+name: $NAME
+isExported:
+  not:
+    has:
+      stopBy: neighbor
+      kind: attributes
+      regex: private
+---
+id: odin-union
+language: Odin
+role: item
+symbolType: enum
+rule:
+  kind: union_declaration
+  has:
+    stopBy: neighbor
+    kind: identifier
+    pattern: $NAME
+name: $NAME
+isExported:
+  not:
+    has:
+      stopBy: neighbor
+      kind: attributes
+      regex: private
+---
+id: odin-typed-constant
+language: Odin
+role: item
+symbolType: constant
+rule:
+  kind: const_type_declaration
+  has:
+    stopBy: neighbor
+    kind: identifier
+    pattern: $NAME
+name: $NAME
+isExported:
+  not:
+    has:
+      stopBy: neighbor
+      kind: attributes
+      regex: private
+---
+id: odin-constant
+language: Odin
+role: item
+symbolType: constant
+rule:
+  kind: const_declaration
+  has:
+    stopBy: neighbor
+    kind: identifier
+    pattern: $NAME
+name: $NAME
+isExported:
+  not:
+    has:
+      stopBy: neighbor
+      kind: attributes
+      regex: private
+---
+id: odin-typed-variable
+language: Odin
+role: item
+symbolType: variable
+rule:
+  kind: var_declaration
+  has:
+    stopBy: neighbor
+    kind: identifier
+    pattern: $NAME
+name: $NAME
+isExported:
+  not:
+    has:
+      stopBy: neighbor
+      kind: attributes
+      regex: private
+---
+id: odin-variable
+language: Odin
+role: item
+symbolType: variable
+rule:
+  kind: variable_declaration
+  has:
+    stopBy: neighbor
+    kind: identifier
+    pattern: $NAME
+name: $NAME
+isExported:
+  not:
+    has:
+      stopBy: neighbor
+      kind: attributes
+      regex: private
+---
+id: odin-struct-field
+language: Odin
+role: member
+parentRuleIds: [odin-struct]
+symbolType: field
+rule:
+  kind: field
+  has:
+    stopBy: neighbor
+    kind: identifier
+    pattern: $NAME
+name: $NAME
+isPublic: true
