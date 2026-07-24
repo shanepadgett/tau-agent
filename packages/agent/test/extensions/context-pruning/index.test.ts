@@ -1,4 +1,5 @@
 import { fauxAssistantMessage, fauxThinking, fauxToolCall, type ToolResultMessage } from "@earendil-works/pi-ai";
+import { resolve } from "node:path";
 import {
 	createEventBus,
 	type ContextEvent,
@@ -8,7 +9,9 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { replayReadCache } from "../../../extensions/explore/read-cache.ts";
 import { setContextPruningEnabled, type ContextPruneDetailsV2 } from "../../../shared/context-pruning-state.ts";
+import { createWorkspace } from "../explore/helpers.ts";
 
 const settings = vi.hoisted(() => ({
 	enabled: true,
@@ -99,7 +102,7 @@ interface RegisteredCommand {
 	handler(args: string, ctx: ExtensionCommandContext): Promise<void>;
 }
 
-function harness(activeBranch: unknown[]) {
+function harness(activeBranch: unknown[], cwd = "/tmp") {
 	const handlers = new Map<string, Handler[]>();
 	const tools: ToolDefinition[] = [];
 	const commands: RegisteredCommand[] = [];
@@ -141,7 +144,7 @@ function harness(activeBranch: unknown[]) {
 	} as unknown as ExtensionAPI;
 	contextPruningExtension(pi);
 	const ctx = {
-		cwd: "/tmp",
+		cwd,
 		isProjectTrusted: () => true,
 		getContextUsage: () => usage,
 		ui: {
@@ -245,6 +248,70 @@ describe("context pruning extension wiring", () => {
 		};
 		const projected = (await test.run("context", event)) as { messages: ContextEvent["messages"] };
 		expect(projected.messages).toHaveLength(2);
+	});
+
+	it("returns a compact checkpoint result and queues kept files as separate autoread messages", async () => {
+		const workspace = await createWorkspace();
+		try {
+			await workspace.write("current.ts", "export const current = true;\n");
+			await workspace.write("other.ts", "export const other = true;\n");
+			const anchor = fauxAssistantMessage(fauxToolCall("context_prune", {}, { id: "anchor" }));
+			const test = harness([{ type: "message", message: anchor }], workspace.dir);
+			await start(test);
+			const tool = test.tools[0];
+			if (!tool) throw new Error("expected context_prune tool");
+			const execution = await tool.execute(
+				"anchor",
+				{
+					keepFiles: [
+						{ path: "current.ts", relevance: "active source" },
+						{ path: "other.ts", relevance: "related source" },
+					],
+					keepToolCalls: [],
+					deferFiles: [],
+				},
+				undefined,
+				undefined,
+				test.ctx,
+			);
+
+			expect(execution.content).toEqual([
+				{
+					type: "text",
+					text: "Context checkpoint applied. Continue with the next action stated before this call.",
+				},
+			]);
+			expect(test.sent).toEqual([
+				{
+					message: expect.objectContaining({
+						customType: "tau.autoread",
+						content: "current.ts\nexport const current = true;\n",
+						display: true,
+						details: expect.objectContaining({ rowId: "anchor:0", status: "read" }),
+					}),
+					options: { deliverAs: "steer" },
+				},
+				{
+					message: expect.objectContaining({
+						customType: "tau.autoread",
+						content: "other.ts\nexport const other = true;\n",
+						display: true,
+						details: expect.objectContaining({ rowId: "anchor:1", status: "read" }),
+					}),
+					options: { deliverAs: "steer" },
+				},
+			]);
+			const replay = replayReadCache(
+				test.sent.map(({ message }) => ({ type: "custom_message", ...(message as Record<string, unknown>) })),
+				workspace.dir,
+			);
+			expect([...replay.completeFileChains.keys()]).toEqual([
+				resolve(workspace.dir, "current.ts"),
+				resolve(workspace.dir, "other.ts"),
+			]);
+		} finally {
+			await workspace.cleanup();
+		}
 	});
 
 	it("implements /prune usage rejection and hidden steering with an immediate turn", async () => {

@@ -64,7 +64,7 @@ describe("context checkpoint execution", () => {
 	it("always applies and records unreserved tool calls and autoreads", async () => {
 		const harness = options();
 		const execution = await executeContextPrune(harness.value);
-		expect(execution.details).toEqual({
+		expect(execution.result.details).toEqual({
 			v: 2,
 			anchorToolCallId: "anchor",
 			prunedToolCallIds: ["keep", "drop"],
@@ -75,7 +75,8 @@ describe("context checkpoint execution", () => {
 			deferredFiles: [],
 			warnings: [],
 		});
-		expect(execution.content[0]?.text).toContain("checkpoint applied");
+		expect(execution.result.content[0]?.text).toContain("checkpoint applied");
+		expect(execution.autoreads).toEqual([]);
 	});
 
 	it("retains one call from a parallel batch and harmlessly deduplicates IDs", async () => {
@@ -91,9 +92,9 @@ describe("context checkpoint execution", () => {
 			},
 		});
 		const execution = await executeContextPrune(harness.value);
-		expect(execution.details.retainedToolCallIds).toEqual(["keep", "missing"]);
-		expect(execution.details.prunedToolCallIds).toEqual(["drop"]);
-		expect(execution.details.warnings).toEqual([]);
+		expect(execution.result.details.retainedToolCallIds).toEqual(["keep", "missing"]);
+		expect(execution.result.details.prunedToolCallIds).toEqual(["drop"]);
+		expect(execution.result.details.warnings).toEqual([]);
 	});
 
 	it("creates fresh snapshots without prior reads and reports per-file failures without blocking", async () => {
@@ -119,14 +120,17 @@ describe("context checkpoint execution", () => {
 				},
 			});
 			const execution = await executeContextPrune(harness.value);
-			expect(execution.details.refreshedFiles).toHaveLength(1);
-			expect(execution.details.retainedAutoreadRowIds).toEqual(["anchor:0"]);
-			expect(execution.details.deferredFiles).toEqual([
+			expect(execution.result.details.refreshedFiles).toHaveLength(1);
+			expect(execution.result.details.retainedAutoreadRowIds).toEqual(["anchor:0"]);
+			expect(execution.result.details.deferredFiles).toEqual([
 				{ path: "later.ts", reason: "cold", relevantWhen: "fallback fails" },
 			]);
-			expect(execution.details.warnings[0]).toContain("missing.ts");
-			expect(execution.content[1]?.text).toContain("current.ts");
-			expect(execution.content[2]?.text).toContain("later.ts");
+			expect(execution.result.details.warnings[0]).toContain("missing.ts");
+			expect(execution.result.content).toHaveLength(2);
+			expect(execution.result.content[1]?.text).toContain("later.ts");
+			expect(execution.result.content.some((part) => part.text.includes("export const current"))).toBe(false);
+			expect(execution.autoreads).toHaveLength(1);
+			expect(execution.autoreads[0]?.content).toContain("current.ts");
 		} finally {
 			await workspace.cleanup();
 		}
@@ -153,9 +157,10 @@ describe("context checkpoint execution", () => {
 					deferFiles: [],
 				},
 			});
-			expect(execution.details.refreshedFiles.map((file) => file.path)).toEqual(["good.ts"]);
-			expect(execution.details.warnings).toHaveLength(1);
-			expect(execution.content[1]?.text).toContain("good.ts");
+			expect(execution.result.details.refreshedFiles.map((file) => file.path)).toEqual(["good.ts"]);
+			expect(execution.result.details.warnings).toHaveLength(1);
+			expect(execution.result.content).toHaveLength(1);
+			expect(execution.autoreads[0]?.content).toContain("good.ts");
 		} finally {
 			await workspace.cleanup();
 		}

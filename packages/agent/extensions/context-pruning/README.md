@@ -11,7 +11,7 @@ Before calling the tool, the agent writes visible prose containing the durable c
 The tool accepts three required lists:
 
 - `keepToolCalls` retains exact earlier tool exchanges by tool-call ID. Parallel calls remain independently selectable: retaining one call does not retain its siblings.
-- `keepFiles` reads each selected file from disk and carries its complete current contents forward as a fresh autoread snapshot. It does not require an earlier complete read.
+- `keepFiles` reads each selected file from disk and carries its complete current contents forward as a fresh autoread snapshot. Each successful snapshot appears as its own autoread marker below the compact checkpoint result. It does not require an earlier complete read.
 - `deferFiles` carries forward a short advisory note explaining why a file is irrelevant now and when to reconsider it.
 
 Duplicate selections are collapsed. A file selected in both `keepFiles` and `deferFiles` is kept. Missing, unreadable, or otherwise unsnapshotable files produce warnings in the successful tool result; they do not block the checkpoint or other file snapshots.

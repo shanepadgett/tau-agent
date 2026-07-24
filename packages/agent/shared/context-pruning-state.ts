@@ -5,8 +5,6 @@ const CONTEXT_PRUNE_TOOL = "context_prune";
 export interface ContextPruneRefreshedFileV2 {
 	path: string;
 	rowId: string;
-	servedHash: string;
-	autoreadDetails: Record<string, unknown>;
 }
 
 export interface ContextPruneDeferredFileV2 {
@@ -116,13 +114,7 @@ function parseRefreshedFiles(value: unknown): ContextPruneRefreshedFileV2[] | un
 	const files: ContextPruneRefreshedFileV2[] = [];
 	for (const item of value) {
 		if (!isRecord(item) || !isNonEmptyString(item.path) || !isNonEmptyString(item.rowId)) return undefined;
-		if (!isNonEmptyString(item.servedHash) || !isRecord(item.autoreadDetails)) return undefined;
-		files.push({
-			path: item.path,
-			rowId: item.rowId,
-			servedHash: item.servedHash,
-			autoreadDetails: { ...item.autoreadDetails },
-		});
+		files.push({ path: item.path, rowId: item.rowId });
 	}
 	return files;
 }

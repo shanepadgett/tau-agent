@@ -34,9 +34,14 @@ interface ContextPruneExecutionOptions {
 	currentGeneration: () => number;
 }
 
-interface ContextPruneExecutionResult {
+interface ContextPruneToolResult {
 	content: Array<{ type: "text"; text: string }>;
 	details: ContextPruneDetailsV2;
+}
+
+interface ContextPruneExecutionResult {
+	result: ContextPruneToolResult;
+	autoreads: PreparedAutoreadMessage[];
 }
 
 export async function executeContextPrune(options: ContextPruneExecutionOptions): Promise<ContextPruneExecutionResult> {
@@ -91,8 +96,6 @@ export async function executeContextPrune(options: ContextPruneExecutionOptions)
 	const refreshedFiles = preparedSnapshots.map((snapshot) => ({
 		path: snapshot.details.path,
 		rowId: snapshot.details.rowId,
-		servedHash: snapshot.details.readCache.servedHash,
-		autoreadDetails: { ...snapshot.details },
 	}));
 	const details: ContextPruneDetailsV2 = {
 		v: 2,
@@ -110,12 +113,14 @@ export async function executeContextPrune(options: ContextPruneExecutionOptions)
 			? "Context checkpoint applied. Continue with the next action stated before this call."
 			: `Context checkpoint applied with ${warnings.length} warning${warnings.length === 1 ? "" : "s"}:\n${warnings.map((warning) => `- ${warning}`).join("\n")}\nContinue with the next action stated before this call.`;
 	return {
-		content: [
-			{ type: "text", text: status },
-			...preparedSnapshots.map((snapshot) => ({ type: "text" as const, text: snapshot.content })),
-			...(deferredFiles.length === 0 ? [] : [{ type: "text" as const, text: deferredFileText(deferredFiles) }]),
-		],
-		details,
+		result: {
+			content: [
+				{ type: "text", text: status },
+				...(deferredFiles.length === 0 ? [] : [{ type: "text" as const, text: deferredFileText(deferredFiles) }]),
+			],
+			details,
+		},
+		autoreads: preparedSnapshots,
 	};
 }
 

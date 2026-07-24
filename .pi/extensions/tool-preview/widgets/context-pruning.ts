@@ -31,8 +31,6 @@ const applied: ContextPruneDetailsV2 = {
 		{
 			path: "packages/agent/extensions/context-pruning/index.ts",
 			rowId: "context-prune-preview:0",
-			servedHash: "3d7f8d8f",
-			autoreadDetails: {},
 		},
 	],
 	deferredFiles: [{ path: "docs/alternatives.md", reason: "fallback only", relevantWhen: "the primary design fails" }],

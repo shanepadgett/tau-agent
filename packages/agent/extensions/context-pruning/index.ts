@@ -117,7 +117,7 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 					parameters: contextPruneParameters,
 					executionMode: "sequential",
 					async execute(toolCallId, params, signal, _onUpdate, executionContext) {
-						return executeContextPrune({
+						const execution = await executeContextPrune({
 							toolCallId,
 							params,
 							signal,
@@ -125,6 +125,10 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 							generation: lifecycleGeneration,
 							currentGeneration: () => lifecycleGeneration,
 						});
+						for (const autoread of execution.autoreads) {
+							pi.sendMessage(autoread, { deliverAs: "steer" });
+						}
+						return execution.result;
 					},
 					renderCall(args, theme, context) {
 						return renderContextPruneCall(args, theme, {

@@ -128,30 +128,25 @@ export function replayReadCache(
 		if (entry.type === "message" && "message" in entry) message = entry.message;
 		else if (entry.type === "custom_message") message = entry;
 		else continue;
-		const candidates = carriedFileMessages(message);
-		let acceptedCarryForward = false;
-		for (const candidate of candidates ?? [message]) {
-			const parsedMeta = readMetaFromMessage(candidate);
-			if (!parsedMeta) continue;
-			acceptedCarryForward = true;
-			const candidateRowId = readRowId(candidate);
-			if (candidateRowId && ignoredRowIds.has(candidateRowId)) continue;
+		const parsedMeta = readMetaFromMessage(message);
+		if (parsedMeta) {
+			const rowId = readRowId(message);
+			if (!rowId || ignoredRowIds.has(rowId)) continue;
 			const pathKey = resolve(cwd, parsedMeta.pathKey);
 			const meta = pathKey === parsedMeta.pathKey ? parsedMeta : { ...parsedMeta, pathKey };
-			if (candidateRowId && applyReadMeta(trust, failedPatchRecoveryPaths, candidate, meta, candidateRowId)) {
+			if (applyReadMeta(trust, failedPatchRecoveryPaths, message, meta, rowId)) {
 				const acceptedTrust = trust.get(meta.pathKey)?.get(meta.scopeKey);
-				if (acceptedTrust) {
+				if (acceptedTrust)
 					acceptedRows.push({
-						rowId: candidateRowId,
+						rowId,
 						pathKey: meta.pathKey,
 						scopeKey: meta.scopeKey,
 						meta,
 						dependencyRowIds: [...acceptedTrust.rowIds],
 					});
-				}
 			}
+			continue;
 		}
-		if (acceptedCarryForward) continue;
 		for (const path of failedPatchPaths(message, cwd)) failedPatchRecoveryPaths.add(path);
 	}
 	const completeFileChains = new Map<string, CompleteFileDependencyChain>();
@@ -166,25 +161,6 @@ export function replayReadCache(
 		});
 	}
 	return { scopeTrust: trust, acceptedRows, completeFileChains, failedPatchRecoveryPaths };
-}
-
-function carriedFileMessages(message: unknown): unknown[] | undefined {
-	if (!isRecord(message) || message.role !== "toolResult" || message.toolName !== "context_prune") return undefined;
-	if (!isRecord(message.details) || message.details.v !== 2 || !Array.isArray(message.details.refreshedFiles)) {
-		return undefined;
-	}
-	if (!Array.isArray(message.content)) {
-		return undefined;
-	}
-	const messages: unknown[] = [];
-	for (let index = 0; index < message.details.refreshedFiles.length; index += 1) {
-		const file = message.details.refreshedFiles[index];
-		const part = message.content[index + 1];
-		if (!isRecord(file) || !isRecord(file.autoreadDetails)) continue;
-		if (!isRecord(part) || part.type !== "text" || typeof part.text !== "string") continue;
-		messages.push({ customType: "tau.autoread", content: part.text, details: file.autoreadDetails });
-	}
-	return messages;
 }
 
 function applyReadMeta(

@@ -153,45 +153,6 @@ describe("read-cache replay", () => {
 		expect(replay.completeFileChains.has(resolve(cwd, "pruned.txt"))).toBe(false);
 	});
 
-	it("replays a checkpoint file directly from its atomic tool result", () => {
-		const cwd = "/workspace";
-		const snapshot = autoreadEntry(cwd, "retained.txt", "anchor:0", "retained source");
-		const replay = replayReadCache(
-			[
-				{
-					type: "message",
-					message: {
-						role: "toolResult",
-						toolName: "context_prune",
-						toolCallId: "anchor",
-						content: [
-							{ type: "text", text: "checkpoint applied" },
-							{ type: "text", text: snapshot.content },
-						],
-						details: {
-							v: 2,
-							refreshedFiles: [
-								{
-									path: "retained.txt",
-									rowId: "anchor:0",
-									servedHash: hash("retained source"),
-									autoreadDetails: snapshot.details,
-								},
-							],
-						},
-					},
-				},
-			],
-			cwd,
-		);
-
-		expect(replay.completeFileChains.get(resolve(cwd, "retained.txt"))).toMatchObject({
-			servedHash: hash("retained source"),
-			rowIds: ["anchor:0"],
-			sourceText: "retained source",
-		});
-	});
-
 	it("returns accepted rows and a reconstructible complete-file dependency chain", () => {
 		const cwd = "/workspace";
 		const pathKey = resolve(cwd, "file.txt");

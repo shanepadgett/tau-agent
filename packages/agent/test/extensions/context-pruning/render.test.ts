@@ -16,7 +16,7 @@ function details(): ContextPruneDetailsV2 {
 		prunedAutoreadRowIds: ["auto-1"],
 		retainedToolCallIds: ["patch-1"],
 		retainedAutoreadRowIds: [],
-		refreshedFiles: [{ path: "src/current.ts", rowId: "anchor:0", servedHash: "hash", autoreadDetails: {} }],
+		refreshedFiles: [{ path: "src/current.ts", rowId: "anchor:0" }],
 		deferredFiles: [{ path: "src/later.ts", reason: "cold", relevantWhen: "fallback fails" }],
 		warnings: [],
 	};
