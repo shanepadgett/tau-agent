@@ -77,6 +77,7 @@ export interface SubagentDetails {
 export interface SubagentInvocationSnapshot extends SubagentDetails {
 	invocationId: string;
 	startedAt: number;
+	files: readonly string[];
 }
 
 export interface SubagentThread {

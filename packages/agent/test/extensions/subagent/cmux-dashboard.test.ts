@@ -27,6 +27,7 @@ function snapshot(overrides: Partial<SubagentInvocationSnapshot> = {}): Subagent
 		usage: { input: 1, output: 2, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 1 },
 		durationMs: 1500,
 		currentActivity: "read run.ts",
+		files: [],
 		...overrides,
 	};
 }
@@ -111,9 +112,9 @@ function interactiveDashboard(exec: CmuxExec, clock = new FakeClock()) {
 }
 
 describe("formatDashboardMarkdown", () => {
-	it("renders multiple invocations without using agent text as a path", () => {
+	it("renders an agent table with requests and injected files", () => {
 		const md = formatDashboardMarkdown([
-			snapshot({ invocationId: "inv-1", agent: "../escaped", task: "one" }),
+			snapshot({ invocationId: "inv-1", agent: "../escaped", task: "one | two", files: ["src/one.ts"] }),
 			snapshot({
 				invocationId: "inv-2",
 				startedAt: 2000,
@@ -123,7 +124,9 @@ describe("formatDashboardMarkdown", () => {
 				phase: "queue",
 			}),
 		]);
-		expect(md).toContain("# Subagent dashboard");
+		expect(md).toContain("# Subagents");
+		expect(md).toContain("2 active · 0 done");
+		expect(md).toContain("| Agent | State | Request | Last tool | Calls | Time |");
 		expect(md).toContain("../escaped");
 		expect(md).toContain("Pathfinder (../escaped)");
 		expect(md).not.toContain("thread-1");
@@ -131,6 +134,11 @@ describe("formatDashboardMarkdown", () => {
 		expect(md).toContain("inv-2");
 		expect(md).toContain("one");
 		expect(md).toContain("two");
+		expect(md).toContain("one &#124; two");
+		expect(md).toContain("## Inputs");
+		expect(md).toContain("src/one.ts");
+		expect(md).not.toContain("provider/model");
+		expect(md).not.toContain("read run.ts");
 	});
 });
 
@@ -206,7 +214,7 @@ describe("createCmuxDashboard", () => {
 		await dashboard.shutdown();
 	});
 
-	it("keeps completed responses visible while another invocation is running", async () => {
+	it("keeps completed work in the table while another invocation is running", async () => {
 		let path = "";
 		const exec: CmuxExec = async (_command, args) => {
 			const parsed = parseRpc(args);
@@ -233,10 +241,10 @@ describe("createCmuxDashboard", () => {
 		await clock.advance(150);
 		await vi.waitFor(async () => {
 			const markdown = await readFile(path, "utf8");
-			expect(markdown).toContain("Active: 1 · Completed: 1");
+			expect(markdown).toContain("1 active · 1 done");
 			expect(markdown).toContain("inv-1");
-			expect(markdown).toContain("tools 4");
-			expect(markdown).toContain("fast answer");
+			expect(markdown).toContain("| Pathfinder (scout) | done | fast task | read | 4 |");
+			expect(markdown).not.toContain("fast answer");
 			expect(markdown).toContain("inv-2");
 		});
 		await dashboard.shutdown();
@@ -290,15 +298,15 @@ describe("createCmuxDashboard", () => {
 		dashboard.onSnapshot(snapshot({ status: "running" }));
 		await vi.waitFor(async () => {
 			expect(path).toBeTruthy();
-			await expect(readFile(path, "utf8")).resolves.toContain("Subagent dashboard");
+			await expect(readFile(path, "utf8")).resolves.toContain("# Subagents");
 		});
 		dashboard.onSnapshot(snapshot({ status: "completed", phase: "output" }));
 		await clock.runCloseGrace();
 		await new Promise((resolve) => setTimeout(resolve, 20));
 		// Failed close must keep the backing file so a live surface is not blanked.
-		await expect(readFile(path, "utf8")).resolves.toContain("Subagent dashboard");
+		await expect(readFile(path, "utf8")).resolves.toContain("# Subagents");
 		await dashboard.shutdown();
-		await expect(readFile(path, "utf8")).resolves.toContain("Subagent dashboard");
+		await expect(readFile(path, "utf8")).resolves.toContain("# Subagents");
 	});
 
 	it("canOpen false prevents opening while prior orphans remain", async () => {

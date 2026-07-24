@@ -243,6 +243,7 @@ export class SubagentRuntime {
 			}),
 			invocationId,
 			startedAt,
+			files: [...(options.files ?? [])],
 		};
 		const active: ActiveInvocation = {
 			snapshot: initialSnapshot,
@@ -330,6 +331,7 @@ export class SubagentRuntime {
 				...details,
 				invocationId,
 				startedAt,
+				files: current.snapshot.files,
 				threadId: details.threadId ?? threadId,
 				agent: details.agent || agent,
 				displayName: details.displayName || displayName,

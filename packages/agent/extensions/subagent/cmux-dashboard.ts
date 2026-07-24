@@ -71,54 +71,82 @@ function cap(text: string | undefined, limit: number): string {
 	return `${normalized.slice(0, limit - 1)}…`;
 }
 
+function tableCell(text: string, limit: number): string {
+	const compact = cap(text.replace(/\s+/g, " ").trim(), limit);
+	return compact.replaceAll("|", "&#124;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function quote(text: string): string {
+	return cap(text, 1200)
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.split("\n")
+		.map((line) => `> ${line}`)
+		.join("\n");
+}
+
+function elapsed(durationMs: number): string {
+	if (durationMs < 1000) return "<1s";
+	if (durationMs < 60_000) return `${(durationMs / 1000).toFixed(1)}s`;
+	const minutes = Math.floor(durationMs / 60_000);
+	const seconds = Math.floor((durationMs % 60_000) / 1000);
+	return `${minutes}m ${seconds}s`;
+}
+
+function dashboardState(status: SubagentInvocationSnapshot["status"]): string {
+	switch (status) {
+		case "waiting":
+			return "queued";
+		case "completed":
+			return "done";
+		case "aborted":
+			return "stopped";
+		default:
+			return status;
+	}
+}
+
 export function formatDashboardMarkdown(snapshots: readonly SubagentInvocationSnapshot[]): string {
 	const ordered = [...snapshots].sort(
 		(a, b) => a.startedAt - b.startedAt || a.invocationId.localeCompare(b.invocationId),
 	);
-	const activeCount = ordered.filter(
-		(snapshot) => snapshot.status !== "completed" && snapshot.status !== "failed" && snapshot.status !== "aborted",
+	const activeCount = ordered.filter((snapshot) =>
+		["waiting", "starting", "running"].includes(snapshot.status),
 	).length;
-	const lines = [
-		"# Subagent dashboard",
-		"",
-		`Active: ${activeCount} · Completed: ${ordered.length - activeCount}`,
-		"",
-	];
+	const doneCount = ordered.filter((snapshot) => snapshot.status === "completed").length;
+	const failedCount = ordered.filter((snapshot) => snapshot.status === "failed").length;
+	const stoppedCount = ordered.filter((snapshot) => snapshot.status === "aborted").length;
+	const counts = [`${activeCount} active`, `${doneCount} done`];
+	if (failedCount > 0) counts.push(`${failedCount} failed`);
+	if (stoppedCount > 0) counts.push(`${stoppedCount} stopped`);
+	const lines = ["# Subagents", "", counts.join(" · "), ""];
 	if (ordered.length === 0) {
-		lines.push("_No active invocations._", "");
+		lines.push("_No subagents._", "");
 		return lines.join("\n");
 	}
+	lines.push("| Agent | State | Request | Last tool | Calls | Time |", "| --- | --- | --- | --- | ---: | ---: |");
 	for (const details of ordered) {
-		const identity = `${details.displayName} (${details.agent})`;
+		const latest = details.actions.at(-1);
+		const currentTool = details.currentActivity?.match(/^\S+/)?.[0];
+		const lastTool = currentTool ?? latest?.tool ?? "";
 		lines.push(
-			`## ${identity}`,
-			"",
-			`\`${details.status}${details.phase ? ` · ${details.phase}` : ""}\` · inv ${details.invocationId} · tools ${details.toolCalls} · ${(details.durationMs / 1000).toFixed(1)}s`,
-			`model ${details.model} · thinking ${details.thinkingLevel}`,
-			"",
-			"### Task",
-			"",
-			cap(details.task, 1200) || "_(empty)_",
+			`| ${tableCell(`${details.displayName} (${details.agent})`, 48)} | ${dashboardState(details.status)} | ${tableCell(details.task, 90)} | ${tableCell(lastTool, 32) || "—"} | ${details.toolCalls} | ${elapsed(details.durationMs)} |`,
 		);
-		if (details.currentActivity) {
-			lines.push("", "### Current", "", cap(details.currentActivity, 400));
+	}
+	lines.push("", "## Inputs", "");
+	for (const details of ordered) {
+		lines.push(
+			`### ${tableCell(details.displayName, 80)}`,
+			"",
+			`${tableCell(details.agent, 80)} · ${tableCell(details.invocationId, 80)}`,
+			"",
+			quote(details.task) || "> _(empty)_",
+		);
+		if (details.files.length > 0) {
+			lines.push("", "**Files**", "");
+			for (const file of details.files) lines.push(`- ${tableCell(file, 300)}`);
 		}
-		if (details.actions.length > 0) {
-			lines.push("", "### Actions", "");
-			for (const action of details.actions.slice(-12)) {
-				const mark = action.error ? "!" : "·";
-				lines.push(`- ${mark} ${cap(action.summary, 200)}`);
-			}
-			if (details.omittedActions > 0) {
-				lines.push(`- _${details.omittedActions} earlier actions omitted_`);
-			}
-		}
-		if (details.response) {
-			lines.push("", "### Response", "", cap(details.response, 3000));
-		}
-		if (details.error) {
-			lines.push("", "### Error", "", cap(details.error, 800));
-		}
+		if (details.error) lines.push("", "**Error**", "", quote(details.error));
 		lines.push("");
 	}
 	return lines.join("\n");
