@@ -112,7 +112,7 @@ function interactiveDashboard(exec: CmuxExec, clock = new FakeClock()) {
 }
 
 describe("formatDashboardMarkdown", () => {
-	it("renders an agent table with requests and injected files", () => {
+	it("renders an agent table and detailed inputs", () => {
 		const md = formatDashboardMarkdown([
 			snapshot({ invocationId: "inv-1", agent: "../escaped", task: "one | two", files: ["src/one.ts"] }),
 			snapshot({
@@ -126,7 +126,8 @@ describe("formatDashboardMarkdown", () => {
 		]);
 		expect(md).toContain("# Subagents");
 		expect(md).toContain("2 active · 0 done");
-		expect(md).toContain("| Agent | State | Request | Last tool | Calls | Time |");
+		expect(md).toContain("| Agent | State | Last tool | Calls | Time |");
+		expect(md).not.toContain("| Agent | State | Request |");
 		expect(md).toContain("../escaped");
 		expect(md).toContain("Pathfinder (../escaped)");
 		expect(md).not.toContain("thread-1");
@@ -134,7 +135,8 @@ describe("formatDashboardMarkdown", () => {
 		expect(md).toContain("inv-2");
 		expect(md).toContain("one");
 		expect(md).toContain("two");
-		expect(md).toContain("one &#124; two");
+		expect(md).toContain("> one | two");
+		expect(md.match(/one \| two/g)).toHaveLength(1);
 		expect(md).toContain("## Inputs");
 		expect(md).toContain("src/one.ts");
 		expect(md).not.toContain("provider/model");
@@ -243,7 +245,7 @@ describe("createCmuxDashboard", () => {
 			const markdown = await readFile(path, "utf8");
 			expect(markdown).toContain("1 active · 1 done");
 			expect(markdown).toContain("inv-1");
-			expect(markdown).toContain("| Pathfinder (scout) | done | fast task | read | 4 |");
+			expect(markdown).toContain("| Pathfinder (scout) | done | read | 4 |");
 			expect(markdown).not.toContain("fast answer");
 			expect(markdown).toContain("inv-2");
 		});

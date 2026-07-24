@@ -124,13 +124,13 @@ export function formatDashboardMarkdown(snapshots: readonly SubagentInvocationSn
 		lines.push("_No subagents._", "");
 		return lines.join("\n");
 	}
-	lines.push("| Agent | State | Request | Last tool | Calls | Time |", "| --- | --- | --- | --- | ---: | ---: |");
+	lines.push("| Agent | State | Last tool | Calls | Time |", "| --- | --- | --- | ---: | ---: |");
 	for (const details of ordered) {
 		const latest = details.actions.at(-1);
 		const currentTool = details.currentActivity?.match(/^\S+/)?.[0];
 		const lastTool = currentTool ?? latest?.tool ?? "";
 		lines.push(
-			`| ${tableCell(`${details.displayName} (${details.agent})`, 48)} | ${dashboardState(details.status)} | ${tableCell(details.task, 90)} | ${tableCell(lastTool, 32) || "—"} | ${details.toolCalls} | ${elapsed(details.durationMs)} |`,
+			`| ${tableCell(`${details.displayName} (${details.agent})`, 48)} | ${dashboardState(details.status)} | ${tableCell(lastTool, 32) || "—"} | ${details.toolCalls} | ${elapsed(details.durationMs)} |`,
 		);
 	}
 	lines.push("", "## Inputs", "");
