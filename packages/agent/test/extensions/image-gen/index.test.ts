@@ -5,18 +5,37 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const client = vi.hoisted(() => ({
-	generateImage: vi.fn(),
+	requestGeneratedImage: vi.fn(),
 	editImage: vi.fn(),
 }));
 
-vi.mock("../../../extensions/image-gen/client.ts", async (importOriginal) => ({
+const filesystem = vi.hoisted(() => ({
+	beforeTemporaryRemove: undefined as (() => void) | undefined,
+}));
+
+vi.mock("../../../src/image-generation/client.ts", async (importOriginal) => ({
 	...(await importOriginal()),
 	...client,
 }));
 
-import imageGenExtension from "../../../extensions/image-gen/index.ts";
+vi.mock("node:fs/promises", async (importOriginal) => {
+	const original = await importOriginal<typeof import("node:fs/promises")>();
+	return {
+		...original,
+		async rm(...args: Parameters<typeof original.rm>) {
+			if (String(args[0]).includes(".tmp")) filesystem.beforeTemporaryRemove?.();
+			return original.rm(...args);
+		},
+	};
+});
 
-const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+import imageGenExtension from "../../../extensions/image-gen/index.ts";
+import { generateImage as generateImageApi } from "@shanepadgett/tau-agent";
+
+const PNG = Buffer.from(
+	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+	"base64",
+);
 
 interface RegisteredTool {
 	name: string;
@@ -73,13 +92,83 @@ function context(
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	client.generateImage.mockResolvedValue({ bytes: PNG, base64: PNG.toString("base64"), mimeType: "image/png" });
-	client.editImage.mockResolvedValue({ bytes: PNG, base64: PNG.toString("base64"), mimeType: "image/png" });
+	filesystem.beforeTemporaryRemove = undefined;
+	client.requestGeneratedImage.mockResolvedValue({ bytes: PNG, mimeType: "image/png" });
+	client.editImage.mockResolvedValue({ bytes: PNG, mimeType: "image/png" });
 });
 
 afterEach(() => vi.unstubAllEnvs());
 
 describe("image_gen extension", () => {
+	it("exposes the canonical operation through the package API", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "tau-image-gen-test-"));
+		try {
+			const apiKey = vi.fn(async () => "xai-token");
+			const result = await generateImageApi(context(cwd, apiKey), {
+				prompt: "public API",
+				provider: "xai",
+				path: "public.png",
+			});
+			expect(result).toEqual({
+				bytes: PNG,
+				path: join(cwd, "public.png"),
+				provider: "xai",
+				model: "grok-imagine-image-quality",
+				operation: "generate",
+				mimeType: "image/png",
+				width: 1,
+				height: 1,
+			});
+			expect(await readFile(result.path)).toEqual(PNG);
+		} finally {
+			await rm(cwd, { recursive: true, force: true });
+		}
+	});
+
+	it("bounds and sanitizes public API failures", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "tau-image-gen-test-"));
+		try {
+			const token = "credential-that-must-not-escape";
+			client.requestGeneratedImage.mockRejectedValue(new Error(`${token}${"x".repeat(3000)}`));
+			const apiKey = vi.fn(async () => token);
+			let failure: unknown;
+			try {
+				await generateImageApi(context(cwd, apiKey), { prompt: "fail", provider: "xai" });
+			} catch (error) {
+				failure = error;
+			}
+			expect(failure).toBeInstanceOf(Error);
+			const message = failure instanceof Error ? failure.message : "";
+			expect(message).not.toContain(token);
+			expect(message.length).toBeLessThanOrEqual(2000);
+		} finally {
+			await rm(cwd, { recursive: true, force: true });
+		}
+	});
+
+	it("treats a destination as committed when cancellation races post-publication cleanup", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "tau-image-gen-test-"));
+		try {
+			const reason = { kind: "cancelled" };
+			const controller = new AbortController();
+			filesystem.beforeTemporaryRemove = () => controller.abort(reason);
+			const apiKey = vi.fn(async () => "xai-token");
+			const pending = generateImageApi(context(cwd, apiKey), {
+				prompt: "cancel during publication",
+				provider: "xai",
+				path: "cancelled.png",
+				signal: controller.signal,
+			});
+			await expect(pending).resolves.toMatchObject({ path: join(cwd, "cancelled.png") });
+			expect(controller.signal.reason).toBe(reason);
+			expect(await readFile(join(cwd, "cancelled.png"))).toEqual(PNG);
+			expect(await readdir(cwd)).toEqual(["cancelled.png"]);
+		} finally {
+			filesystem.beforeTemporaryRemove = undefined;
+			await rm(cwd, { recursive: true, force: true });
+		}
+	});
+
 	it("registers the intended tool metadata", () => {
 		const { tool } = harness();
 		expect(tool.name).toBe("image_gen");
@@ -129,7 +218,7 @@ describe("image_gen extension", () => {
 				context(cwd, apiKey, { provider: "openai-codex", id: "gpt-5.4" }),
 			);
 			expect(apiKey).toHaveBeenCalledWith("openai-codex");
-			expect(client.generateImage).toHaveBeenCalledWith("openai", "openai", OPENAI_TOKEN, undefined);
+			expect(client.requestGeneratedImage).toHaveBeenCalledWith("openai", "openai", OPENAI_TOKEN, undefined);
 			expect(result.details).toMatchObject({ provider: "openai", model: "gpt-image-2" });
 		} finally {
 			await rm(cwd, { recursive: true, force: true });
@@ -148,7 +237,7 @@ describe("image_gen extension", () => {
 				context(cwd, apiKey, null),
 			);
 			expect(apiKey.mock.calls).toEqual([["openai-codex"], ["xai"]]);
-			expect(client.generateImage).toHaveBeenCalledWith("xai", "fallback", "xai-token", undefined);
+			expect(client.requestGeneratedImage).toHaveBeenCalledWith("xai", "fallback", "xai-token", undefined);
 			expect(result.details).toMatchObject({ provider: "xai", model: "grok-imagine-image-quality" });
 		} finally {
 			await rm(cwd, { recursive: true, force: true });
@@ -167,7 +256,7 @@ describe("image_gen extension", () => {
 				context(cwd, apiKey, { provider: "openai-codex", id: "gpt-5.4" }),
 			);
 			expect(apiKey.mock.calls).toEqual([["xai"]]);
-			expect(client.generateImage).toHaveBeenCalledWith("xai", "override", "xai-token", undefined);
+			expect(client.requestGeneratedImage).toHaveBeenCalledWith("xai", "override", "xai-token", undefined);
 		} finally {
 			await rm(cwd, { recursive: true, force: true });
 		}
@@ -187,7 +276,7 @@ describe("image_gen extension", () => {
 				},
 				context(cwd, apiKey),
 			);
-			expect(client.generateImage).toHaveBeenCalledWith("xai", "blue whale", "xai-token", undefined);
+			expect(client.requestGeneratedImage).toHaveBeenCalledWith("xai", "blue whale", "xai-token", undefined);
 			expect(client.editImage).not.toHaveBeenCalled();
 			expect(result.details).toMatchObject({
 				provider: "xai",
@@ -201,7 +290,7 @@ describe("image_gen extension", () => {
 			expect(await readdir(cwd)).toEqual(["result.png"]);
 			expect(updates).toEqual([
 				expect.objectContaining({
-					content: [{ type: "text", text: "Generating image with grok-imagine-image-quality..." }],
+					content: [{ type: "text", text: "Processing image request..." }],
 				}),
 			]);
 		} finally {
@@ -300,9 +389,8 @@ describe("image_gen extension", () => {
 		try {
 			const oversized = Buffer.alloc(12 * 1024 * 1024 + 1);
 			PNG.copy(oversized);
-			client.generateImage.mockResolvedValue({
+			client.requestGeneratedImage.mockResolvedValue({
 				bytes: oversized,
-				base64: oversized.toString("base64"),
 				mimeType: "image/png",
 			});
 			const { tool, apiKey } = harness();

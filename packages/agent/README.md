@@ -2,6 +2,8 @@
 
 Tau is a custom agentic harness built with Pi extensions: tools, commands, prompts, skills, and themes.
 
+The package also exports programmatic Tau capabilities for trusted Pi extensions. The built-in extensions and public API use the same underlying operations.
+
 ## Install
 
 ```bash
@@ -12,6 +14,22 @@ pi install git:github.com/shanepadgett/tau-agent
 pi install ./path/to/tau-agent
 pi install ./path/to/tau-agent/packages/agent
 ```
+
+## Programmatic use
+
+Install the package in the extension's project, then import from its root:
+
+```ts
+import { generateImage } from "@shanepadgett/tau-agent";
+
+const image = await generateImage(ctx, {
+  prompt: "A quiet mountain lake",
+  path: "assets/lake.png",
+  signal,
+});
+```
+
+See [Extending Tau Agent](./docs/extending-tau-agent.md) for the supported API.
 
 ## Development
 

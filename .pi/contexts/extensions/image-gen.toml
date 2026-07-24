@@ -1,30 +1,25 @@
 name = "Image Gen"
-description = "Complete and bounded context for the image-gen extension"
+description = "Built-in image-gen adapter over the reusable image-generation API"
 
 [all]
-description = "Every extension file, direct shared dependency, test, and user-facing help"
+description = "Adapter registration, user-facing help, and integration coverage"
 files = [
   "packages/agent/extensions/image-gen/README.md",
-  "packages/agent/extensions/image-gen/client.ts",
-  "packages/agent/extensions/image-gen/constants.ts",
   "packages/agent/extensions/image-gen/index.ts",
 ]
 anchors = [
+  "packages/agent/docs/extending-tau-agent.md",
   "packages/agent/test/extensions/image-gen/client.test.ts",
   "packages/agent/test/extensions/image-gen/index.test.ts",
 ]
 [runtime]
-description = "Extension runtime and direct shared dependencies"
+description = "Tool registration and adapter execution flow"
 files = [
-  "packages/agent/extensions/image-gen/client.ts",
-  "packages/agent/extensions/image-gen/constants.ts",
   "packages/agent/extensions/image-gen/index.ts",
 ]
 [tests]
-description = "Extension implementation and automated tests"
+description = "Adapter implementation and automated integration tests"
 files = [
-  "packages/agent/extensions/image-gen/client.ts",
-  "packages/agent/extensions/image-gen/constants.ts",
   "packages/agent/extensions/image-gen/index.ts",
   "packages/agent/test/extensions/image-gen/client.test.ts",
   "packages/agent/test/extensions/image-gen/index.test.ts",

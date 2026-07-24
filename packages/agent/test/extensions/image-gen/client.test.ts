@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { editImage, generateImage, resolveCodexAuth } from "../../../extensions/image-gen/client.ts";
+import {
+	editImage,
+	requestGeneratedImage as generateImage,
+	resolveCodexAuth,
+} from "../../../src/image-generation/client.ts";
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 1, 2, 3]);
@@ -36,6 +40,7 @@ describe("image generation clients", () => {
 		jwt({}),
 		jwt({ "https://api.openai.com/auth": {} }),
 		jwt({ "https://api.openai.com/auth": { chatgpt_account_id: " " } }),
+		jwt({ "https://api.openai.com/auth": { chatgpt_account_id: "secret\naccount" } }),
 	])("rejects an unusable Codex credential without exposing it", (token) => {
 		expect(() => resolveCodexAuth(token)).toThrow(
 			"The OpenAI Codex credential does not contain a usable ChatGPT account ID. Run /login again.",
@@ -55,7 +60,7 @@ describe("image generation clients", () => {
 
 		const result = await generateImage("openai", "blue whale", token, signal);
 
-		expect(result).toEqual({ bytes: PNG, base64: PNG.toString("base64"), mimeType: "image/png" });
+		expect(result).toEqual({ bytes: PNG, mimeType: "image/png" });
 		const [url, init] = fetchMock.mock.calls[0] ?? [];
 		expect(url).toBe("https://chatgpt.com/backend-api/codex/images/generations");
 		expect(init).toMatchObject({ method: "POST", signal });
@@ -109,6 +114,27 @@ describe("image generation clients", () => {
 		expect(fetchMock).toHaveBeenCalledOnce();
 	});
 
+	it("redacts OpenAI credentials from transport failures", async () => {
+		const accountId = "account-secret";
+		const token = jwt({ "https://api.openai.com/auth": { chatgpt_account_id: accountId } });
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => {
+				throw new Error(`transport rejected ${token} for ${accountId}`);
+			}),
+		);
+		let failure: unknown;
+		try {
+			await generateImage("openai", "x", token);
+		} catch (error) {
+			failure = error;
+		}
+		const message = failure instanceof Error ? failure.message : "";
+		expect(message).toContain("transport rejected [redacted] for [redacted]");
+		expect(message).not.toContain(token);
+		expect(message).not.toContain(accountId);
+	});
+
 	it.each([
 		[new Response("not json"), "non-JSON image response"],
 		[imageResponse(JPEG), "unsupported image data"],
@@ -144,7 +170,7 @@ describe("image generation clients", () => {
 
 		const result = await generateImage("xai", "blue whale", XAI_TOKEN, signal);
 
-		expect(result).toEqual({ bytes: JPEG, base64: JPEG.toString("base64"), mimeType: "image/jpeg" });
+		expect(result).toEqual({ bytes: JPEG, mimeType: "image/jpeg" });
 		const [url, init] = fetchMock.mock.calls[0] ?? [];
 		expect(url).toBe("https://api.x.ai/v1/images/generations");
 		expect(init).toMatchObject({ method: "POST" });

@@ -5,6 +5,7 @@
   "entry": [
     ".pi/extensions/*/index.ts",
     "packages/agent/extensions/*/index.ts",
+		"packages/agent/src/index.ts",
     "packages/tui/src/index.ts",
     "packages/agent/scripts/generate-tau-schema.ts"
   ],

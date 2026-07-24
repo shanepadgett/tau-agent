@@ -1,0 +1,40 @@
+name = "Image Generation"
+description = "Reusable public image-generation API and provider transport"
+
+[all]
+description = "Public package barrel, image-generation orchestration, provider transport, and constants"
+files = [
+  "packages/agent/src/index.ts",
+  "packages/agent/src/image-generation/client.ts",
+  "packages/agent/src/image-generation/constants.ts",
+  "packages/agent/src/image-generation/index.ts",
+]
+anchors = [
+  "packages/agent/docs/extending-tau-agent.md",
+  "packages/agent/extensions/image-gen/index.ts",
+  "packages/agent/test/extensions/image-gen/client.test.ts",
+  "packages/agent/test/extensions/image-gen/index.test.ts",
+]
+
+[runtime]
+description = "Image-generation API orchestration and provider transport"
+files = [
+  "packages/agent/src/index.ts",
+  "packages/agent/src/image-generation/client.ts",
+  "packages/agent/src/image-generation/constants.ts",
+  "packages/agent/src/image-generation/index.ts",
+]
+anchors = [
+  "packages/agent/extensions/image-gen/index.ts",
+]
+
+[tests]
+description = "Image-generation implementation and automated provider and API tests"
+files = [
+  "packages/agent/src/index.ts",
+  "packages/agent/src/image-generation/client.ts",
+  "packages/agent/src/image-generation/constants.ts",
+  "packages/agent/src/image-generation/index.ts",
+  "packages/agent/test/extensions/image-gen/client.test.ts",
+  "packages/agent/test/extensions/image-gen/index.test.ts",
+]

@@ -24,7 +24,6 @@ export interface EditImage {
 
 export interface GeneratedImage {
 	bytes: Buffer;
-	base64: string;
 	mimeType: EditImage["mimeType"];
 }
 
@@ -58,7 +57,7 @@ export function resolveCodexAuth(token: string): CodexAuth {
 	const authClaim = payload["https://api.openai.com/auth"];
 	if (!isRecord(authClaim)) throw invalidCredential();
 	const accountId = authClaim.chatgpt_account_id;
-	if (typeof accountId !== "string" || !accountId.trim()) throw invalidCredential();
+	if (typeof accountId !== "string" || !/^[\x21-\x7e]+$/.test(accountId.trim())) throw invalidCredential();
 	return { token, accountId: accountId.trim() };
 }
 
@@ -87,7 +86,7 @@ async function boundedError(response: HttpResponse): Promise<string> {
 		.trim();
 }
 
-function serverErrorMessage(body: string, token: string): string {
+function serverErrorMessage(body: string, secrets: readonly string[]): string {
 	let message = body;
 	try {
 		const value: unknown = JSON.parse(body);
@@ -98,7 +97,10 @@ function serverErrorMessage(body: string, token: string): string {
 	} catch {
 		// Plain-text error body.
 	}
-	return message.replaceAll(token, "[redacted]").slice(0, MAX_ERROR_MESSAGE_LENGTH).trim();
+	for (const secret of secrets) {
+		if (secret) message = message.replaceAll(secret, "[redacted]");
+	}
+	return message.slice(0, MAX_ERROR_MESSAGE_LENGTH).trim();
 }
 
 export function detectImageMimeType(bytes: Buffer): GeneratedImage["mimeType"] | undefined {
@@ -137,7 +139,7 @@ function decodeImageResponse(value: unknown, service: "OpenAI Codex" | "xAI", pn
 	if (!mimeType || (pngOnly && mimeType !== "image/png")) {
 		throw new Error(`${service} returned unsupported image data`);
 	}
-	return { bytes, base64: bytes.toString("base64"), mimeType };
+	return { bytes, mimeType };
 }
 
 async function requestOpenAIImage(
@@ -147,20 +149,28 @@ async function requestOpenAIImage(
 	signal?: AbortSignal,
 ): Promise<GeneratedImage> {
 	const route = operation === "generation" ? "generations" : "edits";
-	const response = (await fetch(`${OPENAI_IMAGE_API_BASE_URL}/${route}`, {
-		method: "POST",
-		headers: {
-			Accept: "application/json",
-			Authorization: `Bearer ${auth.token}`,
-			"chatgpt-account-id": auth.accountId,
-			"Content-Type": "application/json",
-			originator: "pi",
-		},
-		body: JSON.stringify(body),
-		signal,
-	})) as HttpResponse;
+	let response: HttpResponse;
+	try {
+		response = (await fetch(`${OPENAI_IMAGE_API_BASE_URL}/${route}`, {
+			method: "POST",
+			headers: {
+				Accept: "application/json",
+				Authorization: `Bearer ${auth.token}`,
+				"chatgpt-account-id": auth.accountId,
+				"Content-Type": "application/json",
+				originator: "pi",
+			},
+			body: JSON.stringify(body),
+			signal,
+		})) as HttpResponse;
+	} catch (error) {
+		if (signal?.aborted) throw signal.reason;
+		let message = error instanceof Error ? error.message : "OpenAI Codex image request failed";
+		for (const secret of [auth.token, auth.accountId]) message = message.replaceAll(secret, "[redacted]");
+		throw new Error(message.slice(0, MAX_ERROR_MESSAGE_LENGTH).trim() || "OpenAI Codex image request failed");
+	}
 	if (!response.ok) {
-		const message = serverErrorMessage(await boundedError(response), auth.token);
+		const message = serverErrorMessage(await boundedError(response), [auth.token, auth.accountId]);
 		throw new Error(
 			`OpenAI Codex image ${operation} failed with status ${response.status}${message ? `: ${message}` : ""}`,
 		);
@@ -232,7 +242,7 @@ async function requestXaiImage(
 			}
 			return decodeImageResponse(value, "xAI", false);
 		}
-		const message = serverErrorMessage(await boundedError(response), token);
+		const message = serverErrorMessage(await boundedError(response), [token]);
 		if (!retryable(response.status) || attempt === MAX_ATTEMPTS) {
 			throw new Error(
 				`xAI image ${operation} failed with status ${response.status}${message ? `: ${message}` : ""}`,
@@ -243,7 +253,7 @@ async function requestXaiImage(
 	throw new Error(`xAI image ${operation} failed`);
 }
 
-export function generateImage(
+export function requestGeneratedImage(
 	provider: ImageProvider,
 	prompt: string,
 	token: string,
