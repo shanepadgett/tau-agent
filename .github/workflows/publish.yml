@@ -10,7 +10,34 @@ permissions:
   id-token: write
 
 jobs:
+  native:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.88.0
+      - run: npm ci --ignore-scripts
+      - run: >-
+          cargo build
+          --release
+          --locked
+          --target aarch64-apple-darwin
+          --manifest-path packages/agent/native/tau-ast/Cargo.toml
+      - run: node --experimental-strip-types packages/agent/scripts/package-tau-ast.ts stage
+      - run: node --experimental-strip-types packages/agent/scripts/package-tau-ast.ts smoke
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tau-ast-darwin-arm64
+          path: packages/agent/native-bin/darwin-arm64/tau-ast
+          if-no-files-found: error
+          retention-days: 1
+
   publish:
+    needs: native
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,9 +45,15 @@ jobs:
         with:
           node-version: 24.18.0
           registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v4
+        with:
+          name: tau-ast-darwin-arm64
+          path: packages/agent/native-bin/darwin-arm64
+      - run: chmod 755 packages/agent/native-bin/darwin-arm64/tau-ast
       - run: npm run check:package-sources
       - run: npm ci --ignore-scripts
       - run: npm pack --dry-run --workspace @shanepadgett/tau-tui
       - run: npm pack --dry-run --workspace @shanepadgett/tau-agent
+      - run: node --experimental-strip-types packages/agent/scripts/package-tau-ast.ts verify-pack
       - run: npm publish --workspace @shanepadgett/tau-tui --access public
       - run: npm publish --workspace @shanepadgett/tau-agent --access public

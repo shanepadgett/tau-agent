@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { AstWorkerClient } from "../../../extensions/explore/ast-worker.ts";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { AstWorkerClient, resolveAstWorkerCommand } from "../../../extensions/explore/ast-worker.ts";
 
 const workerScript = String.raw`
 let incoming = Buffer.alloc(0);
@@ -67,8 +70,20 @@ function client(): AstWorkerClient {
 	return new AstWorkerClient(process.execPath, ["-e", workerScript]);
 }
 
+const workspaces: string[] = [];
+
+async function workspace(): Promise<string> {
+	const root = await mkdtemp(join(tmpdir(), "tau-ast-resolution-"));
+	workspaces.push(root);
+	return root;
+}
+
+afterEach(async () => {
+	await Promise.all(workspaces.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+
 describe("AST worker client", () => {
-	it("shares startup, dispatches framed requests, and shuts down", async () => {
+	it("keeps explicit command injection, dispatches framed requests, and shuts down", async () => {
 		const worker = client();
 		try {
 			const [typescript, odin] = await Promise.all([
@@ -81,6 +96,31 @@ describe("AST worker client", () => {
 		} finally {
 			await worker.shutdown();
 		}
+	});
+
+	it("selects the packaged worker on darwin-arm64", async () => {
+		const root = await workspace();
+		const command = join(root, "native-bin", "darwin-arm64", "tau-ast");
+		await mkdir(join(root, "native-bin", "darwin-arm64"), { recursive: true });
+		await writeFile(command, "worker");
+		expect(resolveAstWorkerCommand(root, "darwin", "arm64")).toEqual({ command });
+	});
+
+	it("falls back to the source Cargo target", async () => {
+		const root = await workspace();
+		await mkdir(join(root, "native", "tau-ast"), { recursive: true });
+		await writeFile(join(root, "native", "tau-ast", "Cargo.toml"), "[package]");
+		expect(resolveAstWorkerCommand(root, "linux", "x64")).toEqual({
+			command: join(root, "native", "tau-ast", "target", "release", "tau-ast"),
+		});
+	});
+
+	it("returns deferred installed-package errors for unsupported and missing workers", async () => {
+		const root = await workspace();
+		const unsupported = resolveAstWorkerCommand(root, "linux", "x64");
+		const missing = resolveAstWorkerCommand(root, "darwin", "arm64");
+		expect("error" in unsupported ? unsupported.error.message : "").toContain("require an Apple Silicon Mac");
+		expect("error" in missing ? missing.error.message : "").toContain("missing from this");
 	});
 
 	it("kills a stuck request on cancellation and starts a fresh worker", async () => {

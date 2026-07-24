@@ -8,5 +8,7 @@ files = [
   "docs/CONTRIBUTING.md",
   "package.json",
   "packages/agent/package.json",
+  "packages/agent/scripts/package-tau-ast.ts",
+  "packages/agent/test/scripts/package-tau-ast.test.ts",
   "packages/tui/package.json",
 ]

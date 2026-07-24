@@ -4,8 +4,12 @@ import { ToolPanel } from "@shanepadgett/tau-tui";
 
 const RELEASE_STEPS = [
 	"write package versions",
+	"build tau-ast darwin-arm64",
+	"stage tau-ast",
+	"smoke test tau-ast",
 	"npm pack --dry-run @shanepadgett/tau-tui",
 	"npm pack --dry-run @shanepadgett/tau-agent",
+	"verify packed tau-ast",
 	"git add release files",
 	"git commit",
 	"git tag",

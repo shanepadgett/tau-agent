@@ -10,6 +10,9 @@ const LOCKFILE_PATH = "package-lock.json";
 const WORKFLOW_NAME = "publish.yml";
 const WORKFLOW_WAIT_MS = 10 * 60_000;
 const POLL_INTERVAL_MS = 5_000;
+const DEFAULT_COMMAND_TIMEOUT_MS = 120_000;
+const CARGO_BUILD_TIMEOUT_MS = 15 * 60_000;
+const TAU_AST_SCRIPT = "packages/agent/scripts/package-tau-ast.ts";
 
 type Bump = "patch" | "minor" | "major";
 
@@ -65,8 +68,10 @@ async function publish(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<
 	if (!repo) throw new Error("No git repository found.");
 	if (repo.fileCount > 0)
 		throw new Error("Working tree is not clean. Commit or stash every change before publishing.");
-	await run(pi, ctx, "gh", ["auth", "status"], repo.root);
-	await run(pi, ctx, "npm", ["run", "check:package-sources"], repo.root);
+	if (process.platform !== "darwin" || process.arch !== "arm64")
+		throw new Error(`/publish requires darwin-arm64; this host is ${process.platform}-${process.arch}.`);
+	await run(pi, ctx, "gh", ["auth", "status"], repo.root, DEFAULT_COMMAND_TIMEOUT_MS);
+	await run(pi, ctx, "npm", ["run", "check:package-sources"], repo.root, DEFAULT_COMMAND_TIMEOUT_MS);
 
 	const manifests = await loadManifests(repo.root);
 	const currentVersion = sharedVersion(manifests);
@@ -124,10 +129,86 @@ async function completePublish(
 		progress?.update("write package versions");
 		await writeReleaseVersion(root, manifests, version);
 	}
-	progress?.update("npm pack --dry-run @shanepadgett/tau-tui");
-	await run(pi, ctx, "npm", ["pack", "--dry-run", "--workspace", "@shanepadgett/tau-tui"], root);
-	progress?.update("npm pack --dry-run @shanepadgett/tau-agent");
-	await run(pi, ctx, "npm", ["pack", "--dry-run", "--workspace", "@shanepadgett/tau-agent"], root);
+	try {
+		progress?.update("build tau-ast darwin-arm64");
+		await run(
+			pi,
+			ctx,
+			"cargo",
+			[
+				"build",
+				"--release",
+				"--locked",
+				"--target",
+				"aarch64-apple-darwin",
+				"--manifest-path",
+				"packages/agent/native/tau-ast/Cargo.toml",
+			],
+			root,
+			CARGO_BUILD_TIMEOUT_MS,
+		);
+		progress?.update("stage tau-ast");
+		await run(
+			pi,
+			ctx,
+			process.execPath,
+			["--experimental-strip-types", TAU_AST_SCRIPT, "stage"],
+			root,
+			DEFAULT_COMMAND_TIMEOUT_MS,
+		);
+		progress?.update("smoke test tau-ast");
+		await run(
+			pi,
+			ctx,
+			process.execPath,
+			["--experimental-strip-types", TAU_AST_SCRIPT, "smoke"],
+			root,
+			DEFAULT_COMMAND_TIMEOUT_MS,
+		);
+		progress?.update("npm pack --dry-run @shanepadgett/tau-tui");
+		await run(
+			pi,
+			ctx,
+			"npm",
+			["pack", "--dry-run", "--workspace", "@shanepadgett/tau-tui"],
+			root,
+			DEFAULT_COMMAND_TIMEOUT_MS,
+		);
+		progress?.update("npm pack --dry-run @shanepadgett/tau-agent");
+		await run(
+			pi,
+			ctx,
+			"npm",
+			["pack", "--dry-run", "--workspace", "@shanepadgett/tau-agent"],
+			root,
+			DEFAULT_COMMAND_TIMEOUT_MS,
+		);
+		progress?.update("verify packed tau-ast");
+		await run(
+			pi,
+			ctx,
+			process.execPath,
+			["--experimental-strip-types", TAU_AST_SCRIPT, "verify-pack"],
+			root,
+			DEFAULT_COMMAND_TIMEOUT_MS,
+		);
+	} finally {
+		await run(
+			pi,
+			ctx,
+			process.execPath,
+			["--experimental-strip-types", TAU_AST_SCRIPT, "clean"],
+			root,
+			DEFAULT_COMMAND_TIMEOUT_MS,
+		);
+	}
+
+	const trackedNativeFiles = await git.run(["ls-files", "--", "packages/agent/native-bin"], { cwd: root });
+	const stagedNativeFiles = await git.run(["diff", "--cached", "--name-only", "--", "packages/agent/native-bin"], {
+		cwd: root,
+	});
+	if (trackedNativeFiles || stagedNativeFiles)
+		throw new Error("Release blocked: packages/agent/native-bin/ contains tracked or staged files.");
 
 	if (tag) {
 		progress?.update("git add release files");
@@ -225,8 +306,9 @@ async function run(
 	command: string,
 	args: string[],
 	cwd: string,
+	timeout: number,
 ): Promise<string> {
-	const result = await pi.exec(command, args, { cwd, signal: ctx.signal, timeout: 120_000 });
+	const result = await pi.exec(command, args, { cwd, signal: ctx.signal, timeout });
 	if (result.code === 0) return result.stdout.trim();
 	throw new Error([result.stderr, result.stdout].filter(Boolean).join("\n").trim() || `${command} failed`);
 }
@@ -258,6 +340,7 @@ async function monitorWorkflow(
 				"databaseId,status,conclusion,url",
 			],
 			root,
+			DEFAULT_COMMAND_TIMEOUT_MS,
 		);
 		const workflowRun = (JSON.parse(output) as WorkflowRun[])[0];
 		if (workflowRun) {

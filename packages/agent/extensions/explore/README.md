@@ -8,6 +8,8 @@ When the source baseline is no longer available, such as after compaction or a c
 
 Agents invoke it with `ls`, `find`, `grep`, `outline`, `symbol`, and `read`. `outline` returns public declaration signatures and parenthesized numeric locators for TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, and Swift files. It also accepts a package directory, which inspects supported files directly inside it. Exact-name filters narrow the result, while `includePrivate` exposes internal declarations. `symbol` accepts those numbers to retrieve several exact declarations in one call, can add bounded surrounding lines, and rejects the whole batch when any locator is stale. Users run `/read-stats` to see estimated token and cost savings for the session.
 
+Installed packages support `outline` and `symbol` on Apple Silicon Macs. They include the worker, so users do not need Rust or Cargo. On other platforms, the rest of Explore remains available and AST tools report the platform limit when invoked.
+
 Use the cheapest useful step:
 
 1. Outline a package directory to discover its public API.

@@ -1,4 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export type AstLanguage = "typeScript" | "tsx" | "odin" | "go" | "rust" | "cSharp" | "java" | "kotlin" | "swift";
@@ -104,8 +106,35 @@ const PROTOCOL_VERSION = 2;
 const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 const STDERR_BYTES = 16 * 1024;
 
+export type AstWorkerResolution = { command: string } | { error: Error };
+
+export function resolveAstWorkerCommand(
+	packageRoot: string,
+	platform: NodeJS.Platform,
+	arch: string,
+): AstWorkerResolution {
+	const packagedCommand = join(packageRoot, "native-bin", "darwin-arm64", "tau-ast");
+	if (platform === "darwin" && arch === "arm64" && existsSync(packagedCommand)) return { command: packagedCommand };
+
+	const sourceRoot = join(packageRoot, "native", "tau-ast");
+	if (existsSync(join(sourceRoot, "Cargo.toml")))
+		return { command: join(sourceRoot, "target", "release", `tau-ast${platform === "win32" ? ".exe" : ""}`) };
+
+	if (platform === "darwin" && arch === "arm64")
+		return {
+			error: new Error(
+				"tau-ast is missing from this @shanepadgett/tau-agent installation. Reinstall the package before using outline or symbol.",
+			),
+		};
+	return {
+		error: new Error(
+			`Packaged AST tools currently require an Apple Silicon Mac (darwin-arm64); this host is ${platform}-${arch}.`,
+		),
+	};
+}
+
 export class AstWorkerClient implements AstClient {
-	private readonly command: string;
+	private readonly command: string | undefined;
 	private readonly args: readonly string[];
 	private child: ChildProcessWithoutNullStreams | undefined;
 	private startPromise: Promise<void> | undefined;
@@ -114,15 +143,7 @@ export class AstWorkerClient implements AstClient {
 	private incoming = Buffer.alloc(0);
 	private stderr = "";
 
-	constructor(
-		command = fileURLToPath(
-			new URL(
-				`../../native/tau-ast/target/release/tau-ast${process.platform === "win32" ? ".exe" : ""}`,
-				import.meta.url,
-			),
-		),
-		args: readonly string[] = [],
-	) {
+	constructor(command: string | undefined = undefined, args: readonly string[] = []) {
 		this.command = command;
 		this.args = args;
 	}
@@ -180,7 +201,11 @@ export class AstWorkerClient implements AstClient {
 	}
 
 	private async start(): Promise<void> {
-		const child = spawn(this.command, this.args, { stdio: ["pipe", "pipe", "pipe"] });
+		const resolution = this.command
+			? { command: this.command }
+			: resolveAstWorkerCommand(fileURLToPath(new URL("../../", import.meta.url)), process.platform, process.arch);
+		if ("error" in resolution) throw resolution.error;
+		const child = spawn(resolution.command, this.args, { stdio: ["pipe", "pipe", "pipe"] });
 		this.child = child;
 		this.incoming = Buffer.alloc(0);
 		this.stderr = "";
