@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-	parseContextPruningNudgeDetailsV2,
+	parseContextPruningNudgeDetailsV3,
 	renderContextPruneCall,
 	renderContextPruneResult,
 	renderContextPruningNudge,
@@ -25,68 +25,71 @@ function details(): ContextPruneDetailsV2 {
 describe("context prune rendering", () => {
 	it("renders informational, escalating, final-tier, and manual context markers from strict details", () => {
 		const automatic = {
-			v: 2 as const,
+			v: 3 as const,
 			kind: "automatic" as const,
-			percent: 20,
-			boundary: 20,
+			tokens: 30_000,
+			boundaryTokens: 30_000,
 			reminder: 1,
 			tier: 1,
 			tierCount: 3,
 			tierFloor: 0,
 			anchorToolCallId: null,
-			growthBaselinePercent: 0,
+			suppressedThroughTokens: 0,
 		};
 		const informational = renderedText(renderContextPruningNudge(automatic, testTheme));
 		expect(informational).toContain("Context:");
-		expect(informational).toContain("20%");
+		expect(informational).toContain("30k");
 		expect(informational).not.toContain("Prune soon.");
 		const escalating = renderedText(
 			renderContextPruningNudge(
-				{ ...automatic, percent: 40, boundary: 40, reminder: 2, tier: 2, tierFloor: 1 },
+				{ ...automatic, tokens: 60_000, boundaryTokens: 60_000, reminder: 2, tier: 2, tierFloor: 1 },
 				testTheme,
 			),
 		);
-		expect(escalating).toContain("40%");
+		expect(escalating).toContain("60k");
 		expect(escalating).toContain("Prune soon.");
 		const finalTier = renderedText(
 			renderContextPruningNudge(
-				{ ...automatic, percent: 60, boundary: 60, reminder: 3, tier: 3, tierFloor: 2 },
+				{ ...automatic, tokens: 90_000, boundaryTokens: 90_000, reminder: 3, tier: 3, tierFloor: 2 },
 				testTheme,
 			),
 		);
-		expect(finalTier).toContain("60%");
+		expect(finalTier).toContain("90k");
 		expect(finalTier).toContain("Prune now.");
 		const manual = renderedText(
 			renderContextPruningNudge(
 				{
 					...automatic,
 					kind: "manual",
-					percent: null,
-					boundary: null,
+					tokens: null,
+					boundaryTokens: null,
 					reminder: null,
 					tier: null,
 					tierCount: null,
 					tierFloor: null,
-					growthBaselinePercent: null,
+					suppressedThroughTokens: null,
 				},
 				testTheme,
 			),
 		);
 		expect(manual).toContain("Context:");
 		expect(manual).toContain("Prune requested.");
-		expect(parseContextPruningNudgeDetailsV2({ ...automatic, extra: true })).toBeUndefined();
-		expect(renderContextPruningNudge({ ...automatic, percent: 101 }, testTheme)).toBeUndefined();
+		expect(parseContextPruningNudgeDetailsV3({ ...automatic, extra: true })).toBeUndefined();
+		expect(renderContextPruningNudge({ ...automatic, tokens: -1 }, testTheme)).toBeUndefined();
 		expect(
 			renderContextPruningNudge(
-				{ ...automatic, percent: 40, boundary: 40, reminder: 2, tier: 1, tierFloor: 0 },
+				{ ...automatic, tokens: 60_000, boundaryTokens: 60_000, reminder: 2, tier: 1, tierFloor: 0 },
 				testTheme,
 			),
 		).toBeUndefined();
 		expect(
-			renderContextPruningNudge({ ...automatic, percent: 100, reminder: 100, tier: 3, tierFloor: 0 }, testTheme),
+			renderContextPruningNudge({ ...automatic, reminder: 7, tier: 3, tierFloor: 0 }, testTheme),
 		).toBeUndefined();
 		expect(
-			renderContextPruningNudge({ ...automatic, anchorToolCallId: null, growthBaselinePercent: 10 }, testTheme),
+			renderContextPruningNudge(
+				{ ...automatic, anchorToolCallId: null, suppressedThroughTokens: 30_000 },
+				testTheme,
+			),
 		).toBeUndefined();
 	});
 

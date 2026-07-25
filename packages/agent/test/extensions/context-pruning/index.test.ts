@@ -15,7 +15,7 @@ import { createWorkspace } from "../explore/helpers.ts";
 
 const settings = vi.hoisted(() => ({
 	enabled: true,
-	nudgeEveryPercent: 20,
+	nudgeEveryTokens: 30_000,
 	nudgeInstructions: [
 		"No prune is required yet unless broad exploration has converged or substantial evidence is already irrelevant. Continue coherent work.",
 		"Move toward a pruning point now. Finish the current coherent step, then prune before starting another broad exploration. Managed context is materially increasing model cost.",
@@ -69,13 +69,13 @@ function appliedBranch(): unknown[] {
 }
 
 function automaticNudgeEntry(
-	boundary: number,
-	percent = boundary,
+	boundaryTokens: number,
+	tokens = boundaryTokens,
 	anchorToolCallId: string | null = null,
-	growthBaselinePercent = 0,
+	suppressedThroughTokens = 0,
 	tierFloor = 0,
 ): unknown {
-	const reminder = (boundary - growthBaselinePercent) / settings.nudgeEveryPercent;
+	const reminder = boundaryTokens / settings.nudgeEveryTokens;
 	const tier = Math.min(reminder, settings.nudgeInstructions.length);
 	return {
 		type: "custom_message",
@@ -83,16 +83,16 @@ function automaticNudgeEntry(
 		content: "internal",
 		display: true,
 		details: {
-			v: 2,
+			v: 3,
 			kind: "automatic",
-			percent,
-			boundary,
+			tokens,
+			boundaryTokens,
 			reminder,
 			tier,
 			tierCount: settings.nudgeInstructions.length,
 			tierFloor,
 			anchorToolCallId,
-			growthBaselinePercent,
+			suppressedThroughTokens,
 		},
 	};
 }
@@ -167,11 +167,11 @@ function harness(activeBranch: unknown[], cwd = "/tmp") {
 		pi,
 		ctx,
 		getActiveTools: () => [...activeTools],
-		setUsage(percent: number | null | undefined) {
+		setUsage(tokens: number | null | undefined) {
 			usage =
-				percent === undefined
+				tokens === undefined
 					? undefined
-					: { tokens: percent === null ? null : percent * 1_000, contextWindow: 100_000, percent };
+					: { tokens, contextWindow: 1_000_000, percent: tokens === null ? null : tokens / 10_000 };
 		},
 		async run(name: string, event: unknown): Promise<unknown> {
 			let returned: unknown;
@@ -190,8 +190,8 @@ async function start(test: TestHarness, reason = "startup"): Promise<void> {
 	await test.run("session_start", { type: "session_start", reason });
 }
 
-async function toolTurn(test: TestHarness, percent: number | null | undefined, toolCallId: string): Promise<void> {
-	test.setUsage(percent);
+async function toolTurn(test: TestHarness, tokens: number | null | undefined, toolCallId: string): Promise<void> {
+	test.setUsage(tokens);
 	await test.run("turn_end", { type: "turn_end", toolResults: [result(toolCallId, "read")] });
 }
 
@@ -210,7 +210,7 @@ function captureRowSnapshots(test: TestHarness): unknown[] {
 afterEach(() => {
 	setContextPruningEnabled(false);
 	settings.enabled = true;
-	settings.nudgeEveryPercent = 20;
+	settings.nudgeEveryTokens = 30_000;
 	settings.nudgeInstructions = [
 		"No prune is required yet unless broad exploration has converged or substantial evidence is already irrelevant. Continue coherent work.",
 		"Move toward a pruning point now. Finish the current coherent step, then prune before starting another broad exploration. Managed context is materially increasing model cost.",
@@ -330,7 +330,7 @@ describe("context pruning extension wiring", () => {
 			message: expect.objectContaining({
 				customType: "tau.context-pruning.nudge",
 				display: true,
-				details: expect.objectContaining({ kind: "manual", percent: null }),
+				details: expect.objectContaining({ kind: "manual", tokens: null }),
 			}),
 			options: { deliverAs: "steer", triggerTurn: true },
 		});
@@ -354,47 +354,68 @@ describe("context pruning extension wiring", () => {
 		expect(test.notifications.at(-1)).toEqual({ message: "Context pruning is disabled.", type: "info" });
 	});
 
-	it("emits the strongest newly crossed boundary with an escalating instruction", async () => {
+	it("emits the strongest newly crossed token boundary with an escalating instruction", async () => {
 		const test = harness([]);
 		await start(test);
-		await toolTurn(test, 20, "list");
+		await toolTurn(test, 30_000, "list");
 		expect(test.sent).toHaveLength(1);
 		expect(test.sent[0]?.message).toMatchObject({
-			details: { kind: "automatic", percent: 20, boundary: 20, reminder: 1, tier: 1, tierCount: 3 },
+			details: {
+				kind: "automatic",
+				tokens: 30_000,
+				boundaryTokens: 30_000,
+				reminder: 1,
+				tier: 1,
+				tierCount: 3,
+			},
 		});
 		const informationalMessage = test.sent[0]?.message;
 		if (!informationalMessage) throw new Error("expected informational nudge");
 		expect((informationalMessage as { content: string }).content).toContain("No prune is required yet");
 
-		await toolTurn(test, 45, "read");
+		await toolTurn(test, 75_000, "read");
 		expect(test.sent).toHaveLength(2);
 		expect(test.sent[1]?.message).toMatchObject({
-			details: { kind: "automatic", percent: 45, boundary: 40, reminder: 2, tier: 2, tierCount: 3 },
+			details: {
+				kind: "automatic",
+				tokens: 75_000,
+				boundaryTokens: 60_000,
+				reminder: 2,
+				tier: 2,
+				tierCount: 3,
+			},
 		});
 		const escalatingMessage = test.sent[1]?.message;
 		if (!escalatingMessage) throw new Error("expected escalating nudge");
 		expect((escalatingMessage as { content: string }).content).toContain("Move toward a pruning point now");
 
-		await toolTurn(test, 65, "grep");
+		await toolTurn(test, 95_000, "grep");
 		expect(test.sent).toHaveLength(3);
 		expect(test.sent[2]?.message).toMatchObject({
-			details: { kind: "automatic", percent: 65, boundary: 60, reminder: 3, tier: 3, tierCount: 3 },
+			details: {
+				kind: "automatic",
+				tokens: 95_000,
+				boundaryTokens: 90_000,
+				reminder: 3,
+				tier: 3,
+				tierCount: 3,
+			},
 		});
 		const finalMessage = test.sent[2]?.message;
 		if (!finalMessage) throw new Error("expected final-tier nudge");
 		expect((finalMessage as { content: string }).content).toContain("Prune now before further tool work");
 		expect((finalMessage as { content: string }).content).toContain("wasting money");
-		expect((finalMessage as { content: string }).content).not.toContain("65");
+		expect((finalMessage as { content: string }).content).not.toContain("95000");
 	});
 
 	it("uses up to five configured instructions and repeats the final tier", async () => {
-		settings.nudgeEveryPercent = 10;
+		settings.nudgeEveryTokens = 10_000;
 		settings.nudgeInstructions = ["one", "two", "three", "four", "five"];
 		const test = harness([]);
 		await start(test);
-		await toolTurn(test, 10, "read-10");
-		await toolTurn(test, 50, "read-50");
-		await toolTurn(test, 60, "read-60");
+		await toolTurn(test, 10_000, "read-10");
+		await toolTurn(test, 50_000, "read-50");
+		await toolTurn(test, 60_000, "read-60");
 
 		expect(test.sent.map((sent) => (sent.message as { content: string }).content)).toEqual([
 			expect.stringContaining("one"),
@@ -409,7 +430,7 @@ describe("context pruning extension wiring", () => {
 		settings.nudgeInstructions = ["custom instruction"];
 		const test = harness([]);
 		await start(test);
-		await toolTurn(test, 20, "read-20");
+		await toolTurn(test, 30_000, "read-30");
 
 		expect(test.sent[0]?.message).toMatchObject({ details: { reminder: 1, tier: 1, tierCount: 1 } });
 		const sent = test.sent[0];
@@ -420,15 +441,15 @@ describe("context pruning extension wiring", () => {
 	});
 
 	it("does not de-escalate after the interval increases", async () => {
-		const activeBranch = [automaticNudgeEntry(60, 65)];
-		settings.nudgeEveryPercent = 100;
+		const activeBranch = [automaticNudgeEntry(90_000, 95_000)];
+		settings.nudgeEveryTokens = 100_000;
 		const test = harness(activeBranch);
 		await start(test);
-		await toolTurn(test, 100, "read-100");
+		await toolTurn(test, 100_000, "read-100");
 
 		expect(test.sent).toHaveLength(1);
 		expect(test.sent[0]?.message).toMatchObject({
-			details: { boundary: 100, reminder: 1, tier: 3, tierCount: 3 },
+			details: { boundaryTokens: 100_000, reminder: 1, tier: 3, tierCount: 3 },
 		});
 		const sent = test.sent[0];
 		if (!sent) throw new Error("expected non-deescalating nudge");
@@ -442,29 +463,29 @@ describe("context pruning extension wiring", () => {
 		await start(test);
 		await toolTurn(test, undefined, "read");
 		await toolTurn(test, null, "read-null");
-		test.setUsage(45);
+		test.setUsage(45_000);
 		await test.run("turn_end", { type: "turn_end", toolResults: [] });
 		expect(test.sent).toEqual([]);
 	});
 
 	it("reconstructs emitted boundaries after tree navigation", async () => {
-		const activeBranch = [automaticNudgeEntry(40, 45)];
+		const activeBranch = [automaticNudgeEntry(60_000, 75_000)];
 		const test = harness(activeBranch);
 		await start(test);
-		await toolTurn(test, 45, "read");
+		await toolTurn(test, 75_000, "read");
 		expect(test.sent).toEqual([]);
 
-		await toolTurn(test, 65, "read-2");
+		await toolTurn(test, 95_000, "read-2");
 		expect(test.sent).toHaveLength(1);
-		expect(test.sent[0]?.message).toMatchObject({ details: { boundary: 60 } });
-		activeBranch.push(automaticNudgeEntry(60, 65, null, 0, 2));
+		expect(test.sent[0]?.message).toMatchObject({ details: { boundaryTokens: 90_000 } });
+		activeBranch.push(automaticNudgeEntry(90_000, 95_000, null, 0, 2));
 		await test.run("session_tree", { type: "session_tree" });
 		await test.run("turn_end", { type: "turn_end", toolResults: [result("read-3", "read")] });
 		expect(test.sent).toHaveLength(1);
 		await test.run("session_compact", { type: "session_compact", reason: "threshold" });
-		await toolTurn(test, 85, "read-4");
+		await toolTurn(test, 125_000, "read-4");
 		expect(test.sent).toHaveLength(2);
-		expect(test.sent[1]?.message).toMatchObject({ details: { boundary: 80 } });
+		expect(test.sent[1]?.message).toMatchObject({ details: { boundaryTokens: 120_000 } });
 	});
 
 	it("reconstructs an anchored reminder and ignores a mismatched baseline", async () => {
@@ -473,40 +494,46 @@ describe("context pruning extension wiring", () => {
 			{
 				type: "custom",
 				customType: "tau.context-pruning.nudge-baseline",
-				data: { v: 1, anchorToolCallId: "anchor", baselinePercent: 30 },
+				data: { v: 2, anchorToolCallId: "anchor", suppressedThroughTokens: 30_000 },
 			},
-			automaticNudgeEntry(100, 100, "anchor", 40),
-			automaticNudgeEntry(50, 51, "anchor", 30),
+			automaticNudgeEntry(120_000, 120_000, "anchor", 60_000),
+			automaticNudgeEntry(60_000, 61_000, "anchor", 30_000),
 		];
 		const test = harness(activeBranch);
 		await start(test);
-		await toolTurn(test, 51, "read-51");
+		await toolTurn(test, 61_000, "read-61");
 		expect(test.sent).toEqual([]);
 
-		await toolTurn(test, 71, "read-71");
+		await toolTurn(test, 91_000, "read-91");
 		expect(test.sent).toHaveLength(1);
 		expect(test.sent[0]?.message).toMatchObject({
 			details: {
 				anchorToolCallId: "anchor",
-				growthBaselinePercent: 30,
-				boundary: 70,
-				reminder: 2,
-				tier: 2,
+				suppressedThroughTokens: 30_000,
+				boundaryTokens: 90_000,
+				reminder: 3,
+				tier: 3,
 			},
 		});
 	});
 
-	it("waits for a full growth interval after an applied prune", async () => {
+	it("suppresses crossed boundaries after an applied prune and waits for the next absolute boundary", async () => {
 		const test = harness(appliedBranch());
 		await start(test);
-		for (const percent of [30, 49]) {
-			await toolTurn(test, percent, `read-${percent}`);
+		for (const tokens of [45_000, 59_000]) {
+			await toolTurn(test, tokens, `read-${tokens}`);
 		}
 		expect(test.sent).toEqual([]);
-		await toolTurn(test, 51, "read-51");
+		await toolTurn(test, 61_000, "read-61");
 		expect(test.sent).toHaveLength(1);
 		expect(test.sent[0]?.message).toMatchObject({
-			details: { boundary: 50, reminder: 1, tier: 1, growthBaselinePercent: 30, anchorToolCallId: "anchor" },
+			details: {
+				boundaryTokens: 60_000,
+				reminder: 2,
+				tier: 2,
+				suppressedThroughTokens: 30_000,
+				anchorToolCallId: "anchor",
+			},
 		});
 	});
 
@@ -514,32 +541,37 @@ describe("context pruning extension wiring", () => {
 		const activeBranch = appliedBranch();
 		const test = harness(activeBranch);
 		await start(test);
-		await toolTurn(test, 30, "read-30");
+		await toolTurn(test, 45_000, "read-45");
 		expect(activeBranch.at(-1)).toEqual({
 			type: "custom",
 			customType: "tau.context-pruning.nudge-baseline",
-			data: { v: 1, anchorToolCallId: "anchor", baselinePercent: 30 },
+			data: { v: 2, anchorToolCallId: "anchor", suppressedThroughTokens: 30_000 },
 		});
 		await test.run("session_compact", { type: "session_compact", reason: "threshold" });
-		await toolTurn(test, 49, "read-49");
+		await toolTurn(test, 59_000, "read-59");
 		expect(test.sent).toEqual([]);
 
 		activeBranch.pop();
 		activeBranch.push({
 			type: "custom",
 			customType: "tau.context-pruning.nudge-baseline",
-			data: { v: 1, anchorToolCallId: "anchor", baselinePercent: 1, extra: true },
+			data: { v: 2, anchorToolCallId: "anchor", suppressedThroughTokens: 1, extra: true },
 		});
 		await test.run("session_tree", { type: "session_tree" });
 		await test.run("turn_end", { type: "turn_end", toolResults: [result("read-new-baseline", "read")] });
 		expect(test.sent).toEqual([]);
 		expect(activeBranch.at(-1)).toMatchObject({
 			type: "custom",
-			data: { baselinePercent: 49 },
+			data: { suppressedThroughTokens: 30_000 },
 		});
-		await toolTurn(test, 70, "read-70");
+		await toolTurn(test, 91_000, "read-91");
 		expect(test.sent.at(-1)?.message).toMatchObject({
-			details: { anchorToolCallId: "anchor", growthBaselinePercent: 49, boundary: 69, reminder: 1 },
+			details: {
+				anchorToolCallId: "anchor",
+				suppressedThroughTokens: 30_000,
+				boundaryTokens: 90_000,
+				reminder: 3,
+			},
 		});
 	});
 
@@ -632,7 +664,7 @@ describe("context pruning extension wiring", () => {
 		expect(test.commands).toEqual([]);
 		expect(test.renderers.has("tau.context-pruning.nudge")).toBe(true);
 		expect(await test.run("context", { type: "context", messages: [] })).toBeUndefined();
-		test.setUsage(80);
+		test.setUsage(80_000);
 		await test.run("turn_end", { type: "turn_end", toolResults: [result("read", "read")] });
 		expect(test.sent).toEqual([]);
 		expect(snapshots.at(-1)).toEqual({ states: [] });

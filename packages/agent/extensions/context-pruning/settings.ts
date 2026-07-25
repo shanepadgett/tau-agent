@@ -11,18 +11,17 @@ export default defineTauExtensionSettings({
 	key: "contextPruning",
 	defaults: {
 		enabled: true as boolean,
-		nudgeEveryPercent: 20 as number,
+		nudgeEveryTokens: 30_000 as number,
 		nudgeInstructions: DEFAULT_NUDGE_INSTRUCTIONS,
 	},
 	schema: Type.Object(
 		{
 			enabled: Type.Optional(Type.Boolean({ default: true, description: "Enable context pruning." })),
-			nudgeEveryPercent: Type.Optional(
+			nudgeEveryTokens: Type.Optional(
 				Type.Integer({
-					default: 20,
+					default: 30_000,
 					minimum: 1,
-					maximum: 100,
-					description: "Context growth interval between automatic pruning hints.",
+					description: "Active-context token interval between automatic pruning hints.",
 				}),
 			),
 			nudgeInstructions: Type.Optional(

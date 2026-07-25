@@ -10,48 +10,48 @@ const MAX_EXPANDED_LINE_CHARACTERS = 240;
 const MAX_EXPANDED_TEXT_CHARACTERS = 3_000;
 const MAX_WARNING_CHARACTERS = 1_000;
 
-export type ContextPruningNudgeDetailsV2 =
+export type ContextPruningNudgeDetailsV3 =
 	| {
-			v: 2;
+			v: 3;
 			kind: "automatic";
-			percent: number;
-			boundary: number;
+			tokens: number;
+			boundaryTokens: number;
 			reminder: number;
 			tier: number;
 			tierCount: number;
 			tierFloor: number;
 			anchorToolCallId: string | null;
-			growthBaselinePercent: number;
+			suppressedThroughTokens: number;
 	  }
 	| {
-			v: 2;
+			v: 3;
 			kind: "manual";
-			percent: null;
-			boundary: null;
+			tokens: null;
+			boundaryTokens: null;
 			reminder: null;
 			tier: null;
 			tierCount: null;
 			tierFloor: null;
 			anchorToolCallId: string | null;
-			growthBaselinePercent: null;
+			suppressedThroughTokens: null;
 	  };
 
-export function parseContextPruningNudgeDetailsV2(value: unknown): ContextPruningNudgeDetailsV2 | undefined {
+export function parseContextPruningNudgeDetailsV3(value: unknown): ContextPruningNudgeDetailsV3 | undefined {
 	if (!isRecord(value)) return undefined;
 	const keys = [
 		"v",
 		"kind",
-		"percent",
-		"boundary",
+		"tokens",
+		"boundaryTokens",
 		"reminder",
 		"tier",
 		"tierCount",
 		"tierFloor",
 		"anchorToolCallId",
-		"growthBaselinePercent",
+		"suppressedThroughTokens",
 	];
 	if (Object.keys(value).length !== keys.length || !keys.every((key) => Object.hasOwn(value, key))) return undefined;
-	if (value.v !== 2 || (value.kind !== "automatic" && value.kind !== "manual")) return undefined;
+	if (value.v !== 3 || (value.kind !== "automatic" && value.kind !== "manual")) return undefined;
 	if (
 		value.anchorToolCallId !== null &&
 		(typeof value.anchorToolCallId !== "string" || value.anchorToolCallId.length === 0)
@@ -60,64 +60,69 @@ export function parseContextPruningNudgeDetailsV2(value: unknown): ContextPrunin
 	}
 	if (value.kind === "manual") {
 		if (
-			value.percent !== null ||
-			value.boundary !== null ||
+			value.tokens !== null ||
+			value.boundaryTokens !== null ||
 			value.reminder !== null ||
 			value.tier !== null ||
 			value.tierCount !== null ||
 			value.tierFloor !== null ||
-			value.growthBaselinePercent !== null
+			value.suppressedThroughTokens !== null
 		)
 			return undefined;
 		return {
-			v: 2,
+			v: 3,
 			kind: "manual",
-			percent: null,
-			boundary: null,
+			tokens: null,
+			boundaryTokens: null,
 			reminder: null,
 			tier: null,
 			tierCount: null,
 			tierFloor: null,
 			anchorToolCallId: value.anchorToolCallId,
-			growthBaselinePercent: null,
+			suppressedThroughTokens: null,
 		};
 	}
 	if (
-		!isPercent(value.percent) ||
-		!isBoundary(value.boundary) ||
+		!isTokenCount(value.tokens) ||
+		!isBoundary(value.boundaryTokens) ||
 		!isReminder(value.reminder) ||
 		!isTier(value.tier) ||
 		!isTier(value.tierCount) ||
 		!isTierFloor(value.tierFloor) ||
-		!isPercent(value.growthBaselinePercent) ||
-		value.boundary > value.percent ||
-		value.boundary <= value.growthBaselinePercent ||
+		!isTokenCount(value.suppressedThroughTokens) ||
+		value.boundaryTokens > value.tokens ||
+		value.boundaryTokens <= value.suppressedThroughTokens ||
 		value.tier > value.tierCount ||
 		value.tierFloor > value.tierCount ||
 		value.tier !== Math.max(Math.min(value.reminder, value.tierCount), value.tierFloor) ||
-		(value.anchorToolCallId === null && value.growthBaselinePercent !== 0)
+		(value.anchorToolCallId === null && value.suppressedThroughTokens !== 0)
 	) {
 		return undefined;
 	}
-	const interval = (value.boundary - value.growthBaselinePercent) / value.reminder;
-	if (!Number.isInteger(interval) || interval < 1 || interval > 100 || value.percent - value.boundary >= interval)
+	const interval = value.boundaryTokens / value.reminder;
+	if (
+		!Number.isSafeInteger(interval) ||
+		interval < 1 ||
+		value.tokens - value.boundaryTokens >= interval ||
+		value.suppressedThroughTokens % interval !== 0
+	)
 		return undefined;
 	return {
-		v: 2,
+		v: 3,
 		kind: "automatic",
-		percent: value.percent,
-		boundary: value.boundary,
+		tokens: value.tokens,
+		boundaryTokens: value.boundaryTokens,
 		reminder: value.reminder,
 		tier: value.tier,
 		tierCount: value.tierCount,
 		tierFloor: value.tierFloor,
 		anchorToolCallId: value.anchorToolCallId,
-		growthBaselinePercent: value.growthBaselinePercent,
+		suppressedThroughTokens: value.suppressedThroughTokens,
 	};
 }
 
 export function renderContextPruningNudge(details: unknown, theme: Theme): Marker | undefined {
-	const parsed = parseContextPruningNudgeDetailsV2(details);
+	const parsed = parseContextPruningNudgeDetailsV3(details);
 	if (!parsed) return undefined;
 	return new Marker({
 		theme,
@@ -127,7 +132,7 @@ export function renderContextPruningNudge(details: unknown, theme: Theme): Marke
 			parsed.kind === "manual"
 				? ["Prune requested."]
 				: [
-						`${parsed.percent}%`,
+						formatTokens(parsed.tokens),
 						...(parsed.tier === parsed.tierCount ? ["Prune now."] : parsed.tier > 1 ? ["Prune soon."] : []),
 					],
 	});
@@ -214,16 +219,23 @@ function firstResultText(result: AgentToolResult<unknown>): string {
 	return "";
 }
 
-function isPercent(value: unknown): value is number {
-	return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 100;
+function formatTokens(count: number): string {
+	if (count < 1_000) return `${count}`;
+	if (count < 10_000) return `${(count / 1_000).toFixed(1)}k`;
+	if (count < 1_000_000) return `${Math.round(count / 1_000)}k`;
+	return `${(count / 1_000_000).toFixed(1)}M`;
+}
+
+function isTokenCount(value: unknown): value is number {
+	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 function isBoundary(value: unknown): value is number {
-	return isPercent(value) && value > 0;
+	return isTokenCount(value) && value > 0;
 }
 
 function isReminder(value: unknown): value is number {
-	return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 100;
+	return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
 }
 
 function isTier(value: unknown): value is number {

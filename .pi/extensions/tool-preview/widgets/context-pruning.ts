@@ -8,7 +8,7 @@ import {
 	renderContextPruneCall,
 	renderContextPruneResult,
 	renderContextPruningNudge,
-	type ContextPruningNudgeDetailsV2,
+	type ContextPruningNudgeDetailsV3,
 } from "../../../../packages/agent/extensions/context-pruning/render.ts";
 import type { ContextPruneDetailsV2 } from "../../../../packages/agent/shared/context-pruning-state.ts";
 import type { ToolRowStateStore } from "../../../../packages/agent/shared/tool-row-state.ts";
@@ -46,52 +46,52 @@ export function createContextPruningPreviewWidget(tui: TUI, cwd: string, theme: 
 	const container = new Container();
 	addPageTitle(container, theme, "Context Pruning Preview");
 	addNudgeStory(container, theme, "Informational Nudge", {
-		v: 2,
+		v: 3,
 		kind: "automatic",
-		percent: 20,
-		boundary: 20,
+		tokens: 30_000,
+		boundaryTokens: 30_000,
 		reminder: 1,
 		tier: 1,
 		tierCount: 3,
 		tierFloor: 0,
 		anchorToolCallId: null,
-		growthBaselinePercent: 0,
+		suppressedThroughTokens: 0,
 	});
 	addNudgeStory(container, theme, "Prune Soon Nudge", {
-		v: 2,
+		v: 3,
 		kind: "automatic",
-		percent: 40,
-		boundary: 40,
+		tokens: 60_000,
+		boundaryTokens: 60_000,
 		reminder: 2,
 		tier: 2,
 		tierCount: 3,
 		tierFloor: 1,
 		anchorToolCallId: null,
-		growthBaselinePercent: 0,
+		suppressedThroughTokens: 0,
 	});
 	addNudgeStory(container, theme, "Prune Now Nudge", {
-		v: 2,
+		v: 3,
 		kind: "automatic",
-		percent: 60,
-		boundary: 60,
+		tokens: 90_000,
+		boundaryTokens: 90_000,
 		reminder: 3,
 		tier: 3,
 		tierCount: 3,
 		tierFloor: 2,
 		anchorToolCallId: null,
-		growthBaselinePercent: 0,
+		suppressedThroughTokens: 0,
 	});
 	addNudgeStory(container, theme, "Manual Request", {
-		v: 2,
+		v: 3,
 		kind: "manual",
-		percent: null,
-		boundary: null,
+		tokens: null,
+		boundaryTokens: null,
 		reminder: null,
 		tier: null,
 		tierCount: null,
 		tierFloor: null,
 		anchorToolCallId: null,
-		growthBaselinePercent: null,
+		suppressedThroughTokens: null,
 	});
 	addToolStory(container, tui, cwd, theme, "Applied Prune", applied, false);
 	addToolStory(container, tui, cwd, theme, "Applied With Warning", warned, false);
@@ -99,7 +99,7 @@ export function createContextPruningPreviewWidget(tui: TUI, cwd: string, theme: 
 	return container;
 }
 
-function addNudgeStory(container: Container, theme: Theme, title: string, details: ContextPruningNudgeDetailsV2): void {
+function addNudgeStory(container: Container, theme: Theme, title: string, details: ContextPruningNudgeDetailsV3): void {
 	addSampleTitle(container, theme, title);
 	addMessageBox(
 		container,

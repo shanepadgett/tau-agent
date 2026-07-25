@@ -20,7 +20,7 @@ Context Pruning does not impose a minimum token saving and does not reject a che
 
 ## Automatic and manual requests
 
-Tau checks context growth after tool-using turns and can send progressively stronger private instructions from `nudgeInstructions`. Growth is measured from the first tool-using turn after the latest checkpoint. Branch navigation and compaction reconstruct that baseline from the active branch.
+Tau checks active context size after tool-using turns and can send progressively stronger private instructions from `nudgeInstructions`. Hints occur at fixed token intervals rather than percentages of the model's context window. After a checkpoint, Tau suppresses boundaries already crossed by the resulting context and resumes at the next boundary. Branch navigation and compaction reconstruct that state from the active branch.
 
 Run `/prune` with no arguments to ask the agent to create a checkpoint and continue its task immediately.
 
@@ -35,5 +35,5 @@ Normal Pi compaction remains independent. When a compaction no longer includes a
 Settings live under `extensions.contextPruning` in Tau settings.
 
 - `enabled`: enables the tool, `/prune`, projection, markers, and branch replay. Defaults to `true`.
-- `nudgeEveryPercent`: context-growth interval between automatic hints, from `1` through `100`. Defaults to `20`.
+- `nudgeEveryTokens`: active-context interval between automatic hints. Defaults to `30000`, producing the default instruction ladder at 30k, 60k, and 90k tokens.
 - `nudgeInstructions`: ordered list of one through five nonempty instructions. Later reminders repeat the final instruction. Defaults to three escalating instructions.

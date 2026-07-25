@@ -15,11 +15,11 @@ import { createToolRowStateStore } from "../../shared/tool-row-state.ts";
 import { contextPruneParameters, executeContextPrune } from "./prune.ts";
 import { projectContext } from "./projection.ts";
 import {
-	parseContextPruningNudgeDetailsV2,
+	parseContextPruningNudgeDetailsV3,
 	renderContextPruneCall,
 	renderContextPruneResult,
 	renderContextPruningNudge,
-	type ContextPruningNudgeDetailsV2,
+	type ContextPruningNudgeDetailsV3,
 } from "./render.ts";
 import contextPruningSettings from "./settings.ts";
 
@@ -30,8 +30,8 @@ const NUDGE_BASELINE_ENTRY_TYPE = "tau.context-pruning.nudge-baseline";
 
 interface NudgeState {
 	anchorToolCallId: string | undefined;
-	growthBaselinePercent: number | undefined;
-	highestBoundary: number;
+	suppressedThroughTokens: number | undefined;
+	highestBoundaryTokens: number;
 	highestTier: number;
 	terminalTierReached: boolean;
 }
@@ -39,20 +39,20 @@ interface NudgeState {
 export default function contextPruningExtension(pi: ExtensionAPI): void {
 	let enabled = false;
 	let lifecycleGeneration = 0;
-	let nudgeEveryPercent = contextPruningSettings.defaults.nudgeEveryPercent;
+	let nudgeEveryTokens = contextPruningSettings.defaults.nudgeEveryTokens;
 	let nudgeInstructions = contextPruningSettings.defaults.nudgeInstructions;
 	let toolRegistered = false;
 	let commandRegistered = false;
 	let visualRows = new Set<string>();
 	let nudgeState: NudgeState = {
 		anchorToolCallId: undefined,
-		growthBaselinePercent: 0,
-		highestBoundary: 0,
+		suppressedThroughTokens: 0,
+		highestBoundaryTokens: 0,
 		highestTier: 0,
 		terminalTierReached: false,
 	};
 	const rowState = createToolRowStateStore(pi, "context-pruning.tool-row-state");
-	pi.registerMessageRenderer<ContextPruningNudgeDetailsV2>(NUDGE_MESSAGE_TYPE, (message, _options, theme) =>
+	pi.registerMessageRenderer<ContextPruningNudgeDetailsV3>(NUDGE_MESSAGE_TYPE, (message, _options, theme) =>
 		renderContextPruningNudge(message.details, theme),
 	);
 
@@ -98,7 +98,7 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 		const settings = await loadTauExtensionSettings(ctx, contextPruningSettings);
 		if (generation !== lifecycleGeneration) return;
 		enabled = settings.enabled;
-		nudgeEveryPercent = settings.nudgeEveryPercent;
+		nudgeEveryTokens = settings.nudgeEveryTokens;
 		nudgeInstructions = settings.nudgeInstructions;
 		setContextPruningEnabled(enabled);
 		if (enabled && !toolRegistered) {
@@ -162,22 +162,22 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 						commandContext.sessionManager.getBranch(),
 						true,
 					).latestAnchorToolCallId;
-					pi.sendMessage<ContextPruningNudgeDetailsV2>(
+					pi.sendMessage<ContextPruningNudgeDetailsV3>(
 						{
 							customType: NUDGE_MESSAGE_TYPE,
 							content: manualPruneSteeringMessage(),
 							display: true,
 							details: {
-								v: 2,
+								v: 3,
 								kind: "manual",
-								percent: null,
-								boundary: null,
+								tokens: null,
+								boundaryTokens: null,
 								reminder: null,
 								tier: null,
 								tierCount: null,
 								tierFloor: null,
 								anchorToolCallId: anchorToolCallId ?? null,
-								growthBaselinePercent: null,
+								suppressedThroughTokens: null,
 							},
 						},
 						{ deliverAs: "steer", triggerTurn: true },
@@ -204,8 +204,8 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 		visualRows.clear();
 		nudgeState = {
 			anchorToolCallId: undefined,
-			growthBaselinePercent: 0,
-			highestBoundary: 0,
+			suppressedThroughTokens: 0,
+			highestBoundaryTokens: 0,
 			highestTier: 0,
 			terminalTierReached: false,
 		};
@@ -216,45 +216,44 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 	pi.on("turn_end", (event, ctx) => {
 		if (!enabled || event.toolResults.length === 0) return undefined;
 		const usage = ctx.getContextUsage();
-		if (!usage || usage.percent === null || !Number.isFinite(usage.percent)) return undefined;
-		const rawPercent = Math.max(0, Math.min(100, usage.percent));
-		const percent = Math.floor(rawPercent);
+		if (!usage || usage.tokens === null || !Number.isFinite(usage.tokens)) return undefined;
+		const tokens = Math.max(0, Math.floor(usage.tokens));
 		const activeAnchor = replayContextPruningState(ctx.sessionManager.getBranch(), true).latestAnchorToolCallId;
 		if (activeAnchor !== nudgeState.anchorToolCallId) {
 			nudgeState = reconstructNudgeState(ctx.sessionManager.getBranch(), activeAnchor);
 		}
-		if (activeAnchor !== undefined && nudgeState.growthBaselinePercent === undefined) {
-			const baselinePercent = Math.ceil(rawPercent);
+		if (activeAnchor !== undefined && nudgeState.suppressedThroughTokens === undefined) {
+			const suppressedThroughTokens = Math.floor(tokens / nudgeEveryTokens) * nudgeEveryTokens;
 			pi.appendEntry(NUDGE_BASELINE_ENTRY_TYPE, {
-				v: 1,
+				v: 2,
 				anchorToolCallId: activeAnchor,
-				baselinePercent,
+				suppressedThroughTokens,
 			});
-			nudgeState.growthBaselinePercent = baselinePercent;
+			nudgeState.suppressedThroughTokens = suppressedThroughTokens;
+			nudgeState.highestBoundaryTokens = suppressedThroughTokens;
 			return undefined;
 		}
-		const baseline = nudgeState.growthBaselinePercent ?? 0;
-		const reminder = Math.floor((percent - baseline) / nudgeEveryPercent);
+		const reminder = Math.floor(tokens / nudgeEveryTokens);
 		if (reminder < 1) return undefined;
-		const boundary = baseline + reminder * nudgeEveryPercent;
-		if (boundary <= nudgeState.highestBoundary) return undefined;
+		const boundaryTokens = reminder * nudgeEveryTokens;
+		if (boundaryTokens <= nudgeState.highestBoundaryTokens) return undefined;
 		const tierCount = nudgeInstructions.length;
 		const tierFloor = nudgeState.terminalTierReached ? tierCount : Math.min(nudgeState.highestTier, tierCount);
 		const tier = Math.max(Math.min(reminder, tierCount), tierFloor);
 		const instruction = nudgeInstructions[tier - 1] ?? nudgeInstructions[0];
-		const details: ContextPruningNudgeDetailsV2 = {
-			v: 2,
+		const details: ContextPruningNudgeDetailsV3 = {
+			v: 3,
 			kind: "automatic",
-			percent,
-			boundary,
+			tokens,
+			boundaryTokens,
 			reminder,
 			tier,
 			tierCount,
 			tierFloor,
 			anchorToolCallId: activeAnchor ?? null,
-			growthBaselinePercent: baseline,
+			suppressedThroughTokens: nudgeState.suppressedThroughTokens ?? 0,
 		};
-		pi.sendMessage<ContextPruningNudgeDetailsV2>(
+		pi.sendMessage<ContextPruningNudgeDetailsV3>(
 			{
 				customType: NUDGE_MESSAGE_TYPE,
 				content: automaticPruneSteeringMessage(instruction, tier === tierCount),
@@ -263,7 +262,7 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 			},
 			{ deliverAs: "steer" },
 		);
-		nudgeState.highestBoundary = boundary;
+		nudgeState.highestBoundaryTokens = boundaryTokens;
 		nudgeState.highestTier = Math.max(nudgeState.highestTier, tier);
 		nudgeState.terminalTierReached ||= tier === tierCount;
 		return undefined;
@@ -289,8 +288,8 @@ function setsEqual(left: ReadonlySet<string>, right: ReadonlySet<string>): boole
 }
 
 function reconstructNudgeState(branch: readonly SessionEntry[], anchorToolCallId: string | undefined): NudgeState {
-	let growthBaselinePercent = anchorToolCallId === undefined ? 0 : undefined;
-	let highestBoundary = 0;
+	let suppressedThroughTokens = anchorToolCallId === undefined ? 0 : undefined;
+	let highestBoundaryTokens = 0;
 	let highestTier = 0;
 	let terminalTierReached = false;
 	let anchorResultIndex = -1;
@@ -310,65 +309,67 @@ function reconstructNudgeState(branch: readonly SessionEntry[], anchorToolCallId
 			const baseline = parseNudgeBaseline(entry.data);
 			if (
 				baseline &&
-				growthBaselinePercent === undefined &&
+				suppressedThroughTokens === undefined &&
 				index > anchorResultIndex &&
 				baseline.anchorToolCallId === anchorToolCallId
 			) {
-				growthBaselinePercent = baseline.baselinePercent;
+				suppressedThroughTokens = baseline.suppressedThroughTokens;
+				highestBoundaryTokens = baseline.suppressedThroughTokens;
 			}
 			continue;
 		}
 		if (entry.type !== "custom_message" || entry.customType !== NUDGE_MESSAGE_TYPE) continue;
-		const details = parseContextPruningNudgeDetailsV2(entry.details);
+		const details = parseContextPruningNudgeDetailsV3(entry.details);
 		if (
 			!details ||
 			details.kind !== "automatic" ||
 			index <= anchorResultIndex ||
 			details.anchorToolCallId !== (anchorToolCallId ?? null) ||
-			details.boundary === null ||
-			details.growthBaselinePercent === null ||
-			(growthBaselinePercent !== undefined && details.growthBaselinePercent !== growthBaselinePercent)
+			details.boundaryTokens === null ||
+			details.suppressedThroughTokens === null ||
+			(suppressedThroughTokens !== undefined && details.suppressedThroughTokens !== suppressedThroughTokens)
 		)
 			continue;
 		const expectedTierFloor: number = terminalTierReached
 			? details.tierCount
 			: Math.min(highestTier, details.tierCount);
-		if (details.boundary <= highestBoundary || details.tierFloor !== expectedTierFloor) continue;
-		highestBoundary = Math.max(highestBoundary, details.boundary);
+		if (details.boundaryTokens <= highestBoundaryTokens || details.tierFloor !== expectedTierFloor) continue;
+		highestBoundaryTokens = Math.max(highestBoundaryTokens, details.boundaryTokens);
 		highestTier = Math.max(highestTier, details.tier);
 		terminalTierReached ||= details.tier === details.tierCount;
-		growthBaselinePercent = details.growthBaselinePercent;
+		suppressedThroughTokens = details.suppressedThroughTokens;
 	}
-	return { anchorToolCallId, growthBaselinePercent, highestBoundary, highestTier, terminalTierReached };
+	return { anchorToolCallId, suppressedThroughTokens, highestBoundaryTokens, highestTier, terminalTierReached };
 }
 
-function parseNudgeBaseline(value: unknown): { v: 1; anchorToolCallId: string; baselinePercent: number } | undefined {
+function parseNudgeBaseline(
+	value: unknown,
+): { v: 2; anchorToolCallId: string; suppressedThroughTokens: number } | undefined {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
 	const record = value as Record<string, unknown>;
 	if (
 		Object.keys(record).length !== 3 ||
 		!Object.hasOwn(record, "v") ||
 		!Object.hasOwn(record, "anchorToolCallId") ||
-		!Object.hasOwn(record, "baselinePercent") ||
-		record.v !== 1 ||
+		!Object.hasOwn(record, "suppressedThroughTokens") ||
+		record.v !== 2 ||
 		typeof record.anchorToolCallId !== "string" ||
 		record.anchorToolCallId.length === 0 ||
-		typeof record.baselinePercent !== "number" ||
-		!Number.isInteger(record.baselinePercent) ||
-		record.baselinePercent < 0 ||
-		record.baselinePercent > 100
+		typeof record.suppressedThroughTokens !== "number" ||
+		!Number.isSafeInteger(record.suppressedThroughTokens) ||
+		record.suppressedThroughTokens < 0
 	)
 		return undefined;
 	return {
-		v: 1,
+		v: 2,
 		anchorToolCallId: record.anchorToolCallId,
-		baselinePercent: record.baselinePercent,
+		suppressedThroughTokens: record.suppressedThroughTokens,
 	};
 }
 
 function automaticPruneSteeringMessage(instruction: string, finalTier: boolean): string {
 	const silent =
-		"Internal context-management instruction. Follow it silently. Do not mention or acknowledge context percentages, prune messages, or internal context management.";
+		"Internal context-management instruction. Follow it silently. Do not mention or acknowledge context-token counts, prune messages, or internal context management.";
 	const protocol =
 		"When pruning, first preserve durable conclusions, user constraints, conditional relevance, and the next action in visible prose, then call context_prune.";
 	return finalTier
