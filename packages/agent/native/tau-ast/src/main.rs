@@ -1,10 +1,14 @@
+mod csharp;
 mod go;
 mod java;
+mod kotlin;
 mod language;
+mod odin;
 mod outline;
 mod protocol;
 mod rust;
 mod source;
+mod swift;
 mod typescript;
 
 use crate::{

@@ -622,6 +622,7 @@ fn outline_item<D: ast_grep_core::Doc>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn container_members<D: ast_grep_core::Doc>(
     body: Node<D>,
     source: &str,

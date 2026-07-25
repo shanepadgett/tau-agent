@@ -497,13 +497,12 @@ fn member_names<D: ast_grep_core::Doc>(node: Node<D>) -> Vec<(String, Node<D>)> 
     }
     let fallback = node
         .dfs()
-        .filter(|child| {
+        .find(|child| {
             matches!(
                 child.kind().as_ref(),
                 "type_identifier" | "field_identifier"
             )
         })
-        .next()
         .or_else(|| node.children().find(|child| child.is_named()));
     fallback
         .map(|name| vec![(name.text().trim().to_owned(), name)])

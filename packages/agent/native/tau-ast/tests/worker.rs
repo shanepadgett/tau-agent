@@ -158,6 +158,39 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
             .as_array()
             .is_some_and(|items| items.iter().any(|item| item["name"] == "Circle"))
     );
+    let odin_items = odin["result"]["files"][0]["items"]
+        .as_array()
+        .expect("Odin items should be an array");
+    assert_eq!(odin_items[0]["rowKind"], "package");
+    let mapped = odin_items
+        .iter()
+        .find(|item| item["name"] == "map_value")
+        .expect("Odin model should contain map_value");
+    assert!(mapped["bodyRange"].is_object());
+    assert!(mapped["signature"]
+        .as_str()
+        .is_some_and(|signature| signature.contains("$T: typeid") && !signature.contains("fmt.println")));
+    let mapped_locator = mapped["locator"]
+        .as_str()
+        .expect("Odin procedure should have a locator");
+    send_request(
+        &mut worker,
+        json!({
+            "operation": "symbol",
+            "requestId": 100,
+            "protocolVersion": 4,
+            "locators": [mapped_locator],
+            "view": "declarationWithImports",
+            "contextLines": 0
+        }),
+    );
+    let mapped_symbol = read_response(&mut stdout);
+    assert_eq!(mapped_symbol["success"], true);
+    let mapped_source = mapped_symbol["result"]["blocks"][0]["source"]
+        .as_str()
+        .expect("Odin symbol should contain source");
+    assert!(mapped_source.contains("import fmt \"core:fmt\""));
+    assert!(!mapped_source.contains("import unused"));
 
     let bundled_languages = [
         ("go.go", "go", "FileParser"),
@@ -245,6 +278,25 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
                     .is_some_and(|signature| !signature.contains("Some("))
             );
         }
+        if language == "cSharp" {
+            let items = response["result"]["files"][0]["items"]
+                .as_array()
+                .expect("C# items should be an array");
+            assert_eq!(items[0]["rowKind"], "import");
+            let parser = items
+                .iter()
+                .find(|item| item["name"] == "FileParser")
+                .expect("C# model should contain FileParser");
+            let method = parser["members"]
+                .as_array()
+                .and_then(|members| members.iter().find(|member| member["name"] == "Parse"))
+                .expect("C# class should contain Parse");
+            assert_eq!(method["qualifiedName"], "Fixture.Parsing.FileParser.Parse");
+            assert!(method["bodyRange"].is_object());
+            assert!(method["signature"]
+                .as_str()
+                .is_some_and(|signature| !signature.contains("return")));
+        }
         if language == "java" {
             let items = response["result"]["files"][0]["items"]
                 .as_array()
@@ -270,6 +322,53 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
                     .as_str()
                     .is_some_and(|signature| !signature.contains("return"))
             );
+        }
+        if language == "kotlin" {
+            let items = response["result"]["files"][0]["items"]
+                .as_array()
+                .expect("Kotlin items should be an array");
+            assert_eq!(items[1]["rowKind"], "package");
+            let parser = items
+                .iter()
+                .find(|item| item["name"] == "FileParser")
+                .expect("Kotlin model should contain FileParser");
+            let method = parser["members"]
+                .as_array()
+                .and_then(|members| members.iter().find(|member| member["name"] == "parse"))
+                .expect("Kotlin class should contain parse");
+            assert_eq!(method["qualifiedName"], "FileParser.parse");
+            assert!(method["bodyRange"].is_object());
+            assert_eq!(
+                method["signature"],
+                "override fun parse(source: String): Result"
+            );
+        }
+        if language == "swift" {
+            let items = response["result"]["files"][0]["items"]
+                .as_array()
+                .expect("Swift items should be an array");
+            assert_eq!(items[0]["rowKind"], "import");
+            assert!(items[0].get("locator").is_none());
+            let parser = items
+                .iter()
+                .find(|item| item["name"] == "FileParser")
+                .expect("Swift model should contain FileParser");
+            let method = parser["members"]
+                .as_array()
+                .and_then(|members| members.iter().find(|member| member["name"] == "parse"))
+                .expect("Swift class should contain parse");
+            assert_eq!(method["qualifiedName"], "FileParser.parse");
+            assert!(method["bodyRange"].is_object());
+            assert_eq!(
+                method["signature"],
+                "open func parse(_ source: borrowing String) async throws -> String"
+            );
+            assert!(items.iter().any(|item| {
+                item["symbolType"] == "namespace"
+                    && item["qualifiedName"]
+                        .as_str()
+                        .is_some_and(|name| name.starts_with("extension Result"))
+            }));
         }
     }
 

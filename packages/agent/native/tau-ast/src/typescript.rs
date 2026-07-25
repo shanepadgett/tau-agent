@@ -111,22 +111,56 @@ pub fn filter_typescript_items<D: ast_grep_core::Doc>(
     }
 
     let mut selected_names = BTreeSet::new();
+    let mut selected_item_ranges = Vec::new();
     let mut selected_ranges = Vec::new();
     for item in items
         .iter_mut()
         .filter(|item| item.row_kind == OutlineRowKind::Declaration)
     {
         let visible = include_private || item.is_exported;
-        let item_matches = visible && names.contains(item.entry.name.as_str());
+        let item_matches = visible
+            && (names.contains(item.entry.name.as_str())
+                || names.contains(item.entry.qualified_name.as_str()));
+        let matching_containers = item
+            .members
+            .iter()
+            .filter(|member| {
+                matches!(
+                    member.entry.symbol_type,
+                    SymbolType::Class
+                        | SymbolType::Interface
+                        | SymbolType::Enum
+                        | SymbolType::Namespace
+                ) && (names.contains(member.entry.name.as_str())
+                    || names.contains(member.entry.qualified_name.as_str()))
+            })
+            .map(|member| member.entry.qualified_name.clone())
+            .collect::<Vec<_>>();
         item.members.retain(|member| {
+            let container_matches = matching_containers.iter().any(|container| {
+                member.entry.qualified_name == *container
+                    || member
+                        .entry
+                        .qualified_name
+                        .strip_prefix(container)
+                        .is_some_and(|suffix| suffix.starts_with('.'))
+            });
             visible
                 && (include_private || member.is_public)
-                && (item_matches || names.contains(member.entry.name.as_str()))
+                && (item_matches
+                    || container_matches
+                    || names.contains(member.entry.name.as_str())
+                    || names.contains(member.entry.qualified_name.as_str()))
         });
         if item_matches || !item.members.is_empty() {
+            selected_item_ranges.push(item.entry.range.clone());
             selected_names.insert(item.entry.name.clone());
             selected_names.extend(item.members.iter().map(|member| member.entry.name.clone()));
-            selected_ranges.push(item.entry.range.clone());
+            if item_matches {
+                selected_ranges.push(item.entry.range.clone());
+            } else {
+                selected_ranges.extend(item.members.iter().map(|member| member.entry.range.clone()));
+            }
         }
     }
 
@@ -144,7 +178,7 @@ pub fn filter_typescript_items<D: ast_grep_core::Doc>(
 
     items.retain(|item| match item.row_kind {
         OutlineRowKind::Package => false,
-        OutlineRowKind::Declaration => selected_ranges.iter().any(|selected| {
+        OutlineRowKind::Declaration => selected_item_ranges.iter().any(|selected| {
             selected.start_byte == item.entry.range.start_byte
                 && selected.end_byte == item.entry.range.end_byte
                 && (selected_names.contains(&item.entry.name)
@@ -176,14 +210,28 @@ pub fn filter_typescript_items<D: ast_grep_core::Doc>(
 pub fn finalize_typescript_signatures(items: &mut [OutlineItem]) {
     for item in items {
         if item.row_kind == OutlineRowKind::Declaration
-            && matches!(item.entry.symbol_type, SymbolType::Class)
+            && matches!(
+                item.entry.symbol_type,
+                SymbolType::Class | SymbolType::Namespace
+            )
         {
             let header = item.entry.signature.trim_end();
+            let members = item
+                .members
+                .iter()
+                .filter(|member| {
+                    item.entry.symbol_type != SymbolType::Namespace
+                        || member
+                            .entry
+                            .qualified_name
+                            .rsplit_once('.')
+                            .is_some_and(|(parent, _)| parent == item.entry.qualified_name)
+                })
+                .collect::<Vec<_>>();
             item.entry.signature = if item.members.is_empty() {
                 format!("{header} {{}}")
             } else {
-                let members = item
-                    .members
+                let members = members
                     .iter()
                     .map(|member| indent(&member.entry.signature))
                     .collect::<Vec<_>>()
@@ -310,6 +358,15 @@ fn declaration_members<D: ast_grep_core::Doc>(
     parent_name: &str,
     include_docs: bool,
 ) -> Vec<OutlineMember> {
+    if matches!(declaration.kind().as_ref(), "internal_module" | "module") {
+        return namespace_members(
+            declaration,
+            source,
+            recovery_ranges,
+            parent_name,
+            include_docs,
+        );
+    }
     let Some(body) = declaration.field("body") else {
         return Vec::new();
     };
@@ -371,6 +428,86 @@ fn declaration_members<D: ast_grep_core::Doc>(
             })
         })
         .collect()
+}
+
+fn namespace_members<D: ast_grep_core::Doc>(
+    declaration: Node<D>,
+    source: &str,
+    recovery_ranges: &[std::ops::Range<usize>],
+    parent_name: &str,
+    include_docs: bool,
+) -> Vec<OutlineMember> {
+    let Some(body) = declaration.field("body") else {
+        return Vec::new();
+    };
+    let mut members = Vec::new();
+    for statement in body.children().filter(|child| child.is_named()) {
+        let (outer, nested, exported) = if statement.kind() == "export_statement" {
+            let nested = statement
+                .field("declaration")
+                .or_else(|| {
+                    statement.children().find(|child| {
+                        child.is_named() && is_declaration_kind(child.kind().as_ref())
+                    })
+                })
+                .and_then(unwrap_ambient);
+            (statement.clone(), nested, true)
+        } else if statement.kind() == "ambient_declaration" {
+            (statement.clone(), unwrap_ambient(statement.clone()), false)
+        } else if is_declaration_kind(statement.kind().as_ref()) {
+            (statement.clone(), Some(statement.clone()), false)
+        } else {
+            continue;
+        };
+        let Some(nested) = nested else {
+            continue;
+        };
+        for mut item in declaration_items(
+            outer,
+            nested,
+            source,
+            recovery_ranges,
+            exported,
+            include_docs,
+        ) {
+            let nested_root = item.entry.qualified_name.clone();
+            let qualified_root = format!("{parent_name}.{nested_root}");
+            item.entry.role = EntryRole::Member;
+            item.entry.qualified_name = qualified_root.clone();
+            if matches!(
+                item.entry.symbol_type,
+                SymbolType::Class
+                    | SymbolType::Interface
+                    | SymbolType::Enum
+                    | SymbolType::Namespace
+            ) && let Some(brace) = item.entry.signature.find('{')
+            {
+                item.entry.signature = format!(
+                    "{} {{ … }}",
+                    item.entry.signature[..brace].trim_end()
+                );
+            } else if item.entry.body_range.is_some() {
+                item.entry.signature = format!("{} {{ … }}", item.entry.signature.trim_end());
+            }
+            members.push(OutlineMember {
+                entry: item.entry,
+                is_public: exported,
+            });
+            members.extend(item.members.into_iter().map(|mut member| {
+                member.entry.qualified_name = member
+                    .entry
+                    .qualified_name
+                    .strip_prefix(&nested_root)
+                    .map_or_else(
+                        || format!("{qualified_root}.{}", member.entry.name),
+                        |suffix| format!("{qualified_root}{suffix}"),
+                    );
+                member.is_public = exported && member.is_public;
+                member
+            }));
+        }
+    }
+    members
 }
 
 fn structural_item<D: ast_grep_core::Doc>(
@@ -475,14 +612,26 @@ fn declaration_body<D: ast_grep_core::Doc>(node: Node<D>) -> Option<Node<D>> {
         | "method_definition"
         | "class_declaration"
         | "abstract_class_declaration" => node.field("body"),
+        "internal_module" | "module" => node.field("body"),
         "variable_declarator" | "public_field_definition" => {
             node.field("value").and_then(|value| {
-                matches!(
+                if matches!(
                     value.kind().as_ref(),
                     "arrow_function" | "function_expression" | "function"
-                )
-                .then(|| value.field("body"))
-                .flatten()
+                ) {
+                    value.field("body")
+                } else if value.kind() == "object"
+                    || value.clone().dfs().any(|child| {
+                        matches!(
+                            child.kind().as_ref(),
+                            "arrow_function" | "function_expression" | "function"
+                        ) && child.field("body").is_some()
+                    })
+                {
+                    Some(value)
+                } else {
+                    None
+                }
             })
         }
         _ => None,
@@ -716,7 +865,7 @@ fn contract_signature<D: ast_grep_core::Doc>(
             format!("{decorators}\n{declaration}")
         }
     };
-    if signature.ends_with("=>") {
+    if signature.ends_with("=>") || signature.ends_with('=') {
         format!("{signature} …")
     } else {
         signature

@@ -50,7 +50,8 @@ const symbolParams = Type.Object(
 			description: "Numeric locators shown in parentheses by outline",
 		}),
 		view: StringEnum(["signature", "declaration", "declarationWithImports"] as const, {
-			description: "Source view to retrieve; TypeScript, TSX, Go, Rust, and Java support selective views",
+			description:
+				"Source view to retrieve; TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, and Swift support selective views",
 		}),
 		contextLines: Type.Optional(
 			Type.Integer({ minimum: 0, description: "Lines of source context before and after each declaration" }),
@@ -142,9 +143,13 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 		if (
 			language === "typeScript" ||
 			language === "tsx" ||
+			language === "odin" ||
 			language === "go" ||
 			language === "rust" ||
-			language === "java"
+			language === "cSharp" ||
+			language === "java" ||
+			language === "kotlin" ||
+			language === "swift"
 		) {
 			const signatureLines = signature.split("\n");
 			const relativeNameLine = entry.nameRange.start.line - entry.range.start.line;
@@ -208,13 +213,6 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 			].join("\n");
 		}
 		signature = signature.replace(/\s+/g, " ");
-		if (language === "odin") {
-			signature = signature
-				.replace(/\s*([(),:])\s*/g, "$1")
-				.replace(/\s*->\s*/g, "->")
-				.replace(/\s*:=\s*/g, ":=")
-				.replace(/\s*\{\s*$/, "");
-		}
 		const label = signature && signature.includes(entry.name) ? signature : `${entry.name} ${signature}`.trim();
 		return `${indent}${lines}(${locator(entry, path)}): ${label}`;
 	}
@@ -233,7 +231,14 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 	): { header: string; footer: string } | undefined {
 		const firstMember = item.members[0];
 		if (!firstMember) return undefined;
-		if (language === "java" && item.bodyRange) {
+		if (
+			(language === "odin" ||
+				language === "cSharp" ||
+				language === "java" ||
+				language === "kotlin" ||
+				language === "swift") &&
+			item.bodyRange
+		) {
 			const bodyOffset = item.bodyRange.startByte - item.range.startByte;
 			const signature = Buffer.from(item.signature);
 			if (bodyOffset >= 0 && bodyOffset < signature.byteLength) {
@@ -249,10 +254,16 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 			item.symbolType === "struct" ||
 			item.symbolType === "interface" ||
 			item.symbolType === "enum" ||
+			item.symbolType === "object" ||
 			item.symbolType === "namespace"
 		) {
 			const members = (
-				language === "java"
+				language === "typeScript" ||
+				language === "tsx" ||
+				language === "cSharp" ||
+				language === "java" ||
+				language === "kotlin" ||
+				language === "swift"
 					? item.members.filter(
 							(member) => member.qualifiedName.split(".").slice(0, -1).join(".") === item.qualifiedName,
 						)
@@ -319,9 +330,13 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 		if (
 			file.language === "typeScript" ||
 			file.language === "tsx" ||
+			file.language === "odin" ||
 			file.language === "go" ||
 			file.language === "rust" ||
-			file.language === "java"
+			file.language === "cSharp" ||
+			file.language === "java" ||
+			file.language === "kotlin" ||
+			file.language === "swift"
 		) {
 			let previousSection = "";
 			for (const item of file.items) {
@@ -346,8 +361,14 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 						? renderStructuralEntry(item, "")
 						: renderEntry(item, file.path, file.language, "", frame?.header),
 				);
-				const javaContainers = new Map(
-					file.language === "java"
+				const nestedContainers = new Map(
+					file.language === "typeScript" ||
+						file.language === "tsx" ||
+						file.language === "odin" ||
+						file.language === "cSharp" ||
+						file.language === "java" ||
+						file.language === "kotlin" ||
+						file.language === "swift"
 						? [item, ...item.members]
 								.filter(
 									(entry) =>
@@ -360,19 +381,36 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 						: [],
 				);
 				const emittedEnumSeparators = new Set<string>();
-				for (const member of item.members) {
+				const openNestedDepths: number[] = [];
+				for (const [memberIndex, member] of item.members.entries()) {
 					const depth =
-						file.language === "java"
+						file.language === "typeScript" ||
+						file.language === "tsx" ||
+						file.language === "odin" ||
+						file.language === "cSharp" ||
+						file.language === "java" ||
+						file.language === "kotlin" ||
+						file.language === "swift"
 							? Math.max(1, member.qualifiedName.split(".").length - item.qualifiedName.split(".").length)
 							: 1;
 					const parent = member.qualifiedName.split(".").slice(0, -1).join(".");
 					const siblings =
-						file.language === "java"
+						file.language === "typeScript" ||
+						file.language === "tsx" ||
+						file.language === "odin" ||
+						file.language === "cSharp" ||
+						file.language === "java" ||
+						file.language === "kotlin" ||
+						file.language === "swift"
 							? item.members.filter(
 									(candidate) => candidate.qualifiedName.split(".").slice(0, -1).join(".") === parent,
 								)
 							: [];
-					const parentIsEnum = javaContainers.get(parent)?.symbolType === "enum";
+					const parentIsEnum = file.language === "java" && nestedContainers.get(parent)?.symbolType === "enum";
+					while (openNestedDepths.length > 0 && (openNestedDepths.at(-1) ?? 0) >= depth) {
+						const closingDepth = openNestedDepths.pop();
+						if (closingDepth !== undefined) lines.push(`${"  ".repeat(closingDepth)}}`);
+					}
 					if (
 						parentIsEnum &&
 						!siblings.some((candidate) => candidate.symbolType === "enumMember") &&
@@ -382,6 +420,12 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 						emittedEnumSeparators.add(parent);
 					}
 					let memberSignature = member.signature;
+					const nextMember = item.members[memberIndex + 1];
+					const hasDescendants = nextMember?.qualifiedName.startsWith(`${member.qualifiedName}.`) ?? false;
+					if (hasDescendants && memberSignature.endsWith(" { … }")) {
+						memberSignature = `${memberSignature.slice(0, -" { … }".length)} {`;
+						openNestedDepths.push(depth);
+					}
 					if (parentIsEnum && member.symbolType === "enumMember") {
 						const constants = siblings.filter((candidate) => candidate.symbolType === "enumMember");
 						const constantIndex = constants.indexOf(member);
@@ -389,6 +433,10 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 						else if (siblings.some((candidate) => candidate.symbolType !== "enumMember")) memberSignature += ";";
 					}
 					lines.push(renderEntry(member, file.path, file.language, "  ".repeat(depth), memberSignature));
+				}
+				while (openNestedDepths.length > 0) {
+					const closingDepth = openNestedDepths.pop();
+					if (closingDepth !== undefined) lines.push(`${"  ".repeat(closingDepth)}}`);
 				}
 				if (frame) lines.push(frame.footer);
 			}

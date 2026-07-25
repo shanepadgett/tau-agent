@@ -2,7 +2,7 @@
 
 Status: active
 Updated: 2026-07-24
-Current language: Kotlin
+Current language: none
 
 ## Purpose
 
@@ -137,6 +137,8 @@ Alternatives:
 
 References: Tau fixtures, `ast-bro`, `codex`, `excalidraw`
 
+Status: complete
+
 - [x] Dedicated TypeScript and TSX adapter.
 - [x] Source-order imports, declarations, exports, and side effects.
 - [x] Complete functions, overloads, classes, interfaces, type aliases, callable variables, decorators, and JSDoc.
@@ -144,9 +146,16 @@ References: Tau fixtures, `ast-bro`, `codex`, `excalidraw`
 - [x] Signature, declaration, and declaration-with-imports views.
 - [x] Public and member-name filtering.
 - [x] Live declaration edit/revert trial without `read`.
-- [ ] Exercise the adapter against a substantial real TSX repository.
-- [ ] Cover namespaces, merged declarations, enums, accessors, construct signatures, call signatures, and index signatures in the live trial.
-- [ ] Resolve any defects discovered while other adapters reuse the common model.
+- [x] Exercise the adapter against a substantial real TSX repository.
+- [x] Cover namespaces, merged declarations, enums, accessors, construct signatures, call signatures, and index signatures through focused fixtures and real TSX trials.
+- [x] Resolve defects discovered while other adapters reused the common model.
+- [x] Complete an unread TSX live edit/revert exit check after `/reload`.
+
+Representative native-worker trials: Excalidraw `App.tsx`, `Actions.tsx`, `Dialog.tsx`, and `LayerUI.tsx`. All parsed without recovery. The 13,801-line `App` class retained 268 qualified members while redacting object-literal field implementations and callbacks nested inside wrapper calls.
+
+Focused namespace coverage retains separately locatable merged declarations, qualified nested classes and interfaces, getters and setters, enums, construct signatures, call signatures, and index signatures. Matching a nested container keeps its visible descendants without pulling unrelated namespace members.
+
+The unread TSX exit trial completed `outline → symbol(declaration) → patch → outline → symbol(declaration) → revert` on `ActiveConfirmDialog.tsx`. It renamed the local `activeConfirmDialog` binding to `pendingConfirmDialog`, resolved the edited declaration, restored the original binding, and resolved the original declaration. `git diff --exit-code` confirmed no remaining change.
 
 ## Go
 
@@ -226,67 +235,108 @@ Accepted Java limitations:
 
 ## Kotlin
 
-Status: active
+Status: complete
 Reference: `/Users/shanepadgett/.local/share/tau-agent/references/okio`
 
-- [ ] Add `kotlin.rs` direct adapter and route Kotlin through it.
-- [ ] Cover package/import declarations and import aliases.
-- [ ] Cover top-level functions and properties, classes, data/value/sealed classes, interfaces, enums, objects, companions, and type aliases.
-- [ ] Cover primary and secondary constructors, properties, accessors, methods, extension functions, and extension properties.
-- [ ] Preserve KDoc, annotations, use-site targets, generics, constraints, modifiers, default values, and expression bodies.
-- [ ] Apply Kotlin's default-public, `internal`, protected, and private visibility correctly.
-- [ ] Distinguish expression bodies from signatures with a clear omission marker.
-- [ ] Implement declaration-with-imports for normal, wildcard, and aliased imports.
-- [ ] Add fixture and worker tests.
-- [ ] Trial common, JVM, native, and test source sets in Okio and complete the unread edit/revert exit check.
+- [x] Add `kotlin.rs` direct adapter and route Kotlin through it.
+- [x] Cover package/import declarations and import aliases.
+- [x] Cover top-level functions and properties, classes, data/value/sealed classes, interfaces, enums, objects, companions, and type aliases.
+- [x] Cover primary and secondary constructors, properties, accessors, methods, extension functions, and extension properties.
+- [x] Preserve KDoc, annotations, use-site targets, generics, constraints, modifiers, default values, and expression bodies.
+- [x] Apply Kotlin's default-public, `internal`, protected, and private visibility correctly.
+- [x] Distinguish expression bodies from signatures with a clear omission marker.
+- [x] Implement declaration-with-imports for normal, wildcard, and aliased imports.
+- [x] Add fixture and worker tests.
+- [x] Trial common, JVM, native, and test source sets in Okio and complete the unread edit/revert exit check.
+
+Representative trials: `commonMain/kotlin/okio/ByteString.kt`, `jvmMain/kotlin/okio/AsyncTimeout.kt`, `nativeMain/kotlin/okio/Deflater.kt`, and `commonTest/kotlin/okio/ByteStringHexTest.kt`. The common `ByteString` declaration retained all public companion and class members despite three parser recovery nodes. The JVM, native, and test files parsed without recovery. Public-only outlines removed private, protected, and internal members while preserving their public owners.
+
+The unread exit trial completed `outline → symbol(declaration) → patch → outline → symbol(declaration) → revert` on `commonTest/kotlin/okio/ByteStringHexTest.kt`. The edited `decodeHexIgnoringWhitespace` declaration and restored `decodeHexIgnoreWhitespace` declaration both resolved exactly. `git diff --exit-code` confirmed no remaining change.
+
+Accepted Kotlin limitations:
+
+- The bundled Kotlin grammar recovers on some valid multiplatform class headers, including Okio's `expect ByteString` declarations when a comment separates the class name from its constructor. Tau reconstructs the exact class range and members, but marks the class and members recovered because their owning structure intersects parser recovery.
+- Wildcard imports remain in `declarationWithImports` because lexical analysis cannot determine which declaration a wildcard supplied. Normal and aliased imports are filtered by their local binding.
+- Primary and secondary constructors share the qualified name `<class>.constructor`. Their exact ranges and locators remain distinct.
+- Type aliases use the shared `struct` symbol category because the protocol has no type-alias category.
 
 ## Swift
 
-Status: queued
+Status: complete
 Reference: `/Users/shanepadgett/.local/share/tau-agent/references/swift-collections`
 
-- [ ] Add `swift.rs` direct adapter and route Swift through it.
-- [ ] Cover imports, type aliases, functions, structs, classes, actors, protocols, enums, and extensions.
-- [ ] Cover properties, methods, initializers, deinitializers, subscripts, operators, enum cases, and associated types.
-- [ ] Preserve documentation comments, attributes, generic constraints, `where` clauses, ownership modifiers, and concurrency modifiers.
-- [ ] Apply `open`, `public`, `package`, `internal`, `fileprivate`, and `private` visibility correctly.
-- [ ] Merge no declarations implicitly; keep extensions separately qualified and locatable.
-- [ ] Define import retention for module imports, selective imports, and implementation-only imports.
-- [ ] Add fixture and worker tests.
-- [ ] Trial core collection implementations, extensions, and tests in Swift Collections.
-- [ ] Complete the unread edit/revert exit check.
+- [x] Add `swift.rs` direct adapter and route Swift through it.
+- [x] Cover imports, type aliases, functions, structs, classes, actors, protocols, enums, and extensions.
+- [x] Cover properties, methods, initializers, deinitializers, subscripts, operators, enum cases, and associated types.
+- [x] Preserve documentation comments, attributes, generic constraints, `where` clauses, ownership modifiers, and concurrency modifiers.
+- [x] Apply `open`, `public`, `package`, `internal`, `fileprivate`, and `private` visibility correctly.
+- [x] Merge no declarations implicitly; keep extensions separately qualified and locatable.
+- [x] Define import retention for module imports, selective imports, and implementation-only imports.
+- [x] Add fixture and worker tests.
+- [x] Trial core collection implementations, extensions, and tests in Swift Collections.
+- [x] Complete the unread edit/revert exit check.
+
+Representative trials: `SortedSet.swift`, `SortedSet+Initializers.swift`, `SortedDictionary.swift`, `SortedDictionary+Keys.swift`, and `_Node.Storage.swift`. Files without modern grammar gaps parsed without recovery. The adapter retained separately locatable extensions, nested types, public and internal members, initializers, collection subscripts, generic constraints, ownership modifiers, and concurrency contracts.
+
+The unread exit trial completed `outline → symbol(declaration) → patch → outline → symbol(declaration) → revert` on `SortedSet+Hashable.swift`. It renamed the `hash(into:)` parameter to `stateHasher`, resolved the edited declaration, restored `hasher`, and resolved the original declaration. `git diff --exit-code` confirmed no remaining change.
+
+Accepted Swift limitations:
+
+- Plain module imports and implementation-only module imports remain in `declarationWithImports` because Swift imports their declarations unqualified. Selective imports such as `import struct Foundation.Date` are filtered by lexical use.
+- The bundled Swift grammar reports recovery on some valid modern syntax in Swift Collections. `SortedSet+Initializers.swift` reports one missing node around a force-unwrap comparison, while `SortedDictionary+Keys.swift` reports one error and one missing node around newer collection accessor syntax. Tau preserves the owning declarations and marks affected ranges recovered.
+- Every binding in a grouped property declaration and every case in a grouped enum declaration is locatable, but the exact locator range remains the enclosing Swift declaration because the grammar models the group as one declaration.
+- An extension target's access level may be declared in another file. Tau retains an extension when it or one of its members is explicitly public, and treats `public extension` as the default-public scope Swift defines.
 
 ## C\#
 
-Status: queued
+Status: complete
 
 - [x] Select Avalonia as the primary real C# repository.
 - [x] Add Avalonia as a read-only reference.
-- [ ] Add `csharp.rs` direct adapter and route C# through it.
-- [ ] Cover using directives, aliases, global usings, and block/file-scoped namespaces.
-- [ ] Cover classes, structs, interfaces, records, enums, delegates, constructors, methods, fields, properties, events, indexers, and operators.
-- [ ] Preserve XML documentation, attributes, generics, constraints, modifiers, nullable syntax, and expression bodies.
-- [ ] Apply top-level, nested, member, `internal`, protected combinations, and default visibility correctly.
-- [ ] Keep property and event accessors individually understandable without duplicating their container declaration.
-- [ ] Handle partial declarations as separate exact declarations with shared qualified names.
-- [ ] Implement declaration-with-imports for namespace and static imports.
-- [ ] Add fixture and worker tests.
-- [ ] Trial the selected repository and complete the unread edit/revert exit check.
+- [x] Add `csharp.rs` direct adapter and route C# through it.
+- [x] Cover using directives, aliases, global usings, and block/file-scoped namespaces.
+- [x] Cover classes, structs, interfaces, records, enums, delegates, constructors, methods, fields, properties, events, indexers, and operators.
+- [x] Preserve XML documentation, attributes, generics, constraints, modifiers, nullable syntax, and expression bodies.
+- [x] Apply top-level, nested, member, `internal`, protected combinations, and default visibility correctly.
+- [x] Keep property and event accessors individually understandable without duplicating their container declaration.
+- [x] Handle partial declarations as separate exact declarations with shared qualified names.
+- [x] Implement declaration-with-imports for namespace and static imports.
+- [x] Add fixture and worker tests.
+- [x] Complete the unread live edit/revert exit check.
+
+Representative native-worker trials: `AvaloniaProperty.cs`, `AvaloniaObject.cs`, `Animatable.cs`, `StyledProperty.cs`, `Dispatcher.cs`, and `BindingOperations.cs`. All parsed without recovery. The adapter retained file-scoped namespaces, partial and generic types, nested declarations, fields, properties and accessors, events, indexers, operators, explicit interface implementations, exact ranges, and body-free signatures.
+
+Accepted C# limitations:
+
+- Ordinary namespace imports and `using static` directives remain in `declarationWithImports` because C# syntax does not identify which imported namespace supplied an unqualified type or extension method. Aliased imports are filtered by lexical use.
+- Explicit interface implementations are retained with private visibility because callers cannot access them through the implementing class's public surface.
+
+The unread exit trial completed `outline → symbol(declaration) → patch → outline → symbol(declaration) → revert` on `AvaloniaLocator.cs`. It renamed the `BindToSelf` parameter from `constant` to `instance`, resolved the edited declaration, restored `constant`, and resolved the original declaration. `git diff --exit-code` confirmed no remaining change.
 
 ## Odin
 
-Status: queued
+Status: complete
 
 - [x] Select the Odin repository, focused on `core` and `base`, as the primary real Odin corpus.
 - [x] Add Odin as a read-only reference.
-- [ ] Add `odin.rs` direct adapter and replace the custom outline-rule path.
-- [ ] Cover package/import declarations, foreign imports and blocks, constants, variables, type declarations, procedures, procedure groups, structs, unions, enums, and bit sets.
-- [ ] Preserve documentation comments, tags, attributes, polymorphic parameters, calling conventions, and return tuples.
-- [ ] Apply `@(private)` and package visibility rules consistently.
-- [ ] Distinguish declarations, initialization expressions, and executable top-level constructs.
-- [ ] Implement declaration-with-imports for normal and aliased imports.
-- [ ] Add fixture and worker tests.
-- [ ] Trial the selected repository and complete the unread edit/revert exit check.
+- [x] Add `odin.rs` direct adapter and replace the custom outline-rule path.
+- [x] Cover package/import declarations, foreign imports and blocks, constants, variables, type declarations, procedures, procedure groups, structs, unions, enums, and bit sets.
+- [x] Preserve documentation comments, tags, attributes, polymorphic parameters, calling conventions, and return tuples.
+- [x] Apply `@(private)` and package visibility rules consistently.
+- [x] Distinguish declarations, initialization expressions, and executable top-level constructs.
+- [x] Implement declaration-with-imports for normal and aliased imports.
+- [x] Add fixture and worker tests.
+- [x] Complete the unread live edit/revert exit check.
+
+Representative native-worker trials: `core/bytes/bytes.odin`, `core/c/libc/stdio.odin`, `core/odin/parser/parser.odin`, `core/text/scanner/scanner.odin`, `core/bufio/scanner.odin`, `base/runtime/internal.odin`, `base/runtime/heap_allocator_unix.odin`, `base/runtime/thread_management.odin`, and `base/sanitizer/address.odin`. All parsed without recovery. The adapter retained foreign blocks, polymorphic and foreign procedures, qualified union alternatives, enum aliases with trailing comments, explicit `#type` procedure aliases, private attributed declarations, grouped fields, exact ranges, and body-free signatures.
+
+Accepted Odin limitations:
+
+- Unaliased imports do not declare their local package binding in source. Tau derives likely bindings from the final path segment and joined path segments. Imports with unusual package names may need an alias for exact `declarationWithImports` retention.
+- Declarations inside top-level `when` clauses are exposed as package declarations while the enclosing conditional remains a redacted side-effect row. Their exact declaration locators remain valid, but the outline does not model the condition as a named container.
+- Each name in a grouped constant or variable declaration retrieves the exact enclosing declaration. Name ranges remain item-specific.
+
+The unread exit trial completed `outline → symbol(declaration) → patch → outline → symbol(declaration) → revert` on `core/math/math.odin`. It renamed the `abs` declaration to `absolute`, resolved the edited declaration, restored `abs`, and resolved the original declaration. `git diff --exit-code` confirmed no remaining change.
 
 ## Discovery log
 
@@ -316,3 +366,25 @@ Status: queued
 - The Java exit trial completed `outline → symbol(declaration) → patch → outline → symbol(declaration) → revert` on the previously unread `Defaults.java`. The edited declaration and restored declaration both resolved exactly, and `git diff --exit-code` confirmed no remaining change.
 - Completed TypeScript/TSX, Go, Rust, and Java adapters now omit attached documentation comments unless `includeDocs` is true. Annotations and attributes remain visible, and `symbol(declaration)` still returns the exact declaration including attached docs.
 - Real-repository outlines with `includePrivate` saved 692 bytes (11.9%) in Excalidraw `Actions.tsx`, 4,144 bytes (55.0%) in go-tui `app.go`, 1,039 bytes (24.4%) in ast-bro `src/adapters/rust.rs`, and 27,077 bytes (66.5%) in Guava `MediaType.java` compared with documentation-enabled output.
+- Kotlin's bundled grammar extends the last `package_header` or `import_header` range across following KDoc in some files. The direct adapter caps those structural ranges at the package identifier or final import alias/path segment and attaches KDoc to the declaration by source adjacency.
+- Valid Okio multiplatform class headers can recover as `ERROR` or `infix_expression` nodes when a comment separates the class name from its constructor. `commonMain/ByteString.kt` and `appleMain/ByteString.kt` exposed both shapes. The direct adapter reconstructs only class-like top-level wrappers with a terminal class-body lambda and marks parser recovery through locator certainty.
+- Kotlin now uses a direct adapter with source-order package and import rows, exact declaration/name/receiver/body ranges, qualified nested members, Kotlin visibility defaults, body-free signatures, selective symbol views, KDoc opt-in rendering, parser certainty, and conservative wildcard-import retention.
+- Kotlin fixture, native worker, and Explore renderer regressions pass. The release worker was rebuilt and reloaded before final live trials.
+- Okio trials covered common, JVM, native, and test source sets through `ByteString.kt`, `AsyncTimeout.kt`, `Deflater.kt`, and `ByteStringHexTest.kt`. Public-only filtering removed non-public declarations and members; selective symbol views retained only lexically used normal and aliased imports plus conservative wildcards.
+- The Kotlin exit trial renamed `decodeHexIgnoreWhitespace` to `decodeHexIgnoringWhitespace` in the previously unread `ByteStringHexTest.kt`, resolved the edited declaration, reverted it, and resolved the original declaration. `git diff --exit-code` confirmed no remaining change.
+- Swift now uses a direct adapter with source-order imports and directives, exact declaration/name/body ranges, separately qualified extensions, nested members, Swift access control, body-free signatures, selective symbol views, documentation opt-in rendering, parser certainty, and conservative module-import retention.
+- Swift fixture, native worker, Explore renderer, UTF-8, CRLF, malformed-source, visibility, protocol requirement, and nested-container regressions pass. Native tests and Clippy pass, and the release worker was rebuilt before the live exit trial.
+- Swift Collections trials covered core sorted set and dictionary declarations, initializer extensions, nested key views, and internal B-tree storage. The corpus exposed expected bundled-parser recovery on modern force-unwrap and accessor syntax without unexplained declaration loss.
+- The Swift exit trial changed and restored the `hash(into:)` parameter in the previously unread `SortedSet+Hashable.swift`. The edited and restored declarations both resolved exactly, and `git diff --exit-code` confirmed no remaining change.
+- A post-reload `includeDocs` trial on `SortedDictionary+Keys.swift` exposed a panic when property-body byte offsets were applied after trimming an indented documented signature. Swift now redacts the exact untrimmed slice before trimming. The same trial found first-line indentation left on documented member signatures, so shared signature dedenting now handles every line. Indented UTF-8 CRLF property and method regressions cover both boundaries.
+- C# now uses a direct adapter with source-order namespace and using rows, exact declaration/name/body ranges, namespace-qualified and nested member names, C# visibility defaults, property/event accessor entries, body-free block and expression signatures, selective symbol views, XML documentation opt-in rendering, and parser certainty.
+- C# fixture, native worker, Explore renderer, UTF-8, CRLF, malformed-source, visibility, nesting, record, delegate, event, indexer, operator, and import regressions pass. The release worker was rebuilt after the implementation.
+- Native worker trials across six representative Avalonia Base files parsed without recovery and retained dense public and private APIs.
+- Odin now uses a direct adapter with source-order packages, imports, declarations, and redacted conditional structure; exact declaration, name, and body ranges; foreign-block and type members; Odin visibility; body-free signatures; selective symbol views; documentation opt-in rendering; and parser certainty.
+- Odin fixture, native worker, Explore renderer, UTF-8, CRLF, malformed-source, grouped-declaration, import, foreign-block, enum-alias, qualified-union, explicit-`#type`, and typed-initializer regressions pass. The former YAML outline rules and their runtime dependencies were removed.
+- Native worker trials across nine representative Odin `core` and `base` files parsed without recovery. Real source exposed and regression-tested attribute assignment versus initializer boundaries, multi-line documentation attachment, enum alias ownership, trailing enum comments, qualified union alternatives, grouped struct fields, and explicit `#type` procedure aliases.
+- After reload, the C# exit trial changed and restored `AvaloniaLocator.BindToSelf` on a previously unread file. The edited and restored declarations both resolved exactly, and the Avalonia repository had no remaining diff.
+- The Odin exit trial changed and restored `core/math.abs` on a previously unread file. The edited and restored declarations both resolved exactly, and the Odin repository had no remaining diff.
+- Excalidraw trials covered large class components, typed function components, JSX-heavy callbacks, aliased and type-only imports, reexports, interfaces, and callable fields without parser recovery. `App.tsx` exposed implementation leakage from object-valued fields and wrapper calls containing callbacks; TypeScript now records those initializer ranges and renders `= …` signatures.
+- Focused TypeScript regressions now cover namespaces, merged declarations, enums, accessors, construct signatures, call signatures, index signatures, nested-container filtering, and qualified Explore rendering.
+- The TSX exit trial changed and restored the local `activeConfirmDialog` binding in the previously unread `ActiveConfirmDialog.tsx`. The edited and restored declarations both resolved exactly, and `git diff --exit-code` confirmed no remaining change.

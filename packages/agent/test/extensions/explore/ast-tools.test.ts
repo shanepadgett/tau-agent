@@ -244,6 +244,60 @@ describe("AST exploration tools", () => {
 		expect(text).toContain("side effects\n1-3: register(parse);");
 	});
 
+	it("renders nested TypeScript namespace declarations at qualified depth", async () => {
+		const path = workspace.path("src/parser.ts");
+		const result = outlineResult(path);
+		const namespace = result.files[0]?.items[0];
+		if (!namespace) throw new Error("outline fixture omitted its declaration");
+		namespace.name = "API";
+		namespace.qualifiedName = "API";
+		namespace.symbolType = "namespace";
+		namespace.signature = "export namespace API {\n  export class Service { … }\n}";
+		namespace.bodyRange = { ...range, startByte: 21 };
+		namespace.members = [
+			{
+				...namespace,
+				role: "member",
+				name: "Service",
+				qualifiedName: "API.Service",
+				symbolType: "class",
+				signature: "export class Service { … }",
+				bodyRange: undefined,
+				locator: "service-locator",
+				isPublic: true,
+			},
+			{
+				...namespace,
+				role: "member",
+				name: "run",
+				qualifiedName: "API.Service.run",
+				symbolType: "method",
+				signature: "run(): void",
+				locator: "run-locator",
+				isPublic: true,
+			},
+		];
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outline: vi.fn(async () => result),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(client, testRowState);
+		const outlined = await ast.outline.execute(
+			"outline-namespace",
+			{ path: "src/parser.ts" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		const text = firstText(outlined);
+		expect(text).toContain("1-3(1): export namespace API {");
+		expect(text).toContain("  1-3(2): export class Service {");
+		expect(text).toContain("    1-3(3): run(): void\n  }\n}");
+		expect(text.match(/run\(\): void/g)).toHaveLength(1);
+	});
+
 	it("renders source-order Go packages, imports, contracts, and members", async () => {
 		await workspace.write("src/parser.go", "package fixture\n");
 		const path = workspace.path("src/parser.go");
@@ -316,6 +370,80 @@ describe("AST exploration tools", () => {
 		expect(text).toContain("declarations\n1-3(1): type Parser interface {");
 		expect(text).toContain("  1-3(2): Parse(source string) Result\n}");
 		expect(text.match(/Parse\(source string\) Result/g)).toHaveLength(1);
+	});
+
+	it("renders Odin structure and exact signatures through the selective adapter path", async () => {
+		await workspace.write("src/parser.odin", "package fixture\n");
+		const path = workspace.path("src/parser.odin");
+		const result = outlineResult(path);
+		const file = result.files[0];
+		if (!file) throw new Error("outline fixture omitted its file");
+		file.language = "odin";
+		const declaration = file.items[0];
+		if (!declaration) throw new Error("outline fixture omitted its declaration");
+		declaration.name = "Parser";
+		declaration.qualifiedName = "Parser";
+		declaration.symbolType = "struct";
+		declaration.signature = "@(align=16)\nParser :: struct {\n  parse: proc(string) -> bool,\n}";
+		declaration.bodyRange = range;
+		declaration.members = [
+			{
+				...declaration,
+				role: "member",
+				name: "parse",
+				qualifiedName: "Parser.parse",
+				symbolType: "field",
+				signature: "parse: proc(string) -> bool,",
+				astKind: "field",
+				locator: "odin-member",
+				isPublic: true,
+			},
+		];
+		const { locator: _locator, ...structural } = declaration;
+		file.items.unshift(
+			{
+				...structural,
+				rowKind: "package",
+				name: "fixture",
+				qualifiedName: "fixture",
+				signature: "package fixture",
+				astKind: "package_declaration",
+				isImport: false,
+				isExported: false,
+				members: [],
+			},
+			{
+				...structural,
+				rowKind: "import",
+				name: "import",
+				qualifiedName: "import",
+				signature: 'import fmt "core:fmt"',
+				astKind: "import_declaration",
+				isImport: true,
+				isExported: false,
+				members: [],
+			},
+		);
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outline: vi.fn(async () => result),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(client, testRowState);
+		const outlined = await ast.outline.execute(
+			"outline-odin",
+			{ path: "src/parser.odin" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		const text = firstText(outlined);
+		expect(text).toContain("package\n1-3: package fixture");
+		expect(text).toContain('imports\n1-3: import fmt "core:fmt"');
+		expect(text).toContain("@(align=16)\n1-3(1): Parser :: struct {");
+		expect(text).toContain("  1-3(2): parse: proc(string) -> bool,\n}");
+		expect(text.match(/parse: proc\(string\) -> bool/g)).toHaveLength(1);
 	});
 
 	it("renders source-order Rust uses, impls, and tuple fields", async () => {
@@ -471,6 +599,166 @@ describe("AST exploration tools", () => {
 		expect(text).not.toContain("(1):   defaultImpl = Parser.class");
 		expect(text).toContain("  1-3(2): Result parse(String source);\n}");
 		expect(text.match(/Result parse\(String source\);/g)).toHaveLength(1);
+	});
+
+	it("renders C# namespaces, contracts, and accessors through the selective adapter path", async () => {
+		await workspace.write("src/Parser.cs", "namespace Fixture;\n");
+		const path = workspace.path("src/Parser.cs");
+		const result = outlineResult(path);
+		const file = result.files[0];
+		if (!file) throw new Error("outline fixture omitted its file");
+		file.language = "cSharp";
+		const declaration = file.items[0];
+		if (!declaration) throw new Error("outline fixture omitted its declaration");
+		declaration.name = "Parser";
+		declaration.qualifiedName = "Fixture.Parser";
+		declaration.symbolType = "class";
+		declaration.signature = "public class Parser {\n  public string Name { … }\n}";
+		declaration.bodyRange = range;
+		declaration.members = [
+			{
+				...declaration,
+				role: "member",
+				name: "Name",
+				qualifiedName: "Fixture.Parser.Name",
+				symbolType: "property",
+				signature: "public string Name { … }",
+				locator: "csharp-property",
+				isPublic: true,
+			},
+			{
+				...declaration,
+				role: "member",
+				name: "get",
+				qualifiedName: "Fixture.Parser.Name.get",
+				symbolType: "property",
+				signature: "get;",
+				locator: "csharp-get",
+				isPublic: true,
+			},
+		];
+		const { locator: _locator, ...structural } = declaration;
+		file.items.unshift({
+			...structural,
+			rowKind: "package",
+			name: "Fixture",
+			qualifiedName: "Fixture",
+			signature: "namespace Fixture;",
+			astKind: "file_scoped_namespace_declaration",
+			isImport: false,
+			isExported: false,
+			members: [],
+		});
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outline: vi.fn(async () => result),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(client, testRowState);
+		const outlined = await ast.outline.execute(
+			"outline-csharp",
+			{ path: "src/Parser.cs" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		const text = firstText(outlined);
+		expect(text).toContain("package\n1-3: namespace Fixture;");
+		expect(text).toContain("declarations\n1-3(1): public class Parser {");
+		expect(text).toContain("  1-3(2): public string Name {");
+		expect(text).toContain("    1-3(3): get;\n  }\n}");
+		expect(text.match(/public string Name/g)).toHaveLength(1);
+	});
+
+	it("renders Kotlin contracts and nested members through the selective adapter path", async () => {
+		await workspace.write("src/Parser.kt", "package fixture\n");
+		const path = workspace.path("src/Parser.kt");
+		const result = outlineResult(path);
+		const file = result.files[0];
+		if (!file) throw new Error("outline fixture omitted its file");
+		file.language = "kotlin";
+		const declaration = file.items[0];
+		if (!declaration) throw new Error("outline fixture omitted its declaration");
+		declaration.name = "Parser";
+		declaration.qualifiedName = "Parser";
+		declaration.symbolType = "interface";
+		declaration.signature = "interface Parser {\n  fun parse(source: String): Result\n}";
+		declaration.members = [
+			{
+				...declaration,
+				role: "member",
+				name: "parse",
+				qualifiedName: "Parser.parse",
+				symbolType: "method",
+				signature: "fun parse(source: String): Result",
+				locator: "kotlin-member",
+				isPublic: true,
+			},
+		];
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outline: vi.fn(async () => result),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(client, testRowState);
+		const outlined = await ast.outline.execute(
+			"outline-kotlin",
+			{ path: "src/Parser.kt" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		const text = firstText(outlined);
+		expect(text).toContain("declarations\n1-3(1): interface Parser {");
+		expect(text).toContain("  1-3(2): fun parse(source: String): Result\n}");
+		expect(text.match(/fun parse\(source: String\): Result/g)).toHaveLength(1);
+	});
+
+	it("renders Swift extensions and members through the selective adapter path", async () => {
+		await workspace.write("src/Parser.swift", "public extension Parser {}\n");
+		const path = workspace.path("src/Parser.swift");
+		const result = outlineResult(path);
+		const file = result.files[0];
+		if (!file) throw new Error("outline fixture omitted its file");
+		file.language = "swift";
+		const declaration = file.items[0];
+		if (!declaration) throw new Error("outline fixture omitted its declaration");
+		declaration.name = "Parser";
+		declaration.qualifiedName = "extension Parser: Sendable";
+		declaration.symbolType = "namespace";
+		declaration.signature = "public extension Parser: Sendable {\n  func parse() async\n}";
+		declaration.members = [
+			{
+				...declaration,
+				role: "member",
+				name: "parse",
+				qualifiedName: "extension Parser: Sendable.parse",
+				symbolType: "method",
+				signature: "func parse() async",
+				locator: "swift-member",
+				isPublic: true,
+			},
+		];
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outline: vi.fn(async () => result),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(client, testRowState);
+		const outlined = await ast.outline.execute(
+			"outline-swift",
+			{ path: "src/Parser.swift" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		const text = firstText(outlined);
+		expect(text).toContain("declarations\n1-3(1): public extension Parser: Sendable {");
+		expect(text).toContain("  1-3(2): func parse() async\n}");
+		expect(text.match(/func parse\(\) async/g)).toHaveLength(1);
 	});
 
 	it("keeps attached documentation before the locator and renders container members once", async () => {

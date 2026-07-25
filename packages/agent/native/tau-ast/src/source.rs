@@ -52,11 +52,7 @@ pub fn indent(source: &str) -> String {
 pub fn dedent(source: &str, column: usize) -> String {
     source
         .lines()
-        .enumerate()
-        .map(|(index, line)| {
-            if index == 0 {
-                return line;
-            }
+        .map(|line| {
             let mut bytes = 0;
             for character in line.chars().take(column) {
                 if !matches!(character, ' ' | '\t') {

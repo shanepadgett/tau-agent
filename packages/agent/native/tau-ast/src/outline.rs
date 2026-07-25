@@ -1,26 +1,29 @@
+use crate::csharp::{
+    extract_csharp_items, filter_csharp_items, finalize_csharp_signatures,
+    matching_csharp_imports,
+};
 use crate::go::{extract_go_items, filter_go_items, finalize_go_signatures, matching_go_imports};
 use crate::java::{
     extract_java_items, filter_java_items, finalize_java_signatures, matching_java_imports,
 };
+use crate::kotlin::{
+    extract_kotlin_items, filter_kotlin_items, finalize_kotlin_signatures, matching_kotlin_imports,
+};
 use crate::language::OdinLanguage;
+use crate::odin::{
+    extract_odin_items, filter_odin_items, finalize_odin_signatures, matching_odin_imports,
+};
 use crate::rust::{
     extract_rust_items, filter_rust_items, finalize_rust_signatures, matching_rust_imports,
+};
+use crate::swift::{
+    extract_swift_items, filter_swift_items, finalize_swift_signatures, matching_swift_imports,
 };
 use crate::typescript::{
     extract_typescript_items, filter_typescript_items, finalize_typescript_signatures,
 };
-use ast_grep_config::GlobalRules;
 use ast_grep_core::{Node, tree_sitter::LanguageExt};
 use ast_grep_language::SupportLang;
-use ast_grep_outline::{
-    DEFAULT_OUTLINE_RULES,
-    combined_extractor::CombinedExtractors,
-    extractor::parse_outline_rules,
-    model::{
-        EntryRole as AstEntryRole, OutlineEntry as AstOutlineEntry, OutlineItem as AstOutlineItem,
-        SymbolType as AstSymbolType,
-    },
-};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -108,7 +111,6 @@ pub enum EntryRole {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SymbolType {
-    File,
     Module,
     Namespace,
     Package,
@@ -122,13 +124,7 @@ pub enum SymbolType {
     Function,
     Variable,
     Constant,
-    String,
-    Number,
-    Boolean,
-    Array,
     Object,
-    Key,
-    Null,
     EnumMember,
     Struct,
     Event,
@@ -267,40 +263,11 @@ enum LocatorKind {
     ExecutableScope,
 }
 
-pub struct OutlineEngine {
-    c_sharp: CombinedExtractors<SupportLang>,
-    kotlin: CombinedExtractors<SupportLang>,
-    swift: CombinedExtractors<SupportLang>,
-    odin: CombinedExtractors<OdinLanguage>,
-}
+pub struct OutlineEngine;
 
 impl OutlineEngine {
     pub fn new() -> Result<Self, Box<dyn Error>> {
-        let default_rules = parse_outline_rules::<SupportLang>(DEFAULT_OUTLINE_RULES)?;
-        let c_sharp_rules = default_rules
-            .iter()
-            .filter(|rule| rule.common().language == SupportLang::CSharp)
-            .cloned()
-            .collect();
-        let kotlin_rules = default_rules
-            .iter()
-            .filter(|rule| rule.common().language == SupportLang::Kotlin)
-            .cloned()
-            .collect();
-        let swift_rules = default_rules
-            .iter()
-            .filter(|rule| rule.common().language == SupportLang::Swift)
-            .cloned()
-            .collect();
-        let odin_rules = parse_outline_rules::<OdinLanguage>(include_str!("../rules/odin.yml"))?;
-        let globals = GlobalRules::default();
-
-        Ok(Self {
-            c_sharp: CombinedExtractors::try_from(c_sharp_rules, &globals)?,
-            kotlin: CombinedExtractors::try_from(kotlin_rules, &globals)?,
-            swift: CombinedExtractors::try_from(swift_rules, &globals)?,
-            odin: CombinedExtractors::try_from(odin_rules, &globals)?,
-        })
+        Ok(Self)
     }
 
     pub fn outline(
@@ -450,14 +417,10 @@ impl OutlineEngine {
             }
             LanguageId::Odin => {
                 let grep = OdinLanguage::Odin.ast_grep(source);
-                (
-                    diagnostics(grep.root()),
-                    self.odin
-                        .extract(grep.root())
-                        .map(|item| outline_item(item, &path, language, &source_fingerprint))
-                        .collect::<Result<Vec<_>, _>>()?,
-                    false,
-                )
+                let diagnostics = diagnostics(grep.root());
+                let mut items = extract_odin_items(grep.root(), source, include_docs);
+                filter_odin_items(grep.root(), source, &mut items, include_private, names);
+                (diagnostics, items, true)
             }
             LanguageId::Go => {
                 let grep = SupportLang::Go.ast_grep(source);
@@ -475,14 +438,10 @@ impl OutlineEngine {
             }
             LanguageId::CSharp => {
                 let grep = SupportLang::CSharp.ast_grep(source);
-                (
-                    diagnostics(grep.root()),
-                    self.c_sharp
-                        .extract(grep.root())
-                        .map(|item| outline_item(item, &path, language, &source_fingerprint))
-                        .collect::<Result<Vec<_>, _>>()?,
-                    false,
-                )
+                let diagnostics = diagnostics(grep.root());
+                let mut items = extract_csharp_items(grep.root(), source, include_docs);
+                filter_csharp_items(grep.root(), source, &mut items, include_private, names);
+                (diagnostics, items, true)
             }
             LanguageId::Java => {
                 let grep = SupportLang::Java.ast_grep(source);
@@ -493,25 +452,17 @@ impl OutlineEngine {
             }
             LanguageId::Kotlin => {
                 let grep = SupportLang::Kotlin.ast_grep(source);
-                (
-                    diagnostics(grep.root()),
-                    self.kotlin
-                        .extract(grep.root())
-                        .map(|item| outline_item(item, &path, language, &source_fingerprint))
-                        .collect::<Result<Vec<_>, _>>()?,
-                    false,
-                )
+                let diagnostics = diagnostics(grep.root());
+                let mut items = extract_kotlin_items(grep.root(), source, include_docs);
+                filter_kotlin_items(grep.root(), source, &mut items, include_private, names);
+                (diagnostics, items, true)
             }
             LanguageId::Swift => {
                 let grep = SupportLang::Swift.ast_grep(source);
-                (
-                    diagnostics(grep.root()),
-                    self.swift
-                        .extract(grep.root())
-                        .map(|item| outline_item(item, &path, language, &source_fingerprint))
-                        .collect::<Result<Vec<_>, _>>()?,
-                    false,
-                )
+                let diagnostics = diagnostics(grep.root());
+                let mut items = extract_swift_items(grep.root(), source, include_docs);
+                filter_swift_items(grep.root(), source, &mut items, include_private, names);
+                (diagnostics, items, true)
             }
         };
         let line_count = if source.is_empty() {
@@ -526,14 +477,22 @@ impl OutlineEngine {
             language,
             LanguageId::TypeScript
                 | LanguageId::Tsx
+                | LanguageId::Odin
                 | LanguageId::Go
                 | LanguageId::Rust
+                | LanguageId::CSharp
                 | LanguageId::Java
+                | LanguageId::Kotlin
+                | LanguageId::Swift
         ) {
             match language {
+                LanguageId::Odin => finalize_odin_signatures(&mut items),
                 LanguageId::Go => finalize_go_signatures(&mut items),
                 LanguageId::Rust => finalize_rust_signatures(&mut items),
+                LanguageId::CSharp => finalize_csharp_signatures(&mut items),
                 LanguageId::Java => finalize_java_signatures(&mut items),
+                LanguageId::Kotlin => finalize_kotlin_signatures(&mut items),
+                LanguageId::Swift => finalize_swift_signatures(&mut items),
                 _ => finalize_typescript_signatures(&mut items),
             }
             finalize_locators(&mut items, &path, language, &source_fingerprint)?;
@@ -612,15 +571,19 @@ impl OutlineEngine {
                     locator.language,
                     LanguageId::TypeScript
                         | LanguageId::Tsx
+                        | LanguageId::Odin
                         | LanguageId::Go
                         | LanguageId::Rust
+                        | LanguageId::CSharp
                         | LanguageId::Java
+                        | LanguageId::Kotlin
+                        | LanguageId::Swift
                 )
             })
         {
             return Err(SymbolError {
                 code: "unsupported_symbol_view",
-                message: "signature and declarationWithImports views support TypeScript, TSX, Go, Rust, and Java only"
+                message: "signature and declarationWithImports views support TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, and Swift"
                     .to_owned(),
             });
         }
@@ -884,113 +847,6 @@ fn diagnostics<D: ast_grep_core::Doc>(root: Node<D>) -> ParseDiagnostics {
     )
 }
 
-fn outline_item(
-    item: AstOutlineItem<'_>,
-    path: &str,
-    language: LanguageId,
-    source_fingerprint: &str,
-) -> Result<OutlineItem, serde_json::Error> {
-    let is_exported = public_visibility(
-        language,
-        item.is_exported,
-        item.entry.name.as_ref(),
-        item.entry.signature.as_ref(),
-    );
-    let row_kind = if item.is_import {
-        OutlineRowKind::Import
-    } else {
-        OutlineRowKind::Declaration
-    };
-    let mut entry = outline_entry(item.entry, path, language, source_fingerprint)?;
-    if row_kind != OutlineRowKind::Declaration {
-        entry.locator = None;
-    }
-    Ok(OutlineItem {
-        entry,
-        row_kind,
-        is_import: item.is_import,
-        is_exported,
-        members: item
-            .members
-            .into_iter()
-            .map(|member| {
-                let is_public = public_visibility(
-                    language,
-                    member.is_public,
-                    member.entry.name.as_ref(),
-                    member.entry.signature.as_ref(),
-                );
-                Ok(OutlineMember {
-                    entry: outline_entry(member.entry, path, language, source_fingerprint)?,
-                    is_public,
-                })
-            })
-            .collect::<Result<Vec<_>, serde_json::Error>>()?,
-    })
-}
-
-fn public_visibility(language: LanguageId, extracted: bool, name: &str, signature: &str) -> bool {
-    match language {
-        LanguageId::Go => name.chars().next().is_some_and(char::is_uppercase),
-        LanguageId::Rust => extracted && !signature.trim_start().starts_with("pub("),
-        _ => extracted,
-    }
-}
-
-fn outline_entry(
-    entry: AstOutlineEntry<'_>,
-    path: &str,
-    language: LanguageId,
-    source_fingerprint: &str,
-) -> Result<OutlineEntry, serde_json::Error> {
-    let range = SourceRange {
-        start_byte: entry.range.byte_offset.start,
-        end_byte: entry.range.byte_offset.end,
-        start: SourcePosition {
-            line: entry.range.start.line,
-            column: entry.range.start.column,
-        },
-        end: SourcePosition {
-            line: entry.range.end.line,
-            column: entry.range.end.column,
-        },
-    };
-    let locator = SourceLocator {
-        version: LOCATOR_VERSION,
-        path: path.to_owned(),
-        language,
-        source_fingerprint: source_fingerprint.to_owned(),
-        locator_kind: LocatorKind::Declaration,
-        qualified_name: entry.name.to_string(),
-        declaration_kind: entry.ast_kind.to_string(),
-        range: range.clone(),
-        name_range: range.clone(),
-        receiver_range: None,
-        body_range: None,
-        certainty: ParseCertainty::Certain,
-        signature: entry.signature.to_string(),
-    };
-
-    Ok(OutlineEntry {
-        role: match entry.role {
-            AstEntryRole::Item => EntryRole::Item,
-            AstEntryRole::Member => EntryRole::Member,
-        },
-        symbol_type: entry.symbol_type.into(),
-        name: entry.name.clone().into_owned(),
-        qualified_name: entry.name.into_owned(),
-        name_range: range.clone(),
-        receiver_range: None,
-        body_range: None,
-        certainty: ParseCertainty::Certain,
-        certainty_reason: None,
-        range,
-        signature: entry.signature.into_owned(),
-        ast_kind: entry.ast_kind.into_owned(),
-        locator: Some(URL_SAFE_NO_PAD.encode(serde_json::to_vec(&locator)?)),
-    })
-}
-
 fn finalize_locators(
     items: &mut [OutlineItem],
     path: &str,
@@ -1054,6 +910,10 @@ fn declaration_with_imports(source: &str, locator: &SourceLocator) -> String {
             let grep = SupportLang::Tsx.ast_grep(source);
             matching_imports(grep.root(), source, locator)
         }
+        LanguageId::Odin => {
+            let grep = OdinLanguage::Odin.ast_grep(source);
+            matching_odin_imports(grep.root(), source, &locator.range)
+        }
         LanguageId::Go => {
             let grep = SupportLang::Go.ast_grep(source);
             matching_go_imports(grep.root(), source, &locator.range)
@@ -1062,11 +922,22 @@ fn declaration_with_imports(source: &str, locator: &SourceLocator) -> String {
             let grep = SupportLang::Rust.ast_grep(source);
             matching_rust_imports(grep.root(), source, &locator.range)
         }
+        LanguageId::CSharp => {
+            let grep = SupportLang::CSharp.ast_grep(source);
+            matching_csharp_imports(grep.root(), source, &locator.range)
+        }
         LanguageId::Java => {
             let grep = SupportLang::Java.ast_grep(source);
             matching_java_imports(grep.root(), source, &locator.range)
         }
-        _ => Vec::new(),
+        LanguageId::Kotlin => {
+            let grep = SupportLang::Kotlin.ast_grep(source);
+            matching_kotlin_imports(grep.root(), source, &locator.range)
+        }
+        LanguageId::Swift => {
+            let grep = SupportLang::Swift.ast_grep(source);
+            matching_swift_imports(grep.root(), source, &locator.range)
+        }
     };
     if imports.is_empty() {
         return declaration.to_owned();
@@ -1138,39 +1009,6 @@ fn matching_imports<'a, D: ast_grep_core::Doc>(
 
 fn source_fingerprint(source: &[u8]) -> String {
     format!("blake3:{}", blake3::hash(source).to_hex())
-}
-
-impl From<AstSymbolType> for SymbolType {
-    fn from(symbol_type: AstSymbolType) -> Self {
-        match symbol_type {
-            AstSymbolType::File => Self::File,
-            AstSymbolType::Module => Self::Module,
-            AstSymbolType::Namespace => Self::Namespace,
-            AstSymbolType::Package => Self::Package,
-            AstSymbolType::Class => Self::Class,
-            AstSymbolType::Method => Self::Method,
-            AstSymbolType::Property => Self::Property,
-            AstSymbolType::Field => Self::Field,
-            AstSymbolType::Constructor => Self::Constructor,
-            AstSymbolType::Enum => Self::Enum,
-            AstSymbolType::Interface => Self::Interface,
-            AstSymbolType::Function => Self::Function,
-            AstSymbolType::Variable => Self::Variable,
-            AstSymbolType::Constant => Self::Constant,
-            AstSymbolType::String => Self::String,
-            AstSymbolType::Number => Self::Number,
-            AstSymbolType::Boolean => Self::Boolean,
-            AstSymbolType::Array => Self::Array,
-            AstSymbolType::Object => Self::Object,
-            AstSymbolType::Key => Self::Key,
-            AstSymbolType::Null => Self::Null,
-            AstSymbolType::EnumMember => Self::EnumMember,
-            AstSymbolType::Struct => Self::Struct,
-            AstSymbolType::Event => Self::Event,
-            AstSymbolType::Operator => Self::Operator,
-            AstSymbolType::TypeParameter => Self::TypeParameter,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -1465,6 +1303,120 @@ mod tests {
     }
 
     #[test]
+    fn redacts_nested_callable_and_object_field_initializers() {
+        let engine = OutlineEngine::new().expect("outline engine should initialize");
+        let path = std::env::temp_dir().join(format!(
+            "tau-ast-typescript-field-bodies-{}.ts",
+            std::process::id()
+        ));
+        let source = "export class App {\n  frame = { get: () => { return 1; }, cache: new Map() };\n  sync = wrap((value: string) => { return value; });\n  simple = new Map<string, number>();\n}\n";
+        fs::write(&path, source).expect("TypeScript field fixture should be writable");
+        let result = outline_file(&engine, &path, LanguageId::TypeScript);
+        let app = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "App")
+            .expect("class should be extracted");
+        let frame = app
+            .members
+            .iter()
+            .find(|member| member.entry.name == "frame")
+            .expect("object field should be extracted");
+        assert_eq!(frame.entry.signature, "frame = …");
+        assert!(frame.entry.body_range.is_some());
+        let sync = app
+            .members
+            .iter()
+            .find(|member| member.entry.name == "sync")
+            .expect("wrapped callback field should be extracted");
+        assert_eq!(sync.entry.signature, "sync = …");
+        assert!(sync.entry.body_range.is_some());
+        let simple = app
+            .members
+            .iter()
+            .find(|member| member.entry.name == "simple")
+            .expect("simple field should be extracted");
+        assert_eq!(simple.entry.signature, "simple = new Map<string, number>()");
+        assert!(simple.entry.body_range.is_none());
+        assert!(!app.entry.signature.contains("return value"));
+        fs::remove_file(path).expect("TypeScript field fixture should be removable");
+    }
+
+    #[test]
+    fn extracts_typescript_namespaces_merged_declarations_and_type_members() {
+        let engine = OutlineEngine::new().expect("outline engine should initialize");
+        let path = std::env::temp_dir().join(format!(
+            "tau-ast-typescript-namespace-{}.ts",
+            std::process::id()
+        ));
+        let source = "export namespace API {\n  export interface Factory {\n    new (name: string): Service;\n    (id: number): Service;\n    [key: string]: unknown;\n    readonly value: string;\n  }\n  export class Service {\n    get name(): string { return 'service'; }\n    set name(value: string) {}\n  }\n}\nexport namespace API {\n  export const version = 1;\n}\nexport enum State { Ready, Failed = Ready }\n";
+        fs::write(&path, source).expect("TypeScript namespace fixture should be writable");
+        let result = outline_file(&engine, &path, LanguageId::TypeScript);
+        let namespaces = result
+            .items
+            .iter()
+            .filter(|item| item.entry.name == "API")
+            .collect::<Vec<_>>();
+        assert_eq!(namespaces.len(), 2);
+        assert_ne!(namespaces[0].entry.locator, namespaces[1].entry.locator);
+        let api = namespaces[0];
+        assert!(api.entry.signature.starts_with("export namespace API {"));
+        assert!(!api.entry.signature.contains("return 'service'"));
+        let member_names = api
+            .members
+            .iter()
+            .map(|member| member.entry.qualified_name.as_str())
+            .collect::<Vec<_>>();
+        for expected in [
+            "API.Factory",
+            "API.Factory.new",
+            "API.Factory.call",
+            "API.Factory.index",
+            "API.Factory.value",
+            "API.Service",
+            "API.Service.name",
+        ] {
+            assert!(member_names.contains(&expected), "missing {expected}");
+        }
+        assert_eq!(
+            api.members
+                .iter()
+                .filter(|member| member.entry.qualified_name == "API.Service.name")
+                .count(),
+            2
+        );
+        let state = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "State")
+            .expect("enum should be extracted");
+        assert_eq!(state.members.len(), 2);
+
+        let filtered = engine
+            .outline(
+                OutlineTarget::File {
+                    path: path.to_string_lossy().into_owned(),
+                    language: LanguageId::TypeScript,
+                },
+                false,
+                false,
+                &["Factory".to_owned()],
+            )
+            .expect("namespace member filter should parse");
+        let filtered_api = filtered.files[0]
+            .items
+            .iter()
+            .find(|item| item.entry.name == "API")
+            .expect("namespace owner should remain");
+        assert_eq!(filtered_api.members.len(), 5);
+        assert!(filtered_api
+            .members
+            .iter()
+            .all(|member| member.entry.qualified_name.starts_with("API.Factory")));
+        fs::remove_file(path).expect("TypeScript namespace fixture should be removable");
+    }
+
+    #[test]
     fn documentation_is_opt_in_without_changing_exact_declaration_ranges() {
         let engine = OutlineEngine::new().expect("outline rules should compile");
         let cases = [
@@ -1487,6 +1439,15 @@ mod tests {
                 "Run func()",
             ),
             (
+                LanguageId::Odin,
+                "odin",
+                "// Service docs.\n@(require_results)\nService :: struct {\n  // Run docs.\n  Run: proc(),\n}\n",
+                "Service",
+                "Run",
+                "@(require_results)",
+                "Run: proc()",
+            ),
+            (
                 LanguageId::Rust,
                 "rs",
                 "/// Service docs.\n#[derive(Debug)]\n// Attribute explanation.\npub struct Service {\n    /// Run docs.\n    #[cfg(test)]\n    pub run: fn(),\n}\n\n/// Tuple docs.\npub struct Tuple(\n    /// Field docs.\n    #[cfg(test)]\n    pub u8,\n);\n",
@@ -1503,6 +1464,33 @@ mod tests {
                 "run",
                 "@Deprecated",
                 "@Deprecated",
+            ),
+            (
+                LanguageId::CSharp,
+                "cs",
+                "/// Service docs.\n[Obsolete]\npublic class Service {\n    /// Run docs.\n    [Obsolete]\n    public void Run() {}\n}\n",
+                "Service",
+                "Run",
+                "[Obsolete]",
+                "[Obsolete]",
+            ),
+            (
+                LanguageId::Kotlin,
+                "kt",
+                "/** Service docs. */\n@Deprecated(\"old\")\nclass Service {\n    /** Run docs. */\n    @Deprecated(\"old\")\n    fun run() {}\n}\n",
+                "Service",
+                "run",
+                "@Deprecated",
+                "@Deprecated",
+            ),
+            (
+                LanguageId::Swift,
+                "swift",
+                "/// Service docs.\n@available(macOS 14, *)\npublic struct Service {\n    /// Run docs.\n    @available(macOS 14, *)\n    public func run() {}\n}\n",
+                "Service",
+                "run",
+                "@available",
+                "@available",
             ),
         ];
 
@@ -1558,7 +1546,12 @@ mod tests {
                     .trim_start()
                     .starts_with(if language == LanguageId::Go {
                         "/* Service docs."
-                    } else if language == LanguageId::Rust {
+                    } else if language == LanguageId::Odin {
+                        "// Service docs."
+                    } else if matches!(
+                        language,
+                        LanguageId::Rust | LanguageId::CSharp | LanguageId::Swift
+                    ) {
                         "/// Service docs."
                     } else {
                         "/** Service docs. */"
@@ -1676,6 +1669,125 @@ mod tests {
         assert!(names.contains(&"Shape_Kind"));
         assert!(names.contains(&"vec2_length"));
         assert!(names.contains(&"lerp"));
+        assert!(names.contains(&"Value"));
+        assert!(names.contains(&"Permissions"));
+        assert!(names.contains(&"first_count"));
+        assert!(names.contains(&"second_count"));
+
+        let source = fs::read_to_string(&fixture).expect("Odin fixture should be readable");
+        let circle = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Circle")
+            .expect("struct should be extracted");
+        assert_eq!(circle.members.len(), 4);
+        assert!(circle.members.iter().any(|member| {
+            member.entry.name == "bounds_min" && member.entry.signature == "bounds_min: Vec2,"
+        }));
+        assert!(circle.members.iter().any(|member| {
+            member.entry.name == "bounds_max" && member.entry.signature == "bounds_max: Vec2,"
+        }));
+        assert!(circle.entry.signature.starts_with("Circle :: struct {"));
+        assert!(!circle.entry.signature.contains("return"));
+        let length = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "vec2_length")
+            .expect("procedure should be extracted");
+        assert_eq!(
+            length.entry.signature,
+            "vec2_length :: proc(v: Vec2) -> f32"
+        );
+        assert!(length.entry.body_range.is_some());
+        assert!(!length.entry.signature.contains("math.sqrt"));
+        let mapped = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "map_value")
+            .expect("attributed polymorphic procedure should be extracted");
+        assert!(mapped.entry.signature.contains("@(require_results)"));
+        assert!(mapped.entry.signature.contains("$T: typeid"));
+        assert!(mapped.entry.signature.contains("(result: T, ok: bool)"));
+        let foreign = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "foreign libc")
+            .expect("foreign block should be extracted");
+        assert!(foreign.members.iter().any(|member| {
+            member.entry.name == "strlen"
+                && member.entry.qualified_name == "foreign libc.strlen"
+        }));
+        let value = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Value")
+            .expect("union should be extracted");
+        assert!(value.entry.signature.contains("int,"));
+        assert!(value.entry.signature.contains("string,"));
+        assert!(value.entry.signature.contains("fmt.Formatter,"));
+        let shape = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Shape_Kind")
+            .expect("enum should be extracted");
+        assert_eq!(
+            shape
+                .members
+                .iter()
+                .map(|member| member.entry.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Circle", "Segment"]
+        );
+        assert!(shape.entry.signature.contains("Segment = Circle,"));
+        let callback = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Callback")
+            .expect("#type procedure alias should be extracted");
+        assert!(callback.entry.signature.contains("#type proc \"contextless\""));
+        let hidden_cache = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "hidden_cache")
+            .expect("attributed private variable should be extracted");
+        assert_eq!(
+            hidden_cache.entry.signature,
+            "@(private=\"file\")\nhidden_cache: int"
+        );
+        assert!(!hidden_cache.is_exported);
+        let initialized = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "initialized")
+            .expect("initialized typed variable should be extracted");
+        assert_eq!(initialized.entry.signature, "initialized: int = …");
+        let typed_limit = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "typed_limit")
+            .expect("typed constant should be extracted");
+        assert_eq!(typed_limit.entry.signature, "typed_limit: int : …");
+        let exact = engine
+            .symbol(
+                std::slice::from_ref(length.entry.locator.as_ref().expect("locator")),
+                SymbolView::Declaration,
+                0,
+            )
+            .expect("Odin declaration should resolve");
+        assert_eq!(
+            exact.blocks[0].source,
+            source[length.entry.range.start_byte..length.entry.range.end_byte]
+        );
+        let with_imports = engine
+            .symbol(
+                std::slice::from_ref(mapped.entry.locator.as_ref().expect("locator")),
+                SymbolView::DeclarationWithImports,
+                0,
+            )
+            .expect("Odin imports should resolve");
+        assert!(with_imports.blocks[0].source.contains("import fmt \"core:fmt\""));
+        assert!(!with_imports.blocks[0].source.contains("import \"core:math\""));
+        assert!(!with_imports.blocks[0].source.contains("import unused"));
 
         let hidden = result
             .items
@@ -1683,6 +1795,202 @@ mod tests {
             .find(|item| item.entry.name == "hidden_length")
             .expect("private procedure should be extracted");
         assert!(!hidden.is_exported);
+    }
+
+    #[test]
+    fn handles_odin_utf8_crlf_visibility_and_recovery() {
+        let engine = OutlineEngine::new().expect("outline engine should initialize");
+        let crlf_path =
+            std::env::temp_dir().join(format!("tau-ast-odin-crlf-{}.odin", std::process::id()));
+        let crlf_source = "package café\r\n\r\n// Décode café.\r\nCafé :: struct {\r\n\tvaleur: string,\r\n}\r\n";
+        fs::write(&crlf_path, crlf_source).expect("Odin CRLF fixture should be writable");
+        let crlf = outline_file(&engine, &crlf_path, LanguageId::Odin);
+        let cafe = crlf
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Café")
+            .expect("UTF-8 Odin struct should be extracted");
+        assert_eq!(
+            &crlf_source[cafe.entry.name_range.start_byte..cafe.entry.name_range.end_byte],
+            "Café"
+        );
+        assert!(crlf_source[cafe.entry.range.start_byte..cafe.entry.range.end_byte]
+            .starts_with("// Décode café."));
+        fs::remove_file(crlf_path).expect("Odin CRLF fixture should be removable");
+
+        let malformed_path = std::env::temp_dir().join(format!(
+            "tau-ast-odin-recovery-{}.odin",
+            std::process::id()
+        ));
+        fs::write(
+            &malformed_path,
+            "package fixture\n\nRecovered :: proc() { broken := }\n",
+        )
+        .expect("malformed Odin fixture should be writable");
+        let malformed = outline_file(&engine, &malformed_path, LanguageId::Odin);
+        let recovered = malformed
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Recovered")
+            .expect("recovered Odin procedure should remain");
+        assert!(matches!(recovered.entry.certainty, ParseCertainty::Recovered));
+        fs::remove_file(malformed_path).expect("malformed Odin fixture should be removable");
+    }
+
+    #[test]
+    fn extracts_complete_csharp_declarations_visibility_ranges_and_selective_views() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/csharp.cs");
+        let source = fs::read_to_string(&fixture).expect("fixture should be readable");
+        let result = outline_file(&engine, &fixture, LanguageId::CSharp);
+
+        assert_eq!(result.diagnostics.error_nodes, 0);
+        assert_eq!(result.diagnostics.missing_nodes, 0);
+        assert_eq!(result.items[0].row_kind, OutlineRowKind::Import);
+        assert_eq!(result.items[4].row_kind, OutlineRowKind::Package);
+        assert!(result.items[0].entry.locator.is_none());
+
+        let parser = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "IParser")
+            .expect("interface should be extracted");
+        assert_eq!(parser.entry.qualified_name, "Fixture.Parsing.IParser");
+        assert!(
+            parser.entry.signature.starts_with(
+                "/// <summary>Parses source values.</summary>\npublic interface IParser<T> where T : class\n{"
+            ),
+            "{}",
+            parser.entry.signature
+        );
+        assert!(parser.members.iter().any(|member| {
+            member.entry.name == "Parse"
+                && member.entry.qualified_name == "Fixture.Parsing.IParser.Parse"
+                && member.is_public
+        }));
+
+        let file_parser = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "FileParser")
+            .expect("partial class should be extracted");
+        assert!(file_parser.is_exported);
+        assert!(file_parser.entry.signature.contains("where T : class\n{"));
+        assert!(!file_parser.entry.signature.contains("return new Result"));
+        let source_property = file_parser
+            .members
+            .iter()
+            .find(|member| member.entry.name == "Source")
+            .expect("property should be extracted");
+        assert_eq!(source_property.entry.signature, "public Text Source { … }");
+        assert!(file_parser.members.iter().any(|member| {
+            member.entry.qualified_name == "Fixture.Parsing.FileParser.Source.get"
+                && member.is_public
+        }));
+        assert!(file_parser.members.iter().any(|member| {
+            member.entry.qualified_name == "Fixture.Parsing.FileParser.Source.set"
+                && !member.is_public
+        }));
+        assert!(file_parser.members.iter().any(|member| {
+            member.entry.name == "operator +"
+                && member.entry.symbol_type == SymbolType::Operator
+                && member.entry.body_range.is_some()
+        }));
+        let explicit = file_parser
+            .members
+            .iter()
+            .find(|member| member.entry.signature.contains("IParser<T>.Parse"))
+            .expect("explicit interface implementation should be extracted");
+        assert!(!explicit.is_public);
+        assert_eq!(explicit.entry.signature, "Result IParser<T>.Parse(T source) => …;");
+        assert_eq!(
+            &source[explicit.entry.range.start_byte..explicit.entry.range.end_byte],
+            "Result IParser<T>.Parse(T source) => Parse(source);"
+        );
+
+        let signature = engine
+            .symbol(
+                std::slice::from_ref(explicit.entry.locator.as_ref().expect("locator")),
+                SymbolView::Signature,
+                0,
+            )
+            .expect("C# signature should resolve");
+        assert_eq!(signature.blocks[0].source, explicit.entry.signature);
+        let with_imports = engine
+            .symbol(
+                std::slice::from_ref(source_property.entry.locator.as_ref().expect("locator")),
+                SymbolView::DeclarationWithImports,
+                0,
+            )
+            .expect("C# declaration-with-imports should resolve");
+        assert!(with_imports.blocks[0].source.contains("using Text = System.String;"));
+        assert!(with_imports.blocks[0].source.contains("global using System;"));
+
+        let public = engine
+            .outline(
+                OutlineTarget::File {
+                    path: fixture.to_string_lossy().into_owned(),
+                    language: LanguageId::CSharp,
+                },
+                false,
+                false,
+                &[],
+            )
+            .expect("public C# outline should parse");
+        assert!(!public.files[0]
+            .items
+            .iter()
+            .any(|item| item.entry.name == "HiddenParser"));
+        let public_file_parser = public.files[0]
+            .items
+            .iter()
+            .find(|item| item.entry.name == "FileParser")
+            .expect("public class should remain");
+        assert!(!public_file_parser.members.iter().any(|member| {
+            matches!(member.entry.name.as_str(), "Counts" | "set" | "Hide")
+        }));
+    }
+
+    #[test]
+    fn handles_csharp_utf8_crlf_block_namespaces_and_recovery() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let crlf_path =
+            std::env::temp_dir().join(format!("tau-ast-csharp-crlf-{}.cs", std::process::id()));
+        let crlf_source = "namespace Fixture {\r\n/// <summary>Décode café.</summary>\r\npublic partial class Café {\r\n    public string Décode() => \"café\";\r\n}\r\n}\r\n";
+        fs::write(&crlf_path, crlf_source).expect("C# CRLF fixture should be writable");
+        let crlf = outline_file(&engine, &crlf_path, LanguageId::CSharp);
+        let cafe = crlf
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Café")
+            .expect("UTF-8 C# class should be extracted");
+        assert_eq!(cafe.entry.qualified_name, "Fixture.Café");
+        assert_eq!(
+            &crlf_source[cafe.entry.name_range.start_byte..cafe.entry.name_range.end_byte],
+            "Café"
+        );
+        assert!(crlf_source[cafe.entry.range.start_byte..cafe.entry.range.end_byte]
+            .starts_with("/// <summary>Décode café.</summary>"));
+        fs::remove_file(&crlf_path).expect("C# CRLF fixture should be removable");
+
+        let malformed_path = std::env::temp_dir().join(format!(
+            "tau-ast-csharp-recovery-{}.cs",
+            std::process::id()
+        ));
+        fs::write(
+            &malformed_path,
+            "public class Recovered { public void Parse() { string broken = ; } }\n",
+        )
+        .expect("malformed C# fixture should be writable");
+        let malformed = outline_file(&engine, &malformed_path, LanguageId::CSharp);
+        let recovered = malformed
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Recovered")
+            .expect("recovered C# class should remain");
+        assert!(matches!(recovered.entry.certainty, ParseCertainty::Recovered));
+        assert!(recovered.entry.certainty_reason.is_some());
+        fs::remove_file(&malformed_path).expect("malformed C# fixture should be removable");
     }
 
     #[test]
@@ -1765,6 +2073,419 @@ mod tests {
                 "{file}"
             );
         }
+    }
+
+    #[test]
+    fn extracts_complete_kotlin_declarations_visibility_ranges_and_selective_views() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/kotlin.kt");
+        let source = fs::read_to_string(&fixture).expect("fixture should be readable");
+        let result = outline_file(&engine, &fixture, LanguageId::Kotlin);
+
+        assert_eq!(result.diagnostics.error_nodes, 0);
+        assert_eq!(result.diagnostics.missing_nodes, 0);
+        assert_eq!(result.items[1].row_kind, OutlineRowKind::Package);
+        assert_eq!(result.items[2].row_kind, OutlineRowKind::Import);
+        assert!(result.items[1].entry.locator.is_none());
+
+        let parser = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Parser")
+            .expect("interface should be extracted");
+        assert_eq!(parser.entry.symbol_type, SymbolType::Interface);
+        assert!(
+            parser
+                .entry
+                .signature
+                .starts_with("/** Parses source values. */")
+        );
+
+        let file_parser = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "FileParser")
+            .expect("sealed class should be extracted");
+        assert!(file_parser.is_exported);
+        assert!(
+            file_parser
+                .entry
+                .signature
+                .contains("where T : Comparable<T> {")
+        );
+        assert!(!file_parser.entry.signature.contains("return Result"));
+        assert!(file_parser.members.iter().any(|member| {
+            member.entry.qualified_name == "FileParser.constructor"
+                && member.entry.symbol_type == SymbolType::Constructor
+        }));
+        assert!(file_parser.members.iter().any(|member| {
+            member.entry.qualified_name == "FileParser.hidden" && !member.is_public
+        }));
+        assert!(file_parser.members.iter().any(|member| {
+            member.entry.qualified_name == "FileParser.mutable.set"
+                && member.entry.body_range.is_some()
+        }));
+        assert!(file_parser.members.iter().any(|member| {
+            member.entry.qualified_name == "FileParser.Named.create"
+                && member.entry.signature.ends_with("= …")
+        }));
+        assert!(file_parser.members.iter().any(|member| {
+            member.entry.qualified_name == "FileParser.memberExtension"
+                && member.entry.receiver_range.is_some()
+        }));
+        let secondary = file_parser
+            .members
+            .iter()
+            .find(|member| member.entry.name == "constructor" && member.entry.body_range.is_some())
+            .expect("secondary constructor should expose its outer body");
+        let secondary_body = secondary.entry.body_range.as_ref().expect("body");
+        assert!(source[secondary_body.start_byte..secondary_body.end_byte].starts_with('{'));
+        assert!(!secondary.entry.signature.contains("check(input"));
+        let parse = file_parser
+            .members
+            .iter()
+            .find(|member| member.entry.qualified_name == "FileParser.parse")
+            .expect("method should be extracted");
+        assert_eq!(
+            parse.entry.signature,
+            "override fun parse(source: String): Result"
+        );
+        let parse_body = parse
+            .entry
+            .body_range
+            .as_ref()
+            .expect("method should expose body");
+        assert!(source[parse_body.start_byte..parse_body.end_byte].starts_with('{'));
+
+        let create = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "createParser")
+            .expect("expression-bodied function should be extracted");
+        assert_eq!(
+            create.entry.signature,
+            "fun createParser(input: Input): Parser = …"
+        );
+        assert!(create.entry.body_range.is_some());
+
+        let signature = engine
+            .symbol(
+                std::slice::from_ref(create.entry.locator.as_ref().expect("locator")),
+                SymbolView::Signature,
+                0,
+            )
+            .expect("Kotlin signature should resolve");
+        assert_eq!(signature.blocks[0].source, create.entry.signature);
+        let with_imports = engine
+            .symbol(
+                std::slice::from_ref(create.entry.locator.as_ref().expect("locator")),
+                SymbolView::DeclarationWithImports,
+                0,
+            )
+            .expect("Kotlin imports should resolve");
+        assert!(
+            with_imports.blocks[0]
+                .source
+                .contains("import fixture.types.Input")
+        );
+        assert!(
+            with_imports.blocks[0]
+                .source
+                .contains("import fixture.types.*")
+        );
+        assert!(
+            !with_imports.blocks[0]
+                .source
+                .contains("kotlin.collections.Set")
+        );
+
+        let public = engine
+            .outline(
+                OutlineTarget::File {
+                    path: fixture.to_string_lossy().into_owned(),
+                    language: LanguageId::Kotlin,
+                },
+                false,
+                true,
+                &[],
+            )
+            .expect("public Kotlin outline should parse");
+        assert!(
+            !public.files[0]
+                .items
+                .iter()
+                .any(|item| item.entry.name == "trimmed")
+        );
+        let public_file_parser = public.files[0]
+            .items
+            .iter()
+            .find(|item| item.entry.name == "FileParser")
+            .expect("public class should remain");
+        assert!(!public_file_parser.members.iter().any(|member| {
+            matches!(
+                member.entry.name.as_str(),
+                "hidden" | "mutable" | "computed"
+            )
+        }));
+    }
+
+    #[test]
+    fn extracts_complete_swift_declarations_visibility_ranges_and_selective_views() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/swift.swift");
+        let source = fs::read_to_string(&fixture).expect("fixture should be readable");
+        let result = outline_file(&engine, &fixture, LanguageId::Swift);
+
+        assert_eq!(result.diagnostics.error_nodes, 0);
+        assert_eq!(result.diagnostics.missing_nodes, 0);
+        assert_eq!(result.items[0].row_kind, OutlineRowKind::Import);
+        assert!(result.items[0].entry.locator.is_none());
+
+        let parser = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Parser")
+            .expect("protocol should be extracted");
+        assert_eq!(parser.entry.symbol_type, SymbolType::Interface);
+        assert!(
+            parser
+                .entry
+                .signature
+                .starts_with("/// Parses source values.")
+        );
+        assert!(!parser.entry.signature.contains("source.trimmingCharacters"));
+        assert!(parser.members.iter().any(|member| {
+            member.entry.qualified_name == "Parser.Output"
+                && member.entry.symbol_type == SymbolType::TypeParameter
+                && member.is_public
+        }));
+        assert!(
+            parser.members.iter().any(|member| {
+                member.entry.qualified_name == "Parser.parse" && member.is_public
+            })
+        );
+        assert!(parser.members.iter().any(|member| {
+            member.entry.qualified_name == "Parser.subscript"
+                && member.entry.symbol_type == SymbolType::Operator
+        }));
+
+        let file_parser = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "FileParser")
+            .expect("open class should be extracted");
+        assert!(file_parser.is_exported);
+        let parse = file_parser
+            .members
+            .iter()
+            .find(|member| member.entry.name == "parse")
+            .expect("method should be extracted");
+        assert_eq!(
+            parse.entry.signature,
+            "open func parse(_ source: borrowing String) async throws -> String"
+        );
+        let parse_body = parse.entry.body_range.as_ref().expect("method body range");
+        assert!(source[parse_body.start_byte..parse_body.end_byte].starts_with('{'));
+        assert!(
+            file_parser
+                .members
+                .iter()
+                .any(|member| { member.entry.name == "secret" && !member.is_public })
+        );
+        assert!(
+            file_parser.members.iter().any(|member| {
+                member.entry.name == "deinit" && member.entry.body_range.is_some()
+            })
+        );
+
+        let state = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "State")
+            .expect("enum should be extracted");
+        assert!(state.members.iter().any(|member| {
+            member.entry.name == "loaded"
+                && member.entry.symbol_type == SymbolType::EnumMember
+                && member.is_public
+        }));
+        assert!(
+            state
+                .members
+                .iter()
+                .any(|member| { member.entry.name == "failed" && !member.is_public })
+        );
+
+        let extension = result
+            .items
+            .iter()
+            .find(|item| item.entry.symbol_type == SymbolType::Namespace)
+            .expect("extension should remain separately locatable");
+        assert!(
+            extension
+                .entry
+                .qualified_name
+                .starts_with("extension Result")
+        );
+        assert!(extension.members.iter().any(|member| {
+            member.entry.name == "mapped"
+                && member.entry.qualified_name.starts_with("extension Result")
+        }));
+
+        let make_date = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "makeDate")
+            .expect("top-level function should be extracted");
+        let with_imports = engine
+            .symbol(
+                std::slice::from_ref(make_date.entry.locator.as_ref().expect("locator")),
+                SymbolView::DeclarationWithImports,
+                0,
+            )
+            .expect("Swift declaration-with-imports should resolve");
+        let imported = &with_imports.blocks[0].source;
+        assert!(imported.contains("@_implementationOnly import Foundation"));
+        assert!(imported.contains("import struct Foundation.Date"));
+        assert!(imported.contains("import Collections"));
+        assert!(!imported.contains("import struct Foundation.URL"));
+
+        let public = engine
+            .outline(
+                OutlineTarget::File {
+                    path: fixture.to_string_lossy().into_owned(),
+                    language: LanguageId::Swift,
+                },
+                false,
+                true,
+                &[],
+            )
+            .expect("public Swift outline should parse");
+        assert!(
+            !public.files[0].items.iter().any(|item| {
+                matches!(item.entry.name.as_str(), "PackageOnly" | "internalHelper")
+            })
+        );
+        let public_result = public.files[0]
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Result")
+            .expect("public struct should remain");
+        assert!(public_result.members.iter().all(|member| {
+            !matches!(
+                member.entry.name.as_str(),
+                "packageValue" | "cached" | "hidden"
+            )
+        }));
+
+        let filtered = engine
+            .outline(
+                OutlineTarget::File {
+                    path: fixture.to_string_lossy().into_owned(),
+                    language: LanguageId::Swift,
+                },
+                false,
+                true,
+                &["mapped".to_owned()],
+            )
+            .expect("Swift member filter should parse");
+        let filtered_extension = filtered.files[0]
+            .items
+            .iter()
+            .find(|item| item.entry.symbol_type == SymbolType::Namespace)
+            .expect("extension owner should remain");
+        assert_eq!(filtered_extension.members.len(), 1);
+        assert_eq!(filtered_extension.members[0].entry.name, "mapped");
+    }
+
+    #[test]
+    fn handles_swift_utf8_crlf_and_recovery() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let crlf_path =
+            std::env::temp_dir().join(format!("tau-ast-swift-crlf-{}.swift", std::process::id()));
+        let crlf_source = "/// Décode café.\r\npublic struct Café {\r\n    /// Valeur — décodée.\r\n    public var valeur: String { \"café\" }\r\n    /// Décode méthode — café.\r\n    public func décode() -> String { \"café\" }\r\n}\r\n";
+        fs::write(&crlf_path, crlf_source).expect("Swift CRLF fixture should be writable");
+        let crlf = outline_file(&engine, &crlf_path, LanguageId::Swift);
+        let cafe = crlf
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Café")
+            .expect("UTF-8 Swift struct should be extracted");
+        assert_eq!(
+            &crlf_source[cafe.entry.name_range.start_byte..cafe.entry.name_range.end_byte],
+            "Café"
+        );
+        assert!(
+            crlf_source[cafe.entry.range.start_byte..cafe.entry.range.end_byte]
+                .starts_with("/// Décode café.")
+        );
+        let value = cafe
+            .members
+            .iter()
+            .find(|member| member.entry.name == "valeur")
+            .expect("documented UTF-8 Swift property should be extracted");
+        assert_eq!(
+            value.entry.signature,
+            "/// Valeur — décodée.\npublic var valeur: String { … }"
+        );
+        let decode = cafe
+            .members
+            .iter()
+            .find(|member| member.entry.name == "décode")
+            .expect("documented UTF-8 Swift method should be extracted");
+        assert_eq!(
+            decode.entry.signature,
+            "/// Décode méthode — café.\npublic func décode() -> String"
+        );
+        fs::remove_file(&crlf_path).expect("Swift CRLF fixture should be removable");
+
+        let malformed_path = std::env::temp_dir().join(format!(
+            "tau-ast-swift-recovery-{}.swift",
+            std::process::id()
+        ));
+        fs::write(
+            &malformed_path,
+            "public struct Recovered {\n    public func parse() { let broken = }\n}\n",
+        )
+        .expect("malformed Swift fixture should be writable");
+        let malformed = outline_file(&engine, &malformed_path, LanguageId::Swift);
+        let recovered = malformed
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Recovered")
+            .expect("recovered Swift struct should remain");
+        assert!(matches!(
+            recovered.entry.certainty,
+            ParseCertainty::Recovered
+        ));
+        assert!(recovered.entry.certainty_reason.is_some());
+        fs::remove_file(&malformed_path).expect("malformed Swift fixture should be removable");
+    }
+
+    #[test]
+    fn handles_kotlin_utf8_crlf_and_split_class_headers() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let path = std::env::temp_dir().join(format!("tau-ast-kotlin-{}.kt", std::process::id()));
+        let source = "/** Café. */\r\nclass Café(val entrée: String) {\r\n  fun décode(): String = entrée\r\n}\r\n";
+        fs::write(&path, source).expect("Kotlin recovery fixture should be writable");
+        let result = outline_file(&engine, &path, LanguageId::Kotlin);
+        let cafe = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Café")
+            .expect("recovered class should remain");
+        assert_eq!(
+            &source[cafe.entry.name_range.start_byte..cafe.entry.name_range.end_byte],
+            "Café"
+        );
+        let exact = engine
+            .symbol(
+                std::slice::from_ref(cafe.entry.locator.as_ref().expect("locator")),
+                SymbolView::Declaration,
+                0,
+            )
+            .expect("recovered declaration should resolve");
+        assert_eq!(exact.blocks[0].source, source.trim_end());
+        fs::remove_file(path).expect("Kotlin fixture should be removable");
     }
 
     #[test]
