@@ -75,7 +75,7 @@ run = "markdownlint-cli2 --fix"
 
 [tasks."check:types"]
 description = "Run TypeScript checks"
-run = "./node_modules/.bin/tsgo --noEmit"
+run = "./node_modules/.bin/tsc --noEmit"
 
 [tasks."test:unit"]
 description = "Run unit tests"
