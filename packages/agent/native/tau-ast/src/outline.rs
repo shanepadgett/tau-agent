@@ -1,4 +1,11 @@
+use crate::go::{extract_go_items, filter_go_items, finalize_go_signatures, matching_go_imports};
+use crate::java::{
+    extract_java_items, filter_java_items, finalize_java_signatures, matching_java_imports,
+};
 use crate::language::OdinLanguage;
+use crate::rust::{
+    extract_rust_items, filter_rust_items, finalize_rust_signatures, matching_rust_imports,
+};
 use crate::typescript::{
     extract_typescript_items, filter_typescript_items, finalize_typescript_signatures,
 };
@@ -138,6 +145,8 @@ pub struct OutlineEntry {
     pub qualified_name: String,
     pub range: SourceRange,
     pub name_range: SourceRange,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub receiver_range: Option<SourceRange>,
     pub body_range: Option<SourceRange>,
     pub signature: String,
     pub ast_kind: String,
@@ -170,6 +179,7 @@ pub struct OutlineItem {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum OutlineRowKind {
+    Package,
     Import,
     Declaration,
     Export,
@@ -244,6 +254,7 @@ struct SourceLocator {
     declaration_kind: String,
     range: SourceRange,
     name_range: SourceRange,
+    receiver_range: Option<SourceRange>,
     body_range: Option<SourceRange>,
     certainty: ParseCertainty,
     signature: String,
@@ -257,10 +268,7 @@ enum LocatorKind {
 }
 
 pub struct OutlineEngine {
-    go: CombinedExtractors<SupportLang>,
-    rust: CombinedExtractors<SupportLang>,
     c_sharp: CombinedExtractors<SupportLang>,
-    java: CombinedExtractors<SupportLang>,
     kotlin: CombinedExtractors<SupportLang>,
     swift: CombinedExtractors<SupportLang>,
     odin: CombinedExtractors<OdinLanguage>,
@@ -269,24 +277,9 @@ pub struct OutlineEngine {
 impl OutlineEngine {
     pub fn new() -> Result<Self, Box<dyn Error>> {
         let default_rules = parse_outline_rules::<SupportLang>(DEFAULT_OUTLINE_RULES)?;
-        let go_rules = default_rules
-            .iter()
-            .filter(|rule| rule.common().language == SupportLang::Go)
-            .cloned()
-            .collect();
-        let rust_rules = default_rules
-            .iter()
-            .filter(|rule| rule.common().language == SupportLang::Rust)
-            .cloned()
-            .collect();
         let c_sharp_rules = default_rules
             .iter()
             .filter(|rule| rule.common().language == SupportLang::CSharp)
-            .cloned()
-            .collect();
-        let java_rules = default_rules
-            .iter()
-            .filter(|rule| rule.common().language == SupportLang::Java)
             .cloned()
             .collect();
         let kotlin_rules = default_rules
@@ -303,10 +296,7 @@ impl OutlineEngine {
         let globals = GlobalRules::default();
 
         Ok(Self {
-            go: CombinedExtractors::try_from(go_rules, &globals)?,
-            rust: CombinedExtractors::try_from(rust_rules, &globals)?,
             c_sharp: CombinedExtractors::try_from(c_sharp_rules, &globals)?,
-            java: CombinedExtractors::try_from(java_rules, &globals)?,
             kotlin: CombinedExtractors::try_from(kotlin_rules, &globals)?,
             swift: CombinedExtractors::try_from(swift_rules, &globals)?,
             odin: CombinedExtractors::try_from(odin_rules, &globals)?,
@@ -317,6 +307,7 @@ impl OutlineEngine {
         &self,
         target: OutlineTarget,
         include_private: bool,
+        include_docs: bool,
         names: &[String],
     ) -> Result<OutlineTargetResult, Box<dyn Error>> {
         let (path, mut files) = match target {
@@ -345,7 +336,8 @@ impl OutlineEngine {
                     )
                     .into());
                 }
-                let file = self.outline_file(&path, language, include_private, names)?;
+                let file =
+                    self.outline_file(&path, language, include_private, include_docs, names)?;
                 (path, vec![file])
             }
             OutlineTarget::Directory { path } => {
@@ -399,7 +391,13 @@ impl OutlineEngine {
                 let files = candidates
                     .into_iter()
                     .map(|(file_path, language)| {
-                        self.outline_file(&file_path, language, include_private, names)
+                        self.outline_file(
+                            &file_path,
+                            language,
+                            include_private,
+                            include_docs,
+                            names,
+                        )
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 (path, files)
@@ -428,24 +426,25 @@ impl OutlineEngine {
         path: &Path,
         language: LanguageId,
         include_private: bool,
+        include_docs: bool,
         names: &[String],
     ) -> Result<OutlineFileResult, Box<dyn Error>> {
         let source_bytes = fs::read(path)?;
         let source = str::from_utf8(&source_bytes)?;
         let path = path.to_string_lossy().into_owned();
         let source_fingerprint = source_fingerprint(&source_bytes);
-        let (diagnostics, mut items, typescript_filtered) = match language {
+        let (diagnostics, mut items, directly_filtered) = match language {
             LanguageId::TypeScript => {
                 let grep = SupportLang::TypeScript.ast_grep(source);
                 let diagnostics = diagnostics(grep.root());
-                let mut items = extract_typescript_items(grep.root(), source);
+                let mut items = extract_typescript_items(grep.root(), source, include_docs);
                 filter_typescript_items(grep.root(), &mut items, include_private, names);
                 (diagnostics, items, true)
             }
             LanguageId::Tsx => {
                 let grep = SupportLang::Tsx.ast_grep(source);
                 let diagnostics = diagnostics(grep.root());
-                let mut items = extract_typescript_items(grep.root(), source);
+                let mut items = extract_typescript_items(grep.root(), source, include_docs);
                 filter_typescript_items(grep.root(), &mut items, include_private, names);
                 (diagnostics, items, true)
             }
@@ -462,25 +461,17 @@ impl OutlineEngine {
             }
             LanguageId::Go => {
                 let grep = SupportLang::Go.ast_grep(source);
-                (
-                    diagnostics(grep.root()),
-                    self.go
-                        .extract(grep.root())
-                        .map(|item| outline_item(item, &path, language, &source_fingerprint))
-                        .collect::<Result<Vec<_>, _>>()?,
-                    false,
-                )
+                let diagnostics = diagnostics(grep.root());
+                let mut items = extract_go_items(grep.root(), source, include_docs);
+                filter_go_items(grep.root(), source, &mut items, include_private, names);
+                (diagnostics, items, true)
             }
             LanguageId::Rust => {
                 let grep = SupportLang::Rust.ast_grep(source);
-                (
-                    diagnostics(grep.root()),
-                    self.rust
-                        .extract(grep.root())
-                        .map(|item| outline_item(item, &path, language, &source_fingerprint))
-                        .collect::<Result<Vec<_>, _>>()?,
-                    false,
-                )
+                let diagnostics = diagnostics(grep.root());
+                let mut items = extract_rust_items(grep.root(), source, include_docs);
+                filter_rust_items(grep.root(), source, &mut items, include_private, names);
+                (diagnostics, items, true)
             }
             LanguageId::CSharp => {
                 let grep = SupportLang::CSharp.ast_grep(source);
@@ -495,14 +486,10 @@ impl OutlineEngine {
             }
             LanguageId::Java => {
                 let grep = SupportLang::Java.ast_grep(source);
-                (
-                    diagnostics(grep.root()),
-                    self.java
-                        .extract(grep.root())
-                        .map(|item| outline_item(item, &path, language, &source_fingerprint))
-                        .collect::<Result<Vec<_>, _>>()?,
-                    false,
-                )
+                let diagnostics = diagnostics(grep.root());
+                let mut items = extract_java_items(grep.root(), source, include_docs);
+                filter_java_items(grep.root(), source, &mut items, include_private, names);
+                (diagnostics, items, true)
             }
             LanguageId::Kotlin => {
                 let grep = SupportLang::Kotlin.ast_grep(source);
@@ -532,11 +519,23 @@ impl OutlineEngine {
         } else {
             source.bytes().filter(|byte| *byte == b'\n').count() + 1
         };
-        if !typescript_filtered {
+        if !directly_filtered {
             filter_items(&mut items, include_private, names);
         }
-        if matches!(language, LanguageId::TypeScript | LanguageId::Tsx) {
-            finalize_typescript_signatures(&mut items);
+        if matches!(
+            language,
+            LanguageId::TypeScript
+                | LanguageId::Tsx
+                | LanguageId::Go
+                | LanguageId::Rust
+                | LanguageId::Java
+        ) {
+            match language {
+                LanguageId::Go => finalize_go_signatures(&mut items),
+                LanguageId::Rust => finalize_rust_signatures(&mut items),
+                LanguageId::Java => finalize_java_signatures(&mut items),
+                _ => finalize_typescript_signatures(&mut items),
+            }
             finalize_locators(&mut items, &path, language, &source_fingerprint)?;
         }
 
@@ -609,12 +608,19 @@ impl OutlineEngine {
 
         if !matches!(view, SymbolView::Declaration)
             && locators.iter().any(|(_, locator)| {
-                !matches!(locator.language, LanguageId::TypeScript | LanguageId::Tsx)
+                !matches!(
+                    locator.language,
+                    LanguageId::TypeScript
+                        | LanguageId::Tsx
+                        | LanguageId::Go
+                        | LanguageId::Rust
+                        | LanguageId::Java
+                )
             })
         {
             return Err(SymbolError {
                 code: "unsupported_symbol_view",
-                message: "signature, body, and declarationWithImports views support TypeScript and TSX only"
+                message: "signature and declarationWithImports views support TypeScript, TSX, Go, Rust, and Java only"
                     .to_owned(),
             });
         }
@@ -752,12 +758,15 @@ fn filter_items(items: &mut Vec<OutlineItem>, include_private: bool, names: &[St
         items.retain_mut(|item| {
             item.members
                 .retain(|member| include_private || member.is_public);
-            item.is_import || include_private || item.is_exported
+            item.is_import
+                || item.row_kind == OutlineRowKind::Package
+                || include_private
+                || item.is_exported
         });
         return;
     }
     items.retain_mut(|item| {
-        if item.is_import {
+        if item.is_import || item.row_kind == OutlineRowKind::Package {
             item.members.clear();
             return true;
         }
@@ -956,6 +965,7 @@ fn outline_entry(
         declaration_kind: entry.ast_kind.to_string(),
         range: range.clone(),
         name_range: range.clone(),
+        receiver_range: None,
         body_range: None,
         certainty: ParseCertainty::Certain,
         signature: entry.signature.to_string(),
@@ -970,6 +980,7 @@ fn outline_entry(
         name: entry.name.clone().into_owned(),
         qualified_name: entry.name.into_owned(),
         name_range: range.clone(),
+        receiver_range: None,
         body_range: None,
         certainty: ParseCertainty::Certain,
         certainty_reason: None,
@@ -1025,6 +1036,7 @@ fn encode_locator(
         declaration_kind: entry.ast_kind.clone(),
         range: entry.range.clone(),
         name_range: entry.name_range.clone(),
+        receiver_range: entry.receiver_range.clone(),
         body_range: entry.body_range.clone(),
         certainty: entry.certainty,
         signature: entry.signature.clone(),
@@ -1041,6 +1053,18 @@ fn declaration_with_imports(source: &str, locator: &SourceLocator) -> String {
         LanguageId::Tsx => {
             let grep = SupportLang::Tsx.ast_grep(source);
             matching_imports(grep.root(), source, locator)
+        }
+        LanguageId::Go => {
+            let grep = SupportLang::Go.ast_grep(source);
+            matching_go_imports(grep.root(), source, &locator.range)
+        }
+        LanguageId::Rust => {
+            let grep = SupportLang::Rust.ast_grep(source);
+            matching_rust_imports(grep.root(), source, &locator.range)
+        }
+        LanguageId::Java => {
+            let grep = SupportLang::Java.ast_grep(source);
+            matching_java_imports(grep.root(), source, &locator.range)
         }
         _ => Vec::new(),
     };
@@ -1165,6 +1189,7 @@ mod tests {
                     language,
                 },
                 true,
+                true,
                 &[],
             )
             .expect("fixture should parse")
@@ -1216,6 +1241,7 @@ mod tests {
                     language: LanguageId::TypeScript,
                 },
                 false,
+                true,
                 &[],
             )
             .expect("fixture should parse")
@@ -1381,6 +1407,7 @@ mod tests {
                     language: LanguageId::TypeScript,
                 },
                 false,
+                true,
                 &["refresh".to_owned()],
             )
             .expect("filtered fixture should parse");
@@ -1414,6 +1441,7 @@ mod tests {
                     language: LanguageId::TypeScript,
                 },
                 false,
+                true,
                 &["Service".to_owned()],
             )
             .expect("top-level class filter should parse");
@@ -1434,6 +1462,200 @@ mod tests {
                 .iter()
                 .all(|member| member.entry.name != "cache")
         );
+    }
+
+    #[test]
+    fn documentation_is_opt_in_without_changing_exact_declaration_ranges() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let cases = [
+            (
+                LanguageId::TypeScript,
+                "ts",
+                "/** Service docs. */\n@sealed\nexport class Service {\n  /** Run docs. */\n  @logged\n  run(): void {}\n}\n\nexport const marker = \"/** keep */\";\n",
+                "Service",
+                "run",
+                "@sealed",
+                "@logged",
+            ),
+            (
+                LanguageId::Go,
+                "go",
+                "package docs\n\n/* Service docs.\n//go:noescape\n*/\n/*line generated.go:10*/\n//go:noinline\ntype Service struct {\n\t// Run docs.\n\tRun func()\n}\n",
+                "Service",
+                "Run",
+                "//go:noinline",
+                "Run func()",
+            ),
+            (
+                LanguageId::Rust,
+                "rs",
+                "/// Service docs.\n#[derive(Debug)]\n// Attribute explanation.\npub struct Service {\n    /// Run docs.\n    #[cfg(test)]\n    pub run: fn(),\n}\n\n/// Tuple docs.\npub struct Tuple(\n    /// Field docs.\n    #[cfg(test)]\n    pub u8,\n);\n",
+                "Service",
+                "run",
+                "#[derive(Debug)]",
+                "#[cfg(test)]",
+            ),
+            (
+                LanguageId::Java,
+                "java",
+                "/** Service docs. */\n@Deprecated\npublic class Service {\n    /** Run docs. */\n    @Deprecated\n    public void run() {}\n}\n",
+                "Service",
+                "run",
+                "@Deprecated",
+                "@Deprecated",
+            ),
+        ];
+
+        for (
+            language,
+            extension,
+            source,
+            item_name,
+            member_name,
+            item_attribute,
+            member_attribute,
+        ) in cases
+        {
+            let path = std::env::temp_dir().join(format!(
+                "tau-ast-docs-{}-{extension}.{extension}",
+                std::process::id()
+            ));
+            fs::write(&path, source).expect("documentation fixture should be writable");
+            let target = OutlineTarget::File {
+                path: path.to_string_lossy().into_owned(),
+                language,
+            };
+
+            let default = engine
+                .outline(target, true, false, &[])
+                .expect("default outline should parse");
+            let item = default.files[0]
+                .items
+                .iter()
+                .find(|item| item.entry.name == item_name)
+                .expect("top-level declaration should remain");
+            let member = item
+                .members
+                .iter()
+                .find(|member| member.entry.name == member_name)
+                .expect("member declaration should remain");
+            assert!(
+                !item.entry.signature.contains("Service docs."),
+                "{extension}"
+            );
+            assert!(!member.entry.signature.contains("Run docs."), "{extension}");
+            assert!(item.entry.signature.contains(item_attribute), "{extension}");
+            assert!(
+                member.entry.signature.contains(member_attribute),
+                "{extension}"
+            );
+            if language == LanguageId::Go {
+                assert!(item.entry.signature.contains("/*line generated.go:10*/"));
+                assert!(!item.entry.signature.contains("//go:noescape"));
+            }
+            assert!(
+                source[item.entry.range.start_byte..item.entry.range.end_byte]
+                    .trim_start()
+                    .starts_with(if language == LanguageId::Go {
+                        "/* Service docs."
+                    } else if language == LanguageId::Rust {
+                        "/// Service docs."
+                    } else {
+                        "/** Service docs. */"
+                    }),
+                "{extension}"
+            );
+            let exact = engine
+                .symbol(
+                    std::slice::from_ref(
+                        member
+                            .entry
+                            .locator
+                            .as_ref()
+                            .expect("member should have a locator"),
+                    ),
+                    SymbolView::Declaration,
+                    0,
+                )
+                .expect("exact member declaration should resolve");
+            assert!(exact.blocks[0].source.contains("Run docs."), "{extension}");
+
+            let documented = engine
+                .outline(
+                    OutlineTarget::File {
+                        path: path.to_string_lossy().into_owned(),
+                        language,
+                    },
+                    true,
+                    true,
+                    &[],
+                )
+                .expect("documented outline should parse");
+            let documented_item = documented.files[0]
+                .items
+                .iter()
+                .find(|item| item.entry.name == item_name)
+                .expect("documented item should remain");
+            assert!(documented_item.entry.signature.contains("Service docs."));
+            assert!(
+                documented_item
+                    .members
+                    .iter()
+                    .find(|member| member.entry.name == member_name)
+                    .is_some_and(|member| member.entry.signature.contains("Run docs."))
+            );
+
+            let filtered = engine
+                .outline(
+                    OutlineTarget::File {
+                        path: path.to_string_lossy().into_owned(),
+                        language,
+                    },
+                    true,
+                    false,
+                    &[member_name.to_owned()],
+                )
+                .expect("name-filtered outline should parse");
+            let filtered_item = filtered.files[0]
+                .items
+                .iter()
+                .find(|item| item.entry.name == item_name)
+                .expect("member owner should remain after filtering");
+            assert_eq!(filtered_item.members.len(), 1, "{extension}");
+            assert!(
+                !filtered_item.members[0]
+                    .entry
+                    .signature
+                    .contains("Run docs.")
+            );
+            assert!(
+                filtered_item.members[0]
+                    .entry
+                    .signature
+                    .contains(member_attribute),
+                "{extension}"
+            );
+
+            if language == LanguageId::TypeScript {
+                let marker = default.files[0]
+                    .items
+                    .iter()
+                    .find(|item| item.entry.name == "marker")
+                    .expect("string-valued declaration should remain");
+                assert!(marker.entry.signature.contains("/** keep */"));
+            }
+            if language == LanguageId::Rust {
+                let tuple = default.files[0]
+                    .items
+                    .iter()
+                    .find(|item| item.entry.name == "Tuple")
+                    .expect("tuple struct should remain");
+                assert!(!tuple.members[0].entry.signature.contains("Field docs."));
+                assert!(tuple.members[0].entry.signature.contains("#[cfg(test)]"));
+            }
+
+            fs::remove_file(path).expect("documentation fixture should be removable");
+        }
     }
 
     #[test]
@@ -1475,7 +1697,7 @@ mod tests {
             (
                 LanguageId::Rust,
                 "rust.rs",
-                &["Parser", "Result", "FileParser", "create_parser"],
+                &["Parser", "Pair", "FileParser", "create_parser"],
             ),
             (
                 LanguageId::CSharp,
@@ -1523,7 +1745,7 @@ mod tests {
             let item = result
                 .items
                 .iter()
-                .find(|item| !item.is_import)
+                .find(|item| item.row_kind == OutlineRowKind::Declaration)
                 .expect("fixture should contain a declaration");
             let symbol = engine
                 .symbol(
@@ -1546,6 +1768,967 @@ mod tests {
     }
 
     #[test]
+    fn extracts_complete_go_declarations_ranges_and_selective_views() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/go.go");
+        let source = fs::read_to_string(&fixture).expect("fixture should be readable");
+        let result = outline_file(&engine, &fixture, LanguageId::Go);
+
+        assert_eq!(result.diagnostics.error_nodes, 0);
+        assert_eq!(result.diagnostics.missing_nodes, 0);
+        assert_eq!(result.items[0].row_kind, OutlineRowKind::Package);
+        assert_eq!(result.items[0].entry.name, "fixture");
+        assert_eq!(
+            &source[result.items[0].entry.name_range.start_byte
+                ..result.items[0].entry.name_range.end_byte],
+            "fixture"
+        );
+        assert_eq!(result.items[1].row_kind, OutlineRowKind::Import);
+        assert!(result.items[0].entry.locator.is_none());
+        assert!(result.items[1].entry.locator.is_none());
+
+        let default_limit = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "DefaultLimit")
+            .expect("grouped constant should be extracted");
+        assert!(default_limit.entry.signature.starts_with("// DefaultLimit"));
+        assert!(
+            source[default_limit.entry.range.start_byte..default_limit.entry.range.end_byte]
+                .contains("const (\n\tDefaultLimit = 10")
+        );
+        let hidden_limit = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "hiddenLimit")
+            .expect("private grouped constant should be extracted");
+        assert!(hidden_limit.entry.signature.starts_with("// hiddenLimit"));
+        let inherited_limit = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "InheritedLimit")
+            .expect("inherited constant should be extracted");
+        assert!(
+            inherited_limit
+                .entry
+                .signature
+                .ends_with("= … // inherited")
+        );
+        let handler = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Handler")
+            .expect("callable variable should be extracted");
+        assert_eq!(
+            handler.entry.signature,
+            "var Handler        = func() string { … }"
+        );
+        assert!(!handler.entry.signature.contains("hidden body"));
+        assert!(handler.entry.body_range.is_some());
+        assert!(
+            !result
+                .items
+                .iter()
+                .any(|item| item.entry.name == "ExportedLocal")
+        );
+        let handlers = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Handlers")
+            .expect("multiple callable initializers should be extracted");
+        assert_eq!(handlers.entry.signature.matches("{ … }").count(), 2);
+        assert!(!handlers.entry.signature.contains("first body"));
+        assert!(!handlers.entry.signature.contains("second body"));
+        assert!(handlers.entry.body_range.is_none());
+
+        let alias = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Value")
+            .expect("type alias should be extracted");
+        assert_eq!(alias.entry.signature, "type Value = string");
+        assert!(alias.entry.body_range.is_none());
+        let grouped = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Grouped")
+            .expect("grouped type should be extracted");
+        assert!(grouped.entry.signature.starts_with("// Grouped documents"));
+
+        let pair = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Pair")
+            .expect("generic struct should be extracted");
+        assert!(
+            pair.entry
+                .signature
+                .starts_with("type Pair[T comparable] struct {")
+        );
+        assert!(pair.entry.signature.contains("Left T"));
+        assert!(pair.entry.signature.contains("Right T"));
+        assert_eq!(
+            pair.members
+                .iter()
+                .map(|member| member.entry.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Left", "Right", "Result", "Box"]
+        );
+        let pair_body = pair
+            .entry
+            .body_range
+            .as_ref()
+            .expect("struct should have a body");
+        assert_eq!(
+            &source[pair_body.start_byte..pair_body.end_byte],
+            "{\n\tLeft, Right T\n\t*Result\n\tBox[string]\n}"
+        );
+
+        let parser = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Parser")
+            .expect("interface should be extracted");
+        assert!(parser.entry.signature.contains("type Parser interface {"));
+        assert!(
+            parser
+                .members
+                .iter()
+                .any(|member| member.entry.name == "~int | ~string")
+        );
+
+        let method = result
+            .items
+            .iter()
+            .find(|item| item.entry.qualified_name == "FileParser.Parse")
+            .expect("pointer receiver method should be extracted");
+        assert_eq!(method.entry.role, EntryRole::Member);
+        assert!(!method.entry.signature.contains("stringsAlias.TrimSpace"));
+        let receiver = method
+            .entry
+            .receiver_range
+            .as_ref()
+            .expect("method should have a receiver range");
+        assert_eq!(
+            &source[receiver.start_byte..receiver.end_byte],
+            "(parser *FileParser)"
+        );
+        let body = method
+            .entry
+            .body_range
+            .as_ref()
+            .expect("method should have a body");
+        assert!(source[body.start_byte..body.end_byte].starts_with('{'));
+        assert!(result.items.iter().any(|item| item.entry.name == "init"));
+
+        let signature = engine
+            .symbol(
+                std::slice::from_ref(
+                    method
+                        .entry
+                        .locator
+                        .as_ref()
+                        .expect("method should have a locator"),
+                ),
+                SymbolView::Signature,
+                0,
+            )
+            .expect("Go signature should resolve");
+        assert_eq!(signature.blocks[0].source, method.entry.signature);
+
+        let filtered = engine
+            .outline(
+                OutlineTarget::File {
+                    path: fixture.to_string_lossy().into_owned(),
+                    language: LanguageId::Go,
+                },
+                false,
+                true,
+                &["Parser".to_owned()],
+            )
+            .expect("Go container filter should resolve");
+        let filtered_parser = filtered.files[0]
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Parser")
+            .expect("filtered interface should remain");
+        assert_eq!(filtered.files[0].items[0].row_kind, OutlineRowKind::Package);
+        assert!(
+            filtered_parser
+                .members
+                .iter()
+                .any(|member| member.entry.name == "Parse")
+        );
+        assert!(
+            filtered_parser
+                .members
+                .iter()
+                .any(|member| member.entry.name == "~int | ~string")
+        );
+    }
+
+    #[test]
+    fn handles_go_import_modes_utf8_crlf_and_recovery() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let imports_path =
+            std::env::temp_dir().join(format!("tau-ast-go-imports-{}.go", std::process::id()));
+        let imports_source = r#"package fixture
+
+import "fmt"
+import alias "strings"
+import . "math"
+import _ "embed"
+import unused "bytes"
+import "math/rand/v2"
+
+func Render(source string) string {
+	fmt.Println(Sqrt(4))
+	fmt.Println(rand.Int())
+	return alias.TrimSpace(source)
+}
+"#;
+        fs::write(&imports_path, imports_source).expect("Go import fixture should be writable");
+        let imports = outline_file(&engine, &imports_path, LanguageId::Go);
+        let render = imports
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Render")
+            .expect("Go function should be extracted");
+        let with_imports = engine
+            .symbol(
+                std::slice::from_ref(
+                    render
+                        .entry
+                        .locator
+                        .as_ref()
+                        .expect("function should have a locator"),
+                ),
+                SymbolView::DeclarationWithImports,
+                0,
+            )
+            .expect("Go declaration-with-imports should resolve");
+        let imported = &with_imports.blocks[0].source;
+        assert!(imported.contains("import \"fmt\""));
+        assert!(imported.contains("import alias \"strings\""));
+        assert!(imported.contains("import . \"math\""));
+        assert!(imported.contains("import _ \"embed\""));
+        assert!(imported.contains("import \"math/rand/v2\""));
+        assert!(!imported.contains("unused \"bytes\""));
+        fs::remove_file(&imports_path).expect("Go import fixture should be removable");
+
+        let crlf_path =
+            std::env::temp_dir().join(format!("tau-ast-go-crlf-{}.go", std::process::id()));
+        let crlf_source = "package fixture\r\n\r\n// Décode handles café.\r\nfunc Décode() string {\r\n\treturn \"café\"\r\n}\r\n";
+        fs::write(&crlf_path, crlf_source).expect("Go CRLF fixture should be writable");
+        let crlf = outline_file(&engine, &crlf_path, LanguageId::Go);
+        let decode = crlf
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Décode")
+            .expect("UTF-8 Go identifier should be extracted");
+        assert_eq!(
+            &crlf_source[decode.entry.name_range.start_byte..decode.entry.name_range.end_byte],
+            "Décode"
+        );
+        assert_eq!(
+            &crlf_source[decode.entry.range.start_byte..decode.entry.range.end_byte],
+            "// Décode handles café.\r\nfunc Décode() string {\r\n\treturn \"café\"\r\n}"
+        );
+        fs::remove_file(&crlf_path).expect("Go CRLF fixture should be removable");
+
+        let malformed_path =
+            std::env::temp_dir().join(format!("tau-ast-go-recovery-{}.go", std::process::id()));
+        fs::write(
+            &malformed_path,
+            "package fixture\n\nfunc Recovered() {\n\tvar broken =\n}\n",
+        )
+        .expect("malformed Go fixture should be writable");
+        let malformed = outline_file(&engine, &malformed_path, LanguageId::Go);
+        let recovered = malformed
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Recovered")
+            .expect("recovered Go function should remain");
+        assert!(matches!(
+            recovered.entry.certainty,
+            ParseCertainty::Recovered
+        ));
+        assert!(recovered.entry.certainty_reason.is_some());
+        fs::remove_file(&malformed_path).expect("malformed Go fixture should be removable");
+    }
+
+    #[test]
+    fn extracts_complete_java_declarations_ranges_visibility_and_selective_views() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/java.java");
+        let source = fs::read_to_string(&fixture).expect("fixture should be readable");
+        let result = outline_file(&engine, &fixture, LanguageId::Java);
+
+        assert_eq!(result.diagnostics.error_nodes, 0);
+        assert_eq!(result.diagnostics.missing_nodes, 0);
+        assert_eq!(result.items[0].row_kind, OutlineRowKind::Package);
+        assert_eq!(result.items[0].entry.name, "fixture");
+        assert!(result.items[0].entry.locator.is_none());
+        assert_eq!(result.items[1].row_kind, OutlineRowKind::Import);
+        assert!(result.items[1].entry.locator.is_none());
+
+        let parser = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Parser")
+            .expect("generic interface should be extracted");
+        assert!(parser.is_exported);
+        assert!(parser.entry.signature.starts_with(
+            "/** Parses source values. */\npublic interface Parser<T extends CharSequence> {"
+        ));
+        assert!(!parser.entry.signature.contains("return emptyList"));
+        let parser_members = parser
+            .members
+            .iter()
+            .map(|member| (member.entry.qualified_name.as_str(), member.is_public))
+            .collect::<Vec<_>>();
+        assert!(parser_members.contains(&("Parser.DEFAULT_LIMIT", true)));
+        assert!(parser_members.contains(&("Parser.parse", true)));
+        assert!(parser_members.contains(&("Parser.emptyValues", true)));
+        assert!(parser_members.contains(&("Parser.reset", false)));
+        assert!(parser_members.contains(&("Parser.Nested", true)));
+        assert!(parser_members.contains(&("Parser.Nested.name", true)));
+        assert!(parser_members.contains(&("Parser.Nested.hidden", false)));
+        let parse = parser
+            .members
+            .iter()
+            .find(|member| member.entry.qualified_name == "Parser.parse")
+            .expect("interface method should be extracted");
+        assert_eq!(
+            parse.entry.signature,
+            "Result parse(T source) throws IOException;"
+        );
+        assert!(parse.entry.body_range.is_none());
+
+        let result_record = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Result")
+            .expect("record should be extracted");
+        assert_eq!(result_record.entry.symbol_type, SymbolType::Struct);
+        let ok = result_record
+            .members
+            .iter()
+            .find(|member| member.entry.qualified_name == "Result.ok")
+            .expect("record component should be locatable");
+        assert_eq!(ok.entry.ast_kind, "record_component");
+        assert_eq!(
+            &source[ok.entry.range.start_byte..ok.entry.range.end_byte],
+            "boolean ok"
+        );
+        assert!(ok.is_public);
+        assert!(result_record.members.iter().any(|member| {
+            member.entry.symbol_type == SymbolType::Constructor
+                && member.entry.ast_kind == "compact_constructor_declaration"
+                && member.entry.body_range.is_some()
+        }));
+        let arguments = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Arguments")
+            .expect("varargs record should be extracted");
+        assert!(arguments.members.iter().any(|member| {
+            member.entry.name == "rest"
+                && member.entry.ast_kind == "record_component"
+                && member.entry.signature == "String... rest"
+        }));
+
+        let state = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "State")
+            .expect("enum should be extracted");
+        assert!(state.members.iter().any(|member| {
+            member.entry.name == "READY" && member.entry.symbol_type == SymbolType::EnumMember
+        }));
+        let failed = state
+            .members
+            .iter()
+            .find(|member| member.entry.name == "FAILED")
+            .expect("enum constant body should be extracted");
+        assert_eq!(failed.entry.signature, "FAILED(1) { … }");
+        assert!(failed.entry.body_range.is_some());
+        let action = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Action")
+            .expect("lambda enum should be extracted");
+        let run = action
+            .members
+            .iter()
+            .find(|member| member.entry.name == "RUN")
+            .expect("lambda enum constant should be extracted");
+        assert_eq!(run.entry.signature, "RUN(() -> { … })");
+        assert!(!run.entry.signature.contains("hidden lambda body"));
+        let call = action
+            .members
+            .iter()
+            .find(|member| member.entry.name == "CALL")
+            .expect("expression lambda enum constant should be extracted");
+        assert_eq!(call.entry.signature, "CALL(() -> …)");
+        assert!(!call.entry.signature.contains("hidden expression body"));
+        let empty = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Empty")
+            .expect("empty enum should be extracted");
+        assert!(
+            empty
+                .entry
+                .signature
+                .contains("{\n  ;\n  public void run()")
+        );
+
+        let marker = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Marker")
+            .expect("annotation type should be extracted");
+        let value = marker
+            .members
+            .iter()
+            .find(|member| member.entry.name == "value")
+            .expect("annotation element should be extracted");
+        assert_eq!(value.entry.signature, "String value() default \"fixture\";");
+        assert!(value.is_public);
+
+        let file_parser = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "FileParser")
+            .expect("class should be extracted");
+        let codes = file_parser
+            .members
+            .iter()
+            .find(|member| member.entry.name == "CODES")
+            .expect("initialized field should be extracted");
+        assert_eq!(
+            codes.entry.signature,
+            "public static final Map<String, Integer> CODES = …;"
+        );
+        assert!(!codes.entry.signature.contains("Map.ofEntries"));
+        assert!(codes.entry.body_range.is_some());
+        assert!(file_parser.members.iter().any(|member| {
+            member.entry.name == "packageCount" && member.entry.signature == "int packageCount;"
+        }));
+        assert!(file_parser.members.iter().any(|member| {
+            member.entry.name == "otherCount" && member.entry.signature == "int otherCount = …;"
+        }));
+        assert!(file_parser.members.iter().any(|member| {
+            member.entry.name == "<static initializer 1>"
+                && member.entry.signature == "static { … }"
+                && member.entry.body_range.is_some()
+        }));
+        assert!(file_parser.members.iter().any(|member| {
+            member.entry.name == "<initializer 1>"
+                && member.entry.signature == "{ … }"
+                && member.entry.body_range.is_some()
+        }));
+        let implementation = file_parser
+            .members
+            .iter()
+            .find(|member| member.entry.name == "parse")
+            .expect("annotated implementation should be extracted");
+        assert!(
+            implementation
+                .entry
+                .signature
+                .starts_with("/** Parses one source value. */\n@Override\npublic Result parse(")
+        );
+        assert!(
+            implementation
+                .entry
+                .signature
+                .ends_with(") throws IOException")
+        );
+        assert!(!implementation.entry.signature.contains("new Result"));
+
+        let signature = engine
+            .symbol(
+                std::slice::from_ref(
+                    implementation
+                        .entry
+                        .locator
+                        .as_ref()
+                        .expect("method should have a locator"),
+                ),
+                SymbolView::Signature,
+                0,
+            )
+            .expect("Java signature should resolve");
+        assert_eq!(signature.blocks[0].source, implementation.entry.signature);
+
+        let with_imports = engine
+            .symbol(
+                std::slice::from_ref(
+                    parser
+                        .entry
+                        .locator
+                        .as_ref()
+                        .expect("interface should have a locator"),
+                ),
+                SymbolView::DeclarationWithImports,
+                0,
+            )
+            .expect("Java declaration-with-imports should resolve");
+        let imported = &with_imports.blocks[0].source;
+        assert!(imported.contains("import java.io.IOException;"));
+        assert!(imported.contains("import java.time.*;"));
+        assert!(imported.contains("import java.util.List;"));
+        assert!(imported.contains("import static java.util.Collections.emptyList;"));
+        assert!(!imported.contains("import java.util.Map;"));
+        assert!(!imported.contains("import java.util.Set;"));
+        assert!(!imported.contains("import static java.util.Map.entry;"));
+
+        let public = engine
+            .outline(
+                OutlineTarget::File {
+                    path: fixture.to_string_lossy().into_owned(),
+                    language: LanguageId::Java,
+                },
+                false,
+                true,
+                &[],
+            )
+            .expect("public Java outline should parse");
+        assert_eq!(
+            public.files[0]
+                .items
+                .iter()
+                .filter(|item| item.row_kind == OutlineRowKind::Declaration)
+                .map(|item| item.entry.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Parser"]
+        );
+        let public_parser = public.files[0]
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Parser")
+            .expect("public interface should remain");
+        assert!(
+            public_parser
+                .members
+                .iter()
+                .all(|member| { !matches!(member.entry.name.as_str(), "reset" | "hidden") })
+        );
+
+        let nested = engine
+            .outline(
+                OutlineTarget::File {
+                    path: fixture.to_string_lossy().into_owned(),
+                    language: LanguageId::Java,
+                },
+                false,
+                true,
+                &["Nested".to_owned()],
+            )
+            .expect("nested Java container filter should parse");
+        let nested_parser = nested.files[0]
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Parser")
+            .expect("nested container owner should remain");
+        assert!(
+            nested_parser
+                .members
+                .iter()
+                .any(|member| member.entry.name == "Nested")
+        );
+        assert!(
+            nested_parser
+                .members
+                .iter()
+                .any(|member| member.entry.name == "name")
+        );
+        assert!(
+            nested_parser
+                .members
+                .iter()
+                .all(|member| member.entry.name != "parse")
+        );
+
+        let filtered_method = engine
+            .outline(
+                OutlineTarget::File {
+                    path: fixture.to_string_lossy().into_owned(),
+                    language: LanguageId::Java,
+                },
+                false,
+                true,
+                &["parse".to_owned()],
+            )
+            .expect("Java member filter should parse");
+        let filtered_imports = filtered_method.files[0]
+            .items
+            .iter()
+            .filter(|item| item.row_kind == OutlineRowKind::Import)
+            .map(|item| item.entry.signature.as_str())
+            .collect::<Vec<_>>();
+        assert!(filtered_imports.contains(&"import java.io.IOException;"));
+        assert!(filtered_imports.contains(&"import java.time.*;"));
+        assert!(!filtered_imports.contains(&"import java.util.List;"));
+        assert!(!filtered_imports.contains(&"import java.util.Map;"));
+    }
+
+    #[test]
+    fn handles_java_utf8_crlf_and_recovery() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let crlf_path =
+            std::env::temp_dir().join(format!("tau-ast-java-crlf-{}.java", std::process::id()));
+        let crlf_source = "/** Café parser. */\r\npublic@Deprecated class Café {\r\n    public String décode() {\r\n        return \"café\";\r\n    }\r\n}\r\n";
+        fs::write(&crlf_path, crlf_source).expect("Java CRLF fixture should be writable");
+        let crlf = outline_file(&engine, &crlf_path, LanguageId::Java);
+        let cafe = crlf
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Café")
+            .expect("UTF-8 Java class should be extracted");
+        assert_eq!(
+            &crlf_source[cafe.entry.name_range.start_byte..cafe.entry.name_range.end_byte],
+            "Café"
+        );
+        assert_eq!(
+            &crlf_source[cafe.entry.range.start_byte..cafe.entry.range.end_byte],
+            "/** Café parser. */\r\npublic@Deprecated class Café {\r\n    public String décode() {\r\n        return \"café\";\r\n    }\r\n}"
+        );
+        fs::remove_file(&crlf_path).expect("Java CRLF fixture should be removable");
+
+        let malformed_path =
+            std::env::temp_dir().join(format!("tau-ast-java-recovery-{}.java", std::process::id()));
+        fs::write(
+            &malformed_path,
+            "public class Recovered {\n    public void parse() {\n        String broken = ;\n    }\n}\n",
+        )
+        .expect("malformed Java fixture should be writable");
+        let malformed = outline_file(&engine, &malformed_path, LanguageId::Java);
+        let recovered = malformed
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Recovered")
+            .expect("recovered Java class should remain");
+        assert!(matches!(
+            recovered.entry.certainty,
+            ParseCertainty::Recovered
+        ));
+        assert!(recovered.entry.certainty_reason.is_some());
+        fs::remove_file(&malformed_path).expect("malformed Java fixture should be removable");
+    }
+
+    #[test]
+    fn extracts_complete_rust_declarations_ranges_visibility_and_selective_views() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/rust.rs");
+        let source = fs::read_to_string(&fixture).expect("fixture should be readable");
+        let result = outline_file(&engine, &fixture, LanguageId::Rust);
+
+        assert_eq!(result.diagnostics.error_nodes, 0);
+        assert_eq!(result.diagnostics.missing_nodes, 0);
+        assert_eq!(result.items[0].row_kind, OutlineRowKind::Import);
+        assert!(result.items[0].entry.locator.is_none());
+        assert!(result.items.iter().any(|item| {
+            item.row_kind == OutlineRowKind::Export
+                && item.entry.signature == "pub use std::io::Result as IoResult;"
+        }));
+        assert!(result.items.iter().any(|item| {
+            item.entry.name == "hidden_mod"
+                && item.is_exported
+                && item
+                    .members
+                    .iter()
+                    .any(|member| member.entry.name == "Reexported" && member.is_public)
+        }));
+
+        let default_limit = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "DEFAULT_LIMIT")
+            .expect("public constant should be extracted");
+        assert_eq!(
+            default_limit.entry.signature,
+            "/// Default parser capacity.\npub const DEFAULT_LIMIT: usize = …;"
+        );
+        assert_eq!(
+            &source[default_limit.entry.range.start_byte..default_limit.entry.range.end_byte],
+            "/// Default parser capacity.\npub const DEFAULT_LIMIT: usize = 10;"
+        );
+        assert!(default_limit.entry.body_range.is_some());
+
+        let pair = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Pair")
+            .expect("generic struct should be extracted");
+        assert!(
+            pair.entry
+                .signature
+                .starts_with("#[derive(Debug)]\npub struct Pair<T>\nwhere\n    T: Debug,\n{")
+        );
+        assert_eq!(
+            pair.members
+                .iter()
+                .map(|member| (member.entry.name.as_str(), member.is_public))
+                .collect::<Vec<_>>(),
+            [("left", true), ("right", false)]
+        );
+        let pair_body = pair
+            .entry
+            .body_range
+            .as_ref()
+            .expect("struct should expose its body range");
+        assert_eq!(
+            &source[pair_body.start_byte..pair_body.end_byte],
+            "{\n    pub left: T,\n    right: T,\n}"
+        );
+
+        let tuple = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Tuple")
+            .expect("tuple struct should be extracted");
+        assert!(tuple.entry.signature.starts_with("pub struct Tuple<T>(\n"));
+        assert!(tuple.entry.signature.ends_with(") where T: Clone;"));
+        assert_eq!(
+            tuple
+                .members
+                .iter()
+                .map(|member| member.entry.qualified_name.as_str())
+                .collect::<Vec<_>>(),
+            ["Tuple.0", "Tuple.1"]
+        );
+
+        let state = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "State")
+            .expect("enum should be extracted");
+        assert!(state.entry.signature.contains("Named { value: T }"));
+        assert!(state.members.iter().all(|member| member.is_public));
+
+        let parser = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Parser")
+            .expect("trait should be extracted");
+        let ready = parser
+            .members
+            .iter()
+            .find(|member| member.entry.name == "ready")
+            .expect("default trait method should be extracted");
+        assert_eq!(ready.entry.signature, "fn ready(&self) -> bool");
+        assert!(ready.entry.body_range.is_some());
+        assert!(ready.is_public);
+
+        let inherent_impl = result
+            .items
+            .iter()
+            .find(|item| {
+                item.entry.ast_kind == "impl_item"
+                    && item.entry.qualified_name == "FileParser"
+                    && item
+                        .members
+                        .iter()
+                        .any(|member| member.entry.name == "parse_async")
+            })
+            .expect("inherent impl should be extracted");
+        let parse_async = inherent_impl
+            .members
+            .iter()
+            .find(|member| member.entry.name == "parse_async")
+            .expect("public async method should be extracted");
+        assert!(
+            parse_async
+                .entry
+                .signature
+                .contains("where\n    T: AsRef<Path>")
+        );
+        assert!(!parse_async.entry.signature.contains("Some("));
+        assert_eq!(parse_async.entry.qualified_name, "FileParser.parse_async");
+
+        let trait_impl = result
+            .items
+            .iter()
+            .find(|item| item.entry.qualified_name == "FileParser as Parser")
+            .expect("trait impl should be qualified");
+        assert!(trait_impl.members.iter().all(|member| member.is_public));
+
+        let parser_macro = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "parser_name")
+            .expect("exported macro should be extracted");
+        assert_eq!(
+            parser_macro.entry.signature,
+            "#[macro_export]\nmacro_rules! parser_name { … }"
+        );
+        assert!(parser_macro.entry.body_range.is_some());
+        assert!(result.items.iter().any(|item| {
+            item.entry.name == "extern \"C\""
+                && item
+                    .members
+                    .iter()
+                    .any(|member| member.entry.name == "fixture_open")
+        }));
+        let nested = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "nested")
+            .expect("inline module should be extracted");
+        assert!(nested.members.iter().any(|member| {
+            member.entry.name == "build"
+                && member.entry.qualified_name == "nested.Public.build"
+                && !member.entry.signature.contains("Self\n")
+        }));
+        let tuple_macro = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "parser_tuple")
+            .expect("parenthesized macro should be extracted");
+        assert_eq!(
+            tuple_macro.entry.signature,
+            "#[macro_export(local_inner_macros)]\nmacro_rules! parser_tuple ( … );"
+        );
+        assert!(tuple_macro.entry.body_range.is_some());
+
+        let signature = engine
+            .symbol(
+                std::slice::from_ref(
+                    parse_async
+                        .entry
+                        .locator
+                        .as_ref()
+                        .expect("method should have a locator"),
+                ),
+                SymbolView::Signature,
+                0,
+            )
+            .expect("Rust signature should resolve");
+        assert_eq!(signature.blocks[0].source, parse_async.entry.signature);
+
+        let with_imports = engine
+            .symbol(
+                std::slice::from_ref(
+                    pair.entry
+                        .locator
+                        .as_ref()
+                        .expect("struct should have a locator"),
+                ),
+                SymbolView::DeclarationWithImports,
+                0,
+            )
+            .expect("Rust declaration-with-imports should resolve");
+        assert!(
+            with_imports.blocks[0]
+                .source
+                .contains("use std::{fmt::Debug, path::Path};")
+        );
+        assert!(
+            with_imports.blocks[0]
+                .source
+                .contains("use std::collections::*;")
+        );
+        assert!(!with_imports.blocks[0].source.contains("extern crate alloc"));
+
+        let public = engine
+            .outline(
+                OutlineTarget::File {
+                    path: fixture.to_string_lossy().into_owned(),
+                    language: LanguageId::Rust,
+                },
+                false,
+                true,
+                &[],
+            )
+            .expect("public Rust outline should parse");
+        assert!(!public.files[0].items.iter().any(|item| {
+            matches!(
+                item.entry.name.as_str(),
+                "INTERNAL_LIMIT" | "internal_parser" | "Hidden"
+            )
+        }));
+        assert!(!public.files[0].items.iter().any(|item| {
+            item.entry.ast_kind == "impl_item"
+                && item
+                    .members
+                    .iter()
+                    .any(|member| matches!(member.entry.name.as_str(), "exposed" | "secret"))
+        }));
+        let public_nested = public.files[0]
+            .items
+            .iter()
+            .find(|item| item.entry.name == "nested")
+            .expect("public module should remain");
+        assert!(
+            public_nested
+                .members
+                .iter()
+                .all(|member| member.entry.name != "Private")
+        );
+        assert!(
+            public_nested
+                .members
+                .iter()
+                .any(|member| member.entry.name == "build")
+        );
+        let public_pair = public.files[0]
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Pair")
+            .expect("public struct should remain");
+        assert_eq!(public_pair.members.len(), 1);
+        assert_eq!(public_pair.members[0].entry.name, "left");
+    }
+
+    #[test]
+    fn handles_rust_utf8_crlf_and_recovery() {
+        let engine = OutlineEngine::new().expect("outline rules should compile");
+        let crlf_path =
+            std::env::temp_dir().join(format!("tau-ast-rust-crlf-{}.rs", std::process::id()));
+        let crlf_source =
+            "/// Décode café.\r\npub fn décode() -> &'static str {\r\n    \"café\"\r\n}\r\n";
+        fs::write(&crlf_path, crlf_source).expect("Rust CRLF fixture should be writable");
+        let crlf = outline_file(&engine, &crlf_path, LanguageId::Rust);
+        let decode = crlf
+            .items
+            .iter()
+            .find(|item| item.entry.name == "décode")
+            .expect("UTF-8 Rust identifier should be extracted");
+        assert_eq!(
+            &crlf_source[decode.entry.name_range.start_byte..decode.entry.name_range.end_byte],
+            "décode"
+        );
+        assert_eq!(
+            &crlf_source[decode.entry.range.start_byte..decode.entry.range.end_byte],
+            "/// Décode café.\r\npub fn décode() -> &'static str {\r\n    \"café\"\r\n}"
+        );
+        fs::remove_file(&crlf_path).expect("Rust CRLF fixture should be removable");
+
+        let malformed_path =
+            std::env::temp_dir().join(format!("tau-ast-rust-recovery-{}.rs", std::process::id()));
+        fs::write(
+            &malformed_path,
+            "pub fn recovered() {\n    let broken = ;\n}\n",
+        )
+        .expect("malformed Rust fixture should be writable");
+        let malformed = outline_file(&engine, &malformed_path, LanguageId::Rust);
+        let recovered = malformed
+            .items
+            .iter()
+            .find(|item| item.entry.name == "recovered")
+            .expect("recovered Rust function should remain");
+        assert!(matches!(
+            recovered.entry.certainty,
+            ParseCertainty::Recovered
+        ));
+        assert!(recovered.entry.certainty_reason.is_some());
+        fs::remove_file(&malformed_path).expect("malformed Rust fixture should be removable");
+    }
+
+    #[test]
     fn filters_go_and_rust_package_private_declarations() {
         let engine = OutlineEngine::new().expect("outline rules should compile");
         for (language, file, private_name) in [
@@ -1562,6 +2745,7 @@ mod tests {
                         language,
                     },
                     false,
+                    true,
                     &[],
                 )
                 .expect("public fixture outline should parse");
@@ -1704,6 +2888,7 @@ export { buildThing as createThing, buildThing as makeThing };
                     language: LanguageId::TypeScript,
                 },
                 false,
+                true,
                 &[],
             )
             .expect("public outline should parse")
@@ -1764,6 +2949,7 @@ export { buildThing as createThing, buildThing as makeThing };
                     language: LanguageId::TypeScript,
                 },
                 false,
+                true,
                 &["buildThing".to_owned()],
             )
             .expect("filtered outline should parse");
@@ -1822,6 +3008,7 @@ export { buildThing as createThing, buildThing as makeThing };
                     language: LanguageId::Tsx,
                 },
                 false,
+                true,
                 &[],
             )
             .expect("TSX outline should parse");
@@ -1861,6 +3048,7 @@ export { buildThing as createThing, buildThing as makeThing };
                     path: temporary.to_string_lossy().into_owned(),
                 },
                 true,
+                true,
                 &[],
             )
             .expect("TypeScript and TSX should share one language family");
@@ -1891,6 +3079,7 @@ export { buildThing as createThing, buildThing as makeThing };
                     path: temporary.to_string_lossy().into_owned(),
                 },
                 true,
+                true,
                 &["A".to_owned()],
             )
             .expect("filtered directory should parse");
@@ -1917,6 +3106,7 @@ export { buildThing as createThing, buildThing as makeThing };
                     path: temporary.to_string_lossy().into_owned(),
                 },
                 true,
+                true,
                 &[],
             )
             .expect_err("directory without supported files should fail");
@@ -1935,6 +3125,7 @@ export { buildThing as createThing, buildThing as makeThing };
                 OutlineTarget::Directory {
                     path: temporary.to_string_lossy().into_owned(),
                 },
+                true,
                 true,
                 &[],
             )

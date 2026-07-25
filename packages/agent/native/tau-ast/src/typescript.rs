@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 pub fn extract_typescript_items<D: ast_grep_core::Doc>(
     root: Node<D>,
     source: &str,
+    include_docs: bool,
 ) -> Vec<OutlineItem> {
     let recovery_ranges = root
         .dfs()
@@ -44,6 +45,7 @@ pub fn extract_typescript_items<D: ast_grep_core::Doc>(
                         source,
                         &recovery_ranges,
                         true,
+                        include_docs,
                     ));
                 } else {
                     items.push(structural_item(
@@ -63,6 +65,7 @@ pub fn extract_typescript_items<D: ast_grep_core::Doc>(
                         source,
                         &recovery_ranges,
                         false,
+                        include_docs,
                     ));
                 }
             }
@@ -72,6 +75,7 @@ pub fn extract_typescript_items<D: ast_grep_core::Doc>(
                 source,
                 &recovery_ranges,
                 false,
+                include_docs,
             )),
             _ => items.push(structural_item(
                 statement,
@@ -139,6 +143,7 @@ pub fn filter_typescript_items<D: ast_grep_core::Doc>(
         .collect::<BTreeSet<_>>();
 
     items.retain(|item| match item.row_kind {
+        OutlineRowKind::Package => false,
         OutlineRowKind::Declaration => selected_ranges.iter().any(|selected| {
             selected.start_byte == item.entry.range.start_byte
                 && selected.end_byte == item.entry.range.end_byte
@@ -195,6 +200,7 @@ fn declaration_items<D: ast_grep_core::Doc>(
     source: &str,
     recovery_ranges: &[std::ops::Range<usize>],
     is_exported: bool,
+    include_docs: bool,
 ) -> Vec<OutlineItem> {
     if matches!(
         declaration.kind().as_ref(),
@@ -211,6 +217,7 @@ fn declaration_items<D: ast_grep_core::Doc>(
                     recovery_ranges,
                     is_exported,
                     Some(declaration.clone()),
+                    include_docs,
                 )
             })
             .collect();
@@ -223,6 +230,7 @@ fn declaration_items<D: ast_grep_core::Doc>(
         recovery_ranges,
         is_exported,
         None,
+        include_docs,
     )
     .into_iter()
     .collect()
@@ -235,6 +243,7 @@ fn declaration_item<D: ast_grep_core::Doc>(
     recovery_ranges: &[std::ops::Range<usize>],
     is_exported: bool,
     lexical_owner: Option<Node<D>>,
+    include_docs: bool,
 ) -> Option<OutlineItem> {
     let name_node = declaration_name(declaration.clone())?;
     let name = name_node.text().into_owned();
@@ -243,7 +252,7 @@ fn declaration_item<D: ast_grep_core::Doc>(
         |owner| owner.kind().into_owned(),
     );
     let outer_bytes = outer.range();
-    let start_byte = attached_jsdoc_start(source, outer_bytes.start).unwrap_or(outer_bytes.start);
+    let start_byte = attached_start(outer.clone(), source).unwrap_or(outer_bytes.start);
     let declaration_bytes = start_byte..outer_bytes.end;
     let ownership_bytes = lexical_owner
         .as_ref()
@@ -255,7 +264,7 @@ fn declaration_item<D: ast_grep_core::Doc>(
     let signature_end = body
         .as_ref()
         .map_or(declaration_bytes.end, |body| body.range().start);
-    let signature = contract_signature(source, start_byte, signature_end);
+    let signature = contract_signature(outer, source, signature_end, include_docs);
     let certainty = certainty(recovery_ranges, &declaration_bytes, &ownership_bytes);
     let symbol_type = declaration_symbol_type(
         declaration.kind().as_ref(),
@@ -263,7 +272,13 @@ fn declaration_item<D: ast_grep_core::Doc>(
             .as_ref()
             .map(|owner| owner.text().into_owned()),
     );
-    let members = declaration_members(declaration.clone(), source, recovery_ranges, &name);
+    let members = declaration_members(
+        declaration.clone(),
+        source,
+        recovery_ranges,
+        &name,
+        include_docs,
+    );
 
     Some(OutlineItem {
         entry: OutlineEntry {
@@ -273,6 +288,7 @@ fn declaration_item<D: ast_grep_core::Doc>(
             qualified_name: name,
             range: source_range(source.as_bytes(), declaration_bytes),
             name_range: source_range(source.as_bytes(), name_node.range()),
+            receiver_range: None,
             body_range,
             signature,
             ast_kind: declaration_kind,
@@ -292,6 +308,7 @@ fn declaration_members<D: ast_grep_core::Doc>(
     source: &str,
     recovery_ranges: &[std::ops::Range<usize>],
     parent_name: &str,
+    include_docs: bool,
 ) -> Vec<OutlineMember> {
     let Some(body) = declaration.field("body") else {
         return Vec::new();
@@ -313,7 +330,7 @@ fn declaration_members<D: ast_grep_core::Doc>(
                 member_symbol_type(member.kind().as_ref())?
             };
             let member_bytes = member.range();
-            let start_byte = attached_jsdoc_start(source, member_bytes.start)
+            let start_byte = attached_start(member.clone(), source)
                 .filter(|start| *start >= ownership.start)
                 .unwrap_or(member_bytes.start);
             let declaration_bytes = start_byte..member_bytes.end;
@@ -337,8 +354,14 @@ fn declaration_members<D: ast_grep_core::Doc>(
                         || source_range(source.as_bytes(), member_bytes.clone()),
                         |name| source_range(source.as_bytes(), name.range()),
                     ),
+                    receiver_range: None,
                     body_range,
-                    signature: contract_signature(source, start_byte, signature_end),
+                    signature: contract_signature(
+                        member.clone(),
+                        source,
+                        signature_end,
+                        include_docs,
+                    ),
                     ast_kind: member.kind().into_owned(),
                     certainty: member_certainty,
                     certainty_reason: certainty_reason(member_certainty),
@@ -360,6 +383,7 @@ fn structural_item<D: ast_grep_core::Doc>(
     let bytes = node.range();
     let signature = source[bytes.clone()].trim().to_owned();
     let name = match row_kind {
+        OutlineRowKind::Package => unreachable!("TypeScript has no package clause"),
         OutlineRowKind::Import | OutlineRowKind::Export => node
             .field("source")
             .map(|source| source.text().into_owned())
@@ -382,6 +406,7 @@ fn structural_item<D: ast_grep_core::Doc>(
             qualified_name: name,
             range: range.clone(),
             name_range: range,
+            receiver_range: None,
             body_range: None,
             signature,
             ast_kind: node.kind().into_owned(),
@@ -598,15 +623,37 @@ fn certainty_reason(certainty: ParseCertainty) -> Option<String> {
     }
 }
 
-fn attached_jsdoc_start(source: &str, declaration_start: usize) -> Option<usize> {
-    let prefix = &source[..declaration_start];
-    let comment_end = prefix.trim_end().len();
-    if !prefix[..comment_end].ends_with("*/") {
-        return None;
+fn attached_start<D: ast_grep_core::Doc>(node: Node<D>, source: &str) -> Option<usize> {
+    attached_nodes(node, source)
+        .first()
+        .map(|attached| attached.range().start)
+}
+
+fn attached_nodes<'tree, D: ast_grep_core::Doc>(
+    node: Node<'tree, D>,
+    source: &str,
+) -> Vec<Node<'tree, D>> {
+    let mut previous = node.prev();
+    let mut next_line = node.start_pos().line();
+    let mut next_start = node.range().start;
+    let mut attachments = Vec::new();
+    while let Some(attached) = previous {
+        let is_doc = attached.kind() == "comment" && attached.text().starts_with("/**");
+        if (!is_doc && attached.kind() != "decorator")
+            || attached.end_pos().line() + 1 < next_line
+            || !source[attached.range().end..next_start]
+                .lines()
+                .all(|line| line.trim().is_empty())
+        {
+            break;
+        }
+        attachments.push(attached.clone());
+        next_line = attached.start_pos().line();
+        next_start = attached.range().start;
+        previous = attached.prev();
     }
-    let comment_start = prefix[..comment_end].rfind("/**")?;
-    let between = &prefix[comment_start..comment_end];
-    (!between[..between.len().saturating_sub(2)].contains("*/")).then_some(comment_start)
+    attachments.reverse();
+    attachments
 }
 
 fn source_range(source: &[u8], bytes: std::ops::Range<usize>) -> SourceRange {
@@ -643,11 +690,35 @@ fn indent(source: &str) -> String {
         .join("\n")
 }
 
-fn contract_signature(source: &str, start_byte: usize, end_byte: usize) -> String {
-    let signature = source[start_byte..end_byte].trim_end();
+fn contract_signature<D: ast_grep_core::Doc>(
+    node: Node<D>,
+    source: &str,
+    end_byte: usize,
+    include_docs: bool,
+) -> String {
+    let attachments = attached_nodes(node.clone(), source);
+    let signature = if include_docs {
+        let start = attachments
+            .first()
+            .map_or(node.range().start, |attached| attached.range().start);
+        source[start..end_byte].trim_end().to_owned()
+    } else {
+        let decorators = attachments
+            .iter()
+            .filter(|attached| attached.kind() == "decorator")
+            .map(|decorator| decorator.text().trim().to_owned())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let declaration = source[node.range().start..end_byte].trim_end();
+        if decorators.is_empty() {
+            declaration.to_owned()
+        } else {
+            format!("{decorators}\n{declaration}")
+        }
+    };
     if signature.ends_with("=>") {
         format!("{signature} …")
     } else {
-        signature.to_owned()
+        signature
     }
 }

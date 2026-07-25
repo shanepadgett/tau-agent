@@ -1,6 +1,10 @@
+mod go;
+mod java;
 mod language;
 mod outline;
 mod protocol;
+mod rust;
+mod source;
 mod typescript;
 
 use crate::{
@@ -76,6 +80,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 Request::Outline {
                     target,
                     include_private,
+                    include_docs,
                     names,
                     ..
                 } => {
@@ -98,7 +103,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                     match engine
                         .as_ref()
                         .expect("engine is initialized above")
-                        .outline(target, include_private, &names)
+                        .outline(target, include_private, include_docs, &names)
                     {
                         Ok(outline) => Response::Success(SuccessResponse {
                             request_id,

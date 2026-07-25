@@ -49,9 +49,10 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 1,
-            "protocolVersion": 3,
+            "protocolVersion": 4,
             "target": { "kind": "file", "path": typescript_path, "language": "typeScript" },
             "includePrivate": true,
+            "includeDocs": false,
             "names": []
         }),
     );
@@ -64,7 +65,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "handshake",
             "requestId": 2,
-            "protocolVersion": 3
+            "protocolVersion": 4
         }),
     );
     let handshake = read_response(&mut stdout);
@@ -82,9 +83,10 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 3,
-            "protocolVersion": 3,
+            "protocolVersion": 4,
             "target": { "kind": "file", "path": typescript_path, "language": "typeScript" },
             "includePrivate": true,
+            "includeDocs": false,
             "names": []
         }),
     );
@@ -116,7 +118,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 4,
-            "protocolVersion": 3,
+            "protocolVersion": 4,
             "locators": [locator],
             "view": "declaration",
             "contextLines": 0
@@ -141,9 +143,10 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 5,
-            "protocolVersion": 3,
+            "protocolVersion": 4,
             "target": { "kind": "file", "path": odin_path, "language": "odin" },
             "includePrivate": true,
+            "includeDocs": false,
             "names": []
         }),
     );
@@ -170,13 +173,14 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
             json!({
                 "operation": "outline",
                 "requestId": index + 6,
-                "protocolVersion": 3,
+                "protocolVersion": 4,
                 "target": {
                     "kind": "file",
                     "path": manifest_dir.join("fixtures").join(fixture),
                     "language": language
                 },
                 "includePrivate": true,
+                "includeDocs": false,
                 "names": []
             }),
         );
@@ -192,6 +196,110 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
                 .is_some_and(|items| items.iter().any(|item| item["name"] == expected_name)),
             "{fixture} omitted {expected_name}"
         );
+        if language == "go" {
+            let items = response["result"]["files"][0]["items"]
+                .as_array()
+                .expect("Go items should be an array");
+            assert_eq!(items[0]["rowKind"], "package");
+            assert!(items[0].get("locator").is_none());
+            let method = items
+                .iter()
+                .find(|item| item["qualifiedName"] == "FileParser.Parse")
+                .expect("Go model should contain a qualified method");
+            assert_eq!(method["role"], "member");
+            assert!(method["receiverRange"].is_object());
+            assert!(method["bodyRange"].is_object());
+            assert_eq!(
+                method["signature"],
+                "func (parser *FileParser) Parse(source string) Result"
+            );
+        }
+        if language == "rust" {
+            let items = response["result"]["files"][0]["items"]
+                .as_array()
+                .expect("Rust items should be an array");
+            assert_eq!(items[0]["rowKind"], "import");
+            assert!(items[0].get("locator").is_none());
+            let implementation = items
+                .iter()
+                .find(|item| {
+                    item["qualifiedName"] == "FileParser"
+                        && item["members"].as_array().is_some_and(|members| {
+                            members.iter().any(|member| member["name"] == "parse_async")
+                        })
+                })
+                .expect("Rust model should contain the inherent impl");
+            let method = implementation["members"]
+                .as_array()
+                .and_then(|members| {
+                    members
+                        .iter()
+                        .find(|member| member["name"] == "parse_async")
+                })
+                .expect("Rust impl should contain parse_async");
+            assert_eq!(method["qualifiedName"], "FileParser.parse_async");
+            assert!(method["bodyRange"].is_object());
+            assert!(
+                method["signature"]
+                    .as_str()
+                    .is_some_and(|signature| !signature.contains("Some("))
+            );
+        }
+        if language == "java" {
+            let items = response["result"]["files"][0]["items"]
+                .as_array()
+                .expect("Java items should be an array");
+            assert_eq!(items[0]["rowKind"], "package");
+            assert!(items[0].get("locator").is_none());
+            let parser = items
+                .iter()
+                .find(|item| item["name"] == "Parser")
+                .expect("Java model should contain Parser");
+            let nested_method = parser["members"]
+                .as_array()
+                .and_then(|members| {
+                    members
+                        .iter()
+                        .find(|member| member["qualifiedName"] == "Parser.Nested.name")
+                })
+                .expect("Java model should contain a qualified nested method");
+            assert_eq!(nested_method["role"], "member");
+            assert!(nested_method["bodyRange"].is_object());
+            assert!(
+                nested_method["signature"]
+                    .as_str()
+                    .is_some_and(|signature| !signature.contains("return"))
+            );
+        }
+    }
+
+    let java_path = manifest_dir.join("fixtures/java.java");
+    for (request_id, include_docs) in [(14, false), (15, true)] {
+        send_request(
+            &mut worker,
+            json!({
+                "operation": "outline",
+                "requestId": request_id,
+                "protocolVersion": 4,
+                "target": { "kind": "file", "path": java_path, "language": "java" },
+                "includePrivate": true,
+                "includeDocs": include_docs,
+                "names": ["parse"]
+            }),
+        );
+        let response = read_response(&mut stdout);
+        assert_eq!(response["success"], true);
+        let implementation = response["result"]["files"][0]["items"]
+            .as_array()
+            .and_then(|items| items.iter().find(|item| item["name"] == "FileParser"))
+            .and_then(|item| item["members"].as_array())
+            .and_then(|members| members.iter().find(|member| member["name"] == "parse"))
+            .expect("name-filtered worker outline should retain FileParser.parse");
+        let signature = implementation["signature"]
+            .as_str()
+            .expect("filtered method should have a signature");
+        assert!(signature.contains("@Override"));
+        assert_eq!(signature.contains("Parses one source value."), include_docs);
     }
 
     let local_export_path = std::env::temp_dir().join(format!(
@@ -208,9 +316,10 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 12,
-            "protocolVersion": 3,
+            "protocolVersion": 4,
             "target": { "kind": "file", "path": local_export_path, "language": "typeScript" },
             "includePrivate": false,
+            "includeDocs": false,
             "names": []
         }),
     );
@@ -239,7 +348,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 13,
-            "protocolVersion": 3,
+            "protocolVersion": 4,
             "locators": [local_locator],
             "view": "declaration",
             "contextLines": 0

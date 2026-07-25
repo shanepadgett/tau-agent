@@ -31,6 +31,9 @@ const outlineParams = Type.Object(
 			description: "TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, or Swift source file or directory",
 		}),
 		includePrivate: Type.Optional(Type.Boolean({ description: "Include private declarations and members" })),
+		includeDocs: Type.Optional(
+			Type.Boolean({ description: "Include attached documentation comments in declaration signatures" }),
+		),
 		names: Type.Optional(
 			Type.Array(Type.String(), {
 				minItems: 1,
@@ -47,7 +50,7 @@ const symbolParams = Type.Object(
 			description: "Numeric locators shown in parentheses by outline",
 		}),
 		view: StringEnum(["signature", "declaration", "declarationWithImports"] as const, {
-			description: "Source view to retrieve; non-TypeScript languages support declaration only",
+			description: "Source view to retrieve; TypeScript, TSX, Go, Rust, and Java support selective views",
 		}),
 		contextLines: Type.Optional(
 			Type.Integer({ minimum: 0, description: "Lines of source context before and after each declaration" }),
@@ -76,7 +79,7 @@ interface LocatorRecord {
 	generation: number;
 }
 
-type OutlineArgs = { path: string; includePrivate?: boolean; names?: string[] };
+type OutlineArgs = { path: string; includePrivate?: boolean; includeDocs?: boolean; names?: string[] };
 
 export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 	const locators = new Map<number, LocatorRecord>();
@@ -136,13 +139,61 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 				? `${entry.range.start.line + 1}`
 				: `${entry.range.start.line + 1}-${entry.range.end.line + 1}`;
 		let signature = (signatureOverride ?? entry.signature).trim();
-		if (language === "typeScript" || language === "tsx") {
+		if (
+			language === "typeScript" ||
+			language === "tsx" ||
+			language === "go" ||
+			language === "rust" ||
+			language === "java"
+		) {
 			const signatureLines = signature.split("\n");
 			const relativeNameLine = entry.nameRange.start.line - entry.range.start.line;
+			const keywordNameLine =
+				language === "go"
+					? signatureLines.findIndex(
+							(line) => /\b(?:func|type|const|var)\b/.test(line) && line.includes(entry.name),
+						)
+					: -1;
+			let inBlockComment = false;
+			let annotationDepth = 0;
+			let attributeDepth = 0;
+			const metadataLines = signatureLines.map((line) => {
+				const trimmed = line.trimStart();
+				if (inBlockComment) {
+					if (trimmed.includes("*/")) inBlockComment = false;
+					return true;
+				}
+				if (trimmed.startsWith("/*")) {
+					inBlockComment = !trimmed.includes("*/");
+					return true;
+				}
+				if (annotationDepth > 0) {
+					annotationDepth += (line.match(/\(/g) ?? []).length - (line.match(/\)/g) ?? []).length;
+					return true;
+				}
+				if (attributeDepth > 0) {
+					attributeDepth += (line.match(/\[/g) ?? []).length - (line.match(/\]/g) ?? []).length;
+					return true;
+				}
+				if (trimmed.startsWith("@") && !trimmed.startsWith(`@interface ${entry.name}`)) {
+					annotationDepth = (line.match(/\(/g) ?? []).length - (line.match(/\)/g) ?? []).length;
+					return true;
+				}
+				if (trimmed.startsWith("#[")) {
+					attributeDepth = (line.match(/\[/g) ?? []).length - (line.match(/\]/g) ?? []).length;
+					return true;
+				}
+				return trimmed.startsWith("//");
+			});
+			const declarationNameLine = signatureLines.findIndex(
+				(line, index) => !metadataLines[index] && line.includes(entry.name),
+			);
 			const nameLine =
-				relativeNameLine >= 0 && relativeNameLine < signatureLines.length
+				relativeNameLine >= 0 && relativeNameLine === declarationNameLine
 					? relativeNameLine
-					: signatureLines.findIndex((line) => line.includes(entry.name));
+					: keywordNameLine >= 0
+						? keywordNameLine
+						: declarationNameLine;
 			const declarationLine = nameLine >= 0 ? nameLine : 0;
 			const sourceLine = signatureLines[declarationLine] ?? entry.name;
 			const first = sourceLine.includes(entry.name) ? sourceLine : `${entry.name} ${sourceLine}`;
@@ -176,28 +227,81 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 		return `${indent}${lines}: ${entry.signature.trim().replace(/\s+/g, " ")}`;
 	}
 
-	function containerHeader(item: OutlineFileResult["items"][number]): string | undefined {
+	function containerFrame(
+		item: OutlineFileResult["items"][number],
+		language: AstLanguage,
+	): { header: string; footer: string } | undefined {
 		const firstMember = item.members[0];
 		if (!firstMember) return undefined;
-		if (item.symbolType === "class") {
-			const members = item.members
+		if (language === "java" && item.bodyRange) {
+			const bodyOffset = item.bodyRange.startByte - item.range.startByte;
+			const signature = Buffer.from(item.signature);
+			if (bodyOffset >= 0 && bodyOffset < signature.byteLength) {
+				const header = signature
+					.subarray(0, bodyOffset + 1)
+					.toString("utf8")
+					.trimEnd();
+				if (header.endsWith("{")) return { header, footer: "}" };
+			}
+		}
+		if (
+			item.symbolType === "class" ||
+			item.symbolType === "struct" ||
+			item.symbolType === "interface" ||
+			item.symbolType === "enum" ||
+			item.symbolType === "namespace"
+		) {
+			const members = (
+				language === "java"
+					? item.members.filter(
+							(member) => member.qualifiedName.split(".").slice(0, -1).join(".") === item.qualifiedName,
+						)
+					: item.members
+			)
 				.map((member) =>
-					member.signature
+					(language === "java" &&
+					(member.symbolType === "class" ||
+						member.symbolType === "struct" ||
+						member.symbolType === "interface" ||
+						member.symbolType === "enum") &&
+					member.signature.endsWith("{")
+						? `${member.signature} … }`
+						: member.signature
+					)
 						.split("\n")
 						.map((line) => `  ${line}`)
 						.join("\n"),
 				)
 				.join("\n");
-			const suffix = ` {\n${members}\n}`;
-			if (item.signature.endsWith(suffix)) return `${item.signature.slice(0, -suffix.length)} {`;
-			return undefined;
+			const braceSuffix = `\n${members}\n}`;
+			if (item.signature.endsWith(braceSuffix))
+				return { header: item.signature.slice(0, -braceSuffix.length), footer: "}" };
+			const tupleMembers = item.members
+				.map((member) =>
+					`${member.signature},`
+						.split("\n")
+						.map((line) => `  ${line}`)
+						.join("\n"),
+				)
+				.join("\n");
+			const tupleSuffix = `\n${tupleMembers}\n);`;
+			if (item.signature.endsWith(tupleSuffix))
+				return { header: item.signature.slice(0, -tupleSuffix.length), footer: ");" };
+			const tupleMarker = `\n${tupleMembers}\n)`;
+			const tupleMarkerIndex = item.signature.lastIndexOf(tupleMarker);
+			if (tupleMarkerIndex >= 0)
+				return {
+					header: item.signature.slice(0, tupleMarkerIndex),
+					footer: item.signature.slice(tupleMarkerIndex + tupleMarker.length - 1),
+				};
+			if (item.symbolType === "class") return undefined;
 		}
 
 		const memberOffset = firstMember.range.startByte - item.range.startByte;
 		const signature = Buffer.from(item.signature);
 		if (memberOffset <= 0 || memberOffset > signature.byteLength) return undefined;
 		const header = signature.subarray(0, memberOffset).toString("utf8").trimEnd();
-		return header.endsWith("{") ? header : undefined;
+		return header.endsWith("{") ? { header, footer: "}" } : undefined;
 	}
 
 	function renderOutlineFile(file: OutlineFileResult, cwd: string, includeHeader: boolean): string[] {
@@ -212,30 +316,81 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 			);
 		}
 		const declarations = file.items.filter((item) => item.rowKind === "declaration");
-		if (file.language === "typeScript" || file.language === "tsx") {
+		if (
+			file.language === "typeScript" ||
+			file.language === "tsx" ||
+			file.language === "go" ||
+			file.language === "rust" ||
+			file.language === "java"
+		) {
 			let previousSection = "";
 			for (const item of file.items) {
 				const section =
-					item.rowKind === "import"
-						? "imports"
-						: item.rowKind === "export"
-							? "exports"
-							: item.rowKind === "sideEffect"
-								? "side effects"
-								: "declarations";
+					item.rowKind === "package"
+						? "package"
+						: item.rowKind === "import"
+							? "imports"
+							: item.rowKind === "export"
+								? "exports"
+								: item.rowKind === "sideEffect"
+									? "side effects"
+									: "declarations";
 				if (section !== previousSection) {
 					if (lines.length > 0) lines.push("");
 					lines.push(section);
 					previousSection = section;
 				}
-				const header = item.rowKind === "declaration" ? containerHeader(item) : undefined;
+				const frame = item.rowKind === "declaration" ? containerFrame(item, file.language) : undefined;
 				lines.push(
 					item.rowKind !== "declaration"
 						? renderStructuralEntry(item, "")
-						: renderEntry(item, file.path, file.language, "", header),
+						: renderEntry(item, file.path, file.language, "", frame?.header),
 				);
-				for (const member of item.members) lines.push(renderEntry(member, file.path, file.language, "  "));
-				if (header) lines.push("}");
+				const javaContainers = new Map(
+					file.language === "java"
+						? [item, ...item.members]
+								.filter(
+									(entry) =>
+										entry.symbolType === "class" ||
+										entry.symbolType === "struct" ||
+										entry.symbolType === "interface" ||
+										entry.symbolType === "enum",
+								)
+								.map((entry) => [entry.qualifiedName, entry] as const)
+						: [],
+				);
+				const emittedEnumSeparators = new Set<string>();
+				for (const member of item.members) {
+					const depth =
+						file.language === "java"
+							? Math.max(1, member.qualifiedName.split(".").length - item.qualifiedName.split(".").length)
+							: 1;
+					const parent = member.qualifiedName.split(".").slice(0, -1).join(".");
+					const siblings =
+						file.language === "java"
+							? item.members.filter(
+									(candidate) => candidate.qualifiedName.split(".").slice(0, -1).join(".") === parent,
+								)
+							: [];
+					const parentIsEnum = javaContainers.get(parent)?.symbolType === "enum";
+					if (
+						parentIsEnum &&
+						!siblings.some((candidate) => candidate.symbolType === "enumMember") &&
+						!emittedEnumSeparators.has(parent)
+					) {
+						lines.push(`${"  ".repeat(depth)};`);
+						emittedEnumSeparators.add(parent);
+					}
+					let memberSignature = member.signature;
+					if (parentIsEnum && member.symbolType === "enumMember") {
+						const constants = siblings.filter((candidate) => candidate.symbolType === "enumMember");
+						const constantIndex = constants.indexOf(member);
+						if (constantIndex + 1 < constants.length) memberSignature += ",";
+						else if (siblings.some((candidate) => candidate.symbolType !== "enumMember")) memberSignature += ";";
+					}
+					lines.push(renderEntry(member, file.path, file.language, "  ".repeat(depth), memberSignature));
+				}
+				if (frame) lines.push(frame.footer);
 			}
 			return lines;
 		}
@@ -269,6 +424,7 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 		promptGuidelines: [
 			"Use a public package outline first to discover reusable APIs; add exact names when likely symbols are known.",
 			"Set includePrivate when internal implementation discovery is needed.",
+			"Leave includeDocs off for routine exploration; enable it when documentation comments are needed.",
 			"Treat each parenthesized number after a line range as that declaration's symbol locator.",
 			"Use symbol with several locators when complete declaration source is needed.",
 		],
@@ -280,7 +436,13 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 				? { kind: "directory", path }
 				: { kind: "file", path, language: languageForPath(path) };
 			const names = params.names ?? [];
-			const result = await client.outline(target, params.includePrivate ?? false, names, signal);
+			const result = await client.outline(
+				target,
+				params.includePrivate ?? false,
+				params.includeDocs ?? false,
+				names,
+				signal,
+			);
 			const lines = result.files.flatMap((file, index) => [
 				...(index === 0 ? [] : [""]),
 				...renderOutlineFile(file, ctx.cwd, result.files.length > 1),
@@ -527,7 +689,7 @@ function truncateLeft(text: string, width: number): string {
 }
 
 function outlineOptionVariants(args: OutlineArgs): string[] {
-	const fixed = args.includePrivate ? ["private"] : [];
+	const fixed = [...(args.includePrivate ? ["private"] : []), ...(args.includeDocs ? ["docs"] : [])];
 	const names = args.names ?? [];
 	if (names.length === 0) return [fixed.length > 0 ? `[${fixed.join(" ")}]` : ""];
 

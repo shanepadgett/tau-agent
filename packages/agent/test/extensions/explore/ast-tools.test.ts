@@ -85,9 +85,10 @@ describe("AST exploration tools", () => {
 		};
 		const client: AstClient = {
 			getGeneration: () => 1,
-			outline: vi.fn(async (target, includePrivate, names) => {
+			outline: vi.fn(async (target, includePrivate, includeDocs, names) => {
 				expect(target).toEqual({ kind: "file", path, language: "typeScript" });
 				expect(includePrivate).toBe(false);
+				expect(includeDocs).toBe(false);
 				expect(names).toEqual([]);
 				return outlineResult(path);
 			}),
@@ -149,7 +150,7 @@ describe("AST exploration tools", () => {
 			extensionContext(workspace.dir),
 		);
 
-		expect(client.outline).toHaveBeenCalledWith({ kind: "directory", path }, true, ["Foo", "bar"], undefined);
+		expect(client.outline).toHaveBeenCalledWith({ kind: "directory", path }, true, false, ["Foo", "bar"], undefined);
 		expect(firstText(result)).toContain("No matching declarations");
 	});
 
@@ -165,6 +166,34 @@ describe("AST exploration tools", () => {
 			properties?: { view?: { enum?: string[] } };
 		};
 		expect(schema.properties?.view?.enum).toEqual(["signature", "declaration", "declarationWithImports"]);
+	});
+
+	it("exposes documentation as an opt-in outline parameter and call-row option", async () => {
+		const path = workspace.path("src/parser.ts");
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outline: vi.fn(async () => outlineResult(path)),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(client, testRowState);
+		const schema = ast.outline.parameters as unknown as {
+			properties?: { includeDocs?: { type?: string; description?: string } };
+		};
+		expect(schema.properties?.includeDocs?.type).toBe("boolean");
+		expect(schema.properties?.includeDocs?.description).toContain("documentation comments");
+
+		const args = { path: "src/parser.ts", includeDocs: true };
+		const call = ast.outline.renderCall?.(args, testTheme, renderContext(args, false));
+		expect(call?.render(200).join("\n")).toContain("[docs]");
+		await ast.outline.execute("outline-docs", args, undefined, undefined, extensionContext(workspace.dir));
+		expect(client.outline).toHaveBeenCalledWith(
+			{ kind: "file", path, language: "typeScript" },
+			false,
+			true,
+			[],
+			undefined,
+		);
 	});
 
 	it("renders source-order TypeScript structure without fake locators", async () => {
@@ -213,6 +242,235 @@ describe("AST exploration tools", () => {
 		expect(text).toContain('imports\n1-3: import type { Input } from "./types.ts";');
 		expect(text).toContain("declarations\n1-3(1): function parse(): void");
 		expect(text).toContain("side effects\n1-3: register(parse);");
+	});
+
+	it("renders source-order Go packages, imports, contracts, and members", async () => {
+		await workspace.write("src/parser.go", "package fixture\n");
+		const path = workspace.path("src/parser.go");
+		const result = outlineResult(path);
+		const file = result.files[0];
+		if (!file) throw new Error("outline fixture omitted its file");
+		file.language = "go";
+		const declaration = file.items[0];
+		if (!declaration) throw new Error("outline fixture omitted its declaration");
+		declaration.name = "Parser";
+		declaration.qualifiedName = "Parser";
+		declaration.symbolType = "interface";
+		declaration.signature = "type Parser interface {\n  Parse(source string) Result\n}";
+		declaration.astKind = "type_spec";
+		declaration.members = [
+			{
+				...declaration,
+				role: "member",
+				name: "Parse",
+				qualifiedName: "Parser.Parse",
+				symbolType: "method",
+				signature: "Parse(source string) Result",
+				astKind: "method_elem",
+				locator: "go-member-locator",
+				isPublic: true,
+			},
+		];
+		const { locator: _locator, ...structural } = declaration;
+		file.items.unshift(
+			{
+				...structural,
+				rowKind: "package",
+				name: "fixture",
+				qualifiedName: "fixture",
+				signature: "package fixture",
+				astKind: "package_clause",
+				isImport: false,
+				isExported: false,
+				members: [],
+			},
+			{
+				...structural,
+				rowKind: "import",
+				name: "import",
+				qualifiedName: "import",
+				signature: 'import "strings"',
+				astKind: "import_declaration",
+				isImport: true,
+				isExported: false,
+				members: [],
+			},
+		);
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outline: vi.fn(async () => result),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(client, testRowState);
+		const outlined = await ast.outline.execute(
+			"outline-go",
+			{ path: "src/parser.go" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		const text = firstText(outlined);
+		expect(text).toContain("package\n1-3: package fixture");
+		expect(text).toContain('imports\n1-3: import "strings"');
+		expect(text).toContain("declarations\n1-3(1): type Parser interface {");
+		expect(text).toContain("  1-3(2): Parse(source string) Result\n}");
+		expect(text.match(/Parse\(source string\) Result/g)).toHaveLength(1);
+	});
+
+	it("renders source-order Rust uses, impls, and tuple fields", async () => {
+		await workspace.write("src/parser.rs", "pub struct Pair(pub u8, String);\n");
+		const path = workspace.path("src/parser.rs");
+		const result = outlineResult(path);
+		const file = result.files[0];
+		if (!file) throw new Error("outline fixture omitted its file");
+		file.language = "rust";
+		const declaration = file.items[0];
+		if (!declaration) throw new Error("outline fixture omitted its declaration");
+		declaration.name = "Pair";
+		declaration.qualifiedName = "Pair";
+		declaration.symbolType = "struct";
+		declaration.signature = "pub struct Pair<T>(\n  0: pub u8,\n  1: String,\n) where T: Clone;";
+		declaration.astKind = "struct_item";
+		declaration.members = [
+			{
+				...declaration,
+				role: "member",
+				name: "0",
+				qualifiedName: "Pair.0",
+				symbolType: "field",
+				signature: "0: pub u8",
+				astKind: "primitive_type",
+				locator: "rust-field-0",
+				isPublic: true,
+			},
+			{
+				...declaration,
+				role: "member",
+				name: "1",
+				qualifiedName: "Pair.1",
+				symbolType: "field",
+				signature: "1: String",
+				astKind: "type_identifier",
+				locator: "rust-field-1",
+				isPublic: false,
+			},
+		];
+		const { locator: _locator, ...structural } = declaration;
+		file.items.unshift({
+			...structural,
+			rowKind: "import",
+			name: "use",
+			qualifiedName: "use",
+			signature: "use std::fmt::Debug;",
+			astKind: "use_declaration",
+			isImport: true,
+			isExported: false,
+			members: [],
+		});
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outline: vi.fn(async () => result),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(client, testRowState);
+		const outlined = await ast.outline.execute(
+			"outline-rust",
+			{ path: "src/parser.rs", includePrivate: true },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		const text = firstText(outlined);
+		expect(text).toContain("imports\n1-3: use std::fmt::Debug;");
+		expect(text).toContain("declarations\n1-3(1): pub struct Pair<T>(");
+		expect(text).toContain("  1-3(2): 0: pub u8");
+		expect(text).toContain("  1-3(3): 1: String\n) where T: Clone;");
+		expect(text.match(/0: pub u8/g)).toHaveLength(1);
+	});
+
+	it("renders source-order Java packages, imports, contracts, and nested members", async () => {
+		await workspace.write("src/Parser.java", "package fixture;\n");
+		const path = workspace.path("src/Parser.java");
+		const result = outlineResult(path);
+		const file = result.files[0];
+		if (!file) throw new Error("outline fixture omitted its file");
+		file.language = "java";
+		const declaration = file.items[0];
+		if (!declaration) throw new Error("outline fixture omitted its declaration");
+		declaration.name = "Parser";
+		declaration.qualifiedName = "Parser";
+		declaration.symbolType = "interface";
+		declaration.nameRange = {
+			...declaration.nameRange,
+			start: { line: 2, column: 17 },
+			end: { line: 2, column: 23 },
+		};
+		declaration.signature =
+			"/**\n * Parser docs.\n */\n@JsonTypeName(\n  defaultImpl = Parser.class\n)\npublic interface Parser {\n  Result parse(String source);\n}";
+		declaration.astKind = "interface_declaration";
+		declaration.members = [
+			{
+				...declaration,
+				role: "member",
+				name: "parse",
+				qualifiedName: "Parser.parse",
+				symbolType: "method",
+				signature: "Result parse(String source);",
+				astKind: "method_declaration",
+				locator: "java-member-locator",
+				isPublic: true,
+			},
+		];
+		const { locator: _locator, ...structural } = declaration;
+		file.items.unshift(
+			{
+				...structural,
+				rowKind: "package",
+				name: "fixture",
+				qualifiedName: "fixture",
+				signature: "package fixture;",
+				astKind: "package_declaration",
+				isImport: false,
+				isExported: false,
+				members: [],
+			},
+			{
+				...structural,
+				rowKind: "import",
+				name: "import",
+				qualifiedName: "import",
+				signature: "import java.io.IOException;",
+				astKind: "import_declaration",
+				isImport: true,
+				isExported: false,
+				members: [],
+			},
+		);
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outline: vi.fn(async () => result),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(client, testRowState);
+		const outlined = await ast.outline.execute(
+			"outline-java",
+			{ path: "src/Parser.java" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		const text = firstText(outlined);
+		expect(text).toContain("package\n1-3: package fixture;");
+		expect(text).toContain("imports\n1-3: import java.io.IOException;");
+		expect(text).toContain("public interface Parser {");
+		expect(text).toContain("1-3(1): public interface Parser {");
+		expect(text).not.toContain("(1):  * Parser docs.");
+		expect(text).not.toContain("(1):   defaultImpl = Parser.class");
+		expect(text).toContain("  1-3(2): Result parse(String source);\n}");
+		expect(text.match(/Result parse\(String source\);/g)).toHaveLength(1);
 	});
 
 	it("keeps attached documentation before the locator and renders container members once", async () => {

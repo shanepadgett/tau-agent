@@ -4,7 +4,7 @@ use crate::outline::{
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
 
-pub const PROTOCOL_VERSION: u32 = 3;
+pub const PROTOCOL_VERSION: u32 = 4;
 const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
@@ -24,6 +24,8 @@ pub enum Request {
         target: OutlineTarget,
         #[serde(rename = "includePrivate")]
         include_private: bool,
+        #[serde(rename = "includeDocs")]
+        include_docs: bool,
         names: Vec<String>,
     },
     Symbol {

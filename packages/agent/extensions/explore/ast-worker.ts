@@ -26,6 +26,7 @@ export interface OutlineEntry {
 	qualifiedName: string;
 	range: SourceRange;
 	nameRange: SourceRange;
+	receiverRange?: SourceRange;
 	bodyRange?: SourceRange;
 	signature: string;
 	astKind: string;
@@ -37,7 +38,7 @@ export interface OutlineEntry {
 export type SymbolView = "signature" | "declaration" | "declarationWithImports";
 
 export interface OutlineItem extends OutlineEntry {
-	rowKind: "import" | "declaration" | "export" | "sideEffect";
+	rowKind: "package" | "import" | "declaration" | "export" | "sideEffect";
 	isImport: boolean;
 	isExported: boolean;
 	members: Array<OutlineEntry & { isPublic: boolean }>;
@@ -85,6 +86,7 @@ export interface AstClient {
 	outline(
 		target: OutlineTarget,
 		includePrivate: boolean,
+		includeDocs: boolean,
 		names: string[],
 		signal: AbortSignal | undefined,
 	): Promise<OutlineTargetResult>;
@@ -99,7 +101,7 @@ export interface AstClient {
 
 type WorkerRequestPayload =
 	| { operation: "handshake" }
-	| { operation: "outline"; target: OutlineTarget; includePrivate: boolean; names: string[] }
+	| { operation: "outline"; target: OutlineTarget; includePrivate: boolean; includeDocs: boolean; names: string[] }
 	| { operation: "symbol"; locators: string[]; view: SymbolView; contextLines: number };
 
 interface WorkerResponse {
@@ -116,7 +118,7 @@ interface PendingRequest {
 	removeAbortListener(): void;
 }
 
-const PROTOCOL_VERSION = 3;
+const PROTOCOL_VERSION = 4;
 const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 const STDERR_BYTES = 16 * 1024;
 
@@ -170,10 +172,11 @@ export class AstWorkerClient implements AstClient {
 	async outline(
 		target: OutlineTarget,
 		includePrivate: boolean,
+		includeDocs: boolean,
 		names: string[],
 		signal: AbortSignal | undefined,
 	): Promise<OutlineTargetResult> {
-		const result = await this.request({ operation: "outline", target, includePrivate, names }, signal);
+		const result = await this.request({ operation: "outline", target, includePrivate, includeDocs, names }, signal);
 		if (result.kind !== "outline") throw new Error("tau-ast returned the wrong result for outline");
 		return result as unknown as OutlineTargetResult;
 	}

@@ -21,7 +21,7 @@ process.stdin.on("data", (chunk) => {
     const request = JSON.parse(incoming.subarray(4, length + 4));
     incoming = incoming.subarray(length + 4);
     if (request.operation === "handshake") {
-      send({ requestId: request.requestId, protocolVersion: 3, success: true, result: { kind: "handshake" } });
+      send({ requestId: request.requestId, protocolVersion: 4, success: true, result: { kind: "handshake" } });
       continue;
     }
     if (request.target?.path === "crash") process.exit(2);
@@ -29,7 +29,7 @@ process.stdin.on("data", (chunk) => {
     if (request.operation === "outline") {
       send({
         requestId: request.requestId,
-        protocolVersion: 3,
+        protocolVersion: 4,
         success: true,
         result: {
           kind: "outline",
@@ -43,7 +43,7 @@ process.stdin.on("data", (chunk) => {
     }
     send({
       requestId: request.requestId,
-      protocolVersion: 3,
+      protocolVersion: 4,
       success: true,
       result: {
         kind: "symbol",
@@ -87,8 +87,8 @@ describe("AST worker client", () => {
 		const worker = client();
 		try {
 			const [typescript, odin] = await Promise.all([
-				worker.outline({ kind: "file", path: "one.ts", language: "typeScript" }, false, [], undefined),
-				worker.outline({ kind: "file", path: "two.odin", language: "odin" }, true, ["Circle"], undefined),
+				worker.outline({ kind: "file", path: "one.ts", language: "typeScript" }, false, false, [], undefined),
+				worker.outline({ kind: "file", path: "two.odin", language: "odin" }, true, true, ["Circle"], undefined),
 			]);
 			expect(typescript.path).toBe("one.ts");
 			expect(odin.path).toBe("two.odin");
@@ -130,14 +130,22 @@ describe("AST worker client", () => {
 			const request = worker.outline(
 				{ kind: "file", path: "hang", language: "typeScript" },
 				false,
+				false,
 				[],
 				controller.signal,
 			);
 			setTimeout(() => controller.abort(), 20);
 			await expect(request).rejects.toThrow("cancelled");
 			expect(
-				(await worker.outline({ kind: "file", path: "fresh.ts", language: "typeScript" }, false, [], undefined))
-					.path,
+				(
+					await worker.outline(
+						{ kind: "file", path: "fresh.ts", language: "typeScript" },
+						false,
+						false,
+						[],
+						undefined,
+					)
+				).path,
 			).toBe("fresh.ts");
 		} finally {
 			await worker.shutdown();
@@ -148,11 +156,18 @@ describe("AST worker client", () => {
 		const worker = client();
 		try {
 			await expect(
-				worker.outline({ kind: "file", path: "crash", language: "typeScript" }, false, [], undefined),
+				worker.outline({ kind: "file", path: "crash", language: "typeScript" }, false, false, [], undefined),
 			).rejects.toThrow("exited");
 			expect(
-				(await worker.outline({ kind: "file", path: "fresh.ts", language: "typeScript" }, false, [], undefined))
-					.path,
+				(
+					await worker.outline(
+						{ kind: "file", path: "fresh.ts", language: "typeScript" },
+						false,
+						false,
+						[],
+						undefined,
+					)
+				).path,
 			).toBe("fresh.ts");
 		} finally {
 			await worker.shutdown();

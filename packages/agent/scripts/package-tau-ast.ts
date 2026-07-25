@@ -48,7 +48,13 @@ async function smokeTauAst(root: string): Promise<void> {
 	const fixture = join(root, "packages", "agent", "native", "tau-ast", "fixtures", "typescript.ts");
 	const worker = new AstWorkerClient(command);
 	try {
-		const result = await worker.outline({ kind: "file", path: fixture, language: "typeScript" }, true, [], undefined);
+		const result = await worker.outline(
+			{ kind: "file", path: fixture, language: "typeScript" },
+			true,
+			false,
+			[],
+			undefined,
+		);
 		if (result.files.length !== 1 || !result.files[0]?.items.some((item) => item.name === "FileParser"))
 			throw new Error(`tau-ast smoke outline returned no FileParser declaration for ${fixture}`);
 	} catch (error) {
