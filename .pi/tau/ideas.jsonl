@@ -22,3 +22,6 @@
 {"id":"bc304acc-2aa3-4934-ac30-1c162e78dae0","text":"update tau-new to allow you to support tagging reference examples and inform the agent to make decisions based on its context. Should also auto inject docs based on what you are creating.","createdAt":1782312052959}
 {"id":"0e365866-237d-41dc-9006-9264f26d3b3d","text":"we need whole file structural maps when agent tries to read whole file","createdAt":1782254899726}
 {"id":"80c286b0-ce43-44e0-9888-4aa960ec3852","text":"find tool needs to group by folder like grep and ls","createdAt":1784942348506}
+{"id":"fdd6fde5-9d50-4af5-b962-7b98dabeb5b9","text":"prune should have setting to hide the UI notification","createdAt":1784949840113}
+{"id":"b9b2b906-3869-4916-98c9-a41852e8ee7d","text":"based on current context, there should be a hidden context injection for the agent to prune before they execute the users request","createdAt":1784949840113}
+{"id":"fd3b6434-7a8b-4105-aba3-85ad5b93baf6","text":"turn counter should have setting to hide the UI notification","createdAt":1784949840113}
