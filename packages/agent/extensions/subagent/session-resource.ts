@@ -118,7 +118,7 @@ export async function createSubagentSessionResource(
 		const modelRuntime = await ModelRuntime.create();
 		modelRuntime.registerNativeProvider(inputs.provider);
 		if (inputs.runtimeApiKey !== undefined)
-			await modelRuntime.setRuntimeApiKey(inputs.model.provider, inputs.runtimeApiKey);
+			await modelRuntime.setRuntimeApiKey(inputs.model.provider, inputs.runtimeApiKey, { allowNetwork: false });
 		if (signal.aborted) throw new Error(`Agent ${inputs.definition.name} startup aborted`);
 		const resourceLoader = new DefaultResourceLoader({
 			cwd: inputs.cwd,
