@@ -6,7 +6,6 @@ import {
 	type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { encode } from "@toon-format/toon";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
@@ -86,20 +85,15 @@ function encodeWindowList(windows: WindowInfo[]): string {
 		height: window.bounds.height,
 	}));
 	const render = (count: number, omitted: number) =>
-		encode(omitted === 0 ? { windows: rows.slice(0, count) } : { windows: rows.slice(0, count), omitted }, {
-			indent: 1,
-		});
+		JSON.stringify(omitted === 0 ? { windows: rows.slice(0, count) } : { windows: rows.slice(0, count), omitted });
 	const fits = (value: string) =>
 		Buffer.byteLength(value, "utf8") <= DEFAULT_MAX_BYTES && value.split("\n").length <= DEFAULT_MAX_LINES;
-	const maximumRows = Math.max(0, DEFAULT_MAX_LINES - 2);
 
-	if (rows.length <= maximumRows) {
-		const full = render(rows.length, 0);
-		if (fits(full)) return full;
-	}
+	const full = render(rows.length, 0);
+	if (fits(full)) return full;
 
 	let low = 0;
-	let high = Math.min(rows.length, maximumRows);
+	let high = rows.length;
 	while (low < high) {
 		const middle = Math.ceil((low + high) / 2);
 		if (fits(render(middle, rows.length - middle))) low = middle;
@@ -116,7 +110,7 @@ function registerAppshotTools(pi: ExtensionAPI, runHelper: RunHelper): void {
 			name: "list_windows",
 			label: "List Windows",
 			description:
-				"List visible normal macOS windows as compact TOON with window IDs, titles, application identity, process IDs, and bounds. Use list_windows to discover exact window IDs and application PIDs before screenshot_window or activate_app. Requires macOS 14 or newer and Screen & System Audio Recording permission.",
+				"List visible normal macOS windows as compact JSON with window IDs, titles, application identity, process IDs, and bounds. Use list_windows to discover exact window IDs and application PIDs before screenshot_window or activate_app. Requires macOS 14 or newer and Screen & System Audio Recording permission.",
 			parameters: listWindowsSchema,
 			async execute(_toolCallId, _params, signal) {
 				if (process.platform !== "darwin") throw new Error("list_windows is only available on macOS");

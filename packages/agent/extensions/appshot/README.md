@@ -1,6 +1,6 @@
 # Appshot
 
-Appshot gives Tau direct discovery and capture of macOS application windows. Tau can list visible windows as compact TOON with their application identity, title, process ID, bounds, and stable window ID; capture an exact window as a PNG for visual inspection; and bring an application forward when needed. Captures preserve aspect ratio and fit within 1568×1568 pixels to keep image payloads bounded.
+Appshot gives Tau direct discovery and capture of macOS application windows. Tau can list visible windows as compact JSON with their application identity, title, process ID, bounds, and stable window ID; capture an exact window as a PNG for visual inspection; and bring an application forward when needed. Captures preserve aspect ratio and fit within 1568×1568 pixels to keep image payloads bounded.
 
 The extension provides three tools:
 

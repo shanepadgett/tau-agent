@@ -65,7 +65,7 @@ describe("appshot extension", () => {
 		expect(tools.get("screenshot_window")?.description).toContain("Call list_windows first");
 		expect(tools.get("activate_app")?.description).toContain("changes user focus");
 	});
-	it("returns a flat TOON window table and hides it while collapsed", async () => {
+	it("returns compact JSON windows and hides it while collapsed", async () => {
 		vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
 		runHelper.mockResolvedValue({
 			code: 0,
@@ -90,7 +90,7 @@ describe("appshot extension", () => {
 		) => Promise<ToolResult>;
 		const result = await execute("call", {}, undefined);
 		expect(result.content[0]?.text).toBe(
-			"windows[1]{window_id,title,app_name,bundle_id,pid,x,y,width,height}:\n 7,Editor,Code,com.example.code,42,1,2,1200,800",
+			'{"windows":[{"window_id":7,"title":"Editor","app_name":"Code","bundle_id":"com.example.code","pid":42,"x":1,"y":2,"width":1200,"height":800}]}',
 		);
 
 		const renderCall = tool.renderCall as (
@@ -119,7 +119,7 @@ describe("appshot extension", () => {
 					expanded: true,
 				}),
 			),
-		).toContain("windows[1]");
+		).toContain('"window_id":7');
 	});
 
 	it("rejects malformed native window data", async () => {

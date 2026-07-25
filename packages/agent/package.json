@@ -36,7 +36,6 @@
 	],
 	"dependencies": {
 		"@shanepadgett/tau-tui": "0.26.0",
-		"@toon-format/toon": "2.3.0",
 		"image-size": "2.0.2",
 		"smol-toml": "1.7.0"
 	},
