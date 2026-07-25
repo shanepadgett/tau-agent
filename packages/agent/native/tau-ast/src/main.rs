@@ -3,6 +3,7 @@ mod go;
 mod java;
 mod kotlin;
 mod language;
+mod markdown;
 mod odin;
 mod outline;
 mod protocol;
@@ -67,6 +68,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                                 LanguageId::Java,
                                 LanguageId::Kotlin,
                                 LanguageId::Swift,
+                                LanguageId::Markdown,
                             ],
                         },
                     })

@@ -3,7 +3,17 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export type AstLanguage = "typeScript" | "tsx" | "odin" | "go" | "rust" | "cSharp" | "java" | "kotlin" | "swift";
+export type AstLanguage =
+	| "typeScript"
+	| "tsx"
+	| "odin"
+	| "go"
+	| "rust"
+	| "cSharp"
+	| "java"
+	| "kotlin"
+	| "swift"
+	| "markdown";
 
 export type OutlineTarget = { kind: "file"; path: string; language: AstLanguage } | { kind: "directory"; path: string };
 
@@ -118,7 +128,7 @@ interface PendingRequest {
 	removeAbortListener(): void;
 }
 
-const PROTOCOL_VERSION = 4;
+const PROTOCOL_VERSION = 5;
 const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 const STDERR_BYTES = 16 * 1024;
 

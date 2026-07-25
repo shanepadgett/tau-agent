@@ -172,13 +172,9 @@ fn extract_scope<D: ast_grep_core::Doc>(
                 SymbolType::Module,
             )),
             "foreign_block" => {
-                if let Some(item) = foreign_item(
-                    node,
-                    source,
-                    recovery_ranges,
-                    include_docs,
-                    parent_public,
-                ) {
+                if let Some(item) =
+                    foreign_item(node, source, recovery_ranges, include_docs, parent_public)
+                {
                     items.push(item);
                 }
             }
@@ -312,9 +308,7 @@ fn foreign_item<D: ast_grep_core::Doc>(
     parent_public: bool,
 ) -> Option<OutlineItem> {
     let block = node.children().find(|child| child.kind() == "block")?;
-    let identifier = node
-        .children()
-        .find(|child| child.kind() == "identifier");
+    let identifier = node.children().find(|child| child.kind() == "identifier");
     let name = identifier.as_ref().map_or_else(
         || "foreign".to_owned(),
         |identifier| format!("foreign {}", identifier.text().trim()),
@@ -355,7 +349,12 @@ fn foreign_item<D: ast_grep_core::Doc>(
     }
     let declaration_certainty = certainty(recovery_ranges, &declaration_range, &node_range);
     let name_range = identifier.map_or_else(
-        || source_range(source.as_bytes(), node_range.start..node_range.start + "foreign".len()),
+        || {
+            source_range(
+                source.as_bytes(),
+                node_range.start..node_range.start + "foreign".len(),
+            )
+        },
         |identifier| source_range(source.as_bytes(), identifier.range()),
     );
     Some(OutlineItem {
@@ -636,13 +635,16 @@ fn declaration_signature<D: ast_grep_core::Doc>(
 ) -> String {
     let node_range = node.range();
     let column = node.start_pos().column(&node);
-    if node.kind() == "procedure_declaration" && let Some(body) = body {
+    if node.kind() == "procedure_declaration"
+        && let Some(body) = body
+    {
         return dedent(source[start..body.start].trim_end(), column);
     }
     if matches!(
         node.kind().as_ref(),
         "struct_declaration" | "enum_declaration" | "union_declaration" | "bit_field_declaration"
-    ) && let Some(body) = body {
+    ) && let Some(body) = body
+    {
         return dedent(source[start..=body.start].trim_end(), column);
     }
     if matches!(
@@ -652,8 +654,12 @@ fn declaration_signature<D: ast_grep_core::Doc>(
     {
         if let Some(body) = body {
             let prefix = source[start..body.start].trim_end();
-            let suffix = if source[node_range.start..body.start].trim_end().ends_with('=')
-                || source[node_range.start..body.start].trim_end().ends_with(':')
+            let suffix = if source[node_range.start..body.start]
+                .trim_end()
+                .ends_with('=')
+                || source[node_range.start..body.start]
+                    .trim_end()
+                    .ends_with(':')
             {
                 " …"
             } else {
@@ -686,7 +692,9 @@ fn declaration_body<D: ast_grep_core::Doc>(
                 .find(|child| child.is_named() && child.range().start >= type_node.range().end)?;
             trimmed_range(initializer.range().start..node.range().end, source)
         }
-        "const_declaration" if declaration_symbol(node.kind().as_ref(), &node) == SymbolType::Constant => {
+        "const_declaration"
+            if declaration_symbol(node.kind().as_ref(), &node) == SymbolType::Constant =>
+        {
             initializer_after(node.range(), source, "::")
         }
         _ => None,
@@ -704,17 +712,17 @@ fn declaration_symbol<D: ast_grep_core::Doc>(kind: &str, node: &Node<D>) -> Symb
             if (node.text().contains("#type")
                 && node.children().any(|child| child.kind() == "type"))
                 || node.children().any(|child| {
-                matches!(
-                    child.kind().as_ref(),
-                    "distinct_type"
-                        | "array_type"
-                        | "pointer_type"
-                        | "bit_set_type"
-                        | "map_type"
-                        | "matrix_type"
-                        | "procedure_type"
-                )
-            }) =>
+                    matches!(
+                        child.kind().as_ref(),
+                        "distinct_type"
+                            | "array_type"
+                            | "pointer_type"
+                            | "bit_set_type"
+                            | "map_type"
+                            | "matrix_type"
+                            | "procedure_type"
+                    )
+                }) =>
         {
             SymbolType::Struct
         }
@@ -727,9 +735,8 @@ fn declaration_name<D: ast_grep_core::Doc>(node: Node<D>) -> Option<Node<D>> {
     node.children()
         .find(|child| child.kind() == "identifier")
         .or_else(|| {
-            node.children().find(|child| {
-                !matches!(child.kind().as_ref(), "attributes" | "attribute" | "tag")
-            })
+            node.children()
+                .find(|child| !matches!(child.kind().as_ref(), "attributes" | "attribute" | "tag"))
         })
 }
 
@@ -784,7 +791,8 @@ fn structural_item<D: ast_grep_core::Doc>(
             name: name.clone(),
             qualified_name: name,
             range: range.clone(),
-            name_range: name_node.map_or(range, |name| source_range(source.as_bytes(), name.range())),
+            name_range: name_node
+                .map_or(range, |name| source_range(source.as_bytes(), name.range())),
             receiver_range: None,
             body_range: None,
             signature: source[bytes].trim().to_owned(),
@@ -808,7 +816,10 @@ fn redacted_structural_item<D: ast_grep_core::Doc>(node: Node<D>, source: &str) 
         SymbolType::Event,
     );
     if let Some(body) = node.children().find(|child| child.kind() == "block") {
-        item.entry.signature = format!("{}… }}", source[node.range().start..=body.range().start].trim_end());
+        item.entry.signature = format!(
+            "{}… }}",
+            source[node.range().start..=body.range().start].trim_end()
+        );
     }
     item
 }
@@ -843,8 +854,15 @@ fn import_is_used<D: ast_grep_core::Doc>(
             let path = path.text();
             let path = path.trim_matches(|character| matches!(character, '"' | '`'));
             let path = path.rsplit_once(':').map_or(path, |(_, suffix)| suffix);
-            let segments = path.split('/').filter(|segment| !segment.is_empty()).collect::<Vec<_>>();
-            let mut bindings = segments.last().map(|segment| (*segment).to_owned()).into_iter().collect::<Vec<_>>();
+            let segments = path
+                .split('/')
+                .filter(|segment| !segment.is_empty())
+                .collect::<Vec<_>>();
+            let mut bindings = segments
+                .last()
+                .map(|segment| (*segment).to_owned())
+                .into_iter()
+                .collect::<Vec<_>>();
             if segments.len() > 1 {
                 bindings.push(segments.join("_"));
             }
@@ -917,7 +935,10 @@ fn initializer_after(
     trimmed_range(range.start + offset + separator.len()..range.end, source)
 }
 
-fn trimmed_range(mut range: std::ops::Range<usize>, source: &str) -> Option<std::ops::Range<usize>> {
+fn trimmed_range(
+    mut range: std::ops::Range<usize>,
+    source: &str,
+) -> Option<std::ops::Range<usize>> {
     while range.start < range.end && source.as_bytes()[range.start].is_ascii_whitespace() {
         range.start += 1;
     }
@@ -930,11 +951,7 @@ fn trimmed_range(mut range: std::ops::Range<usize>, source: &str) -> Option<std:
     (range.start < range.end).then_some(range)
 }
 
-fn field_signature<D: ast_grep_core::Doc>(
-    field: Node<D>,
-    name: Node<D>,
-    source: &str,
-) -> String {
+fn field_signature<D: ast_grep_core::Doc>(field: Node<D>, name: Node<D>, source: &str) -> String {
     let range = field.range();
     let colon = source[range.clone()]
         .find(':')

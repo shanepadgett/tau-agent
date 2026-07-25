@@ -99,9 +99,10 @@ pub fn filter_csharp_items<D: ast_grep_core::Doc>(
     });
 
     let used_names = used_names(root.clone(), &selected_ranges);
-    for node in root.dfs().filter(|node| {
-        node.kind() == "using_directive" && using_is_used(node.clone(), &used_names)
-    }) {
+    for node in root
+        .dfs()
+        .filter(|node| node.kind() == "using_directive" && using_is_used(node.clone(), &used_names))
+    {
         items.push(structural_item(
             node,
             source,
@@ -312,10 +313,12 @@ fn type_members<D: ast_grep_core::Doc>(
     include_docs: bool,
 ) -> Vec<OutlineMember> {
     let mut members = Vec::new();
-    if matches!(declaration.kind().as_ref(), "record_declaration" | "struct_declaration")
-        && let Some(parameters) = declaration
-            .children()
-            .find(|child| child.kind() == "parameter_list")
+    if matches!(
+        declaration.kind().as_ref(),
+        "record_declaration" | "struct_declaration"
+    ) && let Some(parameters) = declaration
+        .children()
+        .find(|child| child.kind() == "parameter_list")
     {
         for parameter in parameters
             .children()
@@ -484,11 +487,23 @@ fn type_entry<D: ast_grep_core::Doc>(
     let node_range = node.range();
     let start = attached_doc_start(node.clone(), source).unwrap_or(node_range.start);
     let declaration_range = start..node_range.end;
-    let signature_start = if include_docs { start } else { node_range.start };
+    let signature_start = if include_docs {
+        start
+    } else {
+        node_range.start
+    };
     let item_certainty = certainty(recovery_ranges, &declaration_range, &node_range);
     let mut signature = body.as_ref().map_or_else(
-        || source[signature_start..node_range.end].trim_end().to_owned(),
-        |body| source[signature_start..body.range().start + 1].trim_end().to_owned(),
+        || {
+            source[signature_start..node_range.end]
+                .trim_end()
+                .to_owned()
+        },
+        |body| {
+            source[signature_start..body.range().start + 1]
+                .trim_end()
+                .to_owned()
+        },
     );
     if nested && body.is_some() {
         signature.push_str(" … }");
@@ -530,7 +545,11 @@ fn field_members<D: ast_grep_core::Doc>(
     let start = attached_doc_start(declaration.clone(), source)
         .filter(|start| *start >= ownership.start)
         .unwrap_or(declaration_range.start);
-    let signature_start = if include_docs { start } else { declaration_range.start };
+    let signature_start = if include_docs {
+        start
+    } else {
+        declaration_range.start
+    };
     let Some(variable) = declaration
         .children()
         .find(|child| child.kind() == "variable_declaration")
@@ -564,7 +583,11 @@ fn field_members<D: ast_grep_core::Doc>(
             Some(OutlineMember {
                 entry: OutlineEntry {
                     role: EntryRole::Member,
-                    symbol_type: if event { SymbolType::Event } else { SymbolType::Field },
+                    symbol_type: if event {
+                        SymbolType::Event
+                    } else {
+                        SymbolType::Field
+                    },
                     name: name.clone(),
                     qualified_name: format!("{parent_name}.{name}"),
                     range: source_range(source.as_bytes(), start..declaration_range.end),
@@ -614,7 +637,11 @@ fn callable_member<D: ast_grep_core::Doc>(
             } else {
                 "explicit operator"
             };
-            (conversion.to_owned(), type_node.range(), SymbolType::Operator)
+            (
+                conversion.to_owned(),
+                type_node.range(),
+                SymbolType::Operator,
+            )
         }
         "destructor_declaration" => {
             let name_node = member.field("name")?;
@@ -645,13 +672,28 @@ fn callable_member<D: ast_grep_core::Doc>(
     let start = attached_doc_start(member.clone(), source)
         .filter(|start| *start >= ownership.start)
         .unwrap_or(member_range.start);
-    let signature_start = if include_docs { start } else { member_range.start };
+    let signature_start = if include_docs {
+        start
+    } else {
+        member_range.start
+    };
     let body = member.field("body");
     let mut signature = body.as_ref().map_or_else(
-        || source[signature_start..member_range.end].trim_end().to_owned(),
-        |body| source[signature_start..body.range().start].trim_end().to_owned(),
+        || {
+            source[signature_start..member_range.end]
+                .trim_end()
+                .to_owned()
+        },
+        |body| {
+            source[signature_start..body.range().start]
+                .trim_end()
+                .to_owned()
+        },
     );
-    if body.as_ref().is_some_and(|body| body.kind() == "arrow_expression_clause") {
+    if body
+        .as_ref()
+        .is_some_and(|body| body.kind() == "arrow_expression_clause")
+    {
         signature.push_str(" => …;");
     }
     let member_certainty = certainty(recovery_ranges, &(start..member_range.end), &ownership);
@@ -690,18 +732,28 @@ fn accessor_members<D: ast_grep_core::Doc>(
     let start = attached_doc_start(member.clone(), source)
         .filter(|start| *start >= ownership.start)
         .unwrap_or(member_range.start);
-    let signature_start = if include_docs { start } else { member_range.start };
+    let signature_start = if include_docs {
+        start
+    } else {
+        member_range.start
+    };
     let accessors = member.field("accessors");
     let value = member.field("value");
     let (name, name_range, symbol_type) = if member.kind() == "indexer_declaration" {
-        let type_end = member.field("type").map_or(member_range.start, |node| node.range().end);
+        let type_end = member
+            .field("type")
+            .map_or(member_range.start, |node| node.range().end);
         let parameters_start = member
             .field("parameters")
             .map_or(member_range.end, |node| node.range().start);
         let this_start = source[type_end..parameters_start]
             .find("this")
             .map_or(type_end, |offset| type_end + offset);
-        ("this".to_owned(), this_start..this_start + 4, SymbolType::Property)
+        (
+            "this".to_owned(),
+            this_start..this_start + 4,
+            SymbolType::Property,
+        )
     } else {
         let name_node = match member.field("name") {
             Some(name) => name,
@@ -720,8 +772,16 @@ fn accessor_members<D: ast_grep_core::Doc>(
     let public = ancestors_public && member_public(&member, parent_kind);
     let body = accessors.clone().or_else(|| value.clone());
     let mut signature = body.as_ref().map_or_else(
-        || source[signature_start..member_range.end].trim_end().to_owned(),
-        |body| source[signature_start..body.range().start].trim_end().to_owned(),
+        || {
+            source[signature_start..member_range.end]
+                .trim_end()
+                .to_owned()
+        },
+        |body| {
+            source[signature_start..body.range().start]
+                .trim_end()
+                .to_owned()
+        },
     );
     if accessors.is_some() {
         signature.push_str(" { … }");
@@ -759,7 +819,11 @@ fn accessor_members<D: ast_grep_core::Doc>(
             let accessor_body = accessor.field("body");
             let mut accessor_signature = accessor_body.as_ref().map_or_else(
                 || accessor.text().trim().to_owned(),
-                |body| source[accessor_range.start..body.range().start].trim_end().to_owned(),
+                |body| {
+                    source[accessor_range.start..body.range().start]
+                        .trim_end()
+                        .to_owned()
+                },
             );
             if accessor_body
                 .as_ref()
@@ -784,10 +848,7 @@ fn accessor_members<D: ast_grep_core::Doc>(
                     receiver_range: None,
                     body_range: accessor_body
                         .map(|body| source_range(source.as_bytes(), body.range())),
-                    signature: dedent(
-                        &accessor_signature,
-                        accessor.start_pos().column(&accessor),
-                    ),
+                    signature: dedent(&accessor_signature, accessor.start_pos().column(&accessor)),
                     ast_kind: accessor.kind().into_owned(),
                     certainty: accessor_certainty,
                     certainty_reason: certainty_reason(accessor_certainty),
@@ -815,7 +876,11 @@ fn enum_member<D: ast_grep_core::Doc>(
     let start = attached_doc_start(member.clone(), source)
         .filter(|start| *start >= ownership.start)
         .unwrap_or(member_range.start);
-    let signature_start = if include_docs { start } else { member_range.start };
+    let signature_start = if include_docs {
+        start
+    } else {
+        member_range.start
+    };
     let value = member.field("value");
     let signature = value.as_ref().map_or_else(
         || source[signature_start..member_range.end].trim().to_owned(),
@@ -920,7 +985,11 @@ fn simple_entry<D: ast_grep_core::Doc>(
 ) -> OutlineEntry {
     let node_range = node.range();
     let start = attached_doc_start(node.clone(), source).unwrap_or(node_range.start);
-    let signature_start = if include_docs { start } else { node_range.start };
+    let signature_start = if include_docs {
+        start
+    } else {
+        node_range.start
+    };
     let item_certainty = certainty(recovery_ranges, &(start..node_range.end), &node_range);
     OutlineEntry {
         role,
@@ -967,7 +1036,8 @@ fn structural_item<D: ast_grep_core::Doc>(
             name: name.clone(),
             qualified_name: name,
             range: range.clone(),
-            name_range: name_node.map_or(range, |name| source_range(source.as_bytes(), name.range())),
+            name_range: name_node
+                .map_or(range, |name| source_range(source.as_bytes(), name.range())),
             receiver_range: None,
             body_range: None,
             signature: source[bytes].trim().to_owned(),
@@ -996,7 +1066,10 @@ fn used_names<D: ast_grep_core::Doc>(root: Node<D>, ranges: &[SourceRange]) -> B
         .collect()
 }
 
-fn using_is_used<D: ast_grep_core::Doc>(declaration: Node<D>, used_names: &BTreeSet<String>) -> bool {
+fn using_is_used<D: ast_grep_core::Doc>(
+    declaration: Node<D>,
+    used_names: &BTreeSet<String>,
+) -> bool {
     declaration
         .field("name")
         .is_none_or(|alias| used_names.contains(alias.text().trim()))
@@ -1025,7 +1098,8 @@ fn attached_doc_start<D: ast_grep_core::Doc>(node: Node<D>, source: &str) -> Opt
 }
 
 fn member_public<D: ast_grep_core::Doc>(node: &Node<D>, parent_kind: &str) -> bool {
-    if has_access(node, "private") || has_access(node, "protected") || has_access(node, "internal") {
+    if has_access(node, "private") || has_access(node, "protected") || has_access(node, "internal")
+    {
         return false;
     }
     parent_kind == "interface_declaration" || has_access(node, "public")

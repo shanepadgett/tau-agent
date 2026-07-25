@@ -159,7 +159,8 @@ pub fn filter_typescript_items<D: ast_grep_core::Doc>(
             if item_matches {
                 selected_ranges.push(item.entry.range.clone());
             } else {
-                selected_ranges.extend(item.members.iter().map(|member| member.entry.range.clone()));
+                selected_ranges
+                    .extend(item.members.iter().map(|member| member.entry.range.clone()));
             }
         }
     }
@@ -482,10 +483,8 @@ fn namespace_members<D: ast_grep_core::Doc>(
                     | SymbolType::Namespace
             ) && let Some(brace) = item.entry.signature.find('{')
             {
-                item.entry.signature = format!(
-                    "{} {{ … }}",
-                    item.entry.signature[..brace].trim_end()
-                );
+                item.entry.signature =
+                    format!("{} {{ … }}", item.entry.signature[..brace].trim_end());
             } else if item.entry.body_range.is_some() {
                 item.entry.signature = format!("{} {{ … }}", item.entry.signature.trim_end());
             }

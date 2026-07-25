@@ -1,6 +1,5 @@
 use crate::csharp::{
-    extract_csharp_items, filter_csharp_items, finalize_csharp_signatures,
-    matching_csharp_imports,
+    extract_csharp_items, filter_csharp_items, finalize_csharp_signatures, matching_csharp_imports,
 };
 use crate::go::{extract_go_items, filter_go_items, finalize_go_signatures, matching_go_imports};
 use crate::java::{
@@ -10,6 +9,9 @@ use crate::kotlin::{
     extract_kotlin_items, filter_kotlin_items, finalize_kotlin_signatures, matching_kotlin_imports,
 };
 use crate::language::OdinLanguage;
+use crate::markdown::{
+    extract_markdown_items, filter_markdown_items, markdown_diagnostics, validate_markdown_source,
+};
 use crate::odin::{
     extract_odin_items, filter_odin_items, finalize_odin_signatures, matching_odin_imports,
 };
@@ -48,6 +50,7 @@ pub enum LanguageId {
     Java,
     Kotlin,
     Swift,
+    Markdown,
 }
 
 #[derive(Debug, Deserialize)]
@@ -130,6 +133,7 @@ pub enum SymbolType {
     Event,
     Operator,
     TypeParameter,
+    Heading,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -330,6 +334,12 @@ impl OutlineEngine {
                 }
                 candidates.sort_by(|left, right| left.0.cmp(&right.0));
                 candidates.dedup_by(|left, right| left.0 == right.0);
+                if candidates
+                    .iter()
+                    .any(|(_, language)| *language != LanguageId::Markdown)
+                {
+                    candidates.retain(|(_, language)| *language != LanguageId::Markdown);
+                }
                 if candidates.is_empty() {
                     return Err(format!(
                         "directory contains no supported source files: {}",
@@ -464,6 +474,19 @@ impl OutlineEngine {
                 filter_swift_items(grep.root(), source, &mut items, include_private, names);
                 (diagnostics, items, true)
             }
+            LanguageId::Markdown => {
+                validate_markdown_source(source)?;
+                let mut parser = tree_sitter::Parser::new();
+                parser.set_language(&tree_sitter_md::LANGUAGE.into())?;
+                let tree = parser
+                    .parse(source, None)
+                    .ok_or("Markdown parser did not return a syntax tree")?;
+                let root = tree.root_node();
+                let diagnostics = markdown_diagnostics(root);
+                let mut items = extract_markdown_items(root, source);
+                filter_markdown_items(&mut items, names);
+                (diagnostics, items, true)
+            }
         };
         let line_count = if source.is_empty() {
             0
@@ -484,6 +507,7 @@ impl OutlineEngine {
                 | LanguageId::Java
                 | LanguageId::Kotlin
                 | LanguageId::Swift
+                | LanguageId::Markdown
         ) {
             match language {
                 LanguageId::Odin => finalize_odin_signatures(&mut items),
@@ -493,6 +517,7 @@ impl OutlineEngine {
                 LanguageId::Java => finalize_java_signatures(&mut items),
                 LanguageId::Kotlin => finalize_kotlin_signatures(&mut items),
                 LanguageId::Swift => finalize_swift_signatures(&mut items),
+                LanguageId::Markdown => {}
                 _ => finalize_typescript_signatures(&mut items),
             }
             finalize_locators(&mut items, &path, language, &source_fingerprint)?;
@@ -578,12 +603,13 @@ impl OutlineEngine {
                         | LanguageId::Java
                         | LanguageId::Kotlin
                         | LanguageId::Swift
+                        | LanguageId::Markdown
                 )
             })
         {
             return Err(SymbolError {
                 code: "unsupported_symbol_view",
-                message: "signature and declarationWithImports views support TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, and Swift"
+                message: "signature and declarationWithImports views support TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, Swift, and Markdown"
                     .to_owned(),
             });
         }
@@ -803,6 +829,7 @@ enum LanguageFamily {
     Java,
     Kotlin,
     Swift,
+    Markdown,
 }
 
 fn language_family(language: LanguageId) -> LanguageFamily {
@@ -815,6 +842,7 @@ fn language_family(language: LanguageId) -> LanguageFamily {
         LanguageId::Java => LanguageFamily::Java,
         LanguageId::Kotlin => LanguageFamily::Kotlin,
         LanguageId::Swift => LanguageFamily::Swift,
+        LanguageId::Markdown => LanguageFamily::Markdown,
     }
 }
 
@@ -829,6 +857,7 @@ fn language_for_path(path: &Path) -> Option<LanguageId> {
         "java" => Some(LanguageId::Java),
         "kt" | "ktm" | "kts" => Some(LanguageId::Kotlin),
         "swift" => Some(LanguageId::Swift),
+        "md" | "markdown" | "mdown" => Some(LanguageId::Markdown),
         _ => None,
     }
 }
@@ -938,6 +967,7 @@ fn declaration_with_imports(source: &str, locator: &SourceLocator) -> String {
             let grep = SupportLang::Swift.ast_grep(source);
             matching_swift_imports(grep.root(), source, &locator.range)
         }
+        LanguageId::Markdown => Vec::new(),
     };
     if imports.is_empty() {
         return declaration.to_owned();
@@ -1065,6 +1095,171 @@ mod tests {
                     .as_ref()
                     .is_some_and(|locator| !locator.is_empty()))
         );
+    }
+
+    #[test]
+    fn extracts_markdown_heading_sections_and_selective_views() {
+        let engine = OutlineEngine::new().expect("outline engine should initialize");
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/markdown.md");
+        let source = fs::read_to_string(&fixture).expect("Markdown fixture should be readable");
+        let result = outline_file(&engine, &fixture, LanguageId::Markdown);
+
+        assert_eq!(result.diagnostics.error_nodes, 0);
+        assert_eq!(result.diagnostics.missing_nodes, 0);
+        assert_eq!(
+            result
+                .items
+                .iter()
+                .map(|item| item.entry.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Guide", "Installation", "macOS", "API Reference"]
+        );
+        assert!(
+            result
+                .items
+                .iter()
+                .all(|item| item.entry.symbol_type == SymbolType::Heading
+                    && item.entry.locator.is_some()
+                    && item.members.is_empty())
+        );
+        assert!(
+            !result
+                .items
+                .iter()
+                .any(|item| item.entry.name.contains("Fenced text"))
+        );
+
+        let installation = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Installation")
+            .expect("installation heading should be extracted");
+        assert_eq!(installation.entry.qualified_name, "Guide.Installation");
+        assert_eq!(installation.entry.signature, "## Installation");
+        let installation_source =
+            &source[installation.entry.range.start_byte..installation.entry.range.end_byte];
+        assert!(installation_source.starts_with("## Installation"));
+        assert!(installation_source.contains("### macOS"));
+        assert!(!installation_source.contains("API Reference"));
+
+        let api = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "API Reference")
+            .expect("Setext heading should be extracted");
+        assert_eq!(api.entry.qualified_name, "Guide.API Reference");
+        assert_eq!(api.entry.signature, "API Reference\n-------------");
+        assert_eq!(
+            &source[api.entry.name_range.start_byte..api.entry.name_range.end_byte],
+            "API Reference"
+        );
+
+        let locator = installation.entry.locator.as_ref().expect("locator");
+        let signature = engine
+            .symbol(std::slice::from_ref(locator), SymbolView::Signature, 0)
+            .expect("Markdown signature should resolve");
+        assert_eq!(signature.blocks[0].source, "## Installation");
+        let declaration = engine
+            .symbol(std::slice::from_ref(locator), SymbolView::Declaration, 0)
+            .expect("Markdown declaration should resolve");
+        assert_eq!(declaration.blocks[0].source, installation_source);
+        let with_imports = engine
+            .symbol(
+                std::slice::from_ref(locator),
+                SymbolView::DeclarationWithImports,
+                0,
+            )
+            .expect("Markdown declaration-with-imports should resolve");
+        assert_eq!(with_imports.blocks[0].source, installation_source);
+
+        let filtered = engine
+            .outline(
+                OutlineTarget::File {
+                    path: fixture.to_string_lossy().into_owned(),
+                    language: LanguageId::Markdown,
+                },
+                false,
+                false,
+                &["Guide.Installation.macOS".to_owned()],
+            )
+            .expect("qualified Markdown heading should filter");
+        assert_eq!(filtered.files[0].items.len(), 1);
+        assert_eq!(filtered.files[0].items[0].entry.name, "macOS");
+    }
+
+    #[test]
+    fn handles_markdown_utf8_crlf_and_ignores_markdown_in_source_directories() {
+        let engine = OutlineEngine::new().expect("outline engine should initialize");
+        let temporary =
+            std::env::temp_dir().join(format!("tau-ast-markdown-crlf-{}", std::process::id()));
+        fs::create_dir_all(&temporary).expect("Markdown fixture directory should be writable");
+        let markdown_path = temporary.join("guide.markdown");
+        let source = "# Café\r\n\r\nIntro.\r\n\r\n## Décode\r\n\r\nInstructions.\r\n";
+        fs::write(&markdown_path, source).expect("Markdown CRLF fixture should be writable");
+        let result = outline_file(&engine, &markdown_path, LanguageId::Markdown);
+        let decode = result
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Décode")
+            .expect("UTF-8 heading should be extracted");
+        assert_eq!(
+            &source[decode.entry.name_range.start_byte..decode.entry.name_range.end_byte],
+            "Décode"
+        );
+        assert_eq!(
+            &source[decode.entry.range.start_byte..decode.entry.range.end_byte],
+            "## Décode\r\n\r\nInstructions.\r\n"
+        );
+
+        fs::write(temporary.join("source.ts"), "export const value = 1;\n")
+            .expect("TypeScript fixture should be writable");
+        let directory = engine
+            .outline(
+                OutlineTarget::Directory {
+                    path: temporary.to_string_lossy().into_owned(),
+                },
+                true,
+                false,
+                &[],
+            )
+            .expect("source directory should ignore adjacent Markdown");
+        assert_eq!(directory.files.len(), 1);
+        assert_eq!(directory.files[0].language, LanguageId::TypeScript);
+        fs::remove_dir_all(temporary).expect("Markdown fixture directory should be removable");
+    }
+
+    #[test]
+    fn normalizes_markdown_heading_names_and_excludes_block_container_headings() {
+        let engine = OutlineEngine::new().expect("outline engine should initialize");
+        let path = std::env::temp_dir().join(format!(
+            "tau-ast-markdown-heading-names-{}.mdown",
+            std::process::id()
+        ));
+        let source = "# Foo ###\n\nAlpha\nBeta\n=====\n\n> ## Quoted\n> quoted body\n\n- ### Listed\n\n# ###\n\n# Foo\u{a0}###\n";
+        fs::write(&path, source).expect("Markdown heading fixture should be writable");
+        let result = outline_file(&engine, &path, LanguageId::Markdown);
+        assert_eq!(
+            result
+                .items
+                .iter()
+                .map(|item| item.entry.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Foo", "Alpha Beta", "?", "Foo\u{a0}###"]
+        );
+        assert_eq!(result.items[0].entry.signature, "# Foo ###");
+        assert_eq!(result.items[1].entry.signature, "Alpha\nBeta\n=====");
+        assert!(
+            !result
+                .items
+                .iter()
+                .any(|item| matches!(item.entry.name.as_str(), "Quoted" | "Listed"))
+        );
+        assert!(
+            validate_markdown_source(&format!("```markdown\n{}\n```\n", "> ".repeat(400))).is_ok()
+        );
+        assert!(validate_markdown_source(&format!(">\t{}# Deep\n", ">\t".repeat(400))).is_err());
+        assert!(validate_markdown_source(&format!("{}item\n", "- ".repeat(400))).is_err());
+        fs::remove_file(path).expect("Markdown heading fixture should be removable");
     }
 
     #[test]
@@ -1409,10 +1604,12 @@ mod tests {
             .find(|item| item.entry.name == "API")
             .expect("namespace owner should remain");
         assert_eq!(filtered_api.members.len(), 5);
-        assert!(filtered_api
-            .members
-            .iter()
-            .all(|member| member.entry.qualified_name.starts_with("API.Factory")));
+        assert!(
+            filtered_api
+                .members
+                .iter()
+                .all(|member| member.entry.qualified_name.starts_with("API.Factory"))
+        );
         fs::remove_file(path).expect("TypeScript namespace fixture should be removable");
     }
 
@@ -1714,8 +1911,7 @@ mod tests {
             .find(|item| item.entry.name == "foreign libc")
             .expect("foreign block should be extracted");
         assert!(foreign.members.iter().any(|member| {
-            member.entry.name == "strlen"
-                && member.entry.qualified_name == "foreign libc.strlen"
+            member.entry.name == "strlen" && member.entry.qualified_name == "foreign libc.strlen"
         }));
         let value = result
             .items
@@ -1744,7 +1940,12 @@ mod tests {
             .iter()
             .find(|item| item.entry.name == "Callback")
             .expect("#type procedure alias should be extracted");
-        assert!(callback.entry.signature.contains("#type proc \"contextless\""));
+        assert!(
+            callback
+                .entry
+                .signature
+                .contains("#type proc \"contextless\"")
+        );
         let hidden_cache = result
             .items
             .iter()
@@ -1785,8 +1986,16 @@ mod tests {
                 0,
             )
             .expect("Odin imports should resolve");
-        assert!(with_imports.blocks[0].source.contains("import fmt \"core:fmt\""));
-        assert!(!with_imports.blocks[0].source.contains("import \"core:math\""));
+        assert!(
+            with_imports.blocks[0]
+                .source
+                .contains("import fmt \"core:fmt\"")
+        );
+        assert!(
+            !with_imports.blocks[0]
+                .source
+                .contains("import \"core:math\"")
+        );
         assert!(!with_imports.blocks[0].source.contains("import unused"));
 
         let hidden = result
@@ -1802,7 +2011,8 @@ mod tests {
         let engine = OutlineEngine::new().expect("outline engine should initialize");
         let crlf_path =
             std::env::temp_dir().join(format!("tau-ast-odin-crlf-{}.odin", std::process::id()));
-        let crlf_source = "package café\r\n\r\n// Décode café.\r\nCafé :: struct {\r\n\tvaleur: string,\r\n}\r\n";
+        let crlf_source =
+            "package café\r\n\r\n// Décode café.\r\nCafé :: struct {\r\n\tvaleur: string,\r\n}\r\n";
         fs::write(&crlf_path, crlf_source).expect("Odin CRLF fixture should be writable");
         let crlf = outline_file(&engine, &crlf_path, LanguageId::Odin);
         let cafe = crlf
@@ -1814,14 +2024,14 @@ mod tests {
             &crlf_source[cafe.entry.name_range.start_byte..cafe.entry.name_range.end_byte],
             "Café"
         );
-        assert!(crlf_source[cafe.entry.range.start_byte..cafe.entry.range.end_byte]
-            .starts_with("// Décode café."));
+        assert!(
+            crlf_source[cafe.entry.range.start_byte..cafe.entry.range.end_byte]
+                .starts_with("// Décode café.")
+        );
         fs::remove_file(crlf_path).expect("Odin CRLF fixture should be removable");
 
-        let malformed_path = std::env::temp_dir().join(format!(
-            "tau-ast-odin-recovery-{}.odin",
-            std::process::id()
-        ));
+        let malformed_path =
+            std::env::temp_dir().join(format!("tau-ast-odin-recovery-{}.odin", std::process::id()));
         fs::write(
             &malformed_path,
             "package fixture\n\nRecovered :: proc() { broken := }\n",
@@ -1833,7 +2043,10 @@ mod tests {
             .iter()
             .find(|item| item.entry.name == "Recovered")
             .expect("recovered Odin procedure should remain");
-        assert!(matches!(recovered.entry.certainty, ParseCertainty::Recovered));
+        assert!(matches!(
+            recovered.entry.certainty,
+            ParseCertainty::Recovered
+        ));
         fs::remove_file(malformed_path).expect("malformed Odin fixture should be removable");
     }
 
@@ -1902,7 +2115,10 @@ mod tests {
             .find(|member| member.entry.signature.contains("IParser<T>.Parse"))
             .expect("explicit interface implementation should be extracted");
         assert!(!explicit.is_public);
-        assert_eq!(explicit.entry.signature, "Result IParser<T>.Parse(T source) => …;");
+        assert_eq!(
+            explicit.entry.signature,
+            "Result IParser<T>.Parse(T source) => …;"
+        );
         assert_eq!(
             &source[explicit.entry.range.start_byte..explicit.entry.range.end_byte],
             "Result IParser<T>.Parse(T source) => Parse(source);"
@@ -1923,8 +2139,16 @@ mod tests {
                 0,
             )
             .expect("C# declaration-with-imports should resolve");
-        assert!(with_imports.blocks[0].source.contains("using Text = System.String;"));
-        assert!(with_imports.blocks[0].source.contains("global using System;"));
+        assert!(
+            with_imports.blocks[0]
+                .source
+                .contains("using Text = System.String;")
+        );
+        assert!(
+            with_imports.blocks[0]
+                .source
+                .contains("global using System;")
+        );
 
         let public = engine
             .outline(
@@ -1937,18 +2161,23 @@ mod tests {
                 &[],
             )
             .expect("public C# outline should parse");
-        assert!(!public.files[0]
-            .items
-            .iter()
-            .any(|item| item.entry.name == "HiddenParser"));
+        assert!(
+            !public.files[0]
+                .items
+                .iter()
+                .any(|item| item.entry.name == "HiddenParser")
+        );
         let public_file_parser = public.files[0]
             .items
             .iter()
             .find(|item| item.entry.name == "FileParser")
             .expect("public class should remain");
-        assert!(!public_file_parser.members.iter().any(|member| {
-            matches!(member.entry.name.as_str(), "Counts" | "set" | "Hide")
-        }));
+        assert!(
+            !public_file_parser
+                .members
+                .iter()
+                .any(|member| { matches!(member.entry.name.as_str(), "Counts" | "set" | "Hide") })
+        );
     }
 
     #[test]
@@ -1969,14 +2198,14 @@ mod tests {
             &crlf_source[cafe.entry.name_range.start_byte..cafe.entry.name_range.end_byte],
             "Café"
         );
-        assert!(crlf_source[cafe.entry.range.start_byte..cafe.entry.range.end_byte]
-            .starts_with("/// <summary>Décode café.</summary>"));
+        assert!(
+            crlf_source[cafe.entry.range.start_byte..cafe.entry.range.end_byte]
+                .starts_with("/// <summary>Décode café.</summary>")
+        );
         fs::remove_file(&crlf_path).expect("C# CRLF fixture should be removable");
 
-        let malformed_path = std::env::temp_dir().join(format!(
-            "tau-ast-csharp-recovery-{}.cs",
-            std::process::id()
-        ));
+        let malformed_path =
+            std::env::temp_dir().join(format!("tau-ast-csharp-recovery-{}.cs", std::process::id()));
         fs::write(
             &malformed_path,
             "public class Recovered { public void Parse() { string broken = ; } }\n",
@@ -1988,7 +2217,10 @@ mod tests {
             .iter()
             .find(|item| item.entry.name == "Recovered")
             .expect("recovered C# class should remain");
-        assert!(matches!(recovered.entry.certainty, ParseCertainty::Recovered));
+        assert!(matches!(
+            recovered.entry.certainty,
+            ParseCertainty::Recovered
+        ));
         assert!(recovered.entry.certainty_reason.is_some());
         fs::remove_file(&malformed_path).expect("malformed C# fixture should be removable");
     }
@@ -3819,7 +4051,7 @@ export { buildThing as createThing, buildThing as makeThing };
             std::process::id()
         ));
         fs::create_dir_all(&temporary).expect("temporary directory should be writable");
-        fs::write(temporary.join("README.md"), "empty\n")
+        fs::write(temporary.join("README.txt"), "empty\n")
             .expect("unsupported fixture should be writable");
         let empty_error = engine
             .outline(

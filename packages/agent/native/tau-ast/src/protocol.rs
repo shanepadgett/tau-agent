@@ -4,7 +4,7 @@ use crate::outline::{
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
 
-pub const PROTOCOL_VERSION: u32 = 4;
+pub const PROTOCOL_VERSION: u32 = 5;
 const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
@@ -96,7 +96,7 @@ pub enum ResponseResult {
         #[serde(rename = "engineVersion")]
         engine_version: &'static str,
         #[serde(rename = "supportedLanguages")]
-        supported_languages: [LanguageId; 9],
+        supported_languages: [LanguageId; 10],
     },
     Outline {
         #[serde(flatten)]

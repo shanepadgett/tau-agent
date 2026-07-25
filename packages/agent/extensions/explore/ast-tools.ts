@@ -19,6 +19,7 @@ import type {
 	AstLanguage,
 	OutlineEntry,
 	OutlineFileResult,
+	SourceRange,
 	OutlineTarget,
 	OutlineTargetResult,
 	SymbolBatchResult,
@@ -28,7 +29,7 @@ import type {
 const outlineParams = Type.Object(
 	{
 		path: Type.String({
-			description: "TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, or Swift source file or directory",
+			description: "TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, Swift, or Markdown source file or directory",
 		}),
 		includePrivate: Type.Optional(Type.Boolean({ description: "Include private declarations and members" })),
 		includeDocs: Type.Optional(
@@ -51,7 +52,7 @@ const symbolParams = Type.Object(
 		}),
 		view: StringEnum(["signature", "declaration", "declarationWithImports"] as const, {
 			description:
-				"Source view to retrieve; TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, and Swift support selective views",
+				"Source view to retrieve; TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, Swift, and Markdown support selective views",
 		}),
 		contextLines: Type.Optional(
 			Type.Integer({ minimum: 0, description: "Lines of source context before and after each declaration" }),
@@ -135,10 +136,7 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 		indent: string,
 		signatureOverride?: string,
 	): string {
-		const lines =
-			entry.range.start.line === entry.range.end.line
-				? `${entry.range.start.line + 1}`
-				: `${entry.range.start.line + 1}-${entry.range.end.line + 1}`;
+		const lines = displayLineRange(entry.range);
 		let signature = (signatureOverride ?? entry.signature).trim();
 		if (
 			language === "typeScript" ||
@@ -149,7 +147,8 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 			language === "cSharp" ||
 			language === "java" ||
 			language === "kotlin" ||
-			language === "swift"
+			language === "swift" ||
+			language === "markdown"
 		) {
 			const signatureLines = signature.split("\n");
 			const relativeNameLine = entry.nameRange.start.line - entry.range.start.line;
@@ -199,9 +198,10 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 					: keywordNameLine >= 0
 						? keywordNameLine
 						: declarationNameLine;
-			const declarationLine = nameLine >= 0 ? nameLine : 0;
+			const declarationLine = language === "markdown" ? Math.max(0, relativeNameLine) : nameLine >= 0 ? nameLine : 0;
 			const sourceLine = signatureLines[declarationLine] ?? entry.name;
-			const first = sourceLine.includes(entry.name) ? sourceLine : `${entry.name} ${sourceLine}`;
+			const first =
+				language === "markdown" || sourceLine.includes(entry.name) ? sourceLine : `${entry.name} ${sourceLine}`;
 			const warning =
 				entry.certainty === "certain"
 					? ""
@@ -218,10 +218,7 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 	}
 
 	function renderStructuralEntry(entry: OutlineEntry, indent: string): string {
-		const lines =
-			entry.range.start.line === entry.range.end.line
-				? `${entry.range.start.line + 1}`
-				: `${entry.range.start.line + 1}-${entry.range.end.line + 1}`;
+		const lines = displayLineRange(entry.range);
 		return `${indent}${lines}: ${entry.signature.trim().replace(/\s+/g, " ")}`;
 	}
 
@@ -336,7 +333,8 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 			file.language === "cSharp" ||
 			file.language === "java" ||
 			file.language === "kotlin" ||
-			file.language === "swift"
+			file.language === "swift" ||
+			file.language === "markdown"
 		) {
 			let previousSection = "";
 			for (const item of file.items) {
@@ -570,10 +568,7 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 					return declaration ? (requestedByToken.get(declaration.locator) ?? []) : [];
 				});
 				const range = block.returnedRange;
-				const lineRange =
-					range.start.line === range.end.line
-						? `${range.start.line + 1}`
-						: `${range.start.line + 1}-${range.end.line + 1}`;
+				const lineRange = displayLineRange(range);
 				lines.push(
 					...(includePaths ? [formatPathForDisplay(block.path, ctx.cwd)] : []),
 					`${lineRange}(${represented.map((record) => record.id).join(",")}): ${represented.map((record) => record.name).join(", ")}`,
@@ -624,6 +619,14 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 			}
 		},
 	};
+}
+
+function displayLineRange(range: SourceRange): string {
+	const endLine =
+		range.endByte > range.startByte && range.end.column === 0
+			? Math.max(range.start.line, range.end.line - 1)
+			: range.end.line;
+	return range.start.line === endLine ? `${range.start.line + 1}` : `${range.start.line + 1}-${endLine + 1}`;
 }
 
 function symbolOptions(view: SymbolView, contextLines: number | undefined): string {
@@ -815,6 +818,10 @@ function languageForPath(path: string): AstLanguage {
 			return "kotlin";
 		case ".swift":
 			return "swift";
+		case ".md":
+		case ".markdown":
+		case ".mdown":
+			return "markdown";
 		default:
 			throw new Error(`Unsupported outline file type: ${extname(path) || "no extension"}`);
 	}

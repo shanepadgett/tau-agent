@@ -244,6 +244,51 @@ describe("AST exploration tools", () => {
 		expect(text).toContain("side effects\n1-3: register(parse);");
 	});
 
+	it("routes Markdown and renders heading section locators", async () => {
+		await workspace.write("README.md", "# Guide\n\n## Installation\n\nInstall it.\n");
+		const path = workspace.path("README.md");
+		const result = outlineResult(path);
+		const file = result.files[0];
+		const heading = file?.items[0];
+		if (!file || !heading) throw new Error("outline fixture omitted its heading");
+		file.language = "markdown";
+		heading.name = "Installation";
+		heading.qualifiedName = "Guide.Installation";
+		heading.symbolType = "heading";
+		heading.signature = "## Installation";
+		heading.astKind = "atx_heading";
+		heading.range = {
+			startByte: 9,
+			endByte: 39,
+			start: { line: 2, column: 0 },
+			end: { line: 5, column: 0 },
+		};
+		heading.nameRange = {
+			startByte: 12,
+			endByte: 24,
+			start: { line: 2, column: 3 },
+			end: { line: 2, column: 15 },
+		};
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outline: vi.fn(async (target) => {
+				expect(target).toEqual({ kind: "file", path, language: "markdown" });
+				return result;
+			}),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(client, testRowState);
+		const outlined = await ast.outline.execute(
+			"outline-markdown",
+			{ path: "README.md" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		expect(firstText(outlined)).toContain("declarations\n3-5(1): ## Installation");
+	});
+
 	it("renders nested TypeScript namespace declarations at qualified depth", async () => {
 		const path = workspace.path("src/parser.ts");
 		const result = outlineResult(path);
@@ -896,7 +941,7 @@ describe("AST exploration tools", () => {
 			extensionContext(workspace.dir),
 		);
 		const text = firstText(outlined);
-		expect(text).toContain("/**\n * Parse input.\n */\n1-5(1): export function parse(): void");
+		expect(text).toContain("/**\n * Parse input.\n */\n1-4(1): export function parse(): void");
 		expect(text).not.toContain("parse /**");
 		expect(text).toContain("6-9(2): export class Worker {\n  7(3): reset(): void\n}");
 		expect(text.match(/reset\(\): void/g)).toHaveLength(1);
@@ -999,7 +1044,7 @@ describe("AST exploration tools", () => {
 	});
 
 	it("rejects unsupported files and invalidates every locator path after mutation", async () => {
-		await workspace.write("README.md", "docs\n");
+		await workspace.write("README.txt", "docs\n");
 		const path = resolve(workspace.dir, "src/parser.ts");
 		const client: AstClient = {
 			getGeneration: () => 1,
@@ -1009,7 +1054,13 @@ describe("AST exploration tools", () => {
 		};
 		const ast = createAstTools(client, testRowState);
 		await expect(
-			ast.outline.execute("outline-1", { path: "README.md" }, undefined, undefined, extensionContext(workspace.dir)),
+			ast.outline.execute(
+				"outline-1",
+				{ path: "README.txt" },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			),
 		).rejects.toThrow("Unsupported outline file type");
 
 		await ast.outline.execute(

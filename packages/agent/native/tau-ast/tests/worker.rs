@@ -49,7 +49,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 1,
-            "protocolVersion": 4,
+            "protocolVersion": 5,
             "target": { "kind": "file", "path": typescript_path, "language": "typeScript" },
             "includePrivate": true,
             "includeDocs": false,
@@ -65,7 +65,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "handshake",
             "requestId": 2,
-            "protocolVersion": 4
+            "protocolVersion": 5
         }),
     );
     let handshake = read_response(&mut stdout);
@@ -75,15 +75,46 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         handshake["result"]["supportedLanguages"]
             .as_array()
             .map(Vec::len),
-        Some(9)
+        Some(10)
     );
+
+    let deep_markdown_path = std::env::temp_dir().join(format!(
+        "tau-ast-worker-deep-markdown-{}.md",
+        std::process::id()
+    ));
+    std::fs::write(
+        &deep_markdown_path,
+        format!("{}# Too deep\n", "> ".repeat(400)),
+    )
+    .expect("deep Markdown fixture should be writable");
+    send_request(
+        &mut worker,
+        json!({
+            "operation": "outline",
+            "requestId": 99,
+            "protocolVersion": 5,
+            "target": { "kind": "file", "path": deep_markdown_path, "language": "markdown" },
+            "includePrivate": false,
+            "includeDocs": false,
+            "names": []
+        }),
+    );
+    let deep_markdown = read_response(&mut stdout);
+    assert_eq!(deep_markdown["success"], false);
+    assert_eq!(deep_markdown["error"]["code"], "outline_failed");
+    assert!(
+        deep_markdown["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("nesting exceeds"))
+    );
+    std::fs::remove_file(deep_markdown_path).expect("deep Markdown fixture should be removable");
 
     send_request(
         &mut worker,
         json!({
             "operation": "outline",
             "requestId": 3,
-            "protocolVersion": 4,
+            "protocolVersion": 5,
             "target": { "kind": "file", "path": typescript_path, "language": "typeScript" },
             "includePrivate": true,
             "includeDocs": false,
@@ -118,7 +149,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 4,
-            "protocolVersion": 4,
+            "protocolVersion": 5,
             "locators": [locator],
             "view": "declaration",
             "contextLines": 0
@@ -143,7 +174,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 5,
-            "protocolVersion": 4,
+            "protocolVersion": 5,
             "target": { "kind": "file", "path": odin_path, "language": "odin" },
             "includePrivate": true,
             "includeDocs": false,
@@ -167,9 +198,9 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         .find(|item| item["name"] == "map_value")
         .expect("Odin model should contain map_value");
     assert!(mapped["bodyRange"].is_object());
-    assert!(mapped["signature"]
-        .as_str()
-        .is_some_and(|signature| signature.contains("$T: typeid") && !signature.contains("fmt.println")));
+    assert!(mapped["signature"].as_str().is_some_and(
+        |signature| signature.contains("$T: typeid") && !signature.contains("fmt.println")
+    ));
     let mapped_locator = mapped["locator"]
         .as_str()
         .expect("Odin procedure should have a locator");
@@ -178,7 +209,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 100,
-            "protocolVersion": 4,
+            "protocolVersion": 5,
             "locators": [mapped_locator],
             "view": "declarationWithImports",
             "contextLines": 0
@@ -199,6 +230,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         ("java.java", "java", "FileParser"),
         ("kotlin.kt", "kotlin", "FileParser"),
         ("swift.swift", "swift", "FileParser"),
+        ("markdown.md", "markdown", "Installation"),
     ];
     for (index, (fixture, language, expected_name)) in bundled_languages.into_iter().enumerate() {
         send_request(
@@ -206,7 +238,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
             json!({
                 "operation": "outline",
                 "requestId": index + 6,
-                "protocolVersion": 4,
+                "protocolVersion": 5,
                 "target": {
                     "kind": "file",
                     "path": manifest_dir.join("fixtures").join(fixture),
@@ -293,9 +325,11 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
                 .expect("C# class should contain Parse");
             assert_eq!(method["qualifiedName"], "Fixture.Parsing.FileParser.Parse");
             assert!(method["bodyRange"].is_object());
-            assert!(method["signature"]
-                .as_str()
-                .is_some_and(|signature| !signature.contains("return")));
+            assert!(
+                method["signature"]
+                    .as_str()
+                    .is_some_and(|signature| !signature.contains("return"))
+            );
         }
         if language == "java" {
             let items = response["result"]["files"][0]["items"]
@@ -370,6 +404,40 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
                         .is_some_and(|name| name.starts_with("extension Result"))
             }));
         }
+        if language == "markdown" {
+            let items = response["result"]["files"][0]["items"]
+                .as_array()
+                .expect("Markdown items should be an array");
+            let installation = items
+                .iter()
+                .find(|item| item["name"] == "Installation")
+                .expect("Markdown model should contain Installation");
+            assert_eq!(installation["symbolType"], "heading");
+            assert_eq!(installation["qualifiedName"], "Guide.Installation");
+            let locator = installation["locator"]
+                .as_str()
+                .expect("Markdown heading should have a locator");
+            send_request(
+                &mut worker,
+                json!({
+                    "operation": "symbol",
+                    "requestId": 200,
+                    "protocolVersion": 5,
+                    "locators": [locator],
+                    "view": "declarationWithImports",
+                    "contextLines": 0
+                }),
+            );
+            let section = read_response(&mut stdout);
+            assert_eq!(section["success"], true);
+            assert!(
+                section["result"]["blocks"][0]["source"]
+                    .as_str()
+                    .is_some_and(|source| source.starts_with("## Installation")
+                        && source.contains("### macOS")
+                        && !source.contains("API Reference"))
+            );
+        }
     }
 
     let java_path = manifest_dir.join("fixtures/java.java");
@@ -379,7 +447,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
             json!({
                 "operation": "outline",
                 "requestId": request_id,
-                "protocolVersion": 4,
+                "protocolVersion": 5,
                 "target": { "kind": "file", "path": java_path, "language": "java" },
                 "includePrivate": true,
                 "includeDocs": include_docs,
@@ -415,7 +483,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 12,
-            "protocolVersion": 4,
+            "protocolVersion": 5,
             "target": { "kind": "file", "path": local_export_path, "language": "typeScript" },
             "includePrivate": false,
             "includeDocs": false,
@@ -447,7 +515,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 13,
-            "protocolVersion": 4,
+            "protocolVersion": 5,
             "locators": [local_locator],
             "view": "declaration",
             "contextLines": 0
