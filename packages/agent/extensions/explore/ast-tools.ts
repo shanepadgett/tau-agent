@@ -1,17 +1,15 @@
-import {
-	DEFAULT_MAX_BYTES,
-	DEFAULT_MAX_LINES,
-	defineTool,
-	formatSize,
-	keyHint,
-	truncateHead,
-	type Theme,
-} from "@earendil-works/pi-coding-agent";
+import { defineTool, formatSize, keyHint, type Theme } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Text, truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
 import { stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { Type } from "typebox";
+import {
+	BoundedTextResultBuilder,
+	truncateBoundedHead,
+	type BoundedTextOverflowDetails,
+} from "../../shared/bounded-text-result.ts";
+import type { TemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.js";
 import {
 	AST_LANGUAGE_REGISTRY,
@@ -27,6 +25,7 @@ import type {
 	SourceRange,
 	OutlineTarget,
 	OutlineTargetResult,
+	RecursiveOutlineSummary,
 	SymbolBatchResult,
 	SymbolView,
 } from "./ast-worker.ts";
@@ -47,6 +46,9 @@ const outlineParams = Type.Object(
 				minItems: 1,
 				description: "Exact top-level or member declaration names",
 			}),
+		),
+		recursive: Type.Optional(
+			Type.Boolean({ description: "Recursively outline every supported source file below a directory" }),
 		),
 	},
 	{ additionalProperties: false },
@@ -69,12 +71,16 @@ const symbolParams = Type.Object(
 
 interface AstToolDetails {
 	kind: "outline" | "symbol";
-	result: OutlineTargetResult | SymbolBatchResult;
+	result:
+		| OutlineTargetResult
+		| SymbolBatchResult
+		| { path: string; summary: RecursiveOutlineSummary; visibleFiles: string[] };
 	declarationCount: number;
 	sourceBytes: number;
 	returnedBytes: number;
 	avoidedBytes: number;
 	truncated: boolean;
+	overflow: BoundedTextOverflowDetails | undefined;
 }
 
 interface LocatorRecord {
@@ -87,9 +93,15 @@ interface LocatorRecord {
 	generation: number;
 }
 
-type OutlineArgs = { path: string; includePrivate?: boolean; includeDocs?: boolean; names?: string[] };
+type OutlineArgs = {
+	path: string;
+	includePrivate?: boolean;
+	includeDocs?: boolean;
+	names?: string[];
+	recursive?: boolean;
+};
 
-export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
+export function createAstTools(client: AstClient, rowState: ToolRowStateStore, temporaryOutput: TemporaryOutputStore) {
 	const locators = new Map<number, LocatorRecord>();
 	let nextLocator = 1;
 
@@ -100,7 +112,7 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 		kind: AstToolDetails["kind"],
 		result: OutlineTargetResult | SymbolBatchResult,
 	): { text: string; details: AstToolDetails } {
-		const truncation = truncateHead(text, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
+		const truncation = truncateBoundedHead(text);
 		const returned = truncation.truncated
 			? `${truncation.content}\n\n[Output truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines (${formatSize(truncation.outputBytes)} of ${formatSize(truncation.totalBytes)})]`
 			: truncation.content;
@@ -115,6 +127,7 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 				returnedBytes,
 				avoidedBytes: Math.max(0, sourceBytes - returnedBytes),
 				truncated: truncation.truncated,
+				overflow: undefined,
 			},
 		};
 	}
@@ -471,9 +484,10 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 		name: "outline",
 		label: "outline",
 		description:
-			"Inspect public declarations in one supported source file or non-recursive package directory without returning implementation bodies. Parenthesized numbers are locators for symbol.",
+			"Inspect declarations in one supported source file, one non-recursive package directory, or a recursive mixed-language subtree without returning implementation bodies. Parenthesized numbers are locators for symbol.",
 		promptSnippet: "Inspect public declarations and get symbol locators without reading implementation bodies",
 		promptGuidelines: [
+			"Set recursive=true to orient an unfamiliar repository or subtree across supported languages.",
 			"Set includePrivate when internal implementation discovery is needed.",
 			"Leave includeDocs off for routine exploration; enable it when documentation comments are needed.",
 			"Treat each parenthesized number after a line range as that declaration's symbol locator.",
@@ -483,6 +497,87 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			const path = resolveExplorePath(ctx.cwd, params.path);
 			const metadata = await stat(path);
+			if (params.recursive) {
+				if (!metadata.isDirectory()) throw new Error("recursive outline requires a directory target");
+				const names = params.names ?? [];
+				const builder = new BoundedTextResultBuilder(temporaryOutput, "completeBlocks");
+				const locatorIdsByFile = new Map<string, number[]>();
+				const allLocatorIds = new Set<number>();
+				let declarationCount = 0;
+				try {
+					const summary = await client.outlineRecursive(
+						path,
+						params.includePrivate ?? false,
+						params.includeDocs ?? false,
+						names,
+						{
+							async onFile(_relativePath, file) {
+								const firstLocator = nextLocator;
+								const block = renderOutlineFile(file, ctx.cwd, true).join("\n");
+								const fileLocatorIds = Array.from(
+									{ length: nextLocator - firstLocator },
+									(_, index) => firstLocator + index,
+								);
+								locatorIdsByFile.set(file.path, fileLocatorIds);
+								for (const id of fileLocatorIds) allLocatorIds.add(id);
+								declarationCount += file.items.reduce(
+									(count, item) => count + (item.rowKind === "declaration" ? 1 + item.members.length : 0),
+									0,
+								);
+								await builder.appendBlock(file.path, formatPathForDisplay(file.path, ctx.cwd), block);
+							},
+							async onDiagnostic(diagnostic) {
+								const language = diagnostic.language ? ` (${diagnostic.language})` : "";
+								await builder.appendBlock(
+									undefined,
+									diagnostic.relativePath,
+									`diagnostic: ${diagnostic.relativePath}${language} [${diagnostic.code}]: ${diagnostic.message}`,
+								);
+							},
+						},
+						signal,
+					);
+					const limits = [
+						...(summary.fileLimitReached ? ["file count"] : []),
+						...(summary.sourceByteLimitReached ? ["source bytes"] : []),
+						...(summary.depthLimitReached ? ["depth"] : []),
+						...(summary.elapsedLimitReached ? ["elapsed time"] : []),
+					];
+					await builder.appendRequiredBlock(
+						"recursive outline summary",
+						[
+							`summary: ${summary.emittedFiles} outlined, ${summary.supportedFiles} supported, ${summary.unsupportedFiles} unsupported, ${summary.failedFiles} failed, ${summary.unreadableFiles} unreadable, ${summary.oversizedFiles} oversized`,
+							`source: ${summary.totalLineCount} lines, ${formatSize(summary.totalByteLength)}; parser degraded: ${summary.parserDegradedFiles}; limits reached: ${limits.join(", ") || "none"}`,
+						].join("\n"),
+					);
+					const bounded = await builder.finish();
+					if (!bounded.overflow.fullOutputComplete) {
+						const visible = new Set(bounded.visibleUnitIds);
+						for (const [file, ids] of locatorIdsByFile) {
+							if (visible.has(file)) continue;
+							for (const id of ids) locators.delete(id);
+						}
+					}
+					const returnedBytes = Buffer.byteLength(bounded.content);
+					return {
+						content: [{ type: "text", text: bounded.content }],
+						details: {
+							kind: "outline",
+							result: { path, summary, visibleFiles: bounded.visibleUnitIds },
+							declarationCount,
+							sourceBytes: summary.totalByteLength,
+							returnedBytes,
+							avoidedBytes: Math.max(0, summary.totalByteLength - returnedBytes),
+							truncated: bounded.overflow.truncated,
+							overflow: bounded.overflow,
+						},
+					};
+				} catch (error) {
+					await builder.abort();
+					for (const id of allLocatorIds) locators.delete(id);
+					throw error;
+				}
+			}
 			const target: OutlineTarget = metadata.isDirectory()
 				? { kind: "directory", path }
 				: { kind: "file", path, language: requireAstLanguageForPath(path) };
@@ -745,7 +840,11 @@ function truncateLeft(text: string, width: number): string {
 }
 
 function outlineOptionVariants(args: OutlineArgs): string[] {
-	const fixed = [...(args.includePrivate ? ["private"] : []), ...(args.includeDocs ? ["docs"] : [])];
+	const fixed = [
+		...(args.recursive ? ["recursive"] : []),
+		...(args.includePrivate ? ["private"] : []),
+		...(args.includeDocs ? ["docs"] : []),
+	];
 	const names = args.names ?? [];
 	if (names.length === 0) return [fixed.length > 0 ? `[${fixed.join(" ")}]` : ""];
 

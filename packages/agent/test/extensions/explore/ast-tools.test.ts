@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { initTheme } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAstTools } from "../../../extensions/explore/ast-tools.ts";
+import { TemporaryOutputStore } from "../../../shared/temporary-output-store.ts";
 import type { AstClient, OutlineTargetResult, SymbolBatchResult } from "../../../extensions/explore/ast-worker.ts";
 import {
 	createWorkspace,
@@ -85,6 +86,7 @@ describe("AST exploration tools", () => {
 		};
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async (target, includePrivate, includeDocs, names) => {
 				expect(target).toEqual({ kind: "file", path, language: "typeScript" });
 				expect(includePrivate).toBe(false);
@@ -100,7 +102,11 @@ describe("AST exploration tools", () => {
 			}),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 
 		const outlined = await ast.outline.execute(
 			"outline-1",
@@ -137,11 +143,16 @@ describe("AST exploration tools", () => {
 		const path = workspace.path("src/package");
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async () => ({ path, files: [], totalByteLength: 0, totalLineCount: 0 })),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		const result = await ast.outline.execute(
 			"outline-1",
 			{ path: "src/package", includePrivate: true, names: ["Foo", "bar"] },
@@ -154,14 +165,77 @@ describe("AST exploration tools", () => {
 		expect(firstText(result)).toContain("No matching declarations");
 	});
 
+	it("renders a recursive mixed-language stream through complete bounded blocks", async () => {
+		await workspace.mkdir("src/nested");
+		const typescriptPath = workspace.path("src/parser.ts");
+		const goPath = workspace.path("src/nested/parser.go");
+		const typescript = outlineResult(typescriptPath).files[0];
+		const go = outlineResult(goPath).files[0];
+		if (!typescript || !go) throw new Error("recursive fixtures missing");
+		go.language = "go";
+		const summary = {
+			discoveredFiles: 3,
+			supportedFiles: 2,
+			unsupportedFiles: 1,
+			emittedFiles: 2,
+			unreadableFiles: 0,
+			oversizedFiles: 0,
+			failedFiles: 0,
+			parserDegradedFiles: 0,
+			totalByteLength: 400,
+			totalLineCount: 20,
+			fileLimitReached: false,
+			sourceByteLimitReached: false,
+			depthLimitReached: false,
+			elapsedLimitReached: false,
+		};
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outline: vi.fn(),
+			outlineRecursive: vi.fn(async (_path, _private, _docs, _names, callbacks) => {
+				await callbacks.onFile("src/nested/parser.go", go);
+				await callbacks.onFile("src/parser.ts", typescript);
+				return summary;
+			}),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const outputStore = new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1);
+		const ast = createAstTools(client, testRowState, outputStore);
+		const result = await ast.outline.execute(
+			"recursive",
+			{ path: "src", recursive: true },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		const text = firstText(result);
+		expect(text.indexOf("src/nested/parser.go")).toBeLessThan(text.indexOf("src/parser.ts"));
+		expect(text).toContain("summary: 2 outlined, 2 supported, 1 unsupported, 0 failed");
+		expect(client.outlineRecursive).toHaveBeenCalledWith(
+			workspace.path("src"),
+			false,
+			false,
+			[],
+			expect.any(Object),
+			undefined,
+		);
+		await outputStore.shutdown();
+	});
+
 	it("does not expose a disconnected body-only symbol view", () => {
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		const schema = ast.symbol.parameters as unknown as {
 			properties?: { view?: { enum?: string[] } };
 		};
@@ -172,11 +246,16 @@ describe("AST exploration tools", () => {
 		const path = workspace.path("src/parser.ts");
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async () => outlineResult(path)),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		const schema = ast.outline.parameters as unknown as {
 			properties?: { includeDocs?: { type?: string; description?: string } };
 		};
@@ -226,11 +305,16 @@ describe("AST exploration tools", () => {
 		});
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async () => result),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		const outlined = await ast.outline.execute(
 			"outline-structure",
 			{ path: "src/parser.ts" },
@@ -271,6 +355,7 @@ describe("AST exploration tools", () => {
 		};
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async (target) => {
 				expect(target).toEqual({ kind: "file", path, language: "markdown" });
 				return result;
@@ -278,7 +363,11 @@ describe("AST exploration tools", () => {
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		const outlined = await ast.outline.execute(
 			"outline-markdown",
 			{ path: "README.md" },
@@ -324,11 +413,16 @@ describe("AST exploration tools", () => {
 		];
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async () => result),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		const outlined = await ast.outline.execute(
 			"outline-namespace",
 			{ path: "src/parser.ts" },
@@ -397,11 +491,16 @@ describe("AST exploration tools", () => {
 		);
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async () => result),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		const outlined = await ast.outline.execute(
 			"outline-go",
 			{ path: "src/parser.go" },
@@ -471,11 +570,16 @@ describe("AST exploration tools", () => {
 		);
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async () => result),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		const outlined = await ast.outline.execute(
 			"outline-odin",
 			{ path: "src/parser.odin" },
@@ -543,11 +647,16 @@ describe("AST exploration tools", () => {
 		});
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async () => result),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		const outlined = await ast.outline.execute(
 			"outline-rust",
 			{ path: "src/parser.rs", includePrivate: true },
@@ -623,11 +732,16 @@ describe("AST exploration tools", () => {
 		);
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async () => result),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		const outlined = await ast.outline.execute(
 			"outline-java",
 			{ path: "src/Parser.java" },
@@ -696,11 +810,16 @@ describe("AST exploration tools", () => {
 		});
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async () => result),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		const outlined = await ast.outline.execute(
 			"outline-csharp",
 			{ path: "src/Parser.cs" },
@@ -743,11 +862,16 @@ describe("AST exploration tools", () => {
 		];
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async () => result),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		const outlined = await ast.outline.execute(
 			"outline-kotlin",
 			{ path: "src/Parser.kt" },
@@ -788,11 +912,16 @@ describe("AST exploration tools", () => {
 		];
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async () => result),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		const outlined = await ast.outline.execute(
 			"outline-swift",
 			{ path: "src/Parser.swift" },
@@ -928,11 +1057,16 @@ describe("AST exploration tools", () => {
 		});
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async () => result),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		const outlined = await ast.outline.execute(
 			"outline-contracts",
 			{ path: "src/parser.ts" },
@@ -970,11 +1104,16 @@ describe("AST exploration tools", () => {
 		};
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async () => result),
 			symbol: vi.fn(async () => symbolResult),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		const outlined = await ast.outline.execute(
 			"outline-aliases",
 			{ path: "src/parser.ts" },
@@ -1000,11 +1139,16 @@ describe("AST exploration tools", () => {
 		const path = workspace.path("src/parser.ts");
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async () => outlineResult(path)),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		const args = {
 			path: "src/a/very/long/package/parser.ts",
 			includePrivate: true,
@@ -1048,11 +1192,16 @@ describe("AST exploration tools", () => {
 		const path = resolve(workspace.dir, "src/parser.ts");
 		const client: AstClient = {
 			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
 			outline: vi.fn(async () => outlineResult(path)),
 			symbol: vi.fn(),
 			shutdown: vi.fn(async () => {}),
 		};
-		const ast = createAstTools(client, testRowState);
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+		);
 		await expect(
 			ast.outline.execute(
 				"outline-1",

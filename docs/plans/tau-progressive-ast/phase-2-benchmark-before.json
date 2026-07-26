@@ -1,0 +1,45 @@
+{
+  "iterations": 20,
+  "results": [
+    {
+      "path": "/Users/shanepadgett/dev/open-source/tau-agent/packages/agent/extensions/explore/ast-tools.ts",
+      "language": "typeScript",
+      "bytes": 28523,
+      "items": 24,
+      "diagnostics": {
+        "errorNodes": 0,
+        "missingNodes": 0
+      },
+      "cold": {
+        "minimumMs": 5.555,
+        "medianMs": 5.654,
+        "p95Ms": 6.357
+      },
+      "warm": {
+        "minimumMs": 3.277,
+        "medianMs": 3.385,
+        "p95Ms": 3.557
+      }
+    },
+    {
+      "path": "/Users/shanepadgett/dev/open-source/tau-agent/packages/agent/native/tau-ast/fixtures/odin.odin",
+      "language": "odin",
+      "bytes": 1152,
+      "items": 25,
+      "diagnostics": {
+        "errorNodes": 0,
+        "missingNodes": 0
+      },
+      "cold": {
+        "minimumMs": 2.197,
+        "medianMs": 2.254,
+        "p95Ms": 2.479
+      },
+      "warm": {
+        "minimumMs": 0.365,
+        "medianMs": 0.385,
+        "p95Ms": 0.501
+      }
+    }
+  ]
+}

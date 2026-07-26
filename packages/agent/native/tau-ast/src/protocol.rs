@@ -1,10 +1,11 @@
 use crate::outline::{
-    LanguageId, OutlineTarget, OutlineTargetResult, SymbolBatchResult, SymbolView,
+    LanguageId, OutlineFileResult, OutlineTarget, OutlineTargetResult, RecursiveBudgets,
+    RecursiveDiagnostic, RecursiveOutlineSummary, SymbolBatchResult, SymbolView,
 };
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
 
-pub const PROTOCOL_VERSION: u32 = 5;
+pub const PROTOCOL_VERSION: u32 = 6;
 const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
@@ -106,6 +107,23 @@ pub enum ResponseResult {
         #[serde(flatten)]
         symbol: SymbolBatchResult,
     },
+    RecursiveStart {
+        path: String,
+        budgets: RecursiveBudgets,
+    },
+    RecursiveFile {
+        #[serde(rename = "relativePath")]
+        relative_path: String,
+        file: OutlineFileResult,
+    },
+    RecursiveDiagnostic {
+        #[serde(flatten)]
+        diagnostic: RecursiveDiagnostic,
+    },
+    RecursiveComplete {
+        #[serde(flatten)]
+        summary: RecursiveOutlineSummary,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -164,6 +182,10 @@ pub fn write_frame(writer: &mut impl Write, response: &Response) -> Result<(), s
         .and_then(|()| writer.write_all(&payload))
         .and_then(|()| writer.flush())
         .map_err(serde_json::Error::io)
+}
+
+pub fn response_fits_frame(response: &Response) -> Result<bool, serde_json::Error> {
+    Ok(serde_json::to_vec(response)?.len() <= MAX_FRAME_BYTES)
 }
 
 #[cfg(test)]

@@ -13,10 +13,12 @@ mod swift;
 mod typescript;
 
 use crate::{
-    outline::{LanguageId, OutlineEngine},
+    outline::{
+        LanguageId, OutlineEngine, OutlineTarget, RecursiveDiagnostic, RecursiveOutlineEvent,
+    },
     protocol::{
         ErrorResponse, PROTOCOL_VERSION, ProtocolError, Request, Response, ResponseResult,
-        SuccessResponse, read_frame, write_frame,
+        SuccessResponse, read_frame, response_fits_frame, write_frame,
     },
 };
 use std::{error::Error, io};
@@ -106,20 +108,109 @@ fn run() -> Result<(), Box<dyn Error>> {
                             }
                         }
                     }
-                    match engine
-                        .as_ref()
-                        .expect("engine is initialized above")
-                        .outline(target, include_private, include_docs, &names)
-                    {
-                        Ok(outline) => Response::Success(SuccessResponse {
-                            request_id,
-                            protocol_version: PROTOCOL_VERSION,
-                            success: true,
-                            result: ResponseResult::Outline { outline },
-                        }),
-                        Err(error) => {
-                            error_response(request_id, "outline_failed", error.to_string())
+                    match target {
+                        OutlineTarget::RecursiveDirectory { path, budgets } => {
+                            write_frame(
+                                &mut writer,
+                                &success_response(
+                                    request_id,
+                                    ResponseResult::RecursiveStart {
+                                        path: path.clone(),
+                                        budgets,
+                                    },
+                                ),
+                            )?;
+                            let mut oversized_frames = 0;
+                            let traversal = engine
+                                .as_ref()
+                                .expect("engine is initialized above")
+                                .outline_recursive(
+                                    &path,
+                                    budgets,
+                                    include_private,
+                                    include_docs,
+                                    &names,
+                                    &mut |event| {
+                                        let response = match event {
+                                            RecursiveOutlineEvent::File {
+                                                relative_path,
+                                                file,
+                                            } => {
+                                                let language = file.language;
+                                                let response = success_response(
+                                                    request_id,
+                                                    ResponseResult::RecursiveFile {
+                                                        relative_path: relative_path.clone(),
+                                                        file,
+                                                    },
+                                                );
+                                                if response_fits_frame(&response)? {
+                                                    response
+                                                } else {
+                                                    oversized_frames += 1;
+                                                    success_response(
+                                                        request_id,
+                                                        ResponseResult::RecursiveDiagnostic {
+                                                            diagnostic: RecursiveDiagnostic {
+                                                                relative_path,
+                                                                language: Some(language),
+                                                                code: "resultFrameTooLarge",
+                                                                message: "rendered AST result exceeds the 8 MiB worker frame limit; outline this file directly"
+                                                                    .to_owned(),
+                                                            },
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                            RecursiveOutlineEvent::Diagnostic(diagnostic) => {
+                                                success_response(
+                                                    request_id,
+                                                    ResponseResult::RecursiveDiagnostic {
+                                                        diagnostic,
+                                                    },
+                                                )
+                                            }
+                                        };
+                                        write_frame(&mut writer, &response)?;
+                                        Ok(())
+                                    },
+                                );
+                            match traversal {
+                                Ok(mut summary) => {
+                                    summary.emitted_files =
+                                        summary.emitted_files.saturating_sub(oversized_frames);
+                                    summary.failed_files += oversized_frames;
+                                    write_frame(
+                                        &mut writer,
+                                        &success_response(
+                                            request_id,
+                                            ResponseResult::RecursiveComplete { summary },
+                                        ),
+                                    )?;
+                                }
+                                Err(error) => write_frame(
+                                    &mut writer,
+                                    &error_response(
+                                        request_id,
+                                        "recursive_outline_failed",
+                                        error.to_string(),
+                                    ),
+                                )?,
+                            }
+                            continue;
                         }
+                        target => match engine
+                            .as_ref()
+                            .expect("engine is initialized above")
+                            .outline(target, include_private, include_docs, &names)
+                        {
+                            Ok(outline) => {
+                                success_response(request_id, ResponseResult::Outline { outline })
+                            }
+                            Err(error) => {
+                                error_response(request_id, "outline_failed", error.to_string())
+                            }
+                        },
                     }
                 }
                 Request::Symbol {
@@ -171,5 +262,14 @@ fn error_response(request_id: u64, code: &'static str, message: String) -> Respo
         protocol_version: PROTOCOL_VERSION,
         success: false,
         error: ProtocolError { code, message },
+    })
+}
+
+fn success_response(request_id: u64, result: ResponseResult) -> Response {
+    Response::Success(SuccessResponse {
+        request_id,
+        protocol_version: PROTOCOL_VERSION,
+        success: true,
+        result,
     })
 }

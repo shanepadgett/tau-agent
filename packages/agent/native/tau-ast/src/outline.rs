@@ -27,16 +27,23 @@ use crate::typescript::{
 use ast_grep_core::{Node, tree_sitter::LanguageExt};
 use ast_grep_language::SupportLang;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use ignore::WalkBuilder;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     error::Error,
     fmt, fs,
-    path::Path,
+    io::Read,
+    path::{Path, PathBuf},
     str,
+    time::{Duration, Instant},
 };
 
 const LOCATOR_VERSION: u32 = 2;
+const MAX_RECURSIVE_FILES: usize = 10_000;
+const MAX_RECURSIVE_SOURCE_BYTES: usize = 256 * 1024 * 1024;
+const MAX_RECURSIVE_DEPTH: usize = 128;
+const MAX_RECURSIVE_ELAPSED_MS: u64 = 60_000;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -56,8 +63,64 @@ pub enum LanguageId {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum OutlineTarget {
-    File { path: String, language: LanguageId },
-    Directory { path: String },
+    File {
+        path: String,
+        language: LanguageId,
+    },
+    Directory {
+        path: String,
+    },
+    RecursiveDirectory {
+        path: String,
+        budgets: RecursiveBudgets,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecursiveBudgets {
+    pub max_files: usize,
+    pub max_source_bytes: usize,
+    pub max_depth: usize,
+    pub max_elapsed_ms: u64,
+}
+
+#[derive(Debug)]
+pub enum RecursiveOutlineEvent {
+    File {
+        relative_path: String,
+        file: OutlineFileResult,
+    },
+    Diagnostic(RecursiveDiagnostic),
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecursiveDiagnostic {
+    pub relative_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<LanguageId>,
+    pub code: &'static str,
+    pub message: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecursiveOutlineSummary {
+    pub discovered_files: usize,
+    pub supported_files: usize,
+    pub unsupported_files: usize,
+    pub emitted_files: usize,
+    pub unreadable_files: usize,
+    pub oversized_files: usize,
+    pub failed_files: usize,
+    pub parser_degraded_files: usize,
+    pub total_byte_length: usize,
+    pub total_line_count: usize,
+    pub file_limit_reached: bool,
+    pub source_byte_limit_reached: bool,
+    pub depth_limit_reached: bool,
+    pub elapsed_limit_reached: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -379,6 +442,9 @@ impl OutlineEngine {
                     .collect::<Result<Vec<_>, _>>()?;
                 (path, files)
             }
+            OutlineTarget::RecursiveDirectory { .. } => {
+                return Err("recursive directory targets require streamed outline handling".into());
+            }
         };
         let total_byte_length = files.iter().map(|file| file.byte_length).sum();
         let total_line_count = files.iter().map(|file| file.line_count).sum();
@@ -407,6 +473,25 @@ impl OutlineEngine {
         names: &[String],
     ) -> Result<OutlineFileResult, Box<dyn Error>> {
         let source_bytes = fs::read(path)?;
+        self.outline_source(
+            path,
+            language,
+            source_bytes,
+            include_private,
+            include_docs,
+            names,
+        )
+    }
+
+    fn outline_source(
+        &self,
+        path: &Path,
+        language: LanguageId,
+        source_bytes: Vec<u8>,
+        include_private: bool,
+        include_docs: bool,
+        names: &[String],
+    ) -> Result<OutlineFileResult, Box<dyn Error>> {
         let source = str::from_utf8(&source_bytes)?;
         let path = path.to_string_lossy().into_owned();
         let source_fingerprint = source_fingerprint(&source_bytes);
@@ -532,6 +617,213 @@ impl OutlineEngine {
             diagnostics,
             items,
         })
+    }
+
+    pub fn outline_recursive(
+        &self,
+        path: &str,
+        budgets: RecursiveBudgets,
+        include_private: bool,
+        include_docs: bool,
+        names: &[String],
+        emit: &mut impl FnMut(RecursiveOutlineEvent) -> Result<(), Box<dyn Error>>,
+    ) -> Result<RecursiveOutlineSummary, Box<dyn Error>> {
+        validate_recursive_budgets(budgets)?;
+        let root = fs::canonicalize(path)?;
+        if !root.is_dir() {
+            return Err(format!(
+                "recursive outline target is not a directory: {}",
+                root.display()
+            )
+            .into());
+        }
+
+        struct Candidate {
+            path: PathBuf,
+            relative_path: String,
+            language: LanguageId,
+        }
+
+        let started = Instant::now();
+        let elapsed_limit = Duration::from_millis(budgets.max_elapsed_ms);
+        let mut summary = RecursiveOutlineSummary {
+            discovered_files: 0,
+            supported_files: 0,
+            unsupported_files: 0,
+            emitted_files: 0,
+            unreadable_files: 0,
+            oversized_files: 0,
+            failed_files: 0,
+            parser_degraded_files: 0,
+            total_byte_length: 0,
+            total_line_count: 0,
+            file_limit_reached: false,
+            source_byte_limit_reached: false,
+            depth_limit_reached: false,
+            elapsed_limit_reached: false,
+        };
+        let mut candidates = Vec::new();
+        let mut walker = WalkBuilder::new(&root);
+        walker
+            .standard_filters(true)
+            .require_git(false)
+            .follow_links(false)
+            .sort_by_file_path(|left, right| left.cmp(right))
+            .max_depth(Some(budgets.max_depth));
+
+        for result in walker.build() {
+            if started.elapsed() >= elapsed_limit {
+                summary.elapsed_limit_reached = true;
+                break;
+            }
+            let entry = match result {
+                Ok(entry) => entry,
+                Err(error) => {
+                    summary.unreadable_files += 1;
+                    emit(RecursiveOutlineEvent::Diagnostic(RecursiveDiagnostic {
+                        relative_path: "?".to_owned(),
+                        language: None,
+                        code: "unreadable",
+                        message: error.to_string(),
+                    }))?;
+                    continue;
+                }
+            };
+            if entry.depth() == budgets.max_depth
+                && entry.file_type().is_some_and(|kind| kind.is_dir())
+            {
+                summary.depth_limit_reached = true;
+            }
+            if !entry.file_type().is_some_and(|kind| kind.is_file()) {
+                continue;
+            }
+            summary.discovered_files += 1;
+            let Some(language) = language_for_path(entry.path()) else {
+                summary.unsupported_files += 1;
+                continue;
+            };
+            if candidates.len() >= budgets.max_files {
+                summary.file_limit_reached = true;
+                break;
+            }
+            let canonical_path = match fs::canonicalize(entry.path()) {
+                Ok(path) => path,
+                Err(error) => {
+                    summary.unreadable_files += 1;
+                    emit(RecursiveOutlineEvent::Diagnostic(RecursiveDiagnostic {
+                        relative_path: relative_path(
+                            entry.path().strip_prefix(&root).unwrap_or(entry.path()),
+                        ),
+                        language: Some(language),
+                        code: "unreadable",
+                        message: error.to_string(),
+                    }))?;
+                    continue;
+                }
+            };
+            let relative = relative_path(canonical_path.strip_prefix(&root).map_err(|_| {
+                format!(
+                    "recursive outline path escaped its root: {}",
+                    canonical_path.display()
+                )
+            })?);
+            summary.supported_files += 1;
+            candidates.push(Candidate {
+                path: canonical_path,
+                relative_path: relative,
+                language,
+            });
+        }
+
+        candidates.sort_by(|left, right| {
+            left.relative_path
+                .cmp(&right.relative_path)
+                .then(left.path.cmp(&right.path))
+        });
+        for candidate in candidates {
+            if started.elapsed() >= elapsed_limit {
+                summary.elapsed_limit_reached = true;
+                break;
+            }
+            let remaining = budgets
+                .max_source_bytes
+                .saturating_sub(summary.total_byte_length);
+            let mut source = Vec::new();
+            let read_result = fs::File::open(&candidate.path).and_then(|file| {
+                file.take(u64::try_from(remaining).unwrap_or(u64::MAX) + 1)
+                    .read_to_end(&mut source)
+            });
+            if let Err(error) = read_result {
+                summary.unreadable_files += 1;
+                emit(RecursiveOutlineEvent::Diagnostic(RecursiveDiagnostic {
+                    relative_path: candidate.relative_path,
+                    language: Some(candidate.language),
+                    code: "unreadable",
+                    message: error.to_string(),
+                }))?;
+                continue;
+            }
+            if source.len() > remaining {
+                summary.oversized_files += 1;
+                summary.source_byte_limit_reached = true;
+                emit(RecursiveOutlineEvent::Diagnostic(RecursiveDiagnostic {
+                    relative_path: candidate.relative_path,
+                    language: Some(candidate.language),
+                    code: "sourceBudget",
+                    message: format!(
+                        "file exceeds the remaining {remaining}-byte recursive source budget"
+                    ),
+                }))?;
+                continue;
+            }
+            summary.total_byte_length += source.len();
+            let outlined = self.outline_source(
+                &candidate.path,
+                candidate.language,
+                source,
+                include_private,
+                include_docs,
+                names,
+            );
+            let file = match outlined {
+                Ok(file) => file,
+                Err(error) => {
+                    summary.failed_files += 1;
+                    emit(RecursiveOutlineEvent::Diagnostic(RecursiveDiagnostic {
+                        relative_path: candidate.relative_path,
+                        language: Some(candidate.language),
+                        code: "outlineFailed",
+                        message: error.to_string(),
+                    }))?;
+                    continue;
+                }
+            };
+            if started.elapsed() >= elapsed_limit {
+                summary.elapsed_limit_reached = true;
+                break;
+            }
+            summary.total_line_count += file.line_count;
+            if file.diagnostics.error_nodes > 0 || file.diagnostics.missing_nodes > 0 {
+                summary.parser_degraded_files += 1;
+            }
+            if !names.is_empty()
+                && !file
+                    .items
+                    .iter()
+                    .any(|item| item.row_kind == OutlineRowKind::Declaration)
+            {
+                continue;
+            }
+            summary.emitted_files += 1;
+            emit(RecursiveOutlineEvent::File {
+                relative_path: candidate.relative_path,
+                file,
+            })?;
+        }
+        if summary.total_byte_length >= budgets.max_source_bytes {
+            summary.source_byte_limit_reached = true;
+        }
+        Ok(summary)
     }
 
     pub fn symbol(
@@ -739,6 +1031,39 @@ impl OutlineEngine {
             blocks,
         })
     }
+}
+
+fn validate_recursive_budgets(budgets: RecursiveBudgets) -> Result<(), Box<dyn Error>> {
+    if budgets.max_files == 0 || budgets.max_files > MAX_RECURSIVE_FILES {
+        return Err(
+            format!("recursive maxFiles must be between 1 and {MAX_RECURSIVE_FILES}").into(),
+        );
+    }
+    if budgets.max_source_bytes == 0 || budgets.max_source_bytes > MAX_RECURSIVE_SOURCE_BYTES {
+        return Err(format!(
+            "recursive maxSourceBytes must be between 1 and {MAX_RECURSIVE_SOURCE_BYTES}"
+        )
+        .into());
+    }
+    if budgets.max_depth == 0 || budgets.max_depth > MAX_RECURSIVE_DEPTH {
+        return Err(
+            format!("recursive maxDepth must be between 1 and {MAX_RECURSIVE_DEPTH}").into(),
+        );
+    }
+    if budgets.max_elapsed_ms == 0 || budgets.max_elapsed_ms > MAX_RECURSIVE_ELAPSED_MS {
+        return Err(format!(
+            "recursive maxElapsedMs must be between 1 and {MAX_RECURSIVE_ELAPSED_MS}"
+        )
+        .into());
+    }
+    Ok(())
+}
+
+fn relative_path(path: &Path) -> String {
+    path.components()
+        .map(|component| component.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 fn filter_items(items: &mut Vec<OutlineItem>, include_private: bool, names: &[String]) {
@@ -4041,6 +4366,48 @@ export { buildThing as createThing, buildThing as makeThing };
         assert_eq!(filtered.total_byte_length, result.total_byte_length);
 
         fs::remove_dir_all(temporary).expect("temporary directory should be removable");
+    }
+
+    #[test]
+    fn recursively_outlines_mixed_languages_in_stable_ignore_aware_order() {
+        let engine = OutlineEngine::new().expect("outline engine should initialize");
+        let temporary =
+            std::env::temp_dir().join(format!("tau-ast-recursive-fixture-{}", std::process::id()));
+        let nested = temporary.join("nested");
+        fs::create_dir_all(&nested).expect("recursive fixture should be writable");
+        fs::write(temporary.join("z.ts"), "export const z = 1;\n").expect("TypeScript fixture");
+        fs::write(nested.join("a.go"), "package nested\n\nfunc A() {}\n").expect("Go fixture");
+        fs::write(nested.join("ignored.rs"), "pub fn ignored() {}\n").expect("ignored fixture");
+        fs::write(temporary.join("README.txt"), "unsupported\n").expect("unsupported fixture");
+        fs::write(temporary.join(".gitignore"), "nested/ignored.rs\n").expect("ignore rules");
+
+        let mut paths = Vec::new();
+        let summary = engine
+            .outline_recursive(
+                &temporary.to_string_lossy(),
+                RecursiveBudgets {
+                    max_files: 20,
+                    max_source_bytes: 1024 * 1024,
+                    max_depth: 8,
+                    max_elapsed_ms: 5_000,
+                },
+                true,
+                false,
+                &[],
+                &mut |event| {
+                    if let RecursiveOutlineEvent::File { relative_path, .. } = event {
+                        paths.push(relative_path);
+                    }
+                    Ok(())
+                },
+            )
+            .expect("recursive outline should complete");
+
+        assert_eq!(paths, ["nested/a.go", "z.ts"]);
+        assert_eq!(summary.emitted_files, 2);
+        assert_eq!(summary.unsupported_files, 1);
+        assert_eq!(summary.failed_files, 0);
+        fs::remove_dir_all(temporary).expect("recursive fixture should be removable");
     }
 
     #[test]

@@ -49,7 +49,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 1,
-            "protocolVersion": 5,
+            "protocolVersion": 6,
             "target": { "kind": "file", "path": typescript_path, "language": "typeScript" },
             "includePrivate": true,
             "includeDocs": false,
@@ -65,7 +65,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "handshake",
             "requestId": 2,
-            "protocolVersion": 5
+            "protocolVersion": 6
         }),
     );
     let handshake = read_response(&mut stdout);
@@ -92,7 +92,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 99,
-            "protocolVersion": 5,
+            "protocolVersion": 6,
             "target": { "kind": "file", "path": deep_markdown_path, "language": "markdown" },
             "includePrivate": false,
             "includeDocs": false,
@@ -114,7 +114,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 3,
-            "protocolVersion": 5,
+            "protocolVersion": 6,
             "target": { "kind": "file", "path": typescript_path, "language": "typeScript" },
             "includePrivate": true,
             "includeDocs": false,
@@ -149,7 +149,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 4,
-            "protocolVersion": 5,
+            "protocolVersion": 6,
             "locators": [locator],
             "view": "declaration",
             "contextLines": 0
@@ -174,7 +174,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 5,
-            "protocolVersion": 5,
+            "protocolVersion": 6,
             "target": { "kind": "file", "path": odin_path, "language": "odin" },
             "includePrivate": true,
             "includeDocs": false,
@@ -209,7 +209,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 100,
-            "protocolVersion": 5,
+            "protocolVersion": 6,
             "locators": [mapped_locator],
             "view": "declarationWithImports",
             "contextLines": 0
@@ -238,7 +238,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
             json!({
                 "operation": "outline",
                 "requestId": index + 6,
-                "protocolVersion": 5,
+                "protocolVersion": 6,
                 "target": {
                     "kind": "file",
                     "path": manifest_dir.join("fixtures").join(fixture),
@@ -422,7 +422,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
                 json!({
                     "operation": "symbol",
                     "requestId": 200,
-                    "protocolVersion": 5,
+                    "protocolVersion": 6,
                     "locators": [locator],
                     "view": "declarationWithImports",
                     "contextLines": 0
@@ -447,7 +447,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
             json!({
                 "operation": "outline",
                 "requestId": request_id,
-                "protocolVersion": 5,
+                "protocolVersion": 6,
                 "target": { "kind": "file", "path": java_path, "language": "java" },
                 "includePrivate": true,
                 "includeDocs": include_docs,
@@ -483,7 +483,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 12,
-            "protocolVersion": 5,
+            "protocolVersion": 6,
             "target": { "kind": "file", "path": local_export_path, "language": "typeScript" },
             "includePrivate": false,
             "includeDocs": false,
@@ -515,7 +515,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 13,
-            "protocolVersion": 5,
+            "protocolVersion": 6,
             "locators": [local_locator],
             "view": "declaration",
             "contextLines": 0
@@ -528,6 +528,73 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         &local_source[local_start..local_end]
     );
     std::fs::remove_file(local_export_path).expect("local export fixture should be removable");
+
+    let recursive_path =
+        std::env::temp_dir().join(format!("tau-ast-worker-recursive-{}", std::process::id()));
+    std::fs::create_dir_all(recursive_path.join("nested"))
+        .expect("recursive worker fixture should be writable");
+    std::fs::write(recursive_path.join("z.ts"), "export const z = 1;\n")
+        .expect("recursive TypeScript fixture should be writable");
+    std::fs::write(
+        recursive_path.join("nested/a.go"),
+        "package nested\n\nfunc A() {}\n",
+    )
+    .expect("recursive Go fixture should be writable");
+    send_request(
+        &mut worker,
+        json!({
+            "operation": "outline",
+            "requestId": 300,
+            "protocolVersion": 6,
+            "target": {
+                "kind": "recursiveDirectory",
+                "path": recursive_path,
+                "budgets": {
+                    "maxFiles": 20,
+                    "maxSourceBytes": 1048576,
+                    "maxDepth": 8,
+                    "maxElapsedMs": 5000
+                }
+            },
+            "includePrivate": true,
+            "includeDocs": false,
+            "names": []
+        }),
+    );
+    let mut recursive_kinds = Vec::new();
+    let mut recursive_files = Vec::new();
+    loop {
+        let response = read_response(&mut stdout);
+        assert_eq!(response["requestId"], 300);
+        let kind = response["result"]["kind"]
+            .as_str()
+            .expect("recursive frame should have a kind")
+            .to_owned();
+        if kind == "recursiveFile" {
+            recursive_files.push(
+                response["result"]["relativePath"]
+                    .as_str()
+                    .expect("recursive file should have a relative path")
+                    .to_owned(),
+            );
+        }
+        recursive_kinds.push(kind.clone());
+        if kind == "recursiveComplete" {
+            assert_eq!(response["result"]["emittedFiles"], 2);
+            break;
+        }
+    }
+    assert_eq!(
+        recursive_kinds,
+        [
+            "recursiveStart",
+            "recursiveFile",
+            "recursiveFile",
+            "recursiveComplete"
+        ]
+    );
+    assert_eq!(recursive_files, ["nested/a.go", "z.ts"]);
+    std::fs::remove_dir_all(recursive_path).expect("recursive worker fixture should be removable");
 
     drop(worker.stdin.take());
     let output = worker

@@ -6,12 +6,28 @@ import { AstWorkerClient, resolveAstWorkerCommand } from "../../../extensions/ex
 
 const workerScript = String.raw`
 let incoming = Buffer.alloc(0);
-function send(response) {
+function frame(response) {
   const payload = Buffer.from(JSON.stringify(response));
-  const frame = Buffer.alloc(payload.length + 4);
-  frame.writeUInt32BE(payload.length, 0);
-  payload.copy(frame, 4);
-  process.stdout.write(frame);
+  const framed = Buffer.alloc(payload.length + 4);
+  framed.writeUInt32BE(payload.length, 0);
+  payload.copy(framed, 4);
+  return framed;
+}
+function send(response) {
+  process.stdout.write(frame(response));
+}
+function sendFragmented(response) {
+  const framed = frame(response);
+  const boundaries = [1, 3, 8, framed.length];
+  let start = 0;
+  function writeNext() {
+    const end = boundaries.shift();
+    if (end === undefined) return;
+    process.stdout.write(framed.subarray(start, end));
+    start = end;
+    setTimeout(writeNext, 10);
+  }
+  writeNext();
 }
 process.stdin.on("data", (chunk) => {
   incoming = Buffer.concat([incoming, chunk]);
@@ -23,7 +39,7 @@ process.stdin.on("data", (chunk) => {
     if (request.operation === "handshake") {
       send({
         requestId: request.requestId,
-        protocolVersion: 5,
+        protocolVersion: 6,
         success: true,
         result: { kind: "handshake", supportedLanguages: ["typeScript", "odin"] }
       });
@@ -32,9 +48,16 @@ process.stdin.on("data", (chunk) => {
     if (request.target?.path === "crash") process.exit(2);
     if (request.target?.path === "hang") continue;
     if (request.operation === "outline") {
-      send({
+      if (request.target.kind === "recursiveDirectory") {
+        send({ requestId: request.requestId, protocolVersion: 6, success: true, result: { kind: "recursiveStart", path: request.target.path, budgets: request.target.budgets } });
+        send({ requestId: request.requestId, protocolVersion: 6, success: true, result: { kind: "recursiveFile", relativePath: "src/one.ts", file: { path: "/repo/src/one.ts", language: "typeScript", sourceFingerprint: "blake3:test", byteLength: 20, lineCount: 1, diagnostics: { errorNodes: 0, missingNodes: 0 }, items: [] } } });
+        send({ requestId: request.requestId, protocolVersion: 6, success: true, result: { kind: "recursiveDiagnostic", relativePath: "src/bad.odin", language: "odin", code: "outlineFailed", message: "bad source" } });
+        send({ requestId: request.requestId, protocolVersion: 6, success: true, result: { kind: "recursiveComplete", discoveredFiles: 3, supportedFiles: 2, unsupportedFiles: 1, emittedFiles: 1, unreadableFiles: 0, oversizedFiles: 0, failedFiles: 1, parserDegradedFiles: 0, totalByteLength: 20, totalLineCount: 1, fileLimitReached: false, sourceByteLimitReached: false, depthLimitReached: false, elapsedLimitReached: false } });
+        continue;
+      }
+      const response = {
         requestId: request.requestId,
-        protocolVersion: 5,
+        protocolVersion: 6,
         success: true,
         result: {
           kind: "outline",
@@ -43,12 +66,14 @@ process.stdin.on("data", (chunk) => {
           totalByteLength: 0,
           totalLineCount: 0
         }
-      });
+      };
+      if (request.target.path === "fragmented.ts") sendFragmented(response);
+      else send(response);
       continue;
     }
     send({
       requestId: request.requestId,
-      protocolVersion: 5,
+      protocolVersion: 6,
       success: true,
       result: {
         kind: "symbol",
@@ -104,12 +129,60 @@ describe("AST worker client", () => {
 		}
 	});
 
+	it("reassembles response frames split across header and payload chunks", async () => {
+		const worker = client();
+		try {
+			const result = await worker.outline(
+				{ kind: "file", path: "fragmented.ts", language: "typeScript" },
+				false,
+				false,
+				[],
+				undefined,
+			);
+			expect(result.path).toBe("fragmented.ts");
+		} finally {
+			await worker.shutdown();
+		}
+	});
+
+	it("streams recursive files and diagnostics before resolving the final summary", async () => {
+		const worker = client();
+		try {
+			const events: string[] = [];
+			const summary = await worker.outlineRecursive(
+				"/repo",
+				false,
+				false,
+				[],
+				{
+					async onFile(relativePath) {
+						events.push(`file:${relativePath}`);
+					},
+					async onDiagnostic(diagnostic) {
+						events.push(`diagnostic:${diagnostic.relativePath}`);
+					},
+				},
+				undefined,
+			);
+			expect(events).toEqual(["file:src/one.ts", "diagnostic:src/bad.odin"]);
+			expect(summary).toMatchObject({
+				emittedFiles: 1,
+				unsupportedFiles: 1,
+				failedFiles: 1,
+			});
+		} finally {
+			await worker.shutdown();
+		}
+	});
+
 	it("selects the packaged worker on darwin-arm64", async () => {
 		const root = await workspace();
 		const command = join(root, "native-bin", "darwin-arm64", "tau-ast");
 		await mkdir(join(root, "native-bin", "darwin-arm64"), { recursive: true });
 		await writeFile(command, "worker");
-		expect(resolveAstWorkerCommand(root, "darwin", "arm64")).toEqual({ command });
+		expect(resolveAstWorkerCommand(root, "darwin", "arm64")).toEqual({
+			command,
+		});
 	});
 
 	it("falls back to the source Cargo target", async () => {

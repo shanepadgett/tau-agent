@@ -33,9 +33,11 @@ def request(request_id: int, path: Path, language: str) -> dict[str, object]:
     return {
         "operation": "outline",
         "requestId": request_id,
-        "protocolVersion": 1,
-        "path": str(path),
-        "language": language,
+        "protocolVersion": 6,
+        "target": {"kind": "file", "path": str(path), "language": language},
+        "includePrivate": True,
+        "includeDocs": False,
+        "names": [],
     }
 
 
@@ -43,7 +45,7 @@ def cold_samples(path: Path, language: str) -> list[float]:
     samples = []
     for iteration in range(ITERATIONS):
         wire = frame(
-            {"operation": "handshake", "requestId": 1, "protocolVersion": 1}
+            {"operation": "handshake", "requestId": 1, "protocolVersion": 6}
         ) + frame(request(2, path, language))
         started = time.perf_counter()
         process = subprocess.run(
@@ -62,7 +64,7 @@ def warm_samples(path: Path, language: str) -> tuple[list[float], dict[str, obje
     if process.stdin is None or process.stdout is None:
         raise RuntimeError("worker pipes were not created")
     process.stdin.write(
-        frame({"operation": "handshake", "requestId": 1, "protocolVersion": 1})
+        frame({"operation": "handshake", "requestId": 1, "protocolVersion": 6})
     )
     process.stdin.flush()
     read_response(process.stdout)
@@ -99,7 +101,7 @@ def summary(samples: list[float]) -> dict[str, float]:
 def benchmark(path: Path, language: str) -> dict[str, object]:
     cold = cold_samples(path, language)
     warm, response = warm_samples(path, language)
-    result = response["result"]
+    result = response["result"]["files"][0]
     return {
         "path": str(path),
         "language": language,

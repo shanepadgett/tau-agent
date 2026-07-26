@@ -433,6 +433,7 @@ dependencies = [
  "ast-grep-language",
  "base64",
  "blake3",
+ "ignore",
  "serde",
  "serde_json",
  "tree-sitter",

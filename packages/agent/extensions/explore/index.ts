@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { resolve } from "node:path";
 import { onTauEvent } from "../../shared/events.js";
+import { createTemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { createToolRowStateStore } from "../../shared/tool-row-state.js";
 import { AST_DISCOVERY_BUDGET, effectiveAstGuidance } from "./ast-guidance.ts";
 import { createAstTools } from "./ast-tools.ts";
@@ -19,7 +20,8 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 	const readCache = createReadCacheStore();
 	const readSnapshots = createReadSnapshotStore();
 	const astClient = new AstWorkerClient();
-	const ast = createAstTools(astClient, rowState);
+	const temporaryOutput = createTemporaryOutputStore();
+	const ast = createAstTools(astClient, rowState, temporaryOutput);
 	registerAutoread(pi, rowState);
 	pi.registerTool(ast.outline);
 	pi.registerTool(ast.symbol);
@@ -45,7 +47,9 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 			await showReadStats(ctx);
 		},
 	});
-	pi.on("session_start", () => {
+	pi.on("session_start", async () => {
+		await temporaryOutput.shutdown();
+		await temporaryOutput.start();
 		rowState.clear();
 		readSnapshots.clear();
 		ast.clear();
@@ -62,5 +66,6 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 	pi.on("session_shutdown", async () => {
 		ast.clear();
 		await astClient.shutdown();
+		await temporaryOutput.shutdown();
 	});
 }

@@ -1,14 +1,24 @@
 name = "Shared utilities"
-description = "Reusable repository, text, range, description, and durable storage primitives"
+description = "Reusable repository, text, range, description, bounded-output, and durable storage primitives"
 
 [all]
 description = "Every general-purpose shared utility"
 files = [
   "packages/agent/shared/description.ts",
+  "packages/agent/shared/bounded-text-result.ts",
   "packages/agent/shared/git.ts",
   "packages/agent/shared/jsonl-store.ts",
   "packages/agent/shared/ranges.ts",
+  "packages/agent/shared/temporary-output-store.ts",
   "packages/agent/shared/text.ts",
+]
+
+[bounded-output]
+description = "Bounded model-visible text results and session-scoped temporary output"
+files = [
+  "packages/agent/shared/bounded-text-result.ts",
+  "packages/agent/shared/temporary-output-store.ts",
+  "packages/agent/test/shared/bounded-text-result.test.ts",
 ]
 
 [repository-and-text]

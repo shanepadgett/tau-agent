@@ -27,6 +27,15 @@
 - Keep tasks green and committable. Slice tasks so each change wires added code and leaves no dead files, exports, or types.
 - If approved task must stage unreachable code for later integration, add local Fallow suppression with reason: `// fallow-ignore-file unused-file -- wired by <task/name>`. Remove it in wiring task. No repo-wide ignores for temporary staged code.
 
+## Tool Results
+
+- New or changed tools capable of returning unbounded model-visible text must construct their result through Tau's shared bounded text-result handler once it exists. Inherently bounded and non-text results may bypass it for a stated reason.
+- The shared handler owns Pi's exported `DEFAULT_MAX_BYTES` and `DEFAULT_MAX_LINES`; tool call sites must not copy or pass those limits.
+- Select overflow behavior by result shape. Head retention reuses Pi's exported `truncateHead`; tail retention reuses `truncateTail`; Tau handles complete groups or blocks for structured output; callers may use pagination where they can continue safely.
+- Route useful complete overflow through the shared session-scoped temporary store. Incomplete files are removed on cancellation or failure, successful files remain for the active session, and session shutdown removes the store.
+- Keep traversal, source-byte, file-count, depth, and elapsed-work budgets separate from model-visible output limits.
+- Keep tool-specific result shapes and TUI rendering outside the shared handler. The handler standardizes bounded model content, overflow metadata, temporary-file ownership, and cleanup.
+
 ## Cleanup
 
 - Delete or replace code/resources? Clean obsolete files, empty dirs, stale docs, dead refs in same change.

@@ -1,89 +1,105 @@
-# Phase 2: Recursive Streaming Outline
+# Phase 2: Recursive Streaming Outline and Shared Overflow Handling
 
-Status: implementation unapproved  
+Status: implemented
 Depends on: Phase 1 capability-aware Explore policy  
-Produces: bounded recursive mixed-language orientation with complete overflow output
+Produces: bounded recursive mixed-language orientation and Tau's shared text-result overflow handler
 
-## Current state
+## How it works
 
-The Rust worker is a long-lived package-private process controlled by Explore. It uses a versioned, length-prefixed JSON protocol over stdin and stdout, request IDs, cancellation, fingerprinted locators, in-memory parse state, and bounded stderr. Tau restarts it after protocol failure and closes it on session shutdown.
+`outline` currently handles one file or one directory level. Phase 2 adds a recursive mode for a repository or subtree. It respects ignore rules, handles every supported language in one run, returns files in stable path order, and stops at explicit traversal limits.
 
-The established boundary remains one package-private worker selected and started by Tau. This phase does not add a user-facing CLI, switch to N-API or WebAssembly, load third-party grammars at runtime, or add persistent storage.
+The worker sends one file at a time instead of building one enormous response. Tau keeps complete file blocks that fit in model context and streams the full outline to a temporary file when it overflows. The agent receives exact counts, the temporary path, and numeric `symbol` locators.
 
-Current outline targets cover one file or immediate files in one package directory. Directory handling rejects mixed language families, can drop Markdown when another supported language is present, and returns one complete `OutlineTargetResult` frame. Protocol frames have an 8 MB ceiling.
+This phase also creates the shared bounded text-result handler that future Tau tools will use. The handler controls model-visible output, overflow metadata, temporary files, and cleanup. Tool-specific result shapes and TUI rendering stay with each tool.
 
-The TypeScript wrapper currently renders the complete result into one string, stores the complete structured result in tool `details`, then applies ordinary head truncation. That shape cannot safely scale to a repository: the worker can exceed its frame limit before TypeScript truncates anything, and session storage can retain the unbounded result.
+## Fixed decisions
 
-Pi's outer model limits are 50 KB or 2,000 lines. Recursive traversal limits must be separate from those output limits.
+- Existing file and non-recursive package outlines keep their behavior.
+- Recursive traversal has its own file-count, source-byte, depth, and elapsed-work limits. Model-output limits never control how much repository work is performed.
+- The shared handler imports Pi's `DEFAULT_MAX_BYTES` and `DEFAULT_MAX_LINES`. Tools do not copy, pass, or choose those model-visible limits.
+- Overflow selection is a strategy. Head retention reuses Pi's exported `truncateHead`, tail retention reuses Pi's exported `truncateTail`, and Tau supplies complete-block retention. Recursive outline uses complete blocks.
+- Overflow files are valid for the active session and disposable afterward.
+- Full output is never buffered in memory before being written.
+- Source and syntax-tree caches remain process memory only. No persistent repository index is added.
 
-The original native spike measured roughly 5.9 ms cold startup and 0.15–0.17 ms warm extraction on macOS arm64. Preserve before-and-after benchmark records, but do not turn noisy wall-clock thresholds into normal correctness tests.
+## Resolved implementation decisions
 
-## Decisions required before coding
+1. The tool accepts `recursive: true` for directories. The worker receives a distinct `recursiveDirectory` target so non-recursive directory behavior cannot change accidentally.
+2. Tau sends fixed recursive budgets of 2,000 supported files, 64 MiB of source, depth 32, and 20 seconds. Native hard caps are 10,000 files, 256 MiB, depth 128, and 60 seconds. These are internal safety limits, not settings or extra tool parameters.
+3. Recursive output contains supported source-file blocks only. Unsupported files and ignored paths do not create structural output; the final summary reports aggregate counts. Supported files that are unreadable, oversized, or fail parsing get path-specific diagnostics.
+4. Temporary output is limited to 64 MiB per file and 256 MiB per session.
+5. Startup cleanup may remove a marked orphan directory after 24 hours. It first checks the owner marker and preserves directories whose owner process is still alive.
 
-Resolve these in this phase and record the answers here:
+## Shared bounded text-result handler
 
-1. Recursive target schema: explicit recursive mode, distinct target form, or depth-based target.
-2. Default and maximum traversal budgets for file count, source bytes, depth, and elapsed work.
-3. Whether output includes unsupported directory structure or only supported source paths.
-4. Temporary-file lifetime and cleanup policy.
+The handler runs while constructing the result returned by `execute`. Applying limits only in `renderResult` is too late because the unbounded content would already be stored in the session and sent to the model.
 
-Do not use model-output exhaustion as an implicit traversal limit.
+The shared handler must:
+
+1. Accept streamed text units without buffering the complete output.
+2. Enforce Pi's model-visible byte and line defaults automatically.
+3. Support head, tail, and complete-block retention without changing `AgentToolResult` or forcing one tool-specific details shape. Head and tail snapshots must delegate to Pi's exported `truncateHead` and `truncateTail`; the shared handler must not reimplement their truncation semantics.
+4. Return bounded model `content` plus standard overflow details: strategy, shown and total lines, shown and total bytes, completion state, and temporary path.
+5. Allow structured callers to attach identifiers for complete visible units. Recursive outline uses those identifiers to record which files reached the model.
+6. Offer an optional common TUI formatter for the standard overflow details. Custom tool rows and expanded renderers remain allowed.
+7. Reject or clearly mark incomplete full output when a disk quota, write failure, cancellation, or producer failure prevents completion.
+
+Phase 2 is the first consumer. The deferred tool-result audit migrates other Tau tools later.
+
+## Temporary-file lifecycle
+
+The shared handler owns a session-scoped directory under the OS temporary directory. Using `os.tmpdir()` chooses a location; it does not provide cleanup.
+
+- Create the session directory lazily with owner-only permissions.
+- Create overflow files with owner-only permissions and unpredictable names.
+- Delete incomplete files immediately after cancellation, producer failure, or write failure.
+- Keep successful files available for `grep` and ranged `read` during the active session.
+- Remove the complete session directory on `session_shutdown`. Shutdown remains idempotent.
+- On startup, remove only clearly marked Tau overflow directories older than the approved orphan lifetime.
+- Enforce per-file and per-session disk quotas. Never rely on eventual OS cleanup for disk safety.
+
+The tool-result notice must state that the path is temporary and valid only for the active session.
 
 ## Native traversal
 
-1. Keep existing file and non-recursive package behavior.
-2. Add recursive repository or subtree traversal using the existing working-root boundary.
-3. Use gitignore and standard ignore behavior. Prune ignored directories before reading files.
-4. Detect each supported file independently so one traversal can contain every supported language.
-5. Sort model output deterministically by canonical relative path even if parsing runs in parallel.
-6. Honor cancellation while walking, reading, parsing, and sending results.
-7. Report unreadable, skipped, oversized, unsupported, and parser-degraded files explicitly.
-8. Finish within the explicit traversal budgets even after model-visible output is full.
-9. Keep source and syntax-tree caching in process memory only. Do not add a persistent repository index.
+1. Walk recursively within the existing working-root boundary.
+2. Apply gitignore and standard ignore behavior before entering ignored directories.
+3. Detect every supported file independently so mixed-language repositories work in one request.
+4. Sort model output by canonical relative path even if parsing runs in parallel.
+5. Honor cancellation while walking, reading, parsing, and sending results.
+6. Report unreadable, skipped, oversized, unsupported, and parser-degraded files explicitly.
+7. Finish within traversal limits even after model-visible output is full.
+8. Keep parser instances per language and worker thread. Full reparsing remains acceptable.
 
-Use the existing `ignore` and parallel-worker foundation where available. Parser instances should remain per-language and per-worker-thread. Full reparsing remains acceptable; this phase does not add approximate Tree-sitter edits.
+## Streaming worker protocol
 
-## Streaming protocol
+One recursive request produces:
 
-Extend the framed protocol so one request can produce:
-
-1. a start frame with canonical target and options;
+1. a start frame with the target and options;
 2. bounded per-file result frames;
 3. bounded progress or diagnostic frames;
 4. one final frame with aggregate counts and completion status; and
 5. a terminal error or cancellation result.
 
-Every frame must remain below `MAX_FRAME_BYTES`. Preserve request IDs across all frames. The TypeScript client must distinguish stream frames from final responses, apply backpressure, remove abort listeners, and reject the whole tool call after malformed frames, worker exit, or protocol failure.
+Every frame stays below the existing 8 MB worker frame ceiling and keeps the same request ID. The TypeScript client applies backpressure, removes abort listeners, and rejects the complete operation after malformed frames, worker exit, protocol mismatch, cancellation, or terminal failure. Failed and cancelled streams create no orientation state.
 
-Do not advertise partial output as complete. A failed or cancelled stream creates no orientation state.
+## Visible output and locators
 
-## Incremental rendering and overflow
+1. Render each file block once as it arrives and append it to the shared handler.
+2. Register numeric locators after their native tokens are stored.
+3. Prefer complete file blocks in model content. Omit the next block when it does not fit.
+4. If one block exceeds the complete model budget, show a partial-file notice and require a narrower file outline before that file counts as visible.
+5. Keep locator mappings for every complete block written to the full temporary output, including blocks outside model content.
+6. Mark exactly which complete file blocks reached model content. Phase 3 uses that set for orientation.
+7. Keep session details bounded. Do not store every declaration or the complete rendered output in tool `details`.
 
-1. Render each file block once as its result arrives.
-2. Register numeric locators only after their native tokens are stored.
-3. Append every rendered block to the complete-output stream.
-4. Retain only the model-visible prefix, locator mappings, aggregate counters, and bounded metadata in memory.
-5. Prefer complete file blocks. If the next block does not fit, omit it from model content rather than cutting it.
-6. If one file block exceeds the entire budget, return a clear partial-file notice and require a narrower file outline before that file can count as visible.
-7. Mark exactly which complete file blocks reached model-visible content. Phase 3 will use this set for orientation.
-
-When output exceeds Pi's line or byte cap, write the complete rendered output to a temporary text file. The notice must report:
-
-- shown lines and total lines;
-- shown bytes and total bytes;
-- absolute temporary path;
-- complete file line and byte size;
-- that reading the temporary file whole will hit normal limits again; and
-- that targeted `grep` or ranged `read` can inspect the overflow file.
-
-Create the temporary file lazily or stream into it from the beginning. Never buffer the complete rendered output first. Remove incomplete files after cancellation or failure.
-
-The temporary output must contain every rendered file block and its numeric locator values. Every locator written there remains registered even when its file block is outside the model-visible prefix. Those files still do not satisfy orientation. Locator mappings remain session-local and stale-safe.
-
-Tool `details` may contain target, counts, source totals, returned and complete output sizes, truncation status, completion status, and temporary path. It must not contain every declaration or the complete rendered output.
+The overflow notice reports shown and total lines, shown and total bytes, the absolute temporary path, and the complete file size. It warns that reading the entire temporary file will hit the same model-output limits and recommends targeted `grep` or ranged `read`.
 
 ## Likely files
 
+- shared bounded text-result handler and temporary-store files under `packages/agent/shared/`
+- shared handler tests
+- `packages/agent/extensions/explore/index.ts` for session lifecycle wiring
 - `packages/agent/extensions/explore/ast-worker.ts`
 - `packages/agent/extensions/explore/ast-tools.ts`
 - `packages/agent/native/tau-ast/src/main.rs`
@@ -91,20 +107,22 @@ Tool `details` may contain target, counts, source totals, returned and complete 
 - `packages/agent/native/tau-ast/src/outline.rs`
 - worker and Explore AST tests
 
-Relevant implementation patterns already validated by repository research are gitignore-aware parallel walking, per-thread parsers, deterministic post-walk ordering, and process-resident cache reuse. Do not copy external CLI or JSON contracts into Tau's public tool schema.
-
 ## Validation
 
 - A recursive mixed-language fixture returns deterministic grouped output.
 - Ignored and unsupported files are not parsed.
 - A rendered result larger than 8 MB completes through bounded frames.
-- A result beyond Pi's limits returns bounded model content and one complete temporary file.
-- Exact shown and total line and byte counts match the written output.
+- Model content never exceeds Pi's limits and contains only complete visible file blocks.
+- Full temporary output contains every rendered block and locator with exact line and byte counts.
 - Session transcript details remain bounded.
-- Cancellation removes incomplete overflow files and leaves the worker usable or restarts it cleanly.
+- Cancellation and failures remove incomplete files and create no orientation state.
+- Session shutdown removes successful overflow files and is idempotent.
+- Startup cleanup removes only old, marked Tau overflow directories.
+- Disk quotas fail safely without claiming the temporary output is complete.
 - Worker crash, malformed frame, and protocol mismatch reject partial results.
-- Files wholly outside the visible prefix and partial file blocks are identified as not visible.
+- The existing file, package, language-fixture, and real-package suites remain green.
+- Preserve before-and-after native benchmark records without adding noisy wall-clock correctness thresholds.
 
 ## Completion
 
-Phase 2 is complete when recursive repository orientation is mixed-language, deterministic, cancellable, independent of model-output limits, safe beyond the worker's old frame ceiling, and explicit about exactly which file blocks reached the model.
+Phase 2 is complete when recursive repository orientation is mixed-language, deterministic, cancellable, safe beyond worker and model limits, and explicit about which files reached the model. The shared bounded text-result handler must be ready for later Tau tool migrations and must clean up its temporary files under normal shutdown, failure, cancellation, and stale-orphan paths.
