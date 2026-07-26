@@ -3,6 +3,7 @@
 ## General
 
 - Extension tool changes need user `/reload` before testing.
+- After any change under `packages/agent/native/tau-ast/`, run `cargo build --release --manifest-path packages/agent/native/tau-ast/Cargo.toml` before testing `outline` or `symbol`. Build before the user runs `/reload` so the restarted worker uses the updated release binary.
 - Keep active work files under `docs/plans/`. Tracked dir. Use `packages/agent/docs/` only for Tau Agent user docs.
 
 ## Scope and Behavior
