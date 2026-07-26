@@ -340,17 +340,24 @@ export function createAstTools(
 				.trim()
 				.split("\n")
 				.map((line) => `  ${line}`),
-			`  surface: visibility=${candidate.visibility}, sourceExport=${candidate.sourceExport}, packageSurface=${candidate.packageSurface}, internalOnly=${candidate.internalOnly}`,
 		];
+		const surface: string[] = [];
+		if (candidate.visibility !== "public") surface.push(`visibility=${candidate.visibility}`);
+		if (candidate.sourceExport !== "yes") surface.push(`sourceExport=${candidate.sourceExport}`);
+		if (candidate.packageSurface !== "yes") surface.push(`packageSurface=${candidate.packageSurface}`);
+		if (candidate.internalOnly !== "no") surface.push(`internalOnly=${candidate.internalOnly}`);
+		if (surface.length > 0) lines.push(`  surface: ${surface.join(", ")}`);
 		if (candidate.callerAccess) {
 			lines.push(
 				`  caller: ${candidate.callerAccess.importStatement} use ${candidate.callerAccess.accessExpression}`,
 			);
 		}
 		if (candidate.reExportChain.length > 1) lines.push(`  re-exports: ${candidate.reExportChain.join(" -> ")}`);
-		const resolution = [`provenance=${candidate.provenance}`, `parse=${candidate.certainty}`];
-		if (candidate.certaintyReason) resolution.push(candidate.certaintyReason);
-		lines.push(`  resolution: ${resolution.join(", ")}`);
+		if (candidate.provenance !== "exact" || candidate.certainty !== "certain" || candidate.certaintyReason) {
+			const resolution = [`provenance=${candidate.provenance}`, `parse=${candidate.certainty}`];
+			if (candidate.certaintyReason) resolution.push(candidate.certaintyReason);
+			lines.push(`  resolution: ${resolution.join(", ")}`);
+		}
 		if (candidate.uncertainty) lines.push(`  uncertainty: ${candidate.uncertainty}`);
 		return lines.join("\n");
 	}
@@ -539,11 +546,7 @@ export function createAstTools(
 	}
 
 	function renderOutlineFile(file: OutlineFileResult, cwd: string, includeHeader: boolean): string[] {
-		const lines = includeHeader
-			? [
-					`${formatPathForDisplay(file.path, cwd)} (${file.language}, ${file.lineCount} lines, ${formatSize(file.byteLength)})`,
-				]
-			: [];
+		const lines = includeHeader ? [formatPathForDisplay(file.path, cwd)] : [];
 		if (file.diagnostics.errorNodes > 0 || file.diagnostics.missingNodes > 0) {
 			lines.push(
 				`warning: parser recovered with ${file.diagnostics.errorNodes} ERROR and ${file.diagnostics.missingNodes} MISSING nodes`,
@@ -769,19 +772,23 @@ export function createAstTools(
 						},
 						signal,
 					);
-					const limits = [
-						...(summary.fileLimitReached ? ["file count"] : []),
-						...(summary.sourceByteLimitReached ? ["source bytes"] : []),
-						...(summary.depthLimitReached ? ["depth"] : []),
-						...(summary.elapsedLimitReached ? ["elapsed time"] : []),
-					];
-					await builder.appendRequiredBlock(
-						"recursive outline summary",
-						[
-							`summary: ${summary.emittedFiles} outlined, ${summary.supportedFiles} supported, ${summary.unsupportedFiles} unsupported, ${summary.failedFiles} failed, ${summary.unreadableFiles} unreadable, ${summary.oversizedFiles} oversized`,
-							`source: ${summary.totalLineCount} lines, ${formatSize(summary.totalByteLength)}; parser degraded: ${summary.parserDegradedFiles}; limits reached: ${limits.join(", ") || "none"}`,
-						].join("\n"),
-					);
+					const exceptionLines = exceptionSummaryLines([
+						...(summary.failedFiles > 0 ||
+						summary.unreadableFiles > 0 ||
+						summary.oversizedFiles > 0 ||
+						summary.parserDegradedFiles > 0
+							? [
+									`exceptions: ${summary.failedFiles} failed, ${summary.unreadableFiles} unreadable, ${summary.oversizedFiles} oversized, parser degraded ${summary.parserDegradedFiles}`,
+								]
+							: []),
+						...limitReachedLine([
+							...(summary.fileLimitReached ? ["file count"] : []),
+							...(summary.sourceByteLimitReached ? ["source bytes"] : []),
+							...(summary.depthLimitReached ? ["depth"] : []),
+							...(summary.elapsedLimitReached ? ["elapsed time"] : []),
+						]),
+					]);
+					if (exceptionLines) await builder.appendRequiredBlock("recursive outline exceptions", exceptionLines);
 					const bounded = await builder.finish();
 					if (!bounded.overflow.fullOutputComplete) {
 						const visible = new Set(bounded.visibleUnitIds);
@@ -1089,61 +1096,41 @@ export function createAstTools(
 			.map((fresh) => registerLocator(fresh.locator, fresh.path, fresh.name));
 		const freshTargetId = freshLocatorIds[0];
 
-		const builder = new BoundedTextResultBuilder(temporaryOutput, "completeBlocks");
-		try {
-			for (const filePlan of plan.files) {
-				if (!changedPaths.has(filePlan.path)) continue;
-				await builder.appendBlock(
-					filePlan.path,
-					formatPathForDisplay(filePlan.path, cwd),
-					`${formatPathForDisplay(filePlan.path, cwd)}\n${filePlan.source}`,
-				);
-			}
-			for (const [index, skipped] of plan.skippedImpacts.entries()) {
-				const candidateIds = skipped.candidateLocators.flatMap((token, candidateIndex) => {
-					if (token === record.token && freshTargetId !== undefined) return [freshTargetId];
-					const existing = [...locators.values()].find(
-						(candidate) => candidate.token === token && !candidate.stale,
-					);
-					if (existing) return [existing.id];
-					const candidatePath = skipped.candidatePaths[candidateIndex];
-					return candidatePath && !changedPaths.has(resolve(candidatePath))
-						? [registerLocator(token, candidatePath, "rename candidate")]
-						: [];
-				});
-				await builder.appendBlock(
-					undefined,
-					`skipped-${index}`,
-					`skipped: ${formatPathForDisplay(skipped.path, cwd)}:${displayLineRange(skipped.range)} [${skipped.reason}]${candidateIds.length > 0 ? ` candidates ${candidateIds.map((id) => `(${id})`).join(", ")}` : ""}`,
-				);
-			}
-			for (const diagnostic of verificationDiagnostics) {
-				await builder.appendBlock(undefined, diagnostic, `warning: ${diagnostic}`);
-			}
-			await builder.appendRequiredBlock(
-				"locator edit summary",
-				`changed: ${mutation.changes.map((change) => change.path).join(", ")}; invalidated locators: ${invalidatedLocatorIds.join(", ") || "none"}; fresh locators: ${freshLocatorIds.map((id) => `(${id})`).join(", ") || "none"}; skipped impacts: ${plan.skippedImpacts.length}; status: ${mutation.status}`,
+		const lines = [
+			`changed: ${mutation.changes.map((change) => change.path).join(", ")}`,
+			`invalidated locators: ${invalidatedLocatorIds.join(", ") || "none"}; fresh locators: ${freshLocatorIds.map((id) => `(${id})`).join(", ") || "none"}; skipped impacts: ${plan.skippedImpacts.length}; status: ${mutation.status}`,
+		];
+		for (const skipped of plan.skippedImpacts) {
+			const candidateIds = skipped.candidateLocators.flatMap((token, candidateIndex) => {
+				if (token === record.token && freshTargetId !== undefined) return [freshTargetId];
+				const existing = [...locators.values()].find((candidate) => candidate.token === token && !candidate.stale);
+				if (existing) return [existing.id];
+				const candidatePath = skipped.candidatePaths[candidateIndex];
+				return candidatePath && !changedPaths.has(resolve(candidatePath))
+					? [registerLocator(token, candidatePath, "rename candidate")]
+					: [];
+			});
+			lines.push(
+				`skipped: ${formatPathForDisplay(skipped.path, cwd)}:${displayLineRange(skipped.range)} [${skipped.reason}]${candidateIds.length > 0 ? ` candidates ${candidateIds.map((id) => `(${id})`).join(", ")}` : ""}`,
 			);
-			const bounded = await builder.finish();
-			if (bounded.overflow.temporaryPath) orientation.recordTemporaryOutput(bounded.overflow.temporaryPath);
-			const returnedBytes = Buffer.byteLength(bounded.content);
-			return {
-				content: [{ type: "text", text: bounded.content }],
-				details: {
-					kind: "locatorEdit",
-					result: { plan, mutation, invalidatedLocatorIds, freshLocatorIds, verificationDiagnostics },
-					declarationCount: freshLocatorIds.length,
-					sourceBytes: plan.files.reduce((total, file) => total + Buffer.byteLength(file.source), 0),
-					returnedBytes,
-					avoidedBytes: 0,
-					truncated: bounded.overflow.truncated,
-					overflow: bounded.overflow,
-				},
-			};
-		} catch (error) {
-			await builder.abort();
-			throw error;
 		}
+		for (const diagnostic of verificationDiagnostics) lines.push(`warning: ${diagnostic}`);
+		const text = lines.join("\n");
+		const sourceBytes = plan.files.reduce((total, file) => total + Buffer.byteLength(file.source), 0);
+		const returnedBytes = Buffer.byteLength(text);
+		return {
+			content: [{ type: "text", text }],
+			details: {
+				kind: "locatorEdit",
+				result: { plan, mutation, invalidatedLocatorIds, freshLocatorIds, verificationDiagnostics },
+				declarationCount: freshLocatorIds.length,
+				sourceBytes,
+				returnedBytes,
+				avoidedBytes: Math.max(0, sourceBytes - returnedBytes),
+				truncated: false,
+				overflow: undefined,
+			},
+		};
 	}
 
 	const replaceDeclaration = defineTool<typeof replaceDeclarationParams, AstToolDetails>({
@@ -1302,21 +1289,23 @@ export function createAstTools(
 				if (result.candidates.length === 0)
 					await builder.appendRequiredBlock("no matches", "No matching declarations");
 				const summary = result.summary;
-				const limits = [
-					...(summary.candidateLimitReached ? ["query candidates"] : []),
-					...(summary.workLimitReached ? ["query work"] : []),
-					...(summary.fileLimitReached ? ["files"] : []),
-					...(summary.sourceByteLimitReached ? ["source bytes"] : []),
-					...(summary.depthLimitReached ? ["depth"] : []),
-					...(summary.elapsedLimitReached ? ["elapsed time"] : []),
-				];
-				await builder.appendRequiredBlock(
-					"API discovery summary",
-					[
-						`summary: ${summary.filesScanned} files scanned, ${summary.declarationsConsidered} declarations considered, ${summary.resultsReturned} results returned, ${summary.omittedCandidates} candidates omitted`,
-						`result limit: ${summary.resultLimit}; source: ${formatSize(summary.totalSourceBytes)}; resolution diagnostics: ${summary.resolutionDiagnostics}; limits reached: ${limits.join(", ") || "none"}`,
-					].join("\n"),
-				);
+				const exceptionLines = exceptionSummaryLines([
+					...(summary.omittedCandidates > 0
+						? [`${summary.omittedCandidates} candidates omitted (result limit ${summary.resultLimit})`]
+						: []),
+					...(summary.resolutionDiagnostics > 0
+						? [`resolution diagnostics: ${summary.resolutionDiagnostics}`]
+						: []),
+					...limitReachedLine([
+						...(summary.candidateLimitReached ? ["query candidates"] : []),
+						...(summary.workLimitReached ? ["query work"] : []),
+						...(summary.fileLimitReached ? ["files"] : []),
+						...(summary.sourceByteLimitReached ? ["source bytes"] : []),
+						...(summary.depthLimitReached ? ["depth"] : []),
+						...(summary.elapsedLimitReached ? ["elapsed time"] : []),
+					]),
+				]);
+				if (exceptionLines) await builder.appendRequiredBlock("API discovery exceptions", exceptionLines);
 				const bounded = await builder.finish();
 				if (!bounded.overflow.fullOutputComplete) {
 					const visible = new Set(bounded.visibleUnitIds);
@@ -1453,22 +1442,30 @@ export function createAstTools(
 					);
 				}
 				const summary = result.summary;
-				const limits = [
-					...(summary.resultLimitReached ? ["results"] : []),
-					...(summary.fileLimitReached ? ["files"] : []),
-					...(summary.sourceByteLimitReached ? ["source bytes"] : []),
-					...(summary.depthLimitReached ? ["depth"] : []),
-					...(summary.elapsedLimitReached ? ["elapsed time"] : []),
-				];
-				await builder.appendRequiredBlock(
-					"structural search summary",
-					[
-						`summary: ${summary.filesDiscovered} discovered, ${summary.filesFiltered} filtered, ${summary.filesRead} read, ${summary.filesParsed} parsed, ${summary.filesSearched} searched`,
-						`matches: ${summary.matchesFound} found, ${summary.matchesReturned} returned (limit ${summary.resultLimit}); source: ${formatSize(summary.sourceBytes)}; parser degraded: ${summary.parserDegradedFiles}`,
-						`failures: ${summary.unreadableFiles} unreadable, ${summary.oversizedFiles} oversized, ${summary.failedFiles} failed; diagnostics omitted: ${summary.diagnosticsOmitted}`,
-						`prefilters: literal=${summary.literalPrefilterApplied ? "yes" : "no"}, node-kind=${summary.potentialKindPrefilterApplied ? "yes" : "no"}; limits reached: ${limits.join(", ") || "none"}`,
-					].join("\n"),
-				);
+				const exceptionLines = exceptionSummaryLines([
+					...(summary.matchesFound > summary.matchesReturned
+						? [
+								`${summary.matchesFound - summary.matchesReturned} matches omitted (result limit ${summary.resultLimit})`,
+							]
+						: []),
+					...(summary.unreadableFiles > 0 ||
+					summary.oversizedFiles > 0 ||
+					summary.failedFiles > 0 ||
+					summary.parserDegradedFiles > 0 ||
+					summary.diagnosticsOmitted > 0
+						? [
+								`exceptions: ${summary.unreadableFiles} unreadable, ${summary.oversizedFiles} oversized, ${summary.failedFiles} failed, parser degraded ${summary.parserDegradedFiles}, diagnostics omitted ${summary.diagnosticsOmitted}`,
+							]
+						: []),
+					...limitReachedLine([
+						...(summary.resultLimitReached ? ["results"] : []),
+						...(summary.fileLimitReached ? ["files"] : []),
+						...(summary.sourceByteLimitReached ? ["source bytes"] : []),
+						...(summary.depthLimitReached ? ["depth"] : []),
+						...(summary.elapsedLimitReached ? ["elapsed time"] : []),
+					]),
+				]);
+				if (exceptionLines) await builder.appendRequiredBlock("structural search exceptions", exceptionLines);
 				const bounded = await builder.finish();
 				if (!bounded.overflow.fullOutputComplete) {
 					const visible = new Set(bounded.visibleUnitIds);
@@ -1606,32 +1603,49 @@ export function createAstTools(
 						const ids = [targetId, ...candidateIds, scopeId];
 						const unit = `${relationship.relativePath}:${relationship.range.startByte}:${index}`;
 						locatorByUnit.set(unit, ids);
+						const kind =
+							relationship.classification === "production"
+								? relationship.relationshipKind
+								: `${relationship.relationshipKind}, ${relationship.classification}`;
+						const certainty = relationship.certainty === "exact" ? "" : `, ${relationship.certainty}`;
 						const lines = [
-							`${relationship.relativePath}:${displayLineRange(relationship.range)} [${relationship.relationshipKind}, ${relationship.certainty}, ${relationship.classification}]`,
-							`  target (${targetId}); enclosing ${displayLineRange(relationship.enclosingScope.range)}(${scopeId}): ${relationship.enclosingScope.qualifiedIdentity}`,
+							`${relationship.relativePath}:${displayLineRange(relationship.range)}(${scopeId}) [${kind}${certainty}]`,
+							...relationship.sitePreview.split("\n").map((line) => `  ${line}`),
 						];
+						if (relationship.sitePreviewTruncated) lines.push("  [preview truncated]");
 						if (relationship.certainty === "ambiguous") {
 							lines.push(
 								`  candidates: ${candidateIds.map((id) => `(${id})`).join(", ")}${relationship.competingCandidatesOmitted ? `; ${relationship.competingCandidatesOmitted} omitted` : ""}`,
 							);
 						}
 						if (relationship.certaintyReason) lines.push(`  uncertainty: ${relationship.certaintyReason}`);
+						if (targetId !== record.id) lines.push(`  target (${targetId})`);
 						await builder.appendBlock(unit, relationship.relativePath, lines.join("\n"));
 					}
 					if (result.relationships.length === 0)
 						await builder.appendRequiredBlock("no relationships", `No direct ${name} found`);
 					const summary = result.summary;
-					const limits = [
-						...(summary.resultLimitReached ? ["results"] : []),
-						...(summary.fileLimitReached ? ["files"] : []),
-						...(summary.sourceByteLimitReached ? ["source bytes"] : []),
-						...(summary.depthLimitReached ? ["depth"] : []),
-						...(summary.elapsedLimitReached ? ["elapsed time"] : []),
-					];
-					await builder.appendRequiredBlock(
-						"relationship summary",
-						`summary: ${summary.filesScanned} files scanned, ${summary.relationshipsFound} found, ${summary.relationshipsReturned} returned, ${summary.ambiguousRelationships} ambiguous; source: ${formatSize(summary.sourceBytes)}; parser degraded: ${summary.parserDegradedFiles}; diagnostics: ${summary.diagnostics}; limits reached: ${limits.join(", ") || "none"}`,
-					);
+					const exceptionLines = exceptionSummaryLines([
+						...(summary.relationshipsFound > summary.relationshipsReturned
+							? [
+									`${summary.relationshipsFound - summary.relationshipsReturned} relationships omitted (result limit ${summary.resultLimit})`,
+								]
+							: []),
+						...(summary.ambiguousRelationships > 0 ? [`${summary.ambiguousRelationships} ambiguous`] : []),
+						...(summary.parserDegradedFiles > 0 || summary.diagnostics > 0
+							? [
+									`exceptions: parser degraded ${summary.parserDegradedFiles}, diagnostics ${summary.diagnostics}`,
+								]
+							: []),
+						...limitReachedLine([
+							...(summary.resultLimitReached ? ["results"] : []),
+							...(summary.fileLimitReached ? ["files"] : []),
+							...(summary.sourceByteLimitReached ? ["source bytes"] : []),
+							...(summary.depthLimitReached ? ["depth"] : []),
+							...(summary.elapsedLimitReached ? ["elapsed time"] : []),
+						]),
+					]);
+					if (exceptionLines) await builder.appendRequiredBlock("relationship exceptions", exceptionLines);
 					const bounded = await builder.finish();
 					if (!bounded.overflow.fullOutputComplete) {
 						const visible = new Set(bounded.visibleUnitIds);
@@ -1968,4 +1982,13 @@ function locatorEditCall(
 		new AstCallComponent(rowState, context.toolCallId, tool, targets, options, theme);
 	component.set(targets, options, theme);
 	return component;
+}
+
+function exceptionSummaryLines(parts: string[]): string | undefined {
+	const lines = parts.filter((part) => part.length > 0);
+	return lines.length > 0 ? lines.join("\n") : undefined;
+}
+
+function limitReachedLine(limits: string[]): string[] {
+	return limits.length > 0 ? [`limits reached: ${limits.join(", ")}`] : [];
 }

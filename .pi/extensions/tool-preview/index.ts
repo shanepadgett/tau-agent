@@ -1,17 +1,34 @@
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, TUI } from "@earendil-works/pi-tui";
 import { matchesKey } from "@earendil-works/pi-tui";
+import { createApiDiscoverPreviewWidget } from "./widgets/api-discover.ts";
+import { createAstSearchPreviewWidget } from "./widgets/ast-search.ts";
 import { createAutoreadPreviewWidget } from "./widgets/autoread.ts";
 import { createContextPreviewOverlay } from "./widgets/context.ts";
 import { createContextPruningPreviewWidget } from "./widgets/context-pruning.ts";
 import { createFindPreviewWidget } from "./widgets/find.ts";
 import { createGrepPreviewWidget } from "./widgets/grep.ts";
 import { framePreviewWidget } from "./widgets/layout.ts";
+import {
+	createInsertDeclarationPreviewWidget,
+	createRenameDeclarationPreviewWidget,
+	createReplaceBodyPreviewWidget,
+	createReplaceDeclarationPreviewWidget,
+} from "./widgets/locator-edits.ts";
 import { createLsPreviewWidget } from "./widgets/ls.ts";
+import { createOutlinePreviewWidget } from "./widgets/outline.ts";
 import { createPatchPreviewWidget } from "./widgets/patch.ts";
 import { createPublishPreviewWidget } from "./widgets/publish.ts";
 import { createReadPreviewWidget } from "./widgets/read.ts";
 import { createReadStatsPreviewOverlay } from "./widgets/read-stats.ts";
+import {
+	createCalleesPreviewWidget,
+	createCallersPreviewWidget,
+	createImplementationsPreviewWidget,
+	createReferencesPreviewWidget,
+	createTestsPreviewWidget,
+} from "./widgets/relationships.ts";
+import { createSymbolPreviewWidget } from "./widgets/symbol.ts";
 import { createTabsListPreviewWidget } from "./widgets/tabs-list.ts";
 import { createToolPanelPreviewWidget } from "./widgets/tool-panel.ts";
 import { createTurnBudgetPreviewWidget } from "./widgets/turn-budget.ts";
@@ -24,15 +41,28 @@ interface PreviewStory {
 }
 
 const STORIES: readonly PreviewStory[] = [
+	{ label: "api_discover — row states", createWidget: createApiDiscoverPreviewWidget },
+	{ label: "ast_search — row states", createWidget: createAstSearchPreviewWidget },
 	{ label: "autoread — line states", createWidget: createAutoreadPreviewWidget },
+	{ label: "callees — row states", createWidget: createCalleesPreviewWidget },
+	{ label: "callers — row states", createWidget: createCallersPreviewWidget },
 	{ label: "context-pruning — markers and prune rows", createWidget: createContextPruningPreviewWidget },
-	{ label: "grep — row states", createWidget: createGrepPreviewWidget },
 	{ label: "find — row states", createWidget: createFindPreviewWidget },
+	{ label: "grep — row states", createWidget: createGrepPreviewWidget },
+	{ label: "implementations — row states", createWidget: createImplementationsPreviewWidget },
+	{ label: "insert_declaration — row states", createWidget: createInsertDeclarationPreviewWidget },
 	{ label: "ls — row states", createWidget: createLsPreviewWidget },
+	{ label: "outline — row states", createWidget: createOutlinePreviewWidget },
 	{ label: "patch — row states", createWidget: createPatchPreviewWidget },
 	{ label: "publish — activity panel", createWidget: createPublishPreviewWidget },
 	{ label: "read — row states", createWidget: createReadPreviewWidget },
+	{ label: "references — row states", createWidget: createReferencesPreviewWidget },
+	{ label: "rename_declaration — row states", createWidget: createRenameDeclarationPreviewWidget },
+	{ label: "replace_body — row states", createWidget: createReplaceBodyPreviewWidget },
+	{ label: "replace_declaration — row states", createWidget: createReplaceDeclarationPreviewWidget },
+	{ label: "symbol — row states", createWidget: createSymbolPreviewWidget },
 	{ label: "tabs-list — Tabs and SelectableList", createWidget: createTabsListPreviewWidget },
+	{ label: "tests — row states", createWidget: createTestsPreviewWidget },
 	{ label: "tool-panel — shell states", createWidget: createToolPanelPreviewWidget },
 	{ label: "turn-budget — marker states", createWidget: createTurnBudgetPreviewWidget },
 ];

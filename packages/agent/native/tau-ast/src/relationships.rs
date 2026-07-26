@@ -96,6 +96,8 @@ pub struct Relationship {
     pub candidate_source_fingerprints: Vec<String>,
     pub competing_candidates_omitted: usize,
     pub actionable: bool,
+    pub site_preview: String,
+    pub site_preview_truncated: bool,
     pub enclosing_scope: EditableScope,
 }
 
@@ -768,6 +770,7 @@ fn make_relationship(
     } else {
         certainty_reason(occurrence.parse_certainty)
     };
+    let (site_preview, site_preview_truncated) = site_preview(file, &occurrence.range);
     Ok(Relationship {
         relative_path: file.relative_path.clone(),
         language: file.outlined.language,
@@ -786,8 +789,30 @@ fn make_relationship(
         candidate_source_fingerprints,
         competing_candidates_omitted: omitted,
         actionable: certainty != RelationshipCertainty::Ambiguous,
+        site_preview,
+        site_preview_truncated,
         enclosing_scope,
     })
+}
+
+const MAX_SITE_PREVIEW_BYTES: usize = 512;
+
+fn site_preview(file: &IndexedFile, bytes: &Range<usize>) -> (String, bool) {
+    let start = file.source[..bytes.start]
+        .rfind('\n')
+        .map_or(0, |index| index + 1);
+    let end = file.source[bytes.end..]
+        .find('\n')
+        .map_or(file.source.len(), |index| bytes.end + index);
+    let line = file.source.get(start..end).unwrap_or("").trim_end();
+    if line.len() <= MAX_SITE_PREVIEW_BYTES {
+        return (line.to_owned(), false);
+    }
+    let mut cut = MAX_SITE_PREVIEW_BYTES;
+    while !line.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    (line[..cut].to_owned(), true)
 }
 
 fn editable_scope(

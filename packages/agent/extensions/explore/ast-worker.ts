@@ -326,6 +326,8 @@ export interface RelationshipLocation {
 	candidateSourceFingerprints: string[];
 	competingCandidatesOmitted: number;
 	actionable: boolean;
+	sitePreview: string;
+	sitePreviewTruncated: boolean;
 	enclosingScope: EditableScope;
 }
 

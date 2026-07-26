@@ -316,7 +316,10 @@ describe("AST exploration tools", () => {
 		const text = firstText(result);
 		expect(text).toContain("parser.ts:1-3(1): blendColor — function");
 		expect(text).toContain('caller: import { blendColor } from "./mod.ts"; use blendColor');
-		expect(text).toContain("summary: 3 files scanned, 8 declarations considered, 1 results returned");
+		expect(text).toContain("re-exports: mod.ts -> src/parser.ts");
+		expect(text).not.toContain("summary:");
+		expect(text).not.toContain("surface:");
+		expect(text).not.toContain("resolution:");
 		expect(orientation.check(path, "blake3:test")).toBe("apiCandidate");
 		await ast.symbol.execute(
 			"symbol-discovered",
@@ -471,6 +474,8 @@ describe("AST exploration tools", () => {
 					candidateSourceFingerprints: ["blake3:test"],
 					competingCandidatesOmitted: 0,
 					actionable: true,
+					sitePreview: "return parse(input);",
+					sitePreviewTruncated: false,
 					enclosingScope: {
 						locator: "scope-locator",
 						language: "typeScript",
@@ -543,8 +548,10 @@ describe("AST exploration tools", () => {
 			undefined,
 			extensionContext(workspace.dir),
 		);
-		expect(firstText(related)).toContain("parser.ts:1-3 [reference, exact, production]");
-		expect(firstText(related)).toContain("enclosing 1-3(2): caller");
+		expect(firstText(related)).toContain("parser.ts:1-3(2) [reference]");
+		expect(firstText(related)).toContain("return parse(input);");
+		expect(firstText(related)).not.toContain("summary:");
+		expect(firstText(related)).not.toContain("enclosing");
 		expect(orientation.check(path, "blake3:test")).toBe("relationshipScope");
 		await ast.symbol.execute(
 			"relationship-scope",
@@ -648,7 +655,7 @@ describe("AST exploration tools", () => {
 		);
 		const text = firstText(result);
 		expect(text.indexOf("src/nested/parser.go")).toBeLessThan(text.indexOf("src/parser.ts"));
-		expect(text).toContain("summary: 2 outlined, 2 supported, 1 unsupported, 0 failed");
+		expect(text).not.toContain("summary:");
 		expect(client.outlineRecursive).toHaveBeenCalledWith(
 			workspace.path("src"),
 			false,
