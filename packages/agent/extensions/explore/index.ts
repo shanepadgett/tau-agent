@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { resolve } from "node:path";
-import { onTauEvent } from "../../shared/events.js";
+import { emitTauEvent, onTauEvent } from "../../shared/events.js";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { createTemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { createToolRowStateStore } from "../../shared/tool-row-state.js";
@@ -26,10 +26,30 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 	const astClient = new AstWorkerClient();
 	const orientation = createOrientationState(() => astClient.supportedLanguages());
 	const temporaryOutput = createTemporaryOutputStore();
-	const ast = createAstTools(astClient, rowState, temporaryOutput, orientation);
+	const ast = createAstTools(astClient, rowState, temporaryOutput, orientation, (toolCallId, cwd, summary) => {
+		emitTauEvent(pi, "tau:file-mutation.applied", {
+			source: "locatorEdit",
+			toolCallId,
+			cwd,
+			status: summary.status,
+			changes: summary.changes.map((change) => ({
+				path: change.path,
+				kind: change.kind,
+				move: change.move,
+				linesAdded: change.linesAdded,
+				linesRemoved: change.linesRemoved,
+				resultingFingerprint: change.resultingFingerprint,
+				snapshotRanges: change.snapshotRanges,
+			})),
+		});
+	});
 	registerAutoread(pi, rowState);
 	pi.registerTool(ast.outline);
 	pi.registerTool(ast.symbol);
+	pi.registerTool(ast.replace_declaration);
+	pi.registerTool(ast.replace_body);
+	pi.registerTool(ast.insert_declaration);
+	pi.registerTool(ast.rename_declaration);
 	pi.registerTool(ast.api_discover);
 	pi.registerTool(ast.ast_search);
 	pi.registerTool(ast.references);

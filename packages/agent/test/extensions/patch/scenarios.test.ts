@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { cp, lstat, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import { cp, lstat, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
-import { applyPatch, type ApplyPatchSummary } from "../../../extensions/patch/executor.ts";
+import { applyExactSourceMutations, applyPatch, type ApplyPatchSummary } from "../../../extensions/patch/executor.ts";
 
 type Snapshot = Record<string, { type: "file"; content: string } | { type: "dir" }>;
 
@@ -97,4 +97,27 @@ describe("patch fixture scenarios", async () => {
 			}
 		});
 	}
+});
+
+describe("exact-source mutations", () => {
+	it("preflights every fingerprint before writing any file", async () => {
+		const workspace = await realpath(await mkdtemp(join(tmpdir(), "tau-exact-source-")));
+		try {
+			const first = join(workspace, "first.ts");
+			const second = join(workspace, "second.ts");
+			await writeFile(first, "first\n");
+			await writeFile(second, "second\n");
+			const fingerprint = (source: string) => `sha256:${createHash("sha256").update(source).digest("hex")}`;
+			await expect(
+				applyExactSourceMutations(workspace, [
+					{ path: first, expectedFingerprint: fingerprint("first\n"), source: "changed first\n" },
+					{ path: second, expectedFingerprint: fingerprint("stale\n"), source: "changed second\n" },
+				]),
+			).rejects.toThrow("Source changed before exact-source mutation");
+			expect(await readFile(first, "utf8")).toBe("first\n");
+			expect(await readFile(second, "utf8")).toBe("second\n");
+		} finally {
+			await rm(workspace, { recursive: true, force: true });
+		}
+	});
 });

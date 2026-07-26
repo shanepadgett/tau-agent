@@ -1,6 +1,7 @@
 import { defineTool, formatSize, keyHint, type Theme } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Text, truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
+import { createHash } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { Type } from "typebox";
@@ -11,6 +12,7 @@ import {
 } from "../../shared/bounded-text-result.ts";
 import type { TemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.js";
+import { applyExactSourceMutations, type ApplyPatchSummary } from "../patch/executor.ts";
 import {
 	AST_LANGUAGE_REGISTRY,
 	astLanguageForPath,
@@ -29,6 +31,8 @@ import {
 	type ApiSurfaceFilter,
 	type AstSearchResult,
 	type AstClient,
+	type EditOperation,
+	type EditPlanResult,
 	type OutlineEntry,
 	type OutlineFileResult,
 	type SourceRange,
@@ -172,15 +176,69 @@ const relationshipParams = Type.Object(
 	},
 	{ additionalProperties: false },
 );
+const replaceDeclarationParams = Type.Object(
+	{
+		locator: Type.Integer({ minimum: 1, description: "Numeric declaration locator" }),
+		source: Type.String({
+			minLength: 1,
+			description: "One complete replacement declaration or Markdown heading section",
+		}),
+	},
+	{ additionalProperties: false },
+);
+const replaceBodyParams = Type.Object(
+	{
+		locator: Type.Integer({ minimum: 1, description: "Numeric declaration locator" }),
+		body: Type.String({
+			minLength: 1,
+			description: "Complete replacement for the adapter-provided code body or Markdown section content",
+		}),
+	},
+	{ additionalProperties: false },
+);
+const insertDeclarationParams = Type.Object(
+	{
+		locator: Type.Integer({ minimum: 1, description: "Numeric declaration locator" }),
+		position: StringEnum(["before", "after"] as const),
+		source: Type.String({ minLength: 1, description: "One complete declaration to insert" }),
+	},
+	{ additionalProperties: false },
+);
+const renameDeclarationParams = Type.Object(
+	{
+		locator: Type.Integer({ minimum: 1, description: "Numeric declaration locator" }),
+		newName: Type.String({ minLength: 1, description: "One identifier in the target language" }),
+		scope: Type.Union([
+			Type.Object({ kind: Type.Literal("file") }, { additionalProperties: false }),
+			Type.Object(
+				{ kind: Type.Literal("repository"), path: Type.String({ minLength: 1 }) },
+				{ additionalProperties: false },
+			),
+		]),
+		includeInferred: Type.Boolean({
+			description: "Update inferred references as well as exact references",
+		}),
+	},
+	{ additionalProperties: false },
+);
+
+interface LocatorEditResult {
+	plan: EditPlanResult;
+	mutation: ApplyPatchSummary;
+	invalidatedLocatorIds: number[];
+	freshLocatorIds: number[];
+	verificationDiagnostics: string[];
+}
 
 interface AstToolDetails {
-	kind: "outline" | "symbol" | "apiDiscover" | "astSearch" | "relationship";
+	kind: "outline" | "symbol" | "apiDiscover" | "astSearch" | "relationship" | "locatorEdit";
 	result:
 		| OutlineTargetResult
 		| SymbolBatchResult
 		| ApiDiscoveryResult
 		| AstSearchResult
 		| RelationshipResult
+		| LocatorEditResult
 		| { path: string; summary: RecursiveOutlineSummary; visibleFiles: string[] };
 	declarationCount: number;
 	sourceBytes: number;
@@ -213,6 +271,7 @@ export function createAstTools(
 	rowState: ToolRowStateStore,
 	temporaryOutput: TemporaryOutputStore,
 	orientation: OrientationState,
+	emitMutation: (toolCallId: string, cwd: string, summary: ApplyPatchSummary) => void,
 ) {
 	const locators = new Map<number, LocatorRecord>();
 	let nextLocator = 1;
@@ -263,6 +322,15 @@ export function createAstTools(
 		};
 		locators.set(id, record);
 		return id;
+	}
+
+	function editableLocator(id: number): LocatorRecord {
+		const record = locators.get(id);
+		if (!record) throw new Error(`Unknown declaration locator: ${id}. Run outline or api_discover again.`);
+		if (record.stale || record.generation !== client.getGeneration()) {
+			throw new Error(`Declaration locator ${id} is stale. Run outline or api_discover again.`);
+		}
+		return record;
 	}
 
 	function renderApiCandidate(candidate: ApiCandidate, id: number, cwd: string): string {
@@ -954,6 +1022,242 @@ export function createAstTools(
 		},
 	});
 
+	async function executeLocatorEdit(
+		toolCallId: string,
+		locatorId: number,
+		edit: EditOperation,
+		signal: AbortSignal | undefined,
+		cwd: string,
+	): Promise<{ content: Array<{ type: "text"; text: string }>; details: AstToolDetails }> {
+		const record = editableLocator(locatorId);
+		const plan = await client.planEdit(record.token, edit, signal);
+		const mutation = await applyExactSourceMutations(cwd, plan.files, signal);
+		if (mutation.changes.length === 0) {
+			const message = mutation.failures.map((failure) => failure.message).join("; ") || "No files changed.";
+			throw new Error(`Locator edit failed: ${message}`);
+		}
+
+		const changedPaths = new Set(mutation.changes.map((change) => resolve(cwd, change.path)));
+		const invalidatedLocatorIds: number[] = [];
+		for (const candidate of locators.values()) {
+			if (changedPaths.has(candidate.path) && !candidate.stale) {
+				candidate.stale = true;
+				invalidatedLocatorIds.push(candidate.id);
+			}
+		}
+		orientation.invalidate([...changedPaths]);
+		emitMutation(toolCallId, cwd, mutation);
+
+		const verificationDiagnostics: string[] = [];
+		const verifiedTokens = new Set<string>();
+		if (mutation.status === "completed") {
+			for (const filePlan of plan.files) {
+				try {
+					const reparsed = await client.outline(
+						{ kind: "file", path: filePlan.path, language: requireAstLanguageForPath(filePlan.path) },
+						true,
+						false,
+						[],
+						signal,
+					);
+					const file = reparsed.files[0];
+					if (!file || file.sourceFingerprint !== sourceFingerprintForPlan(filePlan.source)) {
+						verificationDiagnostics.push(`${filePlan.path}: post-mutation fingerprint did not match the plan`);
+						continue;
+					}
+					if (file.diagnostics.errorNodes > 0 || file.diagnostics.missingNodes > 0) {
+						verificationDiagnostics.push(
+							`${filePlan.path}: parser recovered with ${file.diagnostics.errorNodes} ERROR and ${file.diagnostics.missingNodes} MISSING nodes`,
+						);
+						continue;
+					}
+					for (const item of file.items) {
+						if (item.certainty === "certain" && item.locator) verifiedTokens.add(item.locator);
+						for (const member of item.members) {
+							if (member.certainty === "certain" && member.locator) verifiedTokens.add(member.locator);
+						}
+					}
+				} catch (error) {
+					verificationDiagnostics.push(
+						`${filePlan.path}: post-mutation reparse failed: ${error instanceof Error ? error.message : String(error)}`,
+					);
+				}
+			}
+		}
+		const freshLocatorIds = plan.freshLocators
+			.filter((fresh) => verifiedTokens.has(fresh.locator))
+			.map((fresh) => registerLocator(fresh.locator, fresh.path, fresh.name));
+		const freshTargetId = freshLocatorIds[0];
+
+		const builder = new BoundedTextResultBuilder(temporaryOutput, "completeBlocks");
+		try {
+			for (const filePlan of plan.files) {
+				if (!changedPaths.has(filePlan.path)) continue;
+				await builder.appendBlock(
+					filePlan.path,
+					formatPathForDisplay(filePlan.path, cwd),
+					`${formatPathForDisplay(filePlan.path, cwd)}\n${filePlan.source}`,
+				);
+			}
+			for (const [index, skipped] of plan.skippedImpacts.entries()) {
+				const candidateIds = skipped.candidateLocators.flatMap((token, candidateIndex) => {
+					if (token === record.token && freshTargetId !== undefined) return [freshTargetId];
+					const existing = [...locators.values()].find(
+						(candidate) => candidate.token === token && !candidate.stale,
+					);
+					if (existing) return [existing.id];
+					const candidatePath = skipped.candidatePaths[candidateIndex];
+					return candidatePath && !changedPaths.has(resolve(candidatePath))
+						? [registerLocator(token, candidatePath, "rename candidate")]
+						: [];
+				});
+				await builder.appendBlock(
+					undefined,
+					`skipped-${index}`,
+					`skipped: ${formatPathForDisplay(skipped.path, cwd)}:${displayLineRange(skipped.range)} [${skipped.reason}]${candidateIds.length > 0 ? ` candidates ${candidateIds.map((id) => `(${id})`).join(", ")}` : ""}`,
+				);
+			}
+			for (const diagnostic of verificationDiagnostics) {
+				await builder.appendBlock(undefined, diagnostic, `warning: ${diagnostic}`);
+			}
+			await builder.appendRequiredBlock(
+				"locator edit summary",
+				`changed: ${mutation.changes.map((change) => change.path).join(", ")}; invalidated locators: ${invalidatedLocatorIds.join(", ") || "none"}; fresh locators: ${freshLocatorIds.map((id) => `(${id})`).join(", ") || "none"}; skipped impacts: ${plan.skippedImpacts.length}; status: ${mutation.status}`,
+			);
+			const bounded = await builder.finish();
+			if (bounded.overflow.temporaryPath) orientation.recordTemporaryOutput(bounded.overflow.temporaryPath);
+			const returnedBytes = Buffer.byteLength(bounded.content);
+			return {
+				content: [{ type: "text", text: bounded.content }],
+				details: {
+					kind: "locatorEdit",
+					result: { plan, mutation, invalidatedLocatorIds, freshLocatorIds, verificationDiagnostics },
+					declarationCount: freshLocatorIds.length,
+					sourceBytes: plan.files.reduce((total, file) => total + Buffer.byteLength(file.source), 0),
+					returnedBytes,
+					avoidedBytes: 0,
+					truncated: bounded.overflow.truncated,
+					overflow: bounded.overflow,
+				},
+			};
+		} catch (error) {
+			await builder.abort();
+			throw error;
+		}
+	}
+
+	const replaceDeclaration = defineTool<typeof replaceDeclarationParams, AstToolDetails>({
+		name: "replace_declaration",
+		label: "replace_declaration",
+		description:
+			"Replace one complete declaration through its stale-safe numeric locator. Code must parse as one declaration in the current parent container. A Markdown heading locator replaces the heading and its entire section, including deeper subsections, and requires one root heading at the same depth.",
+		promptSnippet: "Replace one complete declaration by structural locator",
+		parameters: replaceDeclarationParams,
+		executionMode: "sequential",
+		execute(toolCallId, params, signal, _onUpdate, ctx) {
+			return executeLocatorEdit(
+				toolCallId,
+				params.locator,
+				{ kind: "replaceDeclaration", source: params.source },
+				signal,
+				ctx.cwd,
+			);
+		},
+		renderCall(args, theme, context) {
+			return locatorEditCall("replace_declaration", args.locator, locators, rowState, theme, context);
+		},
+		renderResult(result, options, theme, context) {
+			return renderAstResult(result, options.expanded, theme, context);
+		},
+	});
+
+	const replaceBody = defineTool<typeof replaceBodyParams, AstToolDetails>({
+		name: "replace_body",
+		label: "replace_body",
+		description:
+			"Replace exactly the reliable adapter-provided body range while preserving its signature and attached metadata. For a Markdown heading locator, preserve the heading and replace its section content; nested headings must be deeper than the selected heading.",
+		promptSnippet: "Replace one executable body by structural locator",
+		parameters: replaceBodyParams,
+		executionMode: "sequential",
+		execute(toolCallId, params, signal, _onUpdate, ctx) {
+			return executeLocatorEdit(
+				toolCallId,
+				params.locator,
+				{ kind: "replaceBody", body: params.body },
+				signal,
+				ctx.cwd,
+			);
+		},
+		renderCall(args, theme, context) {
+			return locatorEditCall("replace_body", args.locator, locators, rowState, theme, context);
+		},
+		renderResult(result, options, theme, context) {
+			return renderAstResult(result, options.expanded, theme, context);
+		},
+	});
+
+	const insertDeclaration = defineTool<typeof insertDeclarationParams, AstToolDetails>({
+		name: "insert_declaration",
+		label: "insert_declaration",
+		description:
+			"Insert exactly one declaration immediately before or after a declaration locator in its current parent container.",
+		promptSnippet: "Insert one declaration adjacent to a structural locator",
+		parameters: insertDeclarationParams,
+		executionMode: "sequential",
+		execute(toolCallId, params, signal, _onUpdate, ctx) {
+			return executeLocatorEdit(
+				toolCallId,
+				params.locator,
+				{ kind: "insertDeclaration", position: params.position, source: params.source },
+				signal,
+				ctx.cwd,
+			);
+		},
+		renderCall(args, theme, context) {
+			return locatorEditCall("insert_declaration", args.locator, locators, rowState, theme, context, args.position);
+		},
+		renderResult(result, options, theme, context) {
+			return renderAstResult(result, options.expanded, theme, context);
+		},
+	});
+
+	const renameDeclaration = defineTool<typeof renameDeclarationParams, AstToolDetails>({
+		name: "rename_declaration",
+		label: "rename_declaration",
+		description:
+			"Rename one declaration and exact references within an explicit file or repository scope. Inferred references require includeInferred=true; ambiguous references remain unchanged.",
+		promptSnippet: "Rename one declaration through stale-safe structural identity",
+		parameters: renameDeclarationParams,
+		executionMode: "sequential",
+		async execute(toolCallId, params, signal, _onUpdate, ctx) {
+			const scope =
+				params.scope.kind === "repository"
+					? { kind: "repository" as const, path: await realpath(resolveExplorePath(ctx.cwd, params.scope.path)) }
+					: { kind: "file" as const };
+			return executeLocatorEdit(
+				toolCallId,
+				params.locator,
+				{ kind: "renameDeclaration", newName: params.newName, scope, includeInferred: params.includeInferred },
+				signal,
+				ctx.cwd,
+			);
+		},
+		renderCall(args, theme, context) {
+			return locatorEditCall(
+				"rename_declaration",
+				args.locator,
+				locators,
+				rowState,
+				theme,
+				context,
+				`${args.newName} ${args.scope.kind}${args.includeInferred ? " inferred" : ""}`,
+			);
+		},
+		renderResult(result, options, theme, context) {
+			return renderAstResult(result, options.expanded, theme, context);
+		},
+	});
+
 	const apiDiscover = defineTool<typeof apiDiscoverParams, AstToolDetails>({
 		name: "api_discover",
 		label: "api_discover",
@@ -1407,6 +1711,10 @@ export function createAstTools(
 	return {
 		outline,
 		symbol,
+		replace_declaration: replaceDeclaration,
+		replace_body: replaceBody,
+		insert_declaration: insertDeclaration,
+		rename_declaration: renameDeclaration,
 		api_discover: apiDiscover,
 		ast_search: astSearch,
 		references,
@@ -1470,7 +1778,14 @@ function renderAstResult(
 	const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
 	if (!expanded && !context.isError) {
 		const declarationCount = details?.declarationCount ?? 0;
-		const noun = declarationCount === 1 ? "declaration" : "declarations";
+		const noun =
+			details?.kind === "locatorEdit"
+				? declarationCount === 1
+					? "fresh locator"
+					: "fresh locators"
+				: declarationCount === 1
+					? "declaration"
+					: "declarations";
 		const byteSummary = details
 			? `, ${formatSize(details.returnedBytes)} returned, ${formatSize(details.avoidedBytes)} avoided`
 			: "";
@@ -1625,4 +1940,32 @@ function symbolTargetVariants(ids: readonly number[], locators: ReadonlyMap<numb
 	}
 	variants.push(`${records.length} symbols in ${fileCount} files`);
 	return variants;
+}
+
+function sourceFingerprintForPlan(source: string): string {
+	return `sha256:${createHash("sha256").update(source, "utf8").digest("hex")}`;
+}
+
+function locatorEditCall(
+	tool: string,
+	id: number,
+	locators: ReadonlyMap<number, LocatorRecord>,
+	rowState: ToolRowStateStore,
+	theme: Theme,
+	context: {
+		toolCallId: string;
+		invalidate: () => void;
+		lastComponent?: Component;
+	},
+	option = "",
+): Component {
+	rowState.watch(context.toolCallId, context.invalidate);
+	const record = locators.get(id);
+	const targets = record ? [`${record.name}@${basename(record.path)}`, String(id)] : [String(id)];
+	const options = [option ? `[${option}]` : ""];
+	const component =
+		(context.lastComponent as AstCallComponent | undefined) ??
+		new AstCallComponent(rowState, context.toolCallId, tool, targets, options, theme);
+	component.set(targets, options, theme);
+	return component;
 }

@@ -2,13 +2,13 @@
 
 Status: active
 
-Use this corpus for manual acceptance checks whenever a change affects language adapters, outlines, locators, signatures, documentation attachment, declaration ranges, or parser recovery. Reference repositories live under `~/.local/share/tau-agent/references/` and remain read-only.
+Use this corpus for manual acceptance checks whenever a change affects language adapters, outlines, locators, signatures, documentation attachment, declaration ranges, or parser recovery. Reference repositories live under `~/.local/share/tau-agent/references/`. Verify each working tree is clean before testing. Mutation phases may edit these fixtures during acceptance, but must run `git reset --hard HEAD` afterward and verify every working tree is clean again.
 
 This corpus is mandatory for every phase in this plan. Before a phase is complete, run its applicable acceptance workflow against all nine reference repositories and the Markdown fixture below. Unit tests and phase-specific fixtures do not replace this pass. A failure in any supported language blocks phase completion.
 
 ## Required probes
 
-| Adapter | Read-only repository | Production source | Declaration | Expected documentation |
+| Adapter | Reference repository | Production source | Declaration | Expected documentation |
 | --- | --- | --- | --- | --- |
 | TypeScript | `~/.local/share/tau-agent/references/pi` | `packages/agent/src/agent.ts` | `AgentOptions` | `Options for constructing an {@link Agent}.` |
 | TSX | `~/.local/share/tau-agent/references/excalidraw` | `packages/excalidraw/components/Button.tsx` | `Button` | `A generic button component that follows Excalidraw's design system.` |

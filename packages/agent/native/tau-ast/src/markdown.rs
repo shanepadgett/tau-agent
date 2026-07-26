@@ -8,6 +8,7 @@ use tree_sitter::Node;
 struct Heading {
     level: usize,
     start_byte: usize,
+    end_byte: usize,
     name_start_byte: usize,
     name_end_byte: usize,
     name: String,
@@ -57,7 +58,7 @@ pub fn extract_markdown_items(root: Node<'_>, source: &str) -> Vec<OutlineItem> 
                         heading.name_start_byte..heading.name_end_byte,
                     ),
                     receiver_range: None,
-                    body_range: None,
+                    body_range: Some(source_range(source.as_bytes(), heading.end_byte..end_byte)),
                     signature: heading.signature.clone(),
                     ast_kind: heading.ast_kind.clone(),
                     certainty,
@@ -213,6 +214,7 @@ fn collect_headings(node: Node<'_>, source: &str, headings: &mut Vec<Heading>) {
         headings.push(Heading {
             level,
             start_byte: heading_bytes.start,
+            end_byte: heading_bytes.end,
             name_start_byte: trimmed_start,
             name_end_byte: trimmed_end,
             name,

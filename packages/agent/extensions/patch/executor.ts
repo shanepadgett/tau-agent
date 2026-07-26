@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { access, mkdir, readFile, rmdir, stat, unlink, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, realpath, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 import { applyChunksWithRanges, countLogicalLines, UpdateChunkApplyError } from "./matcher.ts";
@@ -32,6 +32,12 @@ export interface ApplyPatchStats {
 	linesAdded: number;
 	linesRemoved: number;
 	completedOperations: number;
+}
+
+export interface ExactSourceMutation {
+	path: string;
+	expectedFingerprint: string;
+	source: string;
 }
 
 export function deriveStats(summary: ApplyPatchSummary): ApplyPatchStats {
@@ -264,6 +270,84 @@ function withMutationQueuePaths<T>(paths: string[], fn: () => Promise<T>): Promi
 		current = () => withFileMutationQueue(path, next);
 	}
 	return current();
+}
+
+export async function applyExactSourceMutations(
+	cwd: string,
+	mutations: readonly ExactSourceMutation[],
+	signal?: AbortSignal,
+): Promise<ApplyPatchSummary> {
+	throwIfAborted(signal);
+	if (mutations.length === 0) throw new Error("Exact-source mutation requires at least one file.");
+	const byPath = new Map<string, ExactSourceMutation>();
+	for (const mutation of mutations) {
+		const path = resolvePath(cwd, mutation.path);
+		if (byPath.has(path)) throw new Error(`Conflicting exact-source mutations for path: ${mutation.path}`);
+		byPath.set(path, { ...mutation, path });
+	}
+	const ordered = [...byPath.values()].sort((left, right) => left.path.localeCompare(right.path));
+
+	return withMutationQueuePaths(
+		ordered.map((mutation) => mutation.path),
+		async () => {
+			const staged: Array<{ mutation: ExactSourceMutation; change: ApplyPatchChange }> = [];
+			for (const [sectionIndex, mutation] of ordered.entries()) {
+				throwIfAborted(signal);
+				await assertExistingFile(mutation.path, mutation.path);
+				const canonical = await realpath(mutation.path);
+				if (canonical !== mutation.path) {
+					throw new Error(`Exact-source mutation path is not canonical: ${mutation.path}`);
+				}
+				const current = await readUtf8(mutation.path, mutation.path);
+				const currentFingerprint = fingerprint(current);
+				if (currentFingerprint !== mutation.expectedFingerprint) {
+					throw new Error(
+						`Source changed before exact-source mutation for ${mutation.path}; expected ${mutation.expectedFingerprint}, found ${currentFingerprint}.`,
+					);
+				}
+				const displayPath = relative(resolve(cwd), mutation.path);
+				const lineCount = countLogicalLines(mutation.source);
+				staged.push({
+					mutation,
+					change: {
+						sectionIndex,
+						kind: "update",
+						path: displayPath.startsWith("..") || isAbsolute(displayPath) ? mutation.path : displayPath,
+						linesAdded: lineCount,
+						linesRemoved: countLogicalLines(current),
+						resultingFingerprint: fingerprint(mutation.source),
+						snapshotRanges: lineCount > 0 ? [{ startLine: 1, endLine: Math.min(lineCount, 120) }] : undefined,
+					},
+				});
+			}
+
+			throwIfAborted(signal);
+			const changes: ApplyPatchChange[] = [];
+			for (const { mutation, change } of staged) {
+				try {
+					throwIfAborted(signal);
+					await writeFile(mutation.path, mutation.source, "utf8");
+					changes.push(change);
+				} catch (error) {
+					return {
+						status: changes.length === 0 ? "failed" : "partial",
+						changes,
+						failures: [
+							{
+								phase: "apply",
+								sectionIndex: change.sectionIndex,
+								path: change.path,
+								kind: "update",
+								message: error instanceof Error ? error.message : String(error),
+							},
+						],
+						totalSections: staged.length,
+					};
+				}
+			}
+			return { status: "completed", changes, failures: [], totalSections: staged.length };
+		},
+	);
 }
 
 export async function applyPatch(

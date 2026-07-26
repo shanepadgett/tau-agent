@@ -267,7 +267,7 @@ pub struct OutlineEntry {
     pub locator: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ParseCertainty {
     Certain,
@@ -368,7 +368,7 @@ impl fmt::Display for SymbolError {
 
 impl Error for SymbolError {}
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SourceLocator {
     pub(crate) version: u32,
@@ -557,7 +557,7 @@ impl OutlineEngine {
         })
     }
 
-    fn outline_source(
+    pub(crate) fn outline_source(
         &self,
         path: &Path,
         language: LanguageId,
@@ -1334,7 +1334,7 @@ impl OutlineEngine {
     }
 }
 
-fn matching_entry<'a>(
+pub(crate) fn matching_entry<'a>(
     file: &'a OutlineFileResult,
     locator: &SourceLocator,
 ) -> Option<&'a OutlineEntry> {
@@ -1965,6 +1965,15 @@ mod tests {
         assert!(installation_source.starts_with("## Installation"));
         assert!(installation_source.contains("### macOS"));
         assert!(!installation_source.contains("API Reference"));
+        let installation_body = installation
+            .entry
+            .body_range
+            .as_ref()
+            .expect("section body range");
+        assert_eq!(
+            &source[installation_body.start_byte..installation_body.end_byte],
+            "\nInstall the package.\n\n```markdown\n# Fenced text is not a heading\n```\n\n### macOS\n\nRun the macOS installer.\n\n<!-- markdownlint-disable-next-line MD003 -->\n"
+        );
 
         let api = result
             .items

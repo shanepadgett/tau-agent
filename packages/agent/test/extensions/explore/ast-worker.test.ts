@@ -39,7 +39,7 @@ process.stdin.on("data", (chunk) => {
     if (request.operation === "handshake") {
       send({
         requestId: request.requestId,
-        protocolVersion: 12,
+        protocolVersion: 13,
         success: true,
         result: { kind: "handshake", supportedLanguages: ["typeScript", "odin"] }
       });
@@ -49,15 +49,15 @@ process.stdin.on("data", (chunk) => {
     if (request.target?.path === "hang") continue;
     if (request.operation === "outline") {
       if (request.target.kind === "recursiveDirectory") {
-        send({ requestId: request.requestId, protocolVersion: 12, success: true, result: { kind: "recursiveStart", path: request.target.path, budgets: request.target.budgets } });
-        send({ requestId: request.requestId, protocolVersion: 12, success: true, result: { kind: "recursiveFile", relativePath: "src/one.ts", file: { path: "/repo/src/one.ts", language: "typeScript", sourceFingerprint: "blake3:test", byteLength: 20, lineCount: 1, diagnostics: { errorNodes: 0, missingNodes: 0 }, items: [] } } });
-        send({ requestId: request.requestId, protocolVersion: 12, success: true, result: { kind: "recursiveDiagnostic", relativePath: "src/bad.odin", language: "odin", code: "outlineFailed", message: "bad source" } });
-        send({ requestId: request.requestId, protocolVersion: 12, success: true, result: { kind: "recursiveComplete", discoveredFiles: 3, supportedFiles: 2, unsupportedFiles: 1, emittedFiles: 1, unreadableFiles: 0, oversizedFiles: 0, failedFiles: 1, parserDegradedFiles: 0, totalByteLength: 20, totalLineCount: 1, fileLimitReached: false, sourceByteLimitReached: false, depthLimitReached: false, elapsedLimitReached: false } });
+        send({ requestId: request.requestId, protocolVersion: 13, success: true, result: { kind: "recursiveStart", path: request.target.path, budgets: request.target.budgets } });
+        send({ requestId: request.requestId, protocolVersion: 13, success: true, result: { kind: "recursiveFile", relativePath: "src/one.ts", file: { path: "/repo/src/one.ts", language: "typeScript", sourceFingerprint: "blake3:test", byteLength: 20, lineCount: 1, diagnostics: { errorNodes: 0, missingNodes: 0 }, items: [] } } });
+        send({ requestId: request.requestId, protocolVersion: 13, success: true, result: { kind: "recursiveDiagnostic", relativePath: "src/bad.odin", language: "odin", code: "outlineFailed", message: "bad source" } });
+        send({ requestId: request.requestId, protocolVersion: 13, success: true, result: { kind: "recursiveComplete", discoveredFiles: 3, supportedFiles: 2, unsupportedFiles: 1, emittedFiles: 1, unreadableFiles: 0, oversizedFiles: 0, failedFiles: 1, parserDegradedFiles: 0, totalByteLength: 20, totalLineCount: 1, fileLimitReached: false, sourceByteLimitReached: false, depthLimitReached: false, elapsedLimitReached: false } });
         continue;
       }
       const response = {
         requestId: request.requestId,
-        protocolVersion: 12,
+        protocolVersion: 13,
         success: true,
         result: {
           kind: "outline",
@@ -74,7 +74,7 @@ process.stdin.on("data", (chunk) => {
     if (request.operation === "apiDiscover") {
       send({
         requestId: request.requestId,
-        protocolVersion: 12,
+        protocolVersion: 13,
         success: true,
         result: {
           kind: "apiDiscovery",
@@ -116,7 +116,7 @@ process.stdin.on("data", (chunk) => {
     if (request.operation === "astSearch") {
       send({
         requestId: request.requestId,
-        protocolVersion: 12,
+        protocolVersion: 13,
         success: true,
         result: {
           kind: "astSearch", path: request.path, language: request.language, pattern: request.pattern,
@@ -137,7 +137,7 @@ process.stdin.on("data", (chunk) => {
     if (request.operation === "relationships") {
       send({
         requestId: request.requestId,
-        protocolVersion: 12,
+        protocolVersion: 13,
         success: true,
         result: {
           kind: "relationships",
@@ -157,9 +157,23 @@ process.stdin.on("data", (chunk) => {
       });
       continue;
     }
+    if (request.operation === "planEdit") {
+      send({
+        requestId: request.requestId,
+        protocolVersion: 13,
+        success: true,
+        result: {
+          kind: "editPlan",
+          files: [{ path: "/tmp/file.ts", expectedFingerprint: "sha256:old", source: "x", edits: [] }],
+          skippedImpacts: [],
+          freshLocators: []
+        }
+      });
+      continue;
+    }
     send({
       requestId: request.requestId,
-      protocolVersion: 12,
+      protocolVersion: 13,
       success: true,
       result: {
         kind: "symbol",
@@ -224,6 +238,9 @@ describe("AST worker client", () => {
 				"references",
 			);
 			expect((await worker.symbol(["locator"], "declaration", 2, undefined)).blocks[0]?.source).toBe("x");
+			expect(
+				(await worker.planEdit("locator", { kind: "replaceBody", body: "{}" }, undefined)).files[0]?.source,
+			).toBe("x");
 		} finally {
 			await worker.shutdown();
 		}

@@ -1,8 +1,8 @@
 import { resolve } from "node:path";
-import { symlink } from "node:fs/promises";
+import { readFile, symlink } from "node:fs/promises";
 import { initTheme } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { createAstTools } from "../../../extensions/explore/ast-tools.ts";
+import { createAstTools as createAstToolsImpl } from "../../../extensions/explore/ast-tools.ts";
 import {
 	createOrientationState,
 	sourceFingerprint,
@@ -78,12 +78,24 @@ function astClient(overrides: Partial<AstClient>): AstClient {
 		getGeneration: () => 1,
 		outline: vi.fn(),
 		outlineRecursive: vi.fn(),
+		planEdit: vi.fn(),
 		relationships: vi.fn(),
 		search: vi.fn(),
 		symbol: vi.fn(),
 		shutdown: vi.fn(async () => {}),
 		...overrides,
 	};
+}
+
+const emitMutation = vi.fn();
+
+function createAstTools(
+	client: Parameters<typeof createAstToolsImpl>[0],
+	rowState: Parameters<typeof createAstToolsImpl>[1],
+	temporaryOutput: Parameters<typeof createAstToolsImpl>[2],
+	orientation: Parameters<typeof createAstToolsImpl>[3],
+) {
+	return createAstToolsImpl(client, rowState, temporaryOutput, orientation, emitMutation);
 }
 
 function astSearchSummary(overrides: Partial<AstSearchSummary> = {}): AstSearchSummary {
@@ -905,6 +917,19 @@ describe("AST exploration tools", () => {
 			extensionContext(workspace.dir),
 		);
 		expect(firstText(outlined)).toContain("declarations\n3-5(1): ## Installation");
+	});
+
+	it("documents Markdown section replacement boundaries on the edit tools", () => {
+		const ast = createAstTools(
+			astClient({}),
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
+		);
+		expect(ast.replace_declaration.description).toContain(
+			"replaces the heading and its entire section, including deeper subsections",
+		);
+		expect(ast.replace_body.description).toContain("preserve the heading and replace its section content");
 	});
 
 	it("renders nested TypeScript namespace declarations at qualified depth", async () => {
@@ -1735,5 +1760,101 @@ describe("AST exploration tools", () => {
 			),
 		).rejects.toThrow("is stale");
 		expect(client.symbol).not.toHaveBeenCalled();
+	});
+
+	it("applies a locator body edit, emits mutation data, invalidates the old ID, and registers a reparsed ID", async () => {
+		const path = workspace.path("src/parser.ts");
+		const original = "function parse(): void {}\n";
+		const changed = "function parse(): void { return; }\n";
+		await workspace.write("src/parser.ts", original);
+		const originalFingerprint = sourceFingerprint(Buffer.from(original));
+		const changedFingerprint = sourceFingerprint(Buffer.from(changed));
+		const initial = outlineResult(path);
+		const initialFile = initial.files[0];
+		if (!initialFile) throw new Error("initial outline fixture missing");
+		initialFile.sourceFingerprint = originalFingerprint;
+		const fresh = structuredClone(initial);
+		const freshFile = fresh.files[0];
+		const freshDeclaration = freshFile?.items[0];
+		if (!freshFile || !freshDeclaration) throw new Error("fresh outline fixture missing");
+		freshFile.sourceFingerprint = changedFingerprint;
+		freshDeclaration.locator = "fresh-locator";
+		const client = astClient({
+			outline: vi.fn().mockResolvedValueOnce(initial).mockResolvedValueOnce(fresh),
+			planEdit: vi.fn(async (locator, edit) => {
+				expect(locator).toBe("native-locator");
+				expect(edit).toEqual({ kind: "replaceBody", body: "{ return; }" });
+				return {
+					files: [
+						{
+							path,
+							expectedFingerprint: originalFingerprint,
+							source: changed,
+							edits: [{ range, replacement: "{ return; }" }],
+						},
+					],
+					skippedImpacts: [],
+					freshLocators: [
+						{ locator: "fresh-locator", path, name: "parse", sourceFingerprint: changedFingerprint },
+					],
+				};
+			}),
+			symbol: vi.fn(async () => ({
+				declarations: [
+					{
+						locator: "fresh-locator",
+						path,
+						language: "typeScript" as const,
+						sourceFingerprint: changedFingerprint,
+						declarationRange: range,
+						diagnostics: [],
+					},
+				],
+				blocks: [{ path, returnedRange: range, declarationIndexes: [0], source: changed.trim() }],
+			})),
+		});
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
+		);
+		await ast.outline.execute(
+			"outline-edit",
+			{ path: "src/parser.ts" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		const edited = await ast.replace_body.execute(
+			"replace-body",
+			{ locator: 1, body: "{ return; }" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		expect(await readFile(path, "utf8")).toBe(changed);
+		expect(firstText(edited)).toContain("invalidated locators: 1; fresh locators: (2)");
+		expect(emitMutation).toHaveBeenCalledWith(
+			"replace-body",
+			workspace.dir,
+			expect.objectContaining({ status: "completed" }),
+		);
+		await expect(
+			ast.symbol.execute(
+				"old-symbol",
+				{ locators: [1], view: "declaration" },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			),
+		).rejects.toThrow("stale");
+		await ast.symbol.execute(
+			"fresh-symbol",
+			{ locators: [2], view: "declaration" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
 	});
 });

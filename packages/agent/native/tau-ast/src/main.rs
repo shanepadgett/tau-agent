@@ -1,5 +1,6 @@
 mod csharp;
 mod discovery;
+mod edits;
 mod go;
 mod java;
 mod kotlin;
@@ -103,6 +104,11 @@ fn run() -> Result<(), Box<dyn Error>> {
                     request_id,
                     "handshake_required",
                     "complete the protocol handshake before relationship requests".to_owned(),
+                ),
+                Request::PlanEdit { .. } if !handshake_complete => error_response(
+                    request_id,
+                    "handshake_required",
+                    "complete the protocol handshake before edit planning requests".to_owned(),
                 ),
                 Request::Outline {
                     target,
@@ -386,6 +392,39 @@ fn run() -> Result<(), Box<dyn Error>> {
                         ),
                         Err(error) => {
                             error_response(request_id, "relationship_failed", error.to_string())
+                        }
+                    }
+                }
+                Request::PlanEdit {
+                    locator,
+                    edit,
+                    budgets,
+                    ..
+                } => {
+                    if engine.is_none() {
+                        match OutlineEngine::new() {
+                            Ok(new_engine) => engine = Some(new_engine),
+                            Err(error) => {
+                                write_frame(
+                                    &mut writer,
+                                    &error_response(
+                                        request_id,
+                                        "rule_initialization_failed",
+                                        error.to_string(),
+                                    ),
+                                )?;
+                                continue;
+                            }
+                        }
+                    }
+                    match engine
+                        .as_ref()
+                        .expect("engine is initialized above")
+                        .plan_edit(&locator, edit, budgets)
+                    {
+                        Ok(plan) => success_response(request_id, ResponseResult::EditPlan { plan }),
+                        Err(error) => {
+                            error_response(request_id, "edit_plan_failed", error.to_string())
                         }
                     }
                 }

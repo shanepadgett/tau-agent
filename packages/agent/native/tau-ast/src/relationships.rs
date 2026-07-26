@@ -145,6 +145,7 @@ struct IndexedDeclaration {
 #[derive(Clone)]
 struct RawOccurrence {
     range: Range<usize>,
+    binding_eligible: bool,
     call: bool,
     type_usage: bool,
     implementation: bool,
@@ -167,6 +168,124 @@ impl OutlineEngine {
                 format!("relationship resultLimit must be between 1 and {MAX_RESULTS}").into(),
             );
         }
+        self.relationships_internal(
+            path,
+            budgets,
+            encoded_locator,
+            operation,
+            Some(result_limit),
+        )
+    }
+
+    pub(crate) fn relationships_for_edit(
+        &self,
+        path: &str,
+        budgets: RecursiveBudgets,
+        encoded_locator: &str,
+    ) -> Result<RelationshipResult, Box<dyn Error>> {
+        self.relationships_internal(
+            path,
+            budgets,
+            encoded_locator,
+            RelationshipOperation::References,
+            None,
+        )
+    }
+
+    pub(crate) fn relationships_for_file_edit(
+        &self,
+        encoded_locator: &str,
+    ) -> Result<RelationshipResult, Box<dyn Error>> {
+        let mut target = decode_source_locator(encoded_locator)?;
+        if target.locator_kind != LocatorKind::Declaration {
+            return Err("relationships require a declaration locator".into());
+        }
+        target.path = fs::canonicalize(&target.path)?
+            .to_string_lossy()
+            .into_owned();
+        let bytes = fs::read(&target.path)?;
+        if source_fingerprint(&bytes) != target.source_fingerprint {
+            return Err(
+                "source changed since the declaration locator was created; request a fresh locator"
+                    .into(),
+            );
+        }
+        let source = String::from_utf8(bytes)?;
+        let target_name = source
+            .get(target.name_range.start_byte..target.name_range.end_byte)
+            .ok_or("declaration locator name range is outside the source")?
+            .to_owned();
+        let path = Path::new(&target.path);
+        let root = path
+            .parent()
+            .ok_or("declaration path has no parent directory")?;
+        let outlined = self.outline_source(
+            path,
+            target.language,
+            source.as_bytes().to_vec(),
+            true,
+            false,
+            &[],
+        )?;
+        let files = vec![IndexedFile {
+            relative_path: path
+                .file_name()
+                .ok_or("declaration path has no file name")?
+                .to_string_lossy()
+                .into_owned(),
+            outlined,
+            source,
+        }];
+        let declarations = index_declarations(&files);
+        let candidates = declarations
+            .iter()
+            .filter(|declaration| declaration.entry.name == target_name)
+            .cloned()
+            .collect::<Vec<_>>();
+        let relationships = collect_target_occurrences(
+            &files,
+            &candidates,
+            &target,
+            &target_name,
+            encoded_locator,
+            RelationshipOperation::References,
+        )?;
+        let returned = relationships.len();
+        Ok(RelationshipResult {
+            path: root.to_string_lossy().into_owned(),
+            operation: RelationshipOperation::References,
+            target_name,
+            target_locator: encoded_locator.to_owned(),
+            relationships,
+            summary: RelationshipSummary {
+                files_scanned: 1,
+                source_bytes: files[0].source.len(),
+                parser_degraded_files: usize::from(
+                    files[0].outlined.diagnostics.error_nodes > 0
+                        || files[0].outlined.diagnostics.missing_nodes > 0,
+                ),
+                relationships_found: returned,
+                relationships_returned: returned,
+                result_limit: returned,
+                result_limit_reached: false,
+                ambiguous_relationships: 0,
+                diagnostics: 0,
+                file_limit_reached: false,
+                source_byte_limit_reached: false,
+                depth_limit_reached: false,
+                elapsed_limit_reached: false,
+            },
+        })
+    }
+
+    fn relationships_internal(
+        &self,
+        path: &str,
+        budgets: RecursiveBudgets,
+        encoded_locator: &str,
+        operation: RelationshipOperation,
+        result_limit: Option<usize>,
+    ) -> Result<RelationshipResult, Box<dyn Error>> {
         let root = fs::canonicalize(path)?;
         if !root.is_dir() {
             return Err(
@@ -313,15 +432,18 @@ impl OutlineEngine {
             .iter()
             .filter(|relationship| relationship.certainty == RelationshipCertainty::Ambiguous)
             .count();
-        relationships.truncate(result_limit);
+        if let Some(result_limit) = result_limit {
+            relationships.truncate(result_limit);
+        }
+        let returned = relationships.len();
         let summary = RelationshipSummary {
             files_scanned: files.len(),
             source_bytes: traversal.total_byte_length,
             parser_degraded_files: traversal.parser_degraded_files,
             relationships_found,
-            relationships_returned: relationships.len(),
-            result_limit,
-            result_limit_reached: relationships_found > relationships.len(),
+            relationships_returned: returned,
+            result_limit: result_limit.unwrap_or(returned),
+            result_limit_reached: relationships_found > returned,
             ambiguous_relationships,
             diagnostics,
             file_limit_reached: traversal.file_limit_reached,
@@ -402,12 +524,19 @@ fn collect_target_occurrences(
             if !include {
                 continue;
             }
-            let exact_binding = (file.outlined.path == target.path
-                || resolves_typescript_binding(file, target, target_name))
-                && matches!(
-                    file.outlined.language,
-                    LanguageId::TypeScript | LanguageId::Tsx
-                );
+            let occurrence_name = file.source.get(occurrence.range.clone()).unwrap_or("");
+            let exact_binding = occurrence.binding_eligible
+                && candidates.len() == 1
+                && (file.outlined.path == target.path
+                    || resolves_typescript_binding_name(
+                        file,
+                        target,
+                        target_name,
+                        occurrence_name,
+                    )
+                    || (occurrence_name == target_name
+                        && row_at(file, &occurrence.range) == Some(OutlineRowKind::Import)
+                        && resolves_typescript_binding(file, target, target_name)));
             let (certainty, candidate_locators, candidate_paths, candidate_fingerprints, omitted) =
                 relationship_certainty(candidates, exact_binding);
             let kind = match operation {
@@ -529,6 +658,7 @@ fn collect_implementations(
             };
             let occurrence = RawOccurrence {
                 range: candidate.entry.name_range.start_byte..candidate.entry.name_range.end_byte,
+                binding_eligible: true,
                 call: false,
                 type_usage: false,
                 implementation: true,
@@ -816,6 +946,7 @@ fn collect_root_occurrences<D: Doc>(
             .map_or_else(|| bytes.clone(), |(range, _)| range.clone());
         output.push(RawOccurrence {
             range: bytes.clone(),
+            binding_eligible: !matches!(kind.as_str(), "property_identifier" | "field_identifier"),
             call: ancestors
                 .iter()
                 .take(3)
@@ -844,6 +975,7 @@ fn text_occurrences(file: &IndexedFile, names: &BTreeSet<String>) -> Vec<RawOccu
             if is_word_boundary(&file.source, start, end) {
                 output.push(RawOccurrence {
                     range: start..end,
+                    binding_eligible: false,
                     call: false,
                     type_usage: false,
                     implementation: false,
@@ -944,6 +1076,45 @@ fn resolves_typescript_binding(
         ) && item.entry.signature.contains(target_name)
             && quoted_module(&item.entry.signature)
                 .is_some_and(|source| module_resolves_to(file, source, &target.path))
+    })
+}
+
+fn resolves_typescript_binding_name(
+    file: &IndexedFile,
+    target: &crate::outline::SourceLocator,
+    target_name: &str,
+    occurrence_name: &str,
+) -> bool {
+    if !resolves_typescript_binding(file, target, target_name) {
+        return false;
+    }
+    file.outlined.items.iter().any(|item| {
+        if item.row_kind != OutlineRowKind::Import {
+            return false;
+        }
+        let Some(source) = quoted_module(&item.entry.signature) else {
+            return false;
+        };
+        if !module_resolves_to(file, source, &target.path) {
+            return false;
+        }
+        item.entry
+            .signature
+            .find('{')
+            .and_then(|open| {
+                item.entry.signature[open + 1..]
+                    .find('}')
+                    .map(|close| (open, close))
+            })
+            .is_some_and(|(open, close)| {
+                item.entry.signature[open + 1..open + 1 + close]
+                    .split(',')
+                    .any(|binding| {
+                        let words = binding.split_whitespace().collect::<Vec<_>>();
+                        words.first().copied() == Some(target_name)
+                            && words.get(2).copied().unwrap_or(target_name) == occurrence_name
+                    })
+            })
     })
 }
 

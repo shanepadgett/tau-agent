@@ -352,6 +352,46 @@ export interface RelationshipResult {
 	};
 }
 
+export type EditOperation =
+	| { kind: "replaceDeclaration"; source: string }
+	| { kind: "replaceBody"; body: string }
+	| { kind: "insertDeclaration"; position: "before" | "after"; source: string }
+	| {
+			kind: "renameDeclaration";
+			newName: string;
+			scope: { kind: "file" } | { kind: "repository"; path: string };
+			includeInferred: boolean;
+	  };
+
+export interface PlannedEdit {
+	range: SourceRange;
+	replacement: string;
+}
+
+export interface EditFilePlan {
+	path: string;
+	expectedFingerprint: string;
+	source: string;
+	edits: PlannedEdit[];
+}
+
+export interface EditPlanResult {
+	files: EditFilePlan[];
+	skippedImpacts: Array<{
+		path: string;
+		range: SourceRange;
+		reason: "ambiguous" | "uncertainParse" | "inferredNotApproved";
+		candidateLocators: string[];
+		candidatePaths: string[];
+	}>;
+	freshLocators: Array<{
+		locator: string;
+		path: string;
+		name: string;
+		sourceFingerprint: string;
+	}>;
+}
+
 export interface AstClient {
 	getGeneration(): number;
 	outline(
@@ -396,6 +436,7 @@ export interface AstClient {
 		resultLimit: number,
 		signal: AbortSignal | undefined,
 	): Promise<RelationshipResult>;
+	planEdit(locator: string, edit: EditOperation, signal: AbortSignal | undefined): Promise<EditPlanResult>;
 	shutdown(): Promise<void>;
 }
 
@@ -437,6 +478,12 @@ type WorkerRequestPayload =
 			locator: string;
 			relationship: RelationshipOperation;
 			resultLimit: number;
+	  }
+	| {
+			operation: "planEdit";
+			locator: string;
+			edit: EditOperation;
+			budgets: RecursiveOutlineBudgets;
 	  };
 
 interface WorkerResponse {
@@ -477,7 +524,7 @@ interface PendingStreamRequest {
 
 type PendingRequest = PendingUnaryRequest | PendingStreamRequest;
 
-const PROTOCOL_VERSION = 12;
+const PROTOCOL_VERSION = 13;
 const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 const STDERR_BYTES = 16 * 1024;
 const HANDSHAKE_TIMEOUT_MS = 2000;
@@ -634,6 +681,15 @@ export class AstWorkerClient implements AstClient {
 		);
 		if (result.kind !== "relationships") throw new Error("tau-ast returned the wrong result for relationships");
 		return result as unknown as RelationshipResult;
+	}
+
+	async planEdit(locator: string, edit: EditOperation, signal: AbortSignal | undefined): Promise<EditPlanResult> {
+		const result = await this.request(
+			{ operation: "planEdit", locator, edit, budgets: RECURSIVE_OUTLINE_BUDGETS },
+			signal,
+		);
+		if (result.kind !== "editPlan") throw new Error("tau-ast returned the wrong result for edit planning");
+		return result as unknown as EditPlanResult;
 	}
 
 	async shutdown(): Promise<void> {
