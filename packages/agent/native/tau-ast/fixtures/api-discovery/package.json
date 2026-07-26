@@ -1,0 +1,6 @@
+{
+  "name": "@tau/api-discovery-fixture",
+  "exports": {
+    ".": "./dist/mod.js"
+  }
+}

@@ -5,6 +5,7 @@ tools:
   - ls
   - find
   - grep
+  - api_discover
   - outline
   - symbol
 names:
@@ -43,7 +44,18 @@ Use `grep` for exact names, imports, registrations, config keys, call sites, and
 
 Text match proves occurrence. It does not prove complete declaration inventory or runtime flow.
 
-### Tier 3: Structure and orientation
+### Tier 3: Repository API discovery
+
+Use `api_discover` when reuse intent is known but the declaration path or exact name is not. Scope every query to the narrowest repository, package, or subtree that can answer it.
+
+- Prefer exact, prefix, substring, or declaration-kind queries when possible.
+- Use bounded fuzzy-name or documentation terms only for uncertain names or concepts.
+- Use `packageSurface` when the caller needs a supported public import path.
+- Treat provenance or uncertainty as part of the result. Do not present inferred resolution as exact.
+
+Discovery proves declaration candidates and supported import paths. It does not prove implementation behavior.
+
+### Tier 4: Structure and orientation
 
 Default to `outline` for code orientation:
 
@@ -56,9 +68,9 @@ Default to `outline` for code orientation:
 
 Outline ranges and locators answer most location, inventory, ownership, visibility, and declaration-shape questions. Do not retrieve bodies only to prove symbol exists.
 
-### Tier 4: Exact declarations
+### Tier 5: Exact declarations
 
-Use `symbol` only with locators returned by `outline` in this child session:
+Use `symbol` only with locators returned by `api_discover` or `outline` in this child session:
 
 - `signature`: exact shape without docs or body.
 - `signatureWithDocs`: documented contract.

@@ -86,6 +86,50 @@ pub struct RecursiveBudgets {
     pub max_elapsed_ms: u64,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) enum DeclarationFilter {
+    ExactName(String),
+    PrefixName(String),
+    SubstringName(String),
+    Kind(SymbolType),
+}
+
+impl DeclarationFilter {
+    pub(crate) fn matches(&self, entry: &OutlineEntry) -> bool {
+        match self {
+            Self::ExactName(name) => entry.name == *name,
+            Self::PrefixName(name) => entry.name.to_lowercase().starts_with(name),
+            Self::SubstringName(name) => entry.name.to_lowercase().contains(name),
+            Self::Kind(symbol_type) => entry.symbol_type == *symbol_type,
+        }
+    }
+
+    fn exact_name(&self) -> Option<&String> {
+        match self {
+            Self::ExactName(name) => Some(name),
+            _ => None,
+        }
+    }
+
+    fn source_can_be_skipped(&self, language: LanguageId, source: &[u8]) -> bool {
+        if !matches!(
+            language,
+            LanguageId::Odin | LanguageId::Go | LanguageId::Swift
+        ) {
+            return false;
+        }
+        match self {
+            Self::ExactName(name) => !source
+                .windows(name.len())
+                .any(|window| window == name.as_bytes()),
+            Self::PrefixName(name) | Self::SubstringName(name) => {
+                str::from_utf8(source).is_ok_and(|source| !source.to_lowercase().contains(name))
+            }
+            Self::Kind(_) => false,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum RecursiveOutlineEvent {
     File {
@@ -177,7 +221,7 @@ pub enum EntryRole {
     Member,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SymbolType {
     Module,
@@ -520,71 +564,138 @@ impl OutlineEngine {
         include_docs: bool,
         names: &[String],
     ) -> Result<OutlineFileResult, Box<dyn Error>> {
+        self.outline_source_filtered(
+            path,
+            language,
+            source_bytes,
+            include_private,
+            include_docs,
+            names,
+            None,
+        )
+    }
+
+    fn outline_source_filtered(
+        &self,
+        path: &Path,
+        language: LanguageId,
+        source_bytes: Vec<u8>,
+        include_private: bool,
+        include_docs: bool,
+        names: &[String],
+        declaration_filter: Option<&DeclarationFilter>,
+    ) -> Result<OutlineFileResult, Box<dyn Error>> {
         let source = str::from_utf8(&source_bytes)?;
         let path = path.to_string_lossy().into_owned();
         let source_fingerprint = source_fingerprint(&source_bytes);
+        let exact_discovery_name = declaration_filter
+            .and_then(DeclarationFilter::exact_name)
+            .filter(|_| !matches!(language, LanguageId::TypeScript | LanguageId::Tsx));
+        let adapter_names = exact_discovery_name.map_or(names, std::slice::from_ref);
         let (diagnostics, mut items, directly_filtered) = match language {
             LanguageId::TypeScript => {
                 let grep = SupportLang::TypeScript.ast_grep(source);
                 let diagnostics = diagnostics(grep.root());
                 let mut items = extract_typescript_items(grep.root(), source, include_docs);
-                filter_typescript_items(grep.root(), &mut items, include_private, names);
+                filter_typescript_items(grep.root(), &mut items, include_private, adapter_names);
                 (diagnostics, items, true)
             }
             LanguageId::Tsx => {
                 let grep = SupportLang::Tsx.ast_grep(source);
                 let diagnostics = diagnostics(grep.root());
                 let mut items = extract_typescript_items(grep.root(), source, include_docs);
-                filter_typescript_items(grep.root(), &mut items, include_private, names);
+                filter_typescript_items(grep.root(), &mut items, include_private, adapter_names);
                 (diagnostics, items, true)
             }
             LanguageId::Odin => {
                 let grep = OdinLanguage::Odin.ast_grep(source);
                 let diagnostics = diagnostics(grep.root());
                 let mut items = extract_odin_items(grep.root(), source, include_docs);
-                filter_odin_items(grep.root(), source, &mut items, include_private, names);
+                filter_odin_items(
+                    grep.root(),
+                    source,
+                    &mut items,
+                    include_private,
+                    adapter_names,
+                );
                 (diagnostics, items, true)
             }
             LanguageId::Go => {
                 let grep = SupportLang::Go.ast_grep(source);
                 let diagnostics = diagnostics(grep.root());
                 let mut items = extract_go_items(grep.root(), source, include_docs);
-                filter_go_items(grep.root(), source, &mut items, include_private, names);
+                filter_go_items(
+                    grep.root(),
+                    source,
+                    &mut items,
+                    include_private,
+                    adapter_names,
+                );
                 (diagnostics, items, true)
             }
             LanguageId::Rust => {
                 let grep = SupportLang::Rust.ast_grep(source);
                 let diagnostics = diagnostics(grep.root());
                 let mut items = extract_rust_items(grep.root(), source, include_docs);
-                filter_rust_items(grep.root(), source, &mut items, include_private, names);
+                filter_rust_items(
+                    grep.root(),
+                    source,
+                    &mut items,
+                    include_private,
+                    adapter_names,
+                );
                 (diagnostics, items, true)
             }
             LanguageId::CSharp => {
                 let grep = SupportLang::CSharp.ast_grep(source);
                 let diagnostics = diagnostics(grep.root());
                 let mut items = extract_csharp_items(grep.root(), source, include_docs);
-                filter_csharp_items(grep.root(), source, &mut items, include_private, names);
+                filter_csharp_items(
+                    grep.root(),
+                    source,
+                    &mut items,
+                    include_private,
+                    adapter_names,
+                );
                 (diagnostics, items, true)
             }
             LanguageId::Java => {
                 let grep = SupportLang::Java.ast_grep(source);
                 let diagnostics = diagnostics(grep.root());
                 let mut items = extract_java_items(grep.root(), source, include_docs);
-                filter_java_items(grep.root(), source, &mut items, include_private, names);
+                filter_java_items(
+                    grep.root(),
+                    source,
+                    &mut items,
+                    include_private,
+                    adapter_names,
+                );
                 (diagnostics, items, true)
             }
             LanguageId::Kotlin => {
                 let grep = SupportLang::Kotlin.ast_grep(source);
                 let diagnostics = diagnostics(grep.root());
                 let mut items = extract_kotlin_items(grep.root(), source, include_docs);
-                filter_kotlin_items(grep.root(), source, &mut items, include_private, names);
+                filter_kotlin_items(
+                    grep.root(),
+                    source,
+                    &mut items,
+                    include_private,
+                    adapter_names,
+                );
                 (diagnostics, items, true)
             }
             LanguageId::Swift => {
                 let grep = SupportLang::Swift.ast_grep(source);
                 let diagnostics = diagnostics(grep.root());
                 let mut items = extract_swift_items(grep.root(), source, include_docs);
-                filter_swift_items(grep.root(), source, &mut items, include_private, names);
+                filter_swift_items(
+                    grep.root(),
+                    source,
+                    &mut items,
+                    include_private,
+                    adapter_names,
+                );
                 (diagnostics, items, true)
             }
             LanguageId::Markdown => {
@@ -597,7 +708,7 @@ impl OutlineEngine {
                 let root = tree.root_node();
                 let diagnostics = markdown_diagnostics(root);
                 let mut items = extract_markdown_items(root, source);
-                filter_markdown_items(&mut items, names);
+                filter_markdown_items(&mut items, adapter_names);
                 (diagnostics, items, true)
             }
         };
@@ -607,7 +718,10 @@ impl OutlineEngine {
             source.bytes().filter(|byte| *byte == b'\n').count() + 1
         };
         if !directly_filtered {
-            filter_items(&mut items, include_private, names);
+            filter_items(&mut items, include_private, adapter_names);
+        }
+        if let Some(declaration_filter) = declaration_filter {
+            prefilter_discovery_declarations(&mut items, declaration_filter);
         }
         if matches!(
             language,
@@ -633,6 +747,9 @@ impl OutlineEngine {
                 LanguageId::Markdown => {}
                 _ => finalize_typescript_signatures(&mut items),
             }
+            if let Some(declaration_filter) = declaration_filter {
+                filter_finalized_discovery_declarations(&mut items, declaration_filter);
+            }
             finalize_locators(
                 &mut items,
                 &path,
@@ -640,6 +757,16 @@ impl OutlineEngine {
                 &source_fingerprint,
                 include_private,
             )?;
+            if let Some(declaration_filter) = declaration_filter {
+                for item in items
+                    .iter_mut()
+                    .filter(|item| item.row_kind == OutlineRowKind::Declaration)
+                {
+                    if !declaration_filter.matches(&item.entry) {
+                        item.entry.locator = None;
+                    }
+                }
+            }
         }
 
         Ok(OutlineFileResult {
@@ -660,6 +787,7 @@ impl OutlineEngine {
         include_private: bool,
         include_docs: bool,
         names: &[String],
+        declaration_filter: Option<&DeclarationFilter>,
         emit: &mut impl FnMut(RecursiveOutlineEvent) -> Result<(), Box<dyn Error>>,
     ) -> Result<RecursiveOutlineSummary, Box<dyn Error>> {
         validate_recursive_budgets(budgets)?;
@@ -816,14 +944,36 @@ impl OutlineEngine {
             }
             summary.total_byte_length += source.len();
             let failed_source_fingerprint = source_fingerprint(&source);
-            let outlined = self.outline_source(
-                &candidate.path,
-                candidate.language,
-                source,
-                include_private,
-                include_docs,
-                names,
-            );
+            let outlined = if declaration_filter.is_some_and(|declaration_filter| {
+                declaration_filter.source_can_be_skipped(candidate.language, &source)
+            }) {
+                Ok(OutlineFileResult {
+                    path: candidate.path.to_string_lossy().into_owned(),
+                    language: candidate.language,
+                    source_fingerprint: failed_source_fingerprint.clone(),
+                    byte_length: source.len(),
+                    line_count: if source.is_empty() {
+                        0
+                    } else {
+                        source.iter().filter(|byte| **byte == b'\n').count() + 1
+                    },
+                    diagnostics: ParseDiagnostics {
+                        error_nodes: 0,
+                        missing_nodes: 0,
+                    },
+                    items: Vec::new(),
+                })
+            } else {
+                self.outline_source_filtered(
+                    &candidate.path,
+                    candidate.language,
+                    source,
+                    include_private,
+                    include_docs,
+                    names,
+                    declaration_filter,
+                )
+            };
             let file = match outlined {
                 Ok(file) => file,
                 Err(error) => {
@@ -1269,6 +1419,38 @@ fn filter_items(items: &mut Vec<OutlineItem>, include_private: bool, names: &[St
                 && (include_private || member.is_public)
         });
         item_is_visible && (item_matches || !item.members.is_empty())
+    });
+}
+
+fn prefilter_discovery_declarations(
+    items: &mut Vec<OutlineItem>,
+    declaration_filter: &DeclarationFilter,
+) {
+    items.retain_mut(|item| {
+        if item.row_kind != OutlineRowKind::Declaration {
+            return true;
+        }
+        let item_matches = declaration_filter.matches(&item.entry);
+        if !item_matches {
+            item.members
+                .retain(|member| declaration_filter.matches(&member.entry));
+        }
+        item_matches || !item.members.is_empty()
+    });
+}
+
+fn filter_finalized_discovery_declarations(
+    items: &mut Vec<OutlineItem>,
+    declaration_filter: &DeclarationFilter,
+) {
+    items.retain_mut(|item| {
+        if item.row_kind != OutlineRowKind::Declaration {
+            return true;
+        }
+        let item_matches = declaration_filter.matches(&item.entry);
+        item.members
+            .retain(|member| declaration_filter.matches(&member.entry));
+        item_matches || !item.members.is_empty()
     });
 }
 
@@ -4974,6 +5156,7 @@ export { buildThing as createThing, buildThing as makeThing };
                 true,
                 false,
                 &[],
+                None,
                 &mut |event| {
                     if let RecursiveOutlineEvent::File {
                         relative_path,

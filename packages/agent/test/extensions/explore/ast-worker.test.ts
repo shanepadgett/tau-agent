@@ -39,7 +39,7 @@ process.stdin.on("data", (chunk) => {
     if (request.operation === "handshake") {
       send({
         requestId: request.requestId,
-        protocolVersion: 7,
+        protocolVersion: 9,
         success: true,
         result: { kind: "handshake", supportedLanguages: ["typeScript", "odin"] }
       });
@@ -49,15 +49,15 @@ process.stdin.on("data", (chunk) => {
     if (request.target?.path === "hang") continue;
     if (request.operation === "outline") {
       if (request.target.kind === "recursiveDirectory") {
-        send({ requestId: request.requestId, protocolVersion: 7, success: true, result: { kind: "recursiveStart", path: request.target.path, budgets: request.target.budgets } });
-        send({ requestId: request.requestId, protocolVersion: 7, success: true, result: { kind: "recursiveFile", relativePath: "src/one.ts", file: { path: "/repo/src/one.ts", language: "typeScript", sourceFingerprint: "blake3:test", byteLength: 20, lineCount: 1, diagnostics: { errorNodes: 0, missingNodes: 0 }, items: [] } } });
-        send({ requestId: request.requestId, protocolVersion: 7, success: true, result: { kind: "recursiveDiagnostic", relativePath: "src/bad.odin", language: "odin", code: "outlineFailed", message: "bad source" } });
-        send({ requestId: request.requestId, protocolVersion: 7, success: true, result: { kind: "recursiveComplete", discoveredFiles: 3, supportedFiles: 2, unsupportedFiles: 1, emittedFiles: 1, unreadableFiles: 0, oversizedFiles: 0, failedFiles: 1, parserDegradedFiles: 0, totalByteLength: 20, totalLineCount: 1, fileLimitReached: false, sourceByteLimitReached: false, depthLimitReached: false, elapsedLimitReached: false } });
+        send({ requestId: request.requestId, protocolVersion: 9, success: true, result: { kind: "recursiveStart", path: request.target.path, budgets: request.target.budgets } });
+        send({ requestId: request.requestId, protocolVersion: 9, success: true, result: { kind: "recursiveFile", relativePath: "src/one.ts", file: { path: "/repo/src/one.ts", language: "typeScript", sourceFingerprint: "blake3:test", byteLength: 20, lineCount: 1, diagnostics: { errorNodes: 0, missingNodes: 0 }, items: [] } } });
+        send({ requestId: request.requestId, protocolVersion: 9, success: true, result: { kind: "recursiveDiagnostic", relativePath: "src/bad.odin", language: "odin", code: "outlineFailed", message: "bad source" } });
+        send({ requestId: request.requestId, protocolVersion: 9, success: true, result: { kind: "recursiveComplete", discoveredFiles: 3, supportedFiles: 2, unsupportedFiles: 1, emittedFiles: 1, unreadableFiles: 0, oversizedFiles: 0, failedFiles: 1, parserDegradedFiles: 0, totalByteLength: 20, totalLineCount: 1, fileLimitReached: false, sourceByteLimitReached: false, depthLimitReached: false, elapsedLimitReached: false } });
         continue;
       }
       const response = {
         requestId: request.requestId,
-        protocolVersion: 7,
+        protocolVersion: 9,
         success: true,
         result: {
           kind: "outline",
@@ -71,9 +71,50 @@ process.stdin.on("data", (chunk) => {
       else send(response);
       continue;
     }
+    if (request.operation === "apiDiscover") {
+      send({
+        requestId: request.requestId,
+        protocolVersion: 9,
+        success: true,
+        result: {
+          kind: "apiDiscovery",
+          path: request.path,
+          candidates: [{
+            locator: "api-locator",
+            language: "typeScript",
+            name: "blendColor",
+            qualifiedName: "blendColor",
+            symbolType: "function",
+            signature: "export function blendColor(): string",
+            definingFile: "/repo/src/color.ts",
+            range: { startByte: 0, endByte: 40, start: { line: 0, column: 0 }, end: { line: 0, column: 40 } },
+            visibility: "public",
+            sourceExport: "yes",
+            packageSurface: "yes",
+            internalOnly: "no",
+            reExportChain: ["mod.ts", "src/color.ts"],
+            callerAccess: {
+              modulePath: "./mod.ts",
+              importStatement: 'import { blendColor } from "./mod.ts";',
+              accessExpression: "blendColor",
+              form: "direct"
+            },
+            provenance: "exact",
+            certainty: "certain"
+          }],
+          summary: {
+            filesScanned: 2, declarationsConsidered: 4, resultsReturned: 1, resultLimit: request.resultLimit,
+            omittedCandidates: 0, candidateLimitReached: false, workLimitReached: false,
+            resolutionDiagnostics: 0, totalSourceBytes: 200, fileLimitReached: false,
+            sourceByteLimitReached: false, depthLimitReached: false, elapsedLimitReached: false
+          }
+        }
+      });
+      continue;
+    }
     send({
       requestId: request.requestId,
-      protocolVersion: 7,
+      protocolVersion: 9,
       success: true,
       result: {
         kind: "symbol",
@@ -124,6 +165,15 @@ describe("AST worker client", () => {
 			]);
 			expect(typescript.path).toBe("one.ts");
 			expect(odin.path).toBe("two.odin");
+			const discovery = await worker.discoverApi(
+				"/repo",
+				{ kind: "exactName", name: "blendColor" },
+				"packageSurface",
+				10,
+				undefined,
+			);
+			expect(discovery.candidates[0]?.callerAccess?.modulePath).toBe("./mod.ts");
+			expect(discovery.summary.filesScanned).toBe(2);
 			expect((await worker.symbol(["locator"], "declaration", 2, undefined)).blocks[0]?.source).toBe("x");
 		} finally {
 			await worker.shutdown();

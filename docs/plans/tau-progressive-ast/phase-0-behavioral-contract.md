@@ -58,6 +58,10 @@ The remaining work turns those tools into the default source-exploration path, t
 
 Phases 1 through 3 may be approved as one coherent batch. Every later phase requires separate approval.
 
+## Required reference validation
+
+Before this phase is complete, run its applicable acceptance workflow against all nine read-only reference repositories and the Markdown fixture in [`language-verification-corpus.md`](./language-verification-corpus.md). Unit tests and phase-specific fixtures do not replace this pass. Treat a failure in any supported language as a phase blocker and record parser recovery or uncertainty explicitly.
+
 ## Completion
 
 Phase 0 is complete. The workflows, rules, and phase order above are approved.

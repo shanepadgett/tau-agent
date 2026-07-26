@@ -134,6 +134,86 @@ export interface SymbolBatchResult {
 	blocks: SymbolBlock[];
 }
 
+export type ApiDeclarationKind =
+	| "module"
+	| "namespace"
+	| "package"
+	| "class"
+	| "method"
+	| "property"
+	| "field"
+	| "constructor"
+	| "enum"
+	| "interface"
+	| "function"
+	| "variable"
+	| "constant"
+	| "object"
+	| "enumMember"
+	| "struct"
+	| "event"
+	| "operator"
+	| "typeParameter"
+	| "heading";
+
+export type ApiQuery =
+	| { kind: "exactName"; name: string }
+	| { kind: "prefixName"; name: string }
+	| { kind: "substringName"; name: string }
+	| { kind: "fuzzyName"; name: string; maxCandidates: number; maxWork: number }
+	| { kind: "declarationKind"; declarationKind: ApiDeclarationKind }
+	| { kind: "documentation"; terms: string[]; maxCandidates: number; maxWork: number };
+
+export type ApiSurfaceFilter = "all" | "public" | "private" | "sourceExport" | "packageSurface";
+
+export interface ApiCandidate {
+	locator: string;
+	language: AstLanguage;
+	name: string;
+	qualifiedName: string;
+	symbolType: ApiDeclarationKind;
+	signature: string;
+	definingFile: string;
+	range: SourceRange;
+	visibility: "public" | "protected" | "internal" | "packagePrivate" | "filePrivate" | "private" | "unknown";
+	sourceExport: "yes" | "no" | "unknown";
+	packageSurface: "yes" | "no" | "unknown";
+	internalOnly: "yes" | "no" | "unknown";
+	reExportChain: string[];
+	callerAccess: {
+		modulePath: string;
+		importStatement: string;
+		accessExpression: string;
+		form: "direct" | "qualified";
+	} | null;
+	provenance: "exact" | "inferred" | "ambiguous" | "unsupported";
+	certainty: "certain" | "recovered" | "nearRecovery";
+	certaintyReason: string | null;
+	uncertainty: string | null;
+}
+
+export interface ApiDiscoverySummary {
+	filesScanned: number;
+	declarationsConsidered: number;
+	resultsReturned: number;
+	resultLimit: number;
+	omittedCandidates: number;
+	candidateLimitReached: boolean;
+	workLimitReached: boolean;
+	resolutionDiagnostics: number;
+	totalSourceBytes: number;
+	fileLimitReached: boolean;
+	sourceByteLimitReached: boolean;
+	depthLimitReached: boolean;
+	elapsedLimitReached: boolean;
+}
+
+export interface ApiDiscoveryResult {
+	path: string;
+	candidates: ApiCandidate[];
+	summary: ApiDiscoverySummary;
+}
+
 export interface AstClient {
 	getGeneration(): number;
 	outline(
@@ -157,6 +237,13 @@ export interface AstClient {
 		contextLines: number,
 		signal: AbortSignal | undefined,
 	): Promise<SymbolBatchResult>;
+	discoverApi(
+		path: string,
+		query: ApiQuery,
+		surface: ApiSurfaceFilter,
+		resultLimit: number,
+		signal: AbortSignal | undefined,
+	): Promise<ApiDiscoveryResult>;
 	shutdown(): Promise<void>;
 }
 
@@ -174,6 +261,14 @@ type WorkerRequestPayload =
 			locators: string[];
 			view: SymbolView;
 			contextLines: number;
+	  }
+	| {
+			operation: "apiDiscover";
+			path: string;
+			budgets: RecursiveOutlineBudgets;
+			query: ApiQuery;
+			surface: ApiSurfaceFilter;
+			resultLimit: number;
 	  };
 
 interface WorkerResponse {
@@ -214,7 +309,7 @@ interface PendingStreamRequest {
 
 type PendingRequest = PendingUnaryRequest | PendingStreamRequest;
 
-const PROTOCOL_VERSION = 7;
+const PROTOCOL_VERSION = 9;
 const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 const STDERR_BYTES = 16 * 1024;
 const HANDSHAKE_TIMEOUT_MS = 2000;
@@ -326,6 +421,21 @@ export class AstWorkerClient implements AstClient {
 		const result = await this.request({ operation: "symbol", locators, view, contextLines }, signal);
 		if (result.kind !== "symbol") throw new Error("tau-ast returned the wrong result for symbol");
 		return result as unknown as SymbolBatchResult;
+	}
+
+	async discoverApi(
+		path: string,
+		query: ApiQuery,
+		surface: ApiSurfaceFilter,
+		resultLimit: number,
+		signal: AbortSignal | undefined,
+	): Promise<ApiDiscoveryResult> {
+		const result = await this.request(
+			{ operation: "apiDiscover", path, budgets: RECURSIVE_OUTLINE_BUDGETS, query, surface, resultLimit },
+			signal,
+		);
+		if (result.kind !== "apiDiscovery") throw new Error("tau-ast returned the wrong result for API discovery");
+		return result as unknown as ApiDiscoveryResult;
 	}
 
 	async shutdown(): Promise<void> {

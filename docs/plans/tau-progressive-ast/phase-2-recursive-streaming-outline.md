@@ -123,6 +123,10 @@ The overflow notice reports shown and total lines, shown and total bytes, the ab
 - The existing file, package, language-fixture, and real-package suites remain green.
 - Preserve before-and-after native benchmark records without adding noisy wall-clock correctness thresholds.
 
+## Required reference validation
+
+Before this phase is complete, run its applicable acceptance workflow against all nine read-only reference repositories and the Markdown fixture in [`language-verification-corpus.md`](./language-verification-corpus.md). Unit tests and phase-specific fixtures do not replace this pass. Treat a failure in any supported language as a phase blocker and record parser recovery or uncertainty explicitly.
+
 ## Completion
 
 Phase 2 is complete when recursive repository orientation is mixed-language, deterministic, cancellable, safe beyond worker and model limits, and explicit about which files reached the model. The shared bounded text-result handler must be ready for later Tau tool migrations and must clean up its temporary files under normal shutdown, failure, cancellation, and stale-orphan paths.

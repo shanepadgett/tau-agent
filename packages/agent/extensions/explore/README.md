@@ -6,20 +6,21 @@ It exists so agents can inspect paths, discover files, search text, inspect decl
 
 When the source baseline is no longer available, such as after compaction or a cold subagent resume, `read` safely returns the current full source.
 
-Agents invoke it with `ls`, `find`, `grep`, `outline`, `symbol`, and `read`. `outline` returns public declaration signatures and parenthesized numeric locators for TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, Swift, and Markdown files. Markdown headings locate their complete sections. It accepts a package directory for one-level inspection, or `recursive: true` for ignore-aware mixed-language orientation of a repository or subtree. Recursive output stays bounded; when the complete outline is larger, Tau saves it to a temporary path for targeted `grep` and ranged `read` during the active session. Exact-name filters narrow the result, `includePrivate` exposes internal declarations, and `includeDocs` adds attached documentation comments when they are needed. Annotations and attributes remain in normal outlines. `symbol` accepts those numbers in four views: `signature` omits documentation and bodies, `signatureWithDocs` adds attached documentation without the body, `declaration` returns exact declaration source, and `declarationWithImports` adds required imports. It retrieves several locators in one call, can add bounded surrounding lines to exact declarations, and rejects the whole batch when any locator is stale. Users run `/read-stats` to see estimated token and cost savings for the session.
+Agents invoke it with `ls`, `find`, `grep`, `api_discover`, `outline`, `symbol`, and `read`. `api_discover` searches declarations across a repository, package, or subtree by exact, prefix, substring, bounded fuzzy, declaration-kind, or documentation query. It filters public, private, source-exported, or package-surface declarations and reports defining files separately from caller access for TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, and Swift. Caller access includes the canonical module path, exact import statement, usable access expression, and resolution uncertainty; TypeScript results also include re-export chains. Candidates contain signatures without implementation bodies and numeric locators accepted by `symbol`. `outline` returns public declaration signatures and parenthesized numeric locators for TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, Swift, and Markdown files. Markdown headings locate their complete sections. It accepts a package directory for one-level inspection, or `recursive: true` for ignore-aware mixed-language orientation of a repository or subtree. Recursive output stays bounded; when the complete outline is larger, Tau saves it to a temporary path for targeted `grep` and ranged `read` during the active session. Exact-name filters narrow the result, `includePrivate` exposes internal declarations, and `includeDocs` adds attached documentation comments when they are needed. Annotations and attributes remain in normal outlines. `symbol` accepts those numbers in four views: `signature` omits documentation and bodies, `signatureWithDocs` adds attached documentation without the body, `declaration` returns exact declaration source, and `declarationWithImports` adds required imports. It retrieves several locators in one call, can add bounded surrounding lines to exact declarations, and rejects the whole batch when any locator is stale. Users run `/read-stats` to see estimated token and cost savings for the session.
 
-Explore scans a bounded, ignore-aware slice of the working root before each agent run. When the repository contains supported source and the selected native worker is usable, Explore adds language-specific AST-first guidance to the agent prompt. Unsupported repositories and hosts get the ordinary filesystem workflow. `outline` and `symbol` stay registered either way.
+Explore scans a bounded, ignore-aware slice of the working root before each agent run. When the repository contains supported source and the selected native worker is usable, Explore adds language-specific AST-first guidance to the agent prompt. Unsupported repositories and hosts get the ordinary filesystem workflow. `api_discover`, `outline`, and `symbol` stay registered either way.
 
-Installed packages support `outline` and `symbol` on Apple Silicon Macs. They include the worker, so users do not need Rust or Cargo. On other platforms, the rest of Explore remains available and AST tools report the platform limit when invoked.
+Installed packages support `api_discover`, `outline`, and `symbol` on Apple Silicon Macs. They include the worker, so users do not need Rust or Cargo. On other platforms, the rest of Explore remains available and AST tools report the platform limit when invoked.
 
 For supported source, use the cheapest useful step:
 
-1. Use a recursive outline to orient an unfamiliar repository or subtree.
-2. Outline a package directory to inspect its immediate public API.
-3. Add exact names when likely declarations are known.
-4. Set `includePrivate` when implementation work needs internals.
-5. Set `includeDocs` when declaration documentation affects the task.
-6. Use `symbol(signatureWithDocs)` when one declaration's documented contract is enough.
-7. Send several locators to the other `symbol` views for exact declarations.
-8. Add context lines when the edit needs nearby source.
-9. Use `read` after a visible outline when cross-cutting logic, exact formatting, parser gaps, or source outside declaration boundaries requires the file. Fatal per-file parser failures allow a fingerprinted fallback read.
+1. Use `api_discover` when reuse intent is known but the declaration path or exact name is not.
+2. Use a recursive outline to orient an unfamiliar repository or subtree.
+3. Outline a package directory to inspect its immediate public API.
+4. Add exact names when likely declarations are known.
+5. Set `includePrivate` when implementation work needs internals.
+6. Set `includeDocs` when declaration documentation affects the task.
+7. Use `symbol(signatureWithDocs)` when one declaration's documented contract is enough.
+8. Send several locators to the other `symbol` views for exact declarations.
+9. Add context lines when the edit needs nearby source.
+10. Use `read` after a visible outline when cross-cutting logic, exact formatting, parser gaps, or source outside declaration boundaries requires the file. Fatal per-file parser failures allow a fingerprinted fallback read.

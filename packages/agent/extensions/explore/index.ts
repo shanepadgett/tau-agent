@@ -27,6 +27,7 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 	registerAutoread(pi, rowState);
 	pi.registerTool(ast.outline);
 	pi.registerTool(ast.symbol);
+	pi.registerTool(ast.api_discover);
 	pi.registerTool(createLsTool(rowState));
 	pi.registerTool(createFindTool(rowState));
 	pi.registerTool(createGrepTool(rowState));

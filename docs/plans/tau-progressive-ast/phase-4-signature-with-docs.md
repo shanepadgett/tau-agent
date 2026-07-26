@@ -67,6 +67,10 @@ Markdown uses the adapter's existing section or heading declaration model. Do no
 - `signature`, `signatureWithDocs`, `declaration`, and `declarationWithImports` remain observably distinct.
 - Multiline signatures, generics, overloads, attributes, decorators, and source formatting remain complete.
 
+## Required reference validation
+
+Before this phase is complete, run its applicable acceptance workflow against all nine read-only reference repositories and the Markdown fixture in [`language-verification-corpus.md`](./language-verification-corpus.md). Unit tests and phase-specific fixtures do not replace this pass. Treat a failure in any supported language as a phase blocker and record parser recovery or uncertainty explicitly.
+
 ## Completion
 
 Phase 4 is complete when an agent can retrieve one declaration's documented contract from an existing locator without re-outlining the file or receiving its implementation body.

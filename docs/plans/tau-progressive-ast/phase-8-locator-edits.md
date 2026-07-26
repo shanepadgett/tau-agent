@@ -88,6 +88,10 @@ Do not create a second filesystem mutation implementation inside the AST worker.
 - Verification output identifies every changed path and remains within Pi limits.
 - An implementation-and-test change can be discovered, retrieved, edited, and verified without textual `grep`, ranged `read`, or whole-file `read` for supported source.
 
+## Required reference validation
+
+Before this phase is complete, run its applicable acceptance workflow against all nine read-only reference repositories and the Markdown fixture in [`language-verification-corpus.md`](./language-verification-corpus.md). Unit tests and phase-specific fixtures do not replace this pass. Treat a failure in any supported language as a phase blocker and record parser recovery or uncertainty explicitly.
+
 ## Completion
 
 Phase 8 is complete when Tau can safely apply the core declaration and impact-edit workflow through stale-safe structural identity while preserving its existing mutation, event, and verification guarantees.

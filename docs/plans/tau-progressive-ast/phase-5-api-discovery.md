@@ -1,6 +1,6 @@
 # Phase 5: Repository API Discovery
 
-Status: implementation unapproved  
+Status: complete
 Depends on: recursive traversal, stale-safe locators, and `signatureWithDocs`  
 Produces: repository-wide declaration and import-path discovery
 
@@ -14,9 +14,9 @@ The worker already has language adapters, declaration kinds, visibility, documen
 
 No persistent index is required for the first implementation. Repository research showed that native parsing, process memory, exact-name prefilters, and bounded traversal are enough to establish the contract before accepting cache invalidation and schema costs.
 
-## Decision required before coding
+## Decision
 
-Choose a tool name and strict schema that clearly communicates declaration or API discovery and remains separate from `ast_search`.
+The tool is `api_discover`. Its query schema remains separate from structural source search.
 
 Do not build one action option bag combining declaration discovery and structural patterns.
 
@@ -85,6 +85,26 @@ Tree-sitter syntax alone cannot prove every dynamic export, alias, inferred type
 - Follow chained re-exports and expose uncertainty where resolution is incomplete.
 - Retrieve a selected candidate's documented contract through its locator without reading its implementation.
 - Report scan and result limits without hiding omitted candidates.
+
+## Required reference validation
+
+Before this phase is complete, run its applicable acceptance workflow against all nine read-only reference repositories and the Markdown fixture in [`language-verification-corpus.md`](./language-verification-corpus.md). Unit tests and phase-specific fixtures do not replace this pass. Treat a failure in any supported language as a phase blocker and record parser recovery or uncertainty explicitly.
+
+## Implementation record
+
+The worker resolves TypeScript package metadata and re-export chains plus Cargo modules, Go module/package paths, Java and Kotlin packages, C# namespaces, Swift package targets, and inferred Odin repository-relative imports. Results use one language-neutral `callerAccess` object with `modulePath`, `importStatement`, `accessExpression`, and direct-or-qualified `form`. Visibility distinguishes public, protected, internal, package-private, file-private, private, and unknown access. Resolution keeps exact, inferred, ambiguous, and unsupported provenance without choosing a silent nearest path.
+
+Protocol 9 carries this contract. No persistent index was added.
+
+Native protocol acceptance passed against the required TypeScript, TSX, Rust, C#, Go, Java, Odin, Kotlin, Swift, and Markdown corpus declarations. Every locator returned its expected documented signature without an implementation body. Rust's `parse_sql` correctly remains an ambiguous package-surface result because `ast-bro` keeps `adapters` private. Odin and Swift caller access remains explicitly inferred.
+
+Live protocol-9 acceptance after reload passed exact package-surface discovery and `symbol(signatureWithDocs)` for all corpus declarations. TypeScript and TSX returned their package names, C#/Go/Java/Kotlin returned exact namespace or package access, Swift returned its inferred SwiftPM target, and Odin returned `base/runtime` when scoped to the repository. The Rust corpus declaration remained correctly absent from `packageSurface`; a root-level `ast_bro::run` probe verified supported Rust caller access. Prefix, substring, bounded fuzzy, declaration-kind, and documentation queries passed against the TypeScript package fixture. Avalonia passed without traversal limits when scoped to `src/Avalonia.Base`; the Odin repository-wide probe found the target but reached the elapsed traversal budget, while the `base/runtime` package scope completed without limits.
+
+Final live checks covered every restricted visibility class: TypeScript protected, Rust/C#/Kotlin/Swift internal, Java package-private, Odin file-private, and ordinary Go private declarations. The `private` surface returned each one with `packageSurface=no` and `internalOnly=yes`. Markdown headings now report `sourceExport=no` and `packageSurface=no`.
+
+Exact, prefix, substring, and declaration-kind discovery now filters declarations before signature finalization, locator encoding, and caller-surface resolution. Odin, Go, and Swift also skip parsing files that cannot contain the requested exact, prefix, or substring name. Other adapters retain parsing because they can synthesize or normalize declaration names. TypeScript keeps its complete import and re-export graph. Rust resolves module parents lazily, caches repeated module checks, and counts surface resolution against the traversal elapsed budget.
+
+The release worker's repository-wide Odin `copy_slice` probe fell from 25.2 seconds with an elapsed-limit result to 0.48 seconds with all 1,862 supported files scanned, one declaration considered, and no traversal limit. A direct protocol-9 pass then completed every required exact-name corpus probe and `signatureWithDocs` lookup without an elapsed limit. Individual discovery calls ranged from 0.004 seconds for Markdown to 3.43 seconds for Guava.
 
 ## Completion
 

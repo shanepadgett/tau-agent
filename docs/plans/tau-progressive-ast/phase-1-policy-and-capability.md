@@ -74,6 +74,10 @@ Keep extension settings out of scope. If implementation unexpectedly needs a set
 - Existing real-package validation remains green across the current TypeScript, Odin, Go, Rust, Java, Kotlin, and Swift repositories.
 - No duplicate supported-language list remains in prompt or tool-description code.
 
+## Required reference validation
+
+Before this phase is complete, run its applicable acceptance workflow against all nine read-only reference repositories and the Markdown fixture in [`language-verification-corpus.md`](./language-verification-corpus.md). Unit tests and phase-specific fixtures do not replace this pass. Treat a failure in any supported language as a phase blocker and record parser recovery or uncertainty explicitly.
+
 ## Completion
 
 Phase 1 is complete when Explore is the sole owner of capability-aware source-exploration guidance, Soul no longer prescribes whole-file source reads, and all existing outline and symbol disclosure guarantees remain intact.

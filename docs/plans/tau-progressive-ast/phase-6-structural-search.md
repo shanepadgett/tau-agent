@@ -84,6 +84,10 @@ Ambiguous pattern parsing must fail with a direct request for an explicit langua
 - Test Odin metavariables against current language fixtures.
 - Keep structural search result types independent of ast-grep's public CLI or JSON contracts.
 
+## Required reference validation
+
+Before this phase is complete, run its applicable acceptance workflow against all nine read-only reference repositories and the Markdown fixture in [`language-verification-corpus.md`](./language-verification-corpus.md). Unit tests and phase-specific fixtures do not replace this pass. Treat a failure in any supported language as a phase blocker and record parser recovery or uncertainty explicitly.
+
 ## Completion
 
 Phase 6 is complete when an agent can search unknown code shapes across a repository through one bounded, deterministic, cancellable AST operation and retrieve selected results by stale-safe locator.

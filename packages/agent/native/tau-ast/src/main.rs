@@ -1,4 +1,5 @@
 mod csharp;
+mod discovery;
 mod go;
 mod java;
 mod kotlin;
@@ -86,6 +87,11 @@ fn run() -> Result<(), Box<dyn Error>> {
                     "handshake_required",
                     "complete the protocol handshake before symbol requests".to_owned(),
                 ),
+                Request::ApiDiscover { .. } if !handshake_complete => error_response(
+                    request_id,
+                    "handshake_required",
+                    "complete the protocol handshake before API discovery requests".to_owned(),
+                ),
                 Request::Outline {
                     target,
                     include_private,
@@ -131,6 +137,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                                     include_private,
                                     include_docs,
                                     &names,
+                                     None,
                                     &mut |event| {
                                         let response = match event {
                                             RecursiveOutlineEvent::File {
@@ -258,6 +265,43 @@ fn run() -> Result<(), Box<dyn Error>> {
                             result: ResponseResult::Symbol { symbol },
                         }),
                         Err(error) => error_response(request_id, error.code, error.message),
+                    }
+                }
+                Request::ApiDiscover {
+                    path,
+                    budgets,
+                    query,
+                    surface,
+                    result_limit,
+                    ..
+                } => {
+                    if engine.is_none() {
+                        match OutlineEngine::new() {
+                            Ok(new_engine) => engine = Some(new_engine),
+                            Err(error) => {
+                                write_frame(
+                                    &mut writer,
+                                    &error_response(
+                                        request_id,
+                                        "rule_initialization_failed",
+                                        error.to_string(),
+                                    ),
+                                )?;
+                                continue;
+                            }
+                        }
+                    }
+                    match engine
+                        .as_ref()
+                        .expect("engine is initialized above")
+                        .discover_api(&path, budgets, query, surface, result_limit)
+                    {
+                        Ok(discovery) => {
+                            success_response(request_id, ResponseResult::ApiDiscovery { discovery })
+                        }
+                        Err(error) => {
+                            error_response(request_id, "api_discovery_failed", error.to_string())
+                        }
                     }
                 }
             }

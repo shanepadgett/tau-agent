@@ -89,6 +89,10 @@ Ambiguous relationships may be displayed but must not silently enter an edit set
 - Large scans are bounded, deterministic, and cancellable.
 - An agent can retrieve the complete implementation and affected test scopes without textual `grep`, ranged `read`, or whole-file `read`.
 
+## Required reference validation
+
+Before this phase is complete, run its applicable acceptance workflow against all nine read-only reference repositories and the Markdown fixture in [`language-verification-corpus.md`](./language-verification-corpus.md). Unit tests and phase-specific fixtures do not replace this pass. Treat a failure in any supported language as a phase blocker and record parser recovery or uncertainty explicitly.
+
 ## Completion
 
 Phase 7 is complete when a selected declaration can expand into trustworthy direct impact information and every actionable result has a stale-safe locator for the complete scope that must be inspected or edited.

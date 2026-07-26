@@ -1,11 +1,14 @@
-use crate::outline::{
-    LanguageId, OutlineFileResult, OutlineTarget, OutlineTargetResult, RecursiveBudgets,
-    RecursiveDiagnostic, RecursiveOutlineSummary, SymbolBatchResult, SymbolView,
+use crate::{
+    discovery::{ApiDiscoveryResult, ApiQuery, ApiSurfaceFilter},
+    outline::{
+        LanguageId, OutlineFileResult, OutlineTarget, OutlineTargetResult, RecursiveBudgets,
+        RecursiveDiagnostic, RecursiveOutlineSummary, SymbolBatchResult, SymbolView,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
 
-pub const PROTOCOL_VERSION: u32 = 7;
+pub const PROTOCOL_VERSION: u32 = 9;
 const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
@@ -39,6 +42,18 @@ pub enum Request {
         #[serde(rename = "contextLines")]
         context_lines: usize,
     },
+    ApiDiscover {
+        #[serde(rename = "requestId")]
+        request_id: u64,
+        #[serde(rename = "protocolVersion")]
+        protocol_version: u32,
+        path: String,
+        budgets: RecursiveBudgets,
+        query: ApiQuery,
+        surface: ApiSurfaceFilter,
+        #[serde(rename = "resultLimit")]
+        result_limit: usize,
+    },
 }
 
 impl Request {
@@ -46,7 +61,8 @@ impl Request {
         match self {
             Self::Handshake { request_id, .. }
             | Self::Outline { request_id, .. }
-            | Self::Symbol { request_id, .. } => *request_id,
+            | Self::Symbol { request_id, .. }
+            | Self::ApiDiscover { request_id, .. } => *request_id,
         }
     }
 
@@ -59,6 +75,9 @@ impl Request {
                 protocol_version, ..
             }
             | Self::Symbol {
+                protocol_version, ..
+            }
+            | Self::ApiDiscover {
                 protocol_version, ..
             } => *protocol_version,
         }
@@ -106,6 +125,10 @@ pub enum ResponseResult {
     Symbol {
         #[serde(flatten)]
         symbol: SymbolBatchResult,
+    },
+    ApiDiscovery {
+        #[serde(flatten)]
+        discovery: ApiDiscoveryResult,
     },
     RecursiveStart {
         path: String,

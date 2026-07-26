@@ -92,6 +92,10 @@ Changing the no-size-exemption rule requires explicit evidence. Shell guidance m
 - `packages/agent/extensions/tau-help/help.md`
 - maintained Tau architecture documentation for the ratified contract
 
+## Required reference validation
+
+Before this phase is complete, run its applicable acceptance workflow against all nine read-only reference repositories and the Markdown fixture in [`language-verification-corpus.md`](./language-verification-corpus.md). Unit tests and phase-specific fixtures do not replace this pass. Treat a failure in any supported language as a phase blocker and record parser recovery or uncertainty explicitly.
+
 ## Completion
 
 Phase 9 is complete when evidence supports an explicit keep-or-revise decision, the chosen policy has regression coverage and maintained documentation, and temporary planning evidence can be removed.

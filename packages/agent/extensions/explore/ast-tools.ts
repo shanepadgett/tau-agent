@@ -21,6 +21,11 @@ import type { OrientationState } from "./orientation-state.ts";
 import { formatPathForDisplay, resolveExplorePath, stripLeadingAt } from "./path-display.ts";
 import {
 	AstWorkerError,
+	type ApiCandidate,
+	type ApiDeclarationKind,
+	type ApiDiscoveryResult,
+	type ApiQuery,
+	type ApiSurfaceFilter,
 	type AstClient,
 	type OutlineEntry,
 	type OutlineFileResult,
@@ -70,12 +75,84 @@ const symbolParams = Type.Object(
 	},
 	{ additionalProperties: false },
 );
+const apiDeclarationKinds = [
+	"module",
+	"namespace",
+	"package",
+	"class",
+	"method",
+	"property",
+	"field",
+	"constructor",
+	"enum",
+	"interface",
+	"function",
+	"variable",
+	"constant",
+	"object",
+	"enumMember",
+	"struct",
+	"event",
+	"operator",
+	"typeParameter",
+	"heading",
+] as const satisfies readonly ApiDeclarationKind[];
+const apiDiscoverParams = Type.Object(
+	{
+		path: Type.String({ description: "Repository, package, or subtree directory" }),
+		query: Type.Union([
+			Type.Object(
+				{ kind: Type.Literal("exactName"), name: Type.String({ minLength: 1 }) },
+				{ additionalProperties: false },
+			),
+			Type.Object(
+				{ kind: Type.Literal("prefixName"), name: Type.String({ minLength: 1 }) },
+				{ additionalProperties: false },
+			),
+			Type.Object(
+				{ kind: Type.Literal("substringName"), name: Type.String({ minLength: 1 }) },
+				{ additionalProperties: false },
+			),
+			Type.Object(
+				{
+					kind: Type.Literal("fuzzyName"),
+					name: Type.String({ minLength: 1 }),
+					maxCandidates: Type.Integer({ minimum: 1, maximum: 10_000 }),
+					maxWork: Type.Integer({ minimum: 1, maximum: 1_000_000 }),
+				},
+				{ additionalProperties: false },
+			),
+			Type.Object(
+				{
+					kind: Type.Literal("declarationKind"),
+					declarationKind: StringEnum(apiDeclarationKinds),
+				},
+				{ additionalProperties: false },
+			),
+			Type.Object(
+				{
+					kind: Type.Literal("documentation"),
+					terms: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+					maxCandidates: Type.Integer({ minimum: 1, maximum: 10_000 }),
+					maxWork: Type.Integer({ minimum: 1, maximum: 1_000_000 }),
+				},
+				{ additionalProperties: false },
+			),
+		]),
+		surface: StringEnum(["all", "public", "private", "sourceExport", "packageSurface"] as const, {
+			description: "Declaration or export surface to search",
+		}),
+		resultLimit: Type.Integer({ minimum: 1, maximum: 100 }),
+	},
+	{ additionalProperties: false },
+);
 
 interface AstToolDetails {
-	kind: "outline" | "symbol";
+	kind: "outline" | "symbol" | "apiDiscover";
 	result:
 		| OutlineTargetResult
 		| SymbolBatchResult
+		| ApiDiscoveryResult
 		| { path: string; summary: RecursiveOutlineSummary; visibleFiles: string[] };
 	declarationCount: number;
 	sourceBytes: number;
@@ -142,18 +219,44 @@ export function createAstTools(
 
 	function locator(entry: OutlineEntry, path: string): number {
 		if (!entry.locator) throw new Error(`Structural outline row ${entry.name} has no symbol locator`);
+		return registerLocator(entry.locator, path, entry.name);
+	}
+
+	function registerLocator(token: string, path: string, name: string): number {
 		const id = nextLocator++;
 		const record = {
 			id,
-			token: entry.locator,
+			token,
 			path: resolve(path),
-			name: entry.name,
+			name,
 			stale: false,
 			declarationRetrieved: false,
 			generation: client.getGeneration(),
 		};
 		locators.set(id, record);
 		return id;
+	}
+
+	function renderApiCandidate(candidate: ApiCandidate, id: number, cwd: string): string {
+		const lines = [
+			`${formatPathForDisplay(candidate.definingFile, cwd)}:${displayLineRange(candidate.range)}(${id}): ${candidate.name} — ${candidate.symbolType}`,
+			...candidate.signature
+				.trim()
+				.split("\n")
+				.map((line) => `  ${line}`),
+			`  surface: visibility=${candidate.visibility}, sourceExport=${candidate.sourceExport}, packageSurface=${candidate.packageSurface}, internalOnly=${candidate.internalOnly}`,
+		];
+		if (candidate.callerAccess) {
+			lines.push(
+				`  caller: ${candidate.callerAccess.importStatement} use ${candidate.callerAccess.accessExpression}`,
+			);
+		}
+		if (candidate.reExportChain.length > 1) lines.push(`  re-exports: ${candidate.reExportChain.join(" -> ")}`);
+		const resolution = [`provenance=${candidate.provenance}`, `parse=${candidate.certainty}`];
+		if (candidate.certaintyReason) resolution.push(candidate.certaintyReason);
+		lines.push(`  resolution: ${resolution.join(", ")}`);
+		if (candidate.uncertainty) lines.push(`  uncertainty: ${candidate.uncertainty}`);
+		return lines.join("\n");
 	}
 
 	function renderEntry(
@@ -832,9 +935,108 @@ export function createAstTools(
 		},
 	});
 
+	const apiDiscover = defineTool<typeof apiDiscoverParams, AstToolDetails>({
+		name: "api_discover",
+		label: "api_discover",
+		description:
+			"Discover declarations and supported caller import paths across a canonical repository, package, or subtree without returning implementation bodies. Results include numeric symbol locators.",
+		promptSnippet: "Find reusable declarations and caller import paths across a repository or subtree",
+		promptGuidelines: [
+			"Use api_discover when reuse intent is known but the declaration path or exact name is not.",
+			"Choose exactly one query kind and keep fuzzy or documentation work limits narrow.",
+			"Use packageSurface when the caller needs a supported public import path.",
+			"Pass a returned numeric locator to symbol(signatureWithDocs) before reading implementation source.",
+		],
+		parameters: apiDiscoverParams,
+		async execute(toolCallId, params, signal, _onUpdate, ctx) {
+			const path = await realpath(resolveExplorePath(ctx.cwd, params.path));
+			if (!(await stat(path)).isDirectory()) throw new Error("api_discover requires a directory scope");
+			const result = await client.discoverApi(
+				path,
+				params.query as ApiQuery,
+				params.surface as ApiSurfaceFilter,
+				params.resultLimit,
+				signal,
+			);
+			const builder = new BoundedTextResultBuilder(temporaryOutput, "completeBlocks");
+			const locatorByUnit = new Map<string, number>();
+			try {
+				for (const [index, candidate] of result.candidates.entries()) {
+					const id = registerLocator(candidate.locator, candidate.definingFile, candidate.name);
+					const unit = `${candidate.definingFile}:${candidate.range.startByte}:${index}`;
+					locatorByUnit.set(unit, id);
+					await builder.appendBlock(unit, candidate.name, renderApiCandidate(candidate, id, ctx.cwd));
+				}
+				if (result.candidates.length === 0)
+					await builder.appendRequiredBlock("no matches", "No matching declarations");
+				const summary = result.summary;
+				const limits = [
+					...(summary.candidateLimitReached ? ["query candidates"] : []),
+					...(summary.workLimitReached ? ["query work"] : []),
+					...(summary.fileLimitReached ? ["files"] : []),
+					...(summary.sourceByteLimitReached ? ["source bytes"] : []),
+					...(summary.depthLimitReached ? ["depth"] : []),
+					...(summary.elapsedLimitReached ? ["elapsed time"] : []),
+				];
+				await builder.appendRequiredBlock(
+					"API discovery summary",
+					[
+						`summary: ${summary.filesScanned} files scanned, ${summary.declarationsConsidered} declarations considered, ${summary.resultsReturned} results returned, ${summary.omittedCandidates} candidates omitted`,
+						`result limit: ${summary.resultLimit}; source: ${formatSize(summary.totalSourceBytes)}; resolution diagnostics: ${summary.resolutionDiagnostics}; limits reached: ${limits.join(", ") || "none"}`,
+					].join("\n"),
+				);
+				const bounded = await builder.finish();
+				if (!bounded.overflow.fullOutputComplete) {
+					const visible = new Set(bounded.visibleUnitIds);
+					for (const [unit, id] of locatorByUnit) if (!visible.has(unit)) locators.delete(id);
+				}
+				if (bounded.overflow.temporaryPath) orientation.recordTemporaryOutput(bounded.overflow.temporaryPath);
+				const returnedBytes = Buffer.byteLength(bounded.content);
+				return {
+					content: [{ type: "text", text: bounded.content }],
+					details: {
+						kind: "apiDiscover",
+						result,
+						declarationCount: result.candidates.length,
+						sourceBytes: summary.totalSourceBytes,
+						returnedBytes,
+						avoidedBytes: Math.max(0, summary.totalSourceBytes - returnedBytes),
+						truncated: bounded.overflow.truncated,
+						overflow: bounded.overflow,
+					},
+				};
+			} catch (error) {
+				await builder.abort();
+				for (const id of locatorByUnit.values()) locators.delete(id);
+				throw error;
+			}
+		},
+		renderCall(args, theme, context) {
+			rowState.watch(context.toolCallId, context.invalidate);
+			const query = formatApiQuery(args.query as ApiQuery);
+			const component =
+				(context.lastComponent as AstCallComponent | undefined) ??
+				new AstCallComponent(
+					rowState,
+					context.toolCallId,
+					"api_discover",
+					[stripLeadingAt(args.path)],
+					[`[${query} ${args.surface} limit=${args.resultLimit}]`],
+					theme,
+				);
+			component.set([stripLeadingAt(args.path)], [`[${query} ${args.surface} limit=${args.resultLimit}]`], theme);
+			return component;
+		},
+		renderResult(result, options, theme, context) {
+			rowState.watch(context.toolCallId, context.invalidate);
+			return renderAstResult(result, options.expanded, theme, context);
+		},
+	});
+
 	return {
 		outline,
 		symbol,
+		api_discover: apiDiscover,
 		clear() {
 			locators.clear();
 			nextLocator = 1;
@@ -853,6 +1055,20 @@ export function createAstTools(
 			orientation.invalidate(paths);
 		},
 	};
+}
+
+function formatApiQuery(query: ApiQuery): string {
+	switch (query.kind) {
+		case "exactName":
+		case "prefixName":
+		case "substringName":
+		case "fuzzyName":
+			return `${query.kind}=${query.name}`;
+		case "declarationKind":
+			return `kind=${query.declarationKind}`;
+		case "documentation":
+			return `docs=${query.terms.join(",")}`;
+	}
 }
 
 function displayLineRange(range: SourceRange): string {

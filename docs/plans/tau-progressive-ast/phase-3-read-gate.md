@@ -104,6 +104,10 @@ Use the existing Explore state owner. Do not introduce a generic `tool_call` int
 - A recorded fatal per-file failure allows an ordinary read only at the matching fingerprint.
 - `/read-stats` reports blocked, deflected, permitted, fallback, and returned bytes without double counting.
 
+## Required reference validation
+
+Before this phase is complete, run its applicable acceptance workflow against all nine read-only reference repositories and the Markdown fixture in [`language-verification-corpus.md`](./language-verification-corpus.md). Unit tests and phase-specific fixtures do not replace this pass. Treat a failure in any supported language as a phase blocker and record parser recovery or uncertainty explicitly.
+
 ## Completion
 
 Phase 3 is complete when Tau's official reads reliably enforce one current model-visible outline per supported file, preserve all existing read behavior after orientation, and always provide a safe route around unavailable or fatally failing AST support.
