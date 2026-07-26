@@ -1,5 +1,11 @@
 # Task 02 — Engine core: IR, adapter interface, parse cache, Markdown scanner
 
+## Cold start
+
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, specs listed below, then on-disk `ast/grammars/` + task 00 `traverse`. **No new tests.** Live: parse one real file → IR; cache hit; md outline. Then `check:ts` green.
+
+Depends on: 00, 01 (done).
+
 ## Goal
 
 The spine everything else plugs into: canonical IR types, the `LanguageAdapter` interface, the registry, the parse/IR cache, budget-aware directory scanning, and the Markdown heading scanner.
@@ -17,7 +23,7 @@ markdown.ts    heading scanner producing FileIr for .md/.markdown/.mdown
 scan.ts        budgeted ignore-aware multi-file IR production (uses ../traverse.ts from task 00)
 ```
 
-Stage with `// fallow-ignore-file unused-file -- wired by task 13-switchover` until wired.
+Stage unreachable modules with `// fallow-ignore-file unused-file -- wired by <task>` until `index.ts` reaches them.
 
 ## IR shape (plain JSON-able objects only)
 
@@ -66,10 +72,10 @@ type LanguageAdapter = {
   capabilities: LanguageCapabilities;
   extract(tree: Parser.Tree, source: string): ExtractResult; // decls + imports
 };
+```
 
 The engine resolves grammar bytes with `grammarWasmPath`/`runtimeWasmPath` from
 `ast/grammars/manifest.ts` (task 01) — no other module touches wasm paths.
-```
 
 `registry.ts` exposes `adapterForPath(path)`, `registeredLanguages()`, and per-language capability lookup. Tools never switch on language ids; they ask the registry. **No `language ===` conditionals outside adapters.**
 
@@ -83,8 +89,12 @@ The engine resolves grammar bytes with `grammarWasmPath`/`runtimeWasmPath` from
 
 ## Markdown scanner
 
-Pure TS, no grammar. ATX headings (`#` … `######`) only; lines inside fenced code blocks (``` or `~~~`, fence length ≥ 3, matching closer) are not headings. Each heading becomes a `Decl` with `kind: "heading"`; section range runs to the line before the next heading of same-or-shallower depth, else EOF. Nest deeper headings as children. Test fixtures: fenced code containing `# fake heading`, nested levels, heading at EOF, CRLF input.
+Pure TS, no grammar. ATX headings (`#` … `######`) only; lines inside fenced code blocks (``` or `~~~`, fence length ≥ 3, matching closer) are not headings. Each heading becomes a `Decl` with `kind: "heading"`; section range runs to the line before the next heading of same-or-shallower depth, else EOF. Nest deeper headings as children. Live-check fixtures by hand: fenced code containing `# fake heading`, nested levels, heading at EOF, CRLF input.
 
-## Tests
+## Done when
 
-Unit tests for cache hit/miss/invalidate, budget tripping, abort mid-scan, Markdown fixtures. Use the task-01 grammars with a stub adapter (real adapters arrive in task 03; a minimal inline TS extractor for one node type is fine here and gets replaced).
+- Engine loads runtime + one grammar, parses a real file, returns IR, deletes tree.
+- Cache hit on second call same bytes; invalidate drops entry.
+- Markdown scanner outlines a real `.md` in-repo.
+- `scan` respects abort and reports budget trips.
+- No unit test suite required — live/`check:ts` only.

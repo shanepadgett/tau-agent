@@ -53,7 +53,7 @@ Per [output-density.md](../cross/output-density.md):
 
 ## Errors / edge cases
 
-- Ambiguous/missing target, bad scope, `budget` < 1, worker, cancel
+- Ambiguous/missing target, bad scope, `budget` < 1, engine, cancel
 
 ## Non-goals
 

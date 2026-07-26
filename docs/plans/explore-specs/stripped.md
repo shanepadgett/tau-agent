@@ -22,16 +22,27 @@ Old code, settings, docs, prompts, TUI, worker APIs, and tests that exist only t
 
 ---
 
+## Explore filesystem clones and read ownership
+
+| Stripped | Old role | Replacement |
+| --- | --- | --- |
+| Explore `ls` / `find` / `grep` tools | Density wrappers over walk/rg | **Pi built-ins.** Explore does not register these. Future density wrappers only if product re-opens |
+| Explore `read` tool | Own full read path, cache, structural policy | **Pi `read`.** Explore applies large-full → outline via `tool_result` hook only ([read-policy.md](cross/read-policy.md), [read.md](fs/read.md)) |
+| Complete-file unchanged / diff / recovery cache | Avoid resending bodies; transcript or in-memory baselines | **Gone.** No Explore body baseline store. Pi read results stand (or outline substitution) |
+| Transcript-replay / unified-diff baseline reconstruction | Rebuild baselines from chat history | **Gone** |
+
+---
+
 ## Read gate and orientation machine
 
 | Stripped | Old role | Replacement |
 | --- | --- | --- |
-| Read-gate / structural-attempt registry | Block `read` until outline/symbol/search/relationship attempt on fingerprint | [read-policy.md](cross/read-policy.md): large full read → outline; ranges always allowed (capped) |
+| Read-gate / structural-attempt registry | Block `read` until outline/symbol/search/relationship attempt on fingerprint | [read-policy.md](cross/read-policy.md): large full Pi `read` → outline via result hook; ranges always allowed (capped) |
 | `readGate.includeGlobs` / `readGate.excludeGlobs` | Which paths are gated | Deleted settings. Markdown hard-ungated; registered source uses threshold policy |
 | Attempt kinds (`directOutline`, `symbol`, `apiCandidate`, `structuralMatch`, `relationshipLocation`, `relationshipScope`) | Unlock tokens for gate | None |
-| `fatalFallback` gate unlock | Allow read after fatal outline failure | None (ordinary read policy / errors) |
+| `fatalFallback` gate unlock | Allow read after fatal outline failure | None |
 | `postPatchDiff` gate exception | Allow complete read after mutation without new attempt | None; policy is threshold-based on current bytes |
-| Blocked-read errors (“use structural tools first”) | Fail closed on gated full read | Never. Large full read succeeds as outline |
+| Blocked-read errors (“use structural tools first”) | Fail closed on gated full read | Never. Large full read succeeds as outline (hook replaces content; does not block the tool call) |
 | Orientation fingerprint unlock protocol as product surface | Couple tools to gate state | Parse/graph cache may key by content hash internally; not an agent-facing unlock system |
 
 ---
@@ -71,17 +82,18 @@ Old code, settings, docs, prompts, TUI, worker APIs, and tests that exist only t
 | Stripped | Replacement |
 | --- | --- |
 | Guidance that requires locator edits | Guidance: patch/edit/write; `impact` before big change; `show`/range for bodies |
-| Guidance that teaches read-gate unlock choreography | Guidance: large read returns outline; use range/`show` |
+| Guidance that teaches read-gate unlock choreography | Guidance: large full `read` returns outline; use range/`show` |
 | Guidance that tells agents to call `symbol` / `api_discover` / `tests` by those old rules | Current tool names and [guidance.md](session/guidance.md) only |
+| Guidance that implies Explore owns `ls`/`find`/`grep`/`read` | Harness/Pi owns those; Explore owns structural tools + read overlay |
 
 ---
 
 ## Settings stripped
 
 - Entire `readGate` object (`includeGlobs`, `excludeGlobs`, and any related knobs)
-- Any settings whose only consumer was read-stats, locator TTL, or gate behavior
+- Any settings whose only consumer was read-stats, locator TTL, gate behavior, or complete-file cache
 
-Kept settings are only those in [settings.md](cross/settings.md): read thresholds/ranges and context default budget, plus existing path/traverse concerns that still apply to the spine.
+Kept settings are only those in [settings.md](cross/settings.md): read thresholds/ranges and context default budget, plus path/traverse concerns that still apply to structural scans.
 
 ---
 
@@ -100,18 +112,17 @@ Human TUI may still show richer chrome.
 
 ## Still in product (do not strip by accident)
 
-- `ls`, `find`, `grep`, `read` (with structural policy)
-- Path-tree / per-file grouped dense agent formatting for list and hit tools
-- `outline`, `show`, `discover`, `ast_search`
-- `deps`, `reverse_deps`
-- `callers`, `callees`, `references`, `implementations`
-- `impact`, `context`
+- Explore: `outline`, `show`, `discover`, `ast_search`
+- Explore: `deps`, `reverse_deps`
+- Explore: `callers`, `callees`, `references`, `implementations`
+- Explore: `impact`, `context`
+- Pi/harness: `ls`, `find`, `grep`, `read` (not Explore-registered)
+- Large full Pi `read` of supported source → outline substitution in model-visible result ([read-policy.md](cross/read-policy.md))
 - Pre-turn guidance injection
 - Autoread (large supported → outline only)
-- Complete-file unchanged/diff cache on real body reads
 - Shared bounded output + session temp overflow
 - Session parse/file-graph/call-graph cache invalidated on mutation
-- Worker-registered language extensibility
+- Engine-registered language extensibility
 
 ---
 
@@ -121,4 +132,4 @@ When porting or rewriting:
 
 1. Treat this file as a delete list.
 2. If old behavior is not listed under “Still in product,” it does not carry forward.
-3. If something old seems useful but is listed stripped (including read-stats), leave it out until product adds a new spec.
+3. If something old seems useful but is listed stripped (including read-stats, Explore fs clones, complete-file cache), leave it out until product adds a new spec.

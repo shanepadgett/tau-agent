@@ -1,73 +1,51 @@
-# `read`
+# `read` (harness / Pi)
+
+## Ownership
+
+- **Pi/harness built-in.** Explore does not register `read`.
+- Explore applies structural overlay only ([read-policy.md](../cross/read-policy.md)).
 
 ## Purpose
 
-- Read text or image file contents with optional line ranges and line numbers.
-- Apply structural read policy for supported source ([read-policy.md](../cross/read-policy.md), thresholds in [settings.md](../cross/settings.md)).
-- Avoid resending unchanged complete-file contents when the session still holds trusted baseline knowledge.
-- Snapshot/lifecycle rules align with [system.md](../cross/system.md). Large body results still honor [bounded-output.md](../cross/bounded-output.md).
+- Read text or image file contents with optional line ranges and line numbers (Pi behavior).
+- For large supported source full reads: model sees outline, not body (Explore `tool_result` overlay).
+- No Explore complete-file unchanged/diff cache ([stripped.md](../stripped.md)).
 
 ## Parameters
+
+Pi’s `read` surface (canonical):
 
 - `path` (required string) — relative or absolute
 - `offset` (optional number) — 1-indexed start line
 - `limit` (optional number) — max lines to return from offset
-- `lineNumbers` (optional boolean) — prefix lines with 1-indexed numbers
+
+(line-number presentation follows Pi defaults unless product later specifies otherwise.)
 
 ## Behavior — media types
 
-- Supported images: delegate to the base image read path.
-- Non-UTF8 / binary text decode failure: fall back to base read behavior rather than crashing.
-- UTF-8 text: Explore caching + structural read policy apply.
+- Images / binary / decode fallback: Pi base path. Explore overlay does not run.
 
-## Behavior — structural policy
+## Behavior — structural overlay
 
 - See [read-policy.md](../cross/read-policy.md).
-- Large supported full read → outline substitution (success).
+- Large supported full read → outline substitution (success; model-visible content replaced).
 - Ranged supported read → at most `maxRangeLines` lines.
 - Markdown always allowed full read.
 
 ## Agent output
 
-- Body/outline text only plus necessary unchanged/diff/truncation notices ([output-density.md](../cross/output-density.md)).
+- Body or outline text only plus necessary truncation notices ([output-density.md](../cross/output-density.md)).
 - Exact file bytes/lines for body reads — no paraphrase.
-- No read-stats, gate, or cache-mode essays in the model payload (short unchanged/diff markers are fine).
+- No read-stats, gate, cache-mode, or “blocked until outline” essays.
 
-## Behavior — ranges and limits
+## Explicitly absent
 
-- `offset` beyond EOF → error naming total lines.
-- Apply shared head byte/line limits to the selected slice after structural range caps.
-- Single line larger than max bytes → explicit error/guidance to use a shell slice, not a silent empty read.
-- Partial truncation of a multi-line slice → notice with next `offset` hint when continuing by lines/bytes.
-- Complete-file means: starts at beginning, includes through end, was not outline-substituted, and was not truncated by output limits.
-
-## Behavior — complete-file knowledge
-
-When a complete file is cacheable and trusted baseline exists in session context:
-
-- **unchanged** — content hash matches baseline; return a short unchanged marker instead of full text
-- **diff** — content changed; return a compact patch/diff against baseline when possible
-- **baseline** — first complete delivery of current contents
-- **recovery** — baseline missing/unusable after compaction or invalidated chain; return full current source safely (still subject to structural full-read policy: large supported files outline-substitute even in recovery)
-
-Partial-range reads can still short-circuit as **unchanged** for the same ranged scope hash when applicable.
-
-## Snapshots
-
-- Successful text body reads may store content snapshots keyed by hash for later diff/unchanged decisions.
-- Outline-substituted large full reads are not complete-file body baselines.
-- Snapshot store clears on session compact/tree/start as defined in system lifecycle.
-- If snapshot epoch goes stale mid-operation, do not use stale baseline decisions.
-
-## Errors / edge cases
-
-- Missing file / unreadable path → normal FS error
-- Aborted signal → aborted error
-- Range wider than `maxRangeLines` on supported source → error to shrink range
-- Never a “blocked until structural attempt” error
+- Explore-owned `read` tool implementation
+- Unchanged / diff / baseline / recovery modes
+- Read-gate unlock errors
+- `/read-stats`
 
 ## Non-goals
 
-- Not a substitute for `outline`/`show` when only signatures or one declaration are needed
-- Does not issue session locators
-- Does not write files
+- Not a general binary editor
+- Not a substitute for `show` when the agent already has path+name

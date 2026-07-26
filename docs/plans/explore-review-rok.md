@@ -1,6 +1,8 @@
 # Explore Extension Review — Rok
 
-Scope: `packages/agent/extensions/explore/` (~6,500 lines TS) plus its native worker `packages/agent/native/tau-ast/` (~22,000 lines Rust). Verdict first: the tools are useful and the instincts (bounded output, native parsing, outline-before-read) are right. The architecture around them is a swamp. It reads like someone kept answering "what if" questions with more machinery and never once asked "what is the spine of this system." There is no spine. There are 23 TS files and 18 Rust files holding hands in the dark.
+**Historical.** Old extension archived. Build plan: [`explore-wasm-rewrite/`](explore-wasm-rewrite/README.md). Specs: [`explore-specs/`](explore-specs/README.md). Spine that survived: adapter IR, path+name identity, pure formatters, no gate, no locators, Pi owns fs/`read` with outline hook.
+
+Scope at time of review: `packages/agent/extensions/explore/` (~6,500 lines TS) plus its native worker `packages/agent/native/tau-ast/` (~22,000 lines Rust). Verdict first: the tools are useful and the instincts (bounded output, native parsing, outline-before-read) are right. The architecture around them is a swamp. It reads like someone kept answering "what if" questions with more machinery and never once asked "what is the spine of this system." There is no spine. There are 23 TS files and 18 Rust files holding hands in the dark.
 
 ## The core failure
 

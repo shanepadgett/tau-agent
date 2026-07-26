@@ -1,10 +1,16 @@
 # Task 06 — `outline` and `show` tools
 
+## Cold start
+
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, every spec listed below, then identity + engine + adapters + `packages/agent/shared/bounded-text-result.ts` + a thin Tau tool (e.g. web/patch) for `defineTool`/row-state patterns. **No new tests.** Register tools now. Live after `/reload` per Done when. `check:ts` green.
+
+Depends on: 05.
+
 ## Goal
 
-The two core shape tools, staged (implemented + tested, registered in task 13).
+The two core shape tools. **Register as soon as they work** (parent plan rule). First live prove of the structural spine.
 
-Specs (acceptance criteria — read all): `explore-specs/shape/outline.md`, `explore-specs/shape/show.md`, `explore-specs/cross/output-density.md`, `explore-specs/cross/bounded-output.md`.
+Specs: `explore-specs/shape/outline.md`, `explore-specs/shape/show.md`, `explore-specs/cross/output-density.md`, `explore-specs/cross/bounded-output.md`.
 
 ## Files
 
@@ -17,7 +23,7 @@ packages/agent/extensions/explore/ast/format/show.ts
 packages/agent/extensions/explore/ast/tools/show.ts
 ```
 
-Tool files are thin: typebox schema, param normalization (strip leading `@` per `path-conventions.md`), one query call, one format call, bounded emission. For `packages/agent/shared/tool-row-state.ts` usage and TUI render conventions (`packages/agent/docs/tui.md`), follow the patterns in the task-00 fs tools and the archived AST tools (`docs/plans/explore-archive/explore/ast-tools.ts`) — never hardcode keybinding hints.
+Tool files are thin: typebox schema, param normalization (strip leading `@` per `path-conventions.md`), one query call, one format call, bounded emission. For `packages/agent/shared/tool-row-state.ts` usage and TUI render conventions (`packages/agent/docs/tui.md`), follow patterns in other Tau extensions — never hardcode keybinding hints. Archive is prior art only.
 
 ## `outline`
 
@@ -37,6 +43,6 @@ Tool files are thin: typebox schema, param normalization (strip leading `@` per 
 - Over budget → **hard error** telling the agent to request fewer targets. Never truncate a batch (`bounded-output.md` show special case).
 - Dedupe identical targets.
 
-## Tests
+## Done when
 
-Pure-function tests against fixture IR: formatting (nesting, ranges, docs toggle, per-file units), recursive overflow path with a fake temp store, show view slicing per language family (TS + Go + Rust minimum), ambiguity batch error, contextLines validation.
+After `/reload`: recursive `outline` on a real package path; `show` a known symbol all four views; ambiguity errors with candidates; large recursive outline hits bound/overflow cleanly.

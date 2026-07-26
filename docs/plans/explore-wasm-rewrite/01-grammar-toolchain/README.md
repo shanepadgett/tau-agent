@@ -1,5 +1,9 @@
 # Task 01 — Grammar toolchain and WASM artifacts
 
+## Cold start
+
+**DONE.** Do not re-run unless bumping grammars. Fresh windows implementing later tasks: use `ast/grammars/manifest.ts` only; do not rebuild wasm casually.
+
 ## Status: done, gate passed
 
 2026-07-26: all nine grammars load and parse through `web-tree-sitter@0.26.11` on the managed Mac (`packages/agent/test/extensions/explore/grammars.test.ts`, 10/10). WASM execution is proven policy-safe (earlier standalone probe: `~/dev/personal/go-test/WASM_PROBE_RESULTS.md`). The plan proceeds.

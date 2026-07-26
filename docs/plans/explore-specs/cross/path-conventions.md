@@ -12,16 +12,16 @@
 - Multi-root or multi-file outputs separate files clearly enough to attribute matches and graph sites.
 - Prefer path factoring over repeating full paths on every row ([output-density.md](output-density.md)).
 
-## Ignore / noise defaults (filesystem tools)
+## Ignore / noise defaults (traversal)
 
-- Default traversal respects ignore rules (for example gitignore-style rules used by Explore traversal).
-- Default traversal hides hidden path segments unless the tool opts into hidden.
-- Default traversal hides common noise directories/files unless the tool opts into noise/ignored inclusion.
-- Tools that accept `noIgnore` / `all` / `hidden` document how those flags widen visibility.
+- Default Explore traversal (structural scans, guidance discovery) respects ignore rules (gitignore-style).
+- Default traversal hides hidden path segments unless the caller opts into hidden.
+- Default traversal hides common noise directories/files unless the caller opts into noise/ignored inclusion.
+- Harness `ls` / `find` / `grep` follow Pi ignore/hidden rules; Explore does not reimplement those tools.
 
 ## Structural scans
 
-- Recursive structural scans are ignore-aware.
+- Recursive structural scans (`outline` recursive, `discover`, graph scope walks, etc.) are ignore-aware.
 - Recursive structural scans honor traversal budgets separate from model-visible output limits:
   - max files
   - max source bytes

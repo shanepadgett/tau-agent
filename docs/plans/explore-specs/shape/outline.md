@@ -36,7 +36,7 @@ Per [output-density.md](../cross/output-density.md):
 
 ## Language coverage
 
-- All worker-registered languages with outline capability ([system.md](../cross/system.md)).
+- All engine-registered languages with outline capability ([system.md](../cross/system.md)).
 
 ## Side effects
 
@@ -45,7 +45,7 @@ Per [output-density.md](../cross/output-density.md):
 
 ## Errors / edge cases
 
-- Unsupported type, recursive on non-dir, worker, cancel
+- Unsupported type, recursive on non-dir, engine, cancel
 - Cancel must not leave partial temp success
 
 ## Non-goals

@@ -38,6 +38,10 @@ Adds `/context` to select reusable repository work scopes from `.pi/contexts`, a
 
 Gives the agent `context_prune` for creating a hard context checkpoint after broad exploration converges. Everything before the checkpoint leaves future model input unless the agent retains an exact tool exchange or carries a file forward as a fresh snapshot. File snapshot failures are reported without blocking the checkpoint. Deferred files remain as a small conditional note. Context markers use an ordered instruction ladder that escalates from informational guidance to pruning before further tool work. Run `/prune` with no arguments to request a checkpoint manually. Session history remains unchanged, and checkpoints, markers, and pruned-row state follow the active branch.
 
+## explore
+
+Structural source tools (outline, show, discover, graph/relationship queries, impact, context). Landing with the WASM rewrite; no tools registered yet. Pi keeps `ls` / `find` / `grep` / `read`.
+
 ## footer
 
 Adds `/footer` to toggle and refresh Tau’s status footer.

@@ -1,19 +1,25 @@
-# Task 03 — Adapters: TypeScript, TSX, Go + fixture harness
+# Task 03 — Adapters: TypeScript, TSX, Go
+
+## Cold start
+
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, then `ast/ir.ts` `ast/adapter.ts` `ast/engine.ts` `ast/registry.ts` on disk. **No new tests.** Live: IR dump on real `.ts` and `.go` in-repo. `check:ts` green.
+
+Depends on: 02.
 
 ## Goal
 
-Two structurally different language families through the adapter interface, proving the IR carries what every later task needs. Plus the reusable fixture harness all other adapters use.
+Two structurally different language families through the adapter interface, proving the IR carries what every later task needs.
 
 ## Files
 
 ```text
 packages/agent/extensions/explore/ast/languages/typescript.ts   (also exports the tsx adapter: same extractor, different wasm + id)
 packages/agent/extensions/explore/ast/languages/go.ts
-packages/agent/extensions/explore/ast/languages/harness.test-util.ts
-packages/agent/extensions/explore/ast/languages/fixtures/<lang>/*.{ts,tsx,go} + *.expected.json
 ```
 
 Register both in `registry.ts` (a language is one file plus one registry line — keep it that way).
+
+Optional hand fixtures under `ast/languages/fixtures/` for live poking — not a vitest harness requirement.
 
 ## Extraction approach
 
@@ -32,11 +38,11 @@ Walk the tree with `tree.rootNode` / `namedChildren` in TS code; use `new Parser
 ## Go specifics
 
 - `function_declaration`; `method_declaration` → `qualifiedName` = `Receiver.Method` (strip pointer `*`); `type_declaration`/`type_spec`: struct type → `struct`, interface type → `interface`, all other type specs (aliases, defined types over primitives) → `struct` (closest kind in the shared vocabulary; do not extend the vocabulary for aliases); `const_declaration` → `constant`, `var_declaration` → `variable`, one `Decl` per spec entry.
-- Kind mappings must stay inside the shared `DeclKind` vocabulary. TS `type_alias_declaration` → `interface`. Record every such judgment call in the fixture expected files so it is reviewable, not folklore.
+- Kind mappings must stay inside the shared `DeclKind` vocabulary. TS `type_alias_declaration` → `interface`. Record judgment calls in a short comment in the adapter file.
 - `exported` = first rune uppercase; `visibility` = `public`/`private` accordingly.
 - Imports: `import_spec` paths.
 - Capabilities: `{ shape: true, search: true, fileDeps: false, callEdges: true, packageSurface: false }` — honest subsets are allowed by `explore-specs/cross/system.md`; do not fake package resolution.
 
-## Fixture harness
+## Done when
 
-`harness.test-util.ts`: given fixture source path, run engine `irForFile`, strip volatile fields (`contentHash`, absolute path), compare against `*.expected.json`. Expected files are committed, human-reviewed JSON — not auto-blessed snapshots. Fixtures must cover: nesting, docs, export/visibility variants, a file with a deliberate syntax error (assert `parseDegraded: true` and that surrounding decls still extract).
+Live: IR for a real `.ts` and `.go` file in this monorepo shows nested decls, docs spans, exports/visibility, imports. Deliberate syntax error still yields surrounding decls + `parseDegraded: true`. Signatures are exact source slices.

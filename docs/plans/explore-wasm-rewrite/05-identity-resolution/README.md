@@ -1,5 +1,11 @@
 # Task 05 — Target identity resolution
 
+## Cold start
+
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, `explore-specs/cross/identity.md` (full), then engine + IR + scan on disk. **No new tests.** Live: resolve/disambiguate real symbols. `check:ts` green.
+
+Depends on: 03 (TS adapter enough).
+
 ## Goal
 
 One module resolving `{ path?, name, line? }` (+ directory scope) to exactly one `Decl`, or a bounded candidate list. Every symbol-targeted tool (show, relationships, impact, context, discover follow-ups) uses this and nothing else.
@@ -35,6 +41,6 @@ resolveTarget(engine, scopeDir: string, target: Target, signal: AbortSignal): Pr
 - Exactly one match → resolved. Multiple → candidates, never a silent pick. Zero → notFound.
 - Resolution always reads current bytes through the engine cache — there is no staleness concept to handle.
 
-## Tests
+## Done when
 
-Same-name decls in one file (function + method), dotted disambiguation, line pinning, cross-file ambiguity in scope scan, not-found, abort during scope scan.
+Live: same-name decls disambiguated by path/line/qualified name; cross-file ambiguity returns candidates; not-found clean; abort during scope scan respected.

@@ -2,11 +2,12 @@
 
 ## Purpose
 
-- Give agents filesystem exploration, structural source orientation, exact source slices, graph queries, and budgeted context packs.
+- Give agents structural source orientation, exact source slices, graph queries, and budgeted context packs.
 - Prefer compact model payloads over dumping whole files when structure answers the question.
-- For large supported source, full `read` returns outline instead of body; bodies come from ranged `read` or `show`.
+- For large supported source, full harness `read` returns outline instead of body (Explore overlay); bodies come from ranged `read` or `show`.
 - Keep scans bounded, deterministic, ignore-aware where applicable, and cancellable.
 - File mutation is not an Explore responsibility; agents use harness `patch` / `edit` / `write`.
+- Filesystem list/search/read tools are **not** an Explore responsibility; agents use harness/Pi `ls` / `find` / `grep` / `read`.
 - **Language growth is a first-class product goal:** adding a language must not require new tools, new identity rules, new read policy, or per-language agent workflows.
 
 ## Language model
@@ -14,8 +15,8 @@
 ### Contract
 
 - Structural behavior is defined against a **shared declaration/graph IR** and a **registered language adapter** set, not against a frozen world list baked into each tool spec.
-- Tool contracts (`outline`, `show`, `discover`, graph tools, `impact`, `context`, `ast_search`, structural `read`) are language-agnostic. They operate on whatever languages the worker currently registers.
-- A language is “supported” only when registered with the worker for the needed capability (shape, search, file edges, call edges, package surface — adapters may implement a subset).
+- Tool contracts (`outline`, `show`, `discover`, graph tools, `impact`, `context`, `ast_search`) and structural `read` overlay are language-agnostic. They operate on whatever languages the engine currently registers.
+- A language is “supported” only when registered with the engine for the needed capability (shape, search, file edges, call edges, package surface — adapters may implement a subset).
 - Unsupported path/language → clear error naming that the language/capability is unavailable. No silent pretend parse.
 - Capability gaps are honest: if a language has outline/`show` but not call graph, `callers`/`impact` say so; they do not fake edges.
 
@@ -38,7 +39,7 @@ It may add:
 
 ### Baseline registered set (current product)
 
-Workers ship at least these when the platform build includes them:
+Engine ships at least these when the build includes them:
 
 - TypeScript (`.ts`)
 - TSX (`.tsx`)
@@ -51,27 +52,26 @@ Workers ship at least these when the platform build includes them:
 - Swift (`.swift`)
 - Markdown (`.md`, `.markdown`, `.mdown`)
 
-This list is the **current baseline**, not the ceiling. Tool specs refer to “registered supported languages” / “worker-advertised languages,” not a duplicated closed enum per tool.
+This list is the **current baseline**, not the ceiling. Tool specs refer to “registered supported languages” / “engine-advertised languages,” not a duplicated closed enum per tool.
 
 ### Markdown
 
 - Markdown stays structurally outline/`show`-able and **ungated** for full `read` ([read-policy.md](read-policy.md)).
 
-## Platform / worker availability
+## Platform / engine availability
 
-- Packaged AST worker is required for structural tools: `outline`, `show`, `discover`, `ast_search`, file graph, symbol graph, `impact`, `context`.
-- Worker advertises the registered language set and per-language capabilities to the session.
-- Current packaged support target: Apple Silicon Mac (`darwin-arm64`).
-- On unsupported hosts, non-AST Explore tools still work (`ls`, `find`, `grep`, and non-structural `read` paths).
-- On unsupported hosts or missing worker, structural tools fail with a clear platform/install error when invoked.
-- Structural tools remain registered even when the worker is unavailable.
+- In-process structural engine (WASM tree-sitter + adapters) is required for: `outline`, `show`, `discover`, `ast_search`, file graph, symbol graph, `impact`, `context`, and the large-`read` outline overlay.
+- Engine advertises the registered language set and per-language capabilities to the session.
+- Structural tools run on any host where the Node/WASM runtime loads (no darwin-arm64-only native worker).
+- If the engine fails to init, structural tools fail with a clear install/runtime error when invoked; harness fs tools still work.
+- Structural tools remain registered even when the engine is unavailable (fail on use).
 
 ## Session lifecycle
 
-- Session start: reset tool-row state, read snapshots, graph/parse cache, temporary output store; reload Explore settings.
-- Session tree change: clear read snapshots; reset graph/parse cache as required for branch safety.
-- Session compact: clear read snapshots (complete-file baseline may become unavailable).
-- Session shutdown: clear graph/parse cache; shut down AST worker; shut down temporary output store.
+- Session start: reset tool-row state, graph/parse cache, temporary output store; reload Explore settings.
+- Session tree change: reset graph/parse cache as required for branch safety.
+- Session compact: no Explore complete-file baseline to clear (none exists). Graph/parse cache policy as implemented for branch safety.
+- Session shutdown: clear graph/parse cache; shut down engine WASM objects; shut down temporary output store.
 - Successful Tau file mutations invalidate graph/parse cache for changed paths.
 
 ## Shared cache (product requirement)
@@ -83,7 +83,7 @@ This list is the **current baseline**, not the ceiling. Tool specs refer to “r
 ## Cross-cutting contracts
 
 - Target identity: [identity.md](identity.md)
-- Structural full/ranged read: [read-policy.md](read-policy.md)
+- Structural full/ranged read overlay: [read-policy.md](read-policy.md)
 - Agent text density: [output-density.md](output-density.md)
 - Model-visible caps / temp overflow: [bounded-output.md](bounded-output.md)
 - Paths / ignore / traversal budgets: [path-conventions.md](path-conventions.md)
@@ -98,9 +98,10 @@ This list is the **current baseline**, not the ceiling. Tool specs refer to “r
 - Before a non-trivial change to a symbol, run `impact` on that symbol.
 - To understand a symbol in one shot, run `context`.
 - Edit with harness patch/edit/write. No Explore write tools.
-- Same workflow for every registered language. No language-specific tool choreography.
+- List/search files with harness `ls` / `find` / `grep`. Read with harness `read` (large supported full reads become outline).
+- Same structural workflow for every registered language. No language-specific tool choreography.
 
 ## Commands
 
-- None. Explore exposes tools and pre-turn guidance only.
+- None. Explore exposes tools, the read overlay, and pre-turn guidance only.
 - `/read-stats` and all read-stats machinery are stripped ([stripped.md](../stripped.md)).

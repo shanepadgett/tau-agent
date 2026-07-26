@@ -7,9 +7,9 @@
 ## `read`
 
 - `structureThresholdLines` (number, default `200`)  
-  Supported source files at or under this line count may be full-read. Above it, a full read returns outline only ([read-policy.md](read-policy.md)).
+  Supported source files at or under this line count may be full-read via Pi `read`. Above it, a full read’s model-visible result is outline only ([read-policy.md](read-policy.md)).
 - `maxRangeLines` (number, default `200`)  
-  Maximum lines returned by one ranged `read` on supported source.
+  Maximum lines returned by one ranged `read` on supported source (enforced by Explore overlay if Pi does not).
 
 ## `context`
 
@@ -23,6 +23,6 @@
 ## Removed (do not carry forward)
 
 - Entire `readGate` object (`includeGlobs`, `excludeGlobs`, anything gate-only)
-- Any setting whose only consumer was `/read-stats`, locator behavior, or gate unlock
+- Any setting whose only consumer was `/read-stats`, locator behavior, gate unlock, or complete-file body cache
 
 Full delete list: [stripped.md](../stripped.md).

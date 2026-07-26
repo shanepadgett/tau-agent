@@ -4,9 +4,7 @@ Critique of the current explore/AST system architecture, the patterns it acciden
 
 ## Status
 
-Critique and target architecture only. No implementation approved yet.
-
-Behavioral acceptance criteria live separately in [`docs/plans/explore-specs/`](explore-specs/README.md). Those specs deliberately avoid architecture so a second design pass can propose structure against fixed product rules.
+Historical critique. Several product decisions here are **superseded** by [`explore-specs/`](explore-specs/README.md) and [`explore-wasm-rewrite/`](explore-wasm-rewrite/README.md): no locators, no orientation gate, no Explore write tools, no Explore `ls`/`find`/`grep`/`read`, WASM in-process engine instead of native worker. Keep for autopsy of anti-patterns; do not implement this document’s old product surface.
 
 ## Product goals to keep
 

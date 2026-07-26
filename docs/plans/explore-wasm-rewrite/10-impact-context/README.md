@@ -1,8 +1,14 @@
 # Task 10 — `impact` and `context` composites
 
+## Cold start
+
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, impact/context/settings specs, then relationships + file-graph + show view extraction. **No new tests.** Compose only — no new graph engine. Live per Done when. `check:ts` green.
+
+Depends on: 09.
+
 ## Goal
 
-Two composite tools over the task 08/09 backends. Staged. No new graph mechanics here — composition and packing only.
+Two composite tools over the task 08/09 backends. Register when they work. No new graph mechanics — composition and packing only.
 
 Specs: `explore-specs/graph/impact.md`, `explore-specs/graph/context.md`, `explore-specs/cross/settings.md` (`context.defaultBudgetTokens` = 8000).
 
@@ -30,6 +36,6 @@ packages/agent/extensions/explore/ast/tools/context.ts
 - Bodies/signatures are byte slices via the same view logic as `show` (reuse `queries/show.ts` view extraction — do not duplicate it).
 - Header: target, `budget`, `used`. Then labeled groups; exact source, no tree compression inside entries. After packing, still run through the shared bounded handler (both limits apply, `bounded-output.md`).
 
-## Tests
+## Done when
 
-Impact section composition + mode filtering on a fixture repo; context packing: budget large enough for all bodies, tight budget forcing signature downgrades and skips, dedupe across sections, type-target variant, `budget < 1` error.
+Live: `impact` modes on a real symbol; `context` with loose and tight budgets (signature downgrade / skip); `budget < 1` errors.

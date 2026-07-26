@@ -1,8 +1,14 @@
 # Task 08 — File dependency graph, `deps` and `reverse_deps`
 
+## Cold start
+
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, deps/reverse-deps specs + system cache section, then `FileIr.imports` + TS adapter. **No new tests.** Register tools. Live on monorepo TS module. `check:ts` green.
+
+Depends on: 03.
+
 ## Goal
 
-Session file-import graph plus the two file-scoped tools. Staged. This graph also backs `impact` sections 2/4/5 (task 10).
+Session file-import graph plus the two file-scoped tools. Register when they work. This graph also backs `impact` sections 2/4/5 (task 10).
 
 Specs: `explore-specs/graph/deps.md`, `explore-specs/graph/reverse-deps.md`, `explore-specs/cross/system.md` (shared cache).
 
@@ -32,6 +38,6 @@ Languages without `fileDeps` → the tools return the capability-unavailable err
 
 Per spec: dependent files as a small indented tree when factoring helps, depth labels when `depth > 1`, external package edges grouped last, one-line empty, omission footer only when `resultLimit` cut. No stats, no timing.
 
-## Tests
+## Done when
 
-Fixture tree with relative/index/bare/unresolved imports; depth BFS with a cycle; reverse index correctness; invalidation after simulated mutation; capability error for Go file.
+Live on this monorepo: `deps`/`reverse_deps` on a known TS module; depth BFS; Go file → capability error.

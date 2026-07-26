@@ -1,19 +1,25 @@
 # Task 14 — Cleanup
 
+## Cold start
+
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, `stripped.md`. Sweep dead names; fix subagents/previews. **No new tests.** `check:ts` green. Ask human before deleting plan/archive dirs.
+
+Depends on: 13.
+
 ## Goal
 
 The old system was archived/deleted on 2026-07-26 (see `docs/plans/explore-archive/README.md`). This task reverses the interim compromises made then and sweeps the leftovers.
 
 ## Reverse the interim wiring
 
-- Scout/review subagents (`packages/agent/extensions/subagent/agents/{scout,review}.md`): restore full tool lists using the new 16-tool names and rewrite their bodies for the new surface (they still describe locators, `symbol`, `api_discover`, `tests` — all gone per `stripped.md`).
-- `CONTEXT_SYNC_REQUIRED_TOOLS` in `packages/agent/extensions/context/sync.ts`: restore `ls`/`find`/`grep`.
+- Scout/review subagents (`packages/agent/extensions/subagent/agents/{scout,review}.md`): restore tool lists using the **12** Explore structural names + Pi fs tools; rewrite bodies for the new surface (they still describe locators, `symbol`, `api_discover`, `tests`, Explore-owned read/ls — all gone or harness-owned per `stripped.md`).
+- `CONTEXT_SYNC_REQUIRED_TOOLS` in `packages/agent/extensions/context/sync.ts`: use Pi `ls`/`find`/`grep` (or whatever the reduced set should be) — not Explore clones.
 - `shared/autoread.ts`: registration moved into Explore in task 12 — confirm the context-pruning call is gone and the shared module only exports what prune/handoff/subagent consume.
-- `.pi/extensions/tool-preview/widgets/`: delete previews for dead tools (`symbol.ts`, `locator-edits.ts`, `read-stats.ts`); refresh mock data in `outline.ts`, `api-discover.ts`, `ast-search.ts`, `autoread.ts`, and the fs-tool widgets to the new output shapes.
+- `.pi/extensions/tool-preview/widgets/`: delete previews for dead tools (`symbol.ts`, `locator-edits.ts`, `read-stats.ts`, Explore fs clones if any); refresh mock data in `outline.ts`, `api-discover.ts` → discover shape, `ast-search.ts`, `autoread.ts` to the new output shapes.
 
 ## Sweep
 
-- `grep -ri "tau-ast\|locator\|read-stats\|orientation\|api_discover" packages/ .pi/extensions/ .github/ AGENTS.md` — every remaining hit is justified or removed (Pi upstream docs don't count).
+- `grep -ri "tau-ast\|locator\|read-stats\|orientation\|api_discover\|createExploreRead\|explore.*\bls\b" packages/ .pi/extensions/ .github/ AGENTS.md` — every remaining hit is justified or removed (Pi upstream docs don't count).
 - Run context-sync so `.pi/contexts` reflects the final file layout.
 - `mise run check:ts` green; Fallow reports no dead files.
 - `npm pack --dry-run` on `packages/agent` shows grammar `.wasm` files and no native binaries.

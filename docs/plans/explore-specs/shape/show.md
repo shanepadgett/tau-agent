@@ -32,7 +32,7 @@ Per [output-density.md](../cross/output-density.md):
 ## Errors / edge cases
 
 - `contextLines` on non-declaration view → error
-- Bad file/language, worker, schema
+- Bad file/language, engine, schema
 
 ## Non-goals
 

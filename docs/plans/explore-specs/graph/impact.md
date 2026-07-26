@@ -48,7 +48,7 @@ Per [output-density.md](../cross/output-density.md) and relationship site densit
 
 ## Errors / edge cases
 
-- Ambiguous/missing target, bad scope, worker, cancel
+- Ambiguous/missing target, bad scope, engine, cancel
 
 ## Non-goals
 

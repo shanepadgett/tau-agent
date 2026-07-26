@@ -23,7 +23,7 @@ Per [output-density.md](../cross/output-density.md):
 
 ## Errors / edge cases
 
-- Missing/non-file, unsupported dep extraction, worker, cancel
+- Missing/non-file, unsupported dep extraction, engine, cancel
 
 ## Non-goals
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-Research and proposed delivery shape. No implementation approved by this document.
+Research that justified WASM over a native helper. **Delivery plan:** [`explore-wasm-rewrite/`](explore-wasm-rewrite/README.md). Product contract: [`explore-specs/`](explore-specs/README.md). Do not treat this file as the build order.
 
 ## Problem
 

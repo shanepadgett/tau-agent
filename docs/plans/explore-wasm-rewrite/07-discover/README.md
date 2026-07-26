@@ -1,8 +1,14 @@
 # Task 07 — `discover` tool
 
+## Cold start
+
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, `explore-specs/shape/discover.md` + output-density/bounded-output, then outline tool + scan + engine as patterns. **No new tests.** Register when done. Live per Done when. `check:ts` green.
+
+Depends on: 06.
+
 ## Goal
 
-Repo/package/subtree declaration discovery replacing `api_discover`. Staged.
+Repo/package/subtree declaration discovery replacing `api_discover`. Register when it works.
 
 Spec: `explore-specs/shape/discover.md`.
 
@@ -28,6 +34,6 @@ packages/agent/extensions/explore/ast/tools/discover.ts
 
 Per `output-density.md`: group by defining file, path header once; each candidate `L<start>-<end>`, kind, signature slice; import/access path only when `packageSurface`/`sourceExport` made it the point. No scores, no work counters unless a budget tripped (one footer line). Complete-block bounding + temp overflow. Empty → one line.
 
-## Tests
+## Done when
 
-Each query kind against a small fixture tree; surface filters incl. packageSurface on a fixture package with `exports`; maxWork trip; resultLimit omission footer; directory-only validation.
+Live: each query kind on a real subtree; surface filters; directory-only validation; resultLimit footer when cut.

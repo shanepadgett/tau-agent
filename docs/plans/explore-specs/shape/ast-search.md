@@ -9,7 +9,7 @@
 
 - `path` (required string)
 - `pattern` (required string, 1…16KiB)
-- `language` (optional string) — worker-registered language id (required for directory targets)
+- `language` (optional string) — engine-registered language id (required for directory targets)
 - `resultLimit` (required int 1…100)
 
 ## Language resolution
