@@ -1,0 +1,124 @@
+# Stripped from current Explore (does not carry forward)
+
+This file is normative. Anything listed here is **out of the product**. A rewrite or implementation that reintroduces these without a new explicit product decision is wrong.
+
+Old code, settings, docs, prompts, TUI, worker APIs, and tests that exist only to serve these behaviors are disposable. Do not preserve them “for compatibility.”
+
+---
+
+## Identity and edits
+
+| Stripped | Old role | Replacement |
+| --- | --- | --- |
+| Numeric session locators | Opaque ints minted by outline/search/relationships; stale-safe handles | Path + name (+ line). Source line ranges in output only |
+| Locator session table / worker generation / stale protocol | Invalidate and fail closed on edit/restart | None. Resolve against current bytes + session parse/graph cache |
+| `symbol` tool | Resolve locator → signature/body views | `show` (path + name + view) |
+| `replace_declaration` | Locator structural whole-decl replace | Harness `patch` / `edit` / `write` |
+| `replace_body` | Locator body-range replace | Harness patch/edit/write |
+| `insert_declaration` | Locator sibling insert | Harness patch/edit/write |
+| `rename_declaration` | Locator rename + ref walk | Harness patch/edit/write + graph tools for finding sites |
+| Fresh locator return after edit | Rebind IDs post-mutation | None |
+| Locator fields on any tool result | Primary follow-up handle | Path, name, line, signature only |
+
+---
+
+## Read gate and orientation machine
+
+| Stripped | Old role | Replacement |
+| --- | --- | --- |
+| Read-gate / structural-attempt registry | Block `read` until outline/symbol/search/relationship attempt on fingerprint | [read-policy.md](cross/read-policy.md): large full read → outline; ranges always allowed (capped) |
+| `readGate.includeGlobs` / `readGate.excludeGlobs` | Which paths are gated | Deleted settings. Markdown hard-ungated; registered source uses threshold policy |
+| Attempt kinds (`directOutline`, `symbol`, `apiCandidate`, `structuralMatch`, `relationshipLocation`, `relationshipScope`) | Unlock tokens for gate | None |
+| `fatalFallback` gate unlock | Allow read after fatal outline failure | None (ordinary read policy / errors) |
+| `postPatchDiff` gate exception | Allow complete read after mutation without new attempt | None; policy is threshold-based on current bytes |
+| Blocked-read errors (“use structural tools first”) | Fail closed on gated full read | Never. Large full read succeeds as outline |
+| Orientation fingerprint unlock protocol as product surface | Couple tools to gate state | Parse/graph cache may key by content hash internally; not an agent-facing unlock system |
+
+---
+
+## Tools and names removed
+
+| Stripped | Replacement |
+| --- | --- |
+| `api_discover` | `discover` (same job, no locators) |
+| `symbol` | `show` |
+| `tests` (relationship tool) | None. No test discovery tool |
+| `impact` affected-tests section / test filter flags | None |
+| Locator edit tool family (four tools) | None |
+| Import-cycle tool | None |
+| Full dependency graph dump tool | None (`deps` / `reverse_deps` are file-scoped only) |
+| Call-path `trace` tool | None |
+| Semantic / embeddings search | None |
+| Log `squeeze` | None |
+| Structural search-and-rewrite write tool | None (`ast_search` is search-only; writes are harness) |
+| Dedicated Explore rename tool | None |
+
+---
+
+## Commands, TUI, telemetry
+
+| Stripped | Old role | Replacement |
+| --- | --- | --- |
+| `/read-stats` command | TUI panel: token/cost savings, cache modes, gate telemetry | **Gone entirely.** No command, no panel, no savings ledger |
+| Read-stats machinery | Counters for baseline/recovery/unchanged/diff, blocked/permitted/fallback reads, bytes deflected, permission breakdown by attempt kind | **Gone.** Do not keep half the counters “just in case” |
+| Gate/orientation telemetry product requirements | Feed read-stats and similar | None. Implementation may log privately for debugging; not a specified product surface |
+| Structural-orientation event accounting for stats | “Outline-via-read counts for metrics” | None as product requirement |
+
+---
+
+## Prompt / guidance baggage
+
+| Stripped | Replacement |
+| --- | --- |
+| Guidance that requires locator edits | Guidance: patch/edit/write; `impact` before big change; `show`/range for bodies |
+| Guidance that teaches read-gate unlock choreography | Guidance: large read returns outline; use range/`show` |
+| Guidance that tells agents to call `symbol` / `api_discover` / `tests` by those old rules | Current tool names and [guidance.md](session/guidance.md) only |
+
+---
+
+## Settings stripped
+
+- Entire `readGate` object (`includeGlobs`, `excludeGlobs`, and any related knobs)
+- Any settings whose only consumer was read-stats, locator TTL, or gate behavior
+
+Kept settings are only those in [settings.md](cross/settings.md): read thresholds/ranges and context default budget, plus existing path/traverse concerns that still apply to the spine.
+
+---
+
+## Agent output meta (strip from model text)
+
+Carry-forward ban on dumping the following into **agent** tool results (see [output-density.md](cross/output-density.md)):
+
+- Search/rank scores and internal relevance numbers
+- Engine work counters and timing except real budget-hit notices
+- Arg-echo preambles and success banners
+- Duplicate full paths under a file/directory header
+- Locator fields
+- Tutorials / schema names / implementation breadcrumbs in results
+
+Human TUI may still show richer chrome.
+
+## Still in product (do not strip by accident)
+
+- `ls`, `find`, `grep`, `read` (with structural policy)
+- Path-tree / per-file grouped dense agent formatting for list and hit tools
+- `outline`, `show`, `discover`, `ast_search`
+- `deps`, `reverse_deps`
+- `callers`, `callees`, `references`, `implementations`
+- `impact`, `context`
+- Pre-turn guidance injection
+- Autoread (large supported → outline only)
+- Complete-file unchanged/diff cache on real body reads
+- Shared bounded output + session temp overflow
+- Session parse/file-graph/call-graph cache invalidated on mutation
+- Worker-registered language extensibility
+
+---
+
+## Implementation instruction
+
+When porting or rewriting:
+
+1. Treat this file as a delete list.
+2. If old behavior is not listed under “Still in product,” it does not carry forward.
+3. If something old seems useful but is listed stripped (including read-stats), leave it out until product adds a new spec.

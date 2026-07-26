@@ -9,7 +9,8 @@
 ## Display
 
 - Model-facing paths are shown relative to cwd when possible.
-- Multi-root or multi-file outputs separate files clearly enough to attribute locators and matches.
+- Multi-root or multi-file outputs separate files clearly enough to attribute matches and graph sites.
+- Prefer path factoring over repeating full paths on every row ([output-density.md](output-density.md)).
 
 ## Ignore / noise defaults (filesystem tools)
 
