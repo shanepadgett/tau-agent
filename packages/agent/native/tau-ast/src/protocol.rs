@@ -4,12 +4,13 @@ use crate::{
         LanguageId, OutlineFileResult, OutlineTarget, OutlineTargetResult, RecursiveBudgets,
         RecursiveDiagnostic, RecursiveOutlineSummary, SymbolBatchResult, SymbolView,
     },
+    relationships::{RelationshipOperation, RelationshipResult},
     search::AstSearchResult,
 };
 use serde::{Deserialize, Serialize};
 use std::io::{self, Read, Write};
 
-pub const PROTOCOL_VERSION: u32 = 10;
+pub const PROTOCOL_VERSION: u32 = 11;
 const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
@@ -67,6 +68,18 @@ pub enum Request {
         #[serde(rename = "resultLimit")]
         result_limit: usize,
     },
+    Relationships {
+        #[serde(rename = "requestId")]
+        request_id: u64,
+        #[serde(rename = "protocolVersion")]
+        protocol_version: u32,
+        path: String,
+        budgets: RecursiveBudgets,
+        locator: String,
+        relationship: RelationshipOperation,
+        #[serde(rename = "resultLimit")]
+        result_limit: usize,
+    },
 }
 
 impl Request {
@@ -76,7 +89,8 @@ impl Request {
             | Self::Outline { request_id, .. }
             | Self::Symbol { request_id, .. }
             | Self::ApiDiscover { request_id, .. }
-            | Self::AstSearch { request_id, .. } => *request_id,
+            | Self::AstSearch { request_id, .. }
+            | Self::Relationships { request_id, .. } => *request_id,
         }
     }
 
@@ -95,6 +109,9 @@ impl Request {
                 protocol_version, ..
             }
             | Self::AstSearch {
+                protocol_version, ..
+            }
+            | Self::Relationships {
                 protocol_version, ..
             } => *protocol_version,
         }
@@ -150,6 +167,10 @@ pub enum ResponseResult {
     AstSearch {
         #[serde(flatten)]
         search: AstSearchResult,
+    },
+    Relationships {
+        #[serde(flatten)]
+        relationships: RelationshipResult,
     },
     RecursiveStart {
         path: String,

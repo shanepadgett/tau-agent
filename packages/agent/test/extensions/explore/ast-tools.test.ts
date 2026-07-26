@@ -14,6 +14,7 @@ import {
 	type ApiDiscoveryResult,
 	type AstClient,
 	type OutlineTargetResult,
+	type RelationshipResult,
 	type SymbolBatchResult,
 } from "../../../extensions/explore/ast-worker.ts";
 import {
@@ -76,6 +77,7 @@ function astClient(overrides: Partial<AstClient>): AstClient {
 		getGeneration: () => 1,
 		outline: vi.fn(),
 		outlineRecursive: vi.fn(),
+		relationships: vi.fn(),
 		search: vi.fn(),
 		symbol: vi.fn(),
 		shutdown: vi.fn(async () => {}),
@@ -379,6 +381,113 @@ describe("AST exploration tools", () => {
 			extensionContext(workspace.dir),
 		);
 		expect(client.symbol).toHaveBeenCalledWith(["match-locator"], "declaration", 0, undefined);
+	});
+
+	it("expands declaration relationships into retrievable editable-scope locators", async () => {
+		const path = workspace.path("src/parser.ts");
+		const relationship: RelationshipResult = {
+			path: workspace.path("src"),
+			operation: "references",
+			targetName: "parse",
+			targetLocator: "native-locator",
+			relationships: [
+				{
+					relativePath: "parser.ts",
+					language: "typeScript",
+					range,
+					relationshipKind: "reference",
+					certainty: "exact",
+					parseCertainty: "certain",
+					certaintyReason: null,
+					classification: "production",
+					targetLocator: "native-locator",
+					targetPath: path,
+					candidateLocators: ["native-locator"],
+					candidatePaths: [path],
+					competingCandidatesOmitted: 0,
+					actionable: true,
+					enclosingScope: {
+						locator: "scope-locator",
+						language: "typeScript",
+						kind: "function_declaration",
+						qualifiedIdentity: "caller",
+						range,
+						bodyRange: range,
+						sourceFingerprint: "blake3:test",
+						certainty: "certain",
+						certaintyReason: null,
+					},
+				},
+			],
+			summary: {
+				filesScanned: 1,
+				sourceBytes: 200,
+				parserDegradedFiles: 0,
+				relationshipsFound: 1,
+				relationshipsReturned: 1,
+				resultLimit: 10,
+				resultLimitReached: false,
+				ambiguousRelationships: 0,
+				diagnostics: 0,
+				fileLimitReached: false,
+				sourceByteLimitReached: false,
+				depthLimitReached: false,
+				elapsedLimitReached: false,
+			},
+		};
+		const client = astClient({
+			outline: vi.fn(async () => outlineResult(path)),
+			relationships: vi.fn(async (scope, locator, operation, limit) => {
+				expect(scope).toBe(workspace.path("src"));
+				expect(locator).toBe("native-locator");
+				expect(operation).toBe("references");
+				expect(limit).toBe(10);
+				return relationship;
+			}),
+			symbol: vi.fn(async (tokens) => ({
+				declarations: [
+					{
+						locator: tokens[0] ?? "",
+						path,
+						language: "typeScript" as const,
+						sourceFingerprint: "blake3:test",
+						declarationRange: range,
+						diagnostics: [],
+					},
+				],
+				blocks: [{ path, returnedRange: range, declarationIndexes: [0], source: "function caller() {}" }],
+			})),
+		});
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
+		);
+		await ast.outline.execute(
+			"outline-relationship",
+			{ path: "src/parser.ts" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		const related = await ast.references.execute(
+			"references-1",
+			{ path: "src", locator: 1, resultLimit: 10 },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		expect(firstText(related)).toContain("parser.ts:1-3 [reference, exact, production]");
+		expect(firstText(related)).toContain("enclosing 1-3(2): caller");
+		await ast.symbol.execute(
+			"relationship-scope",
+			{ locators: [2], view: "declaration" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		expect(client.symbol).toHaveBeenCalledWith(["scope-locator"], "declaration", 0, undefined);
 	});
 
 	it("infers a symlinked file from its canonical target", async () => {

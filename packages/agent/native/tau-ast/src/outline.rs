@@ -77,7 +77,7 @@ pub enum OutlineTarget {
     },
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecursiveBudgets {
     pub max_files: usize,
@@ -370,26 +370,26 @@ impl Error for SymbolError {}
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SourceLocator {
-    version: u32,
-    path: String,
-    language: LanguageId,
-    source_fingerprint: String,
-    include_private: bool,
-    locator_kind: LocatorKind,
-    qualified_name: String,
-    declaration_kind: String,
-    range: SourceRange,
-    name_range: SourceRange,
-    receiver_range: Option<SourceRange>,
-    body_range: Option<SourceRange>,
-    certainty: ParseCertainty,
-    signature: String,
+pub(crate) struct SourceLocator {
+    pub(crate) version: u32,
+    pub(crate) path: String,
+    pub(crate) language: LanguageId,
+    pub(crate) source_fingerprint: String,
+    pub(crate) include_private: bool,
+    pub(crate) locator_kind: LocatorKind,
+    pub(crate) qualified_name: String,
+    pub(crate) declaration_kind: String,
+    pub(crate) range: SourceRange,
+    pub(crate) name_range: SourceRange,
+    pub(crate) receiver_range: Option<SourceRange>,
+    pub(crate) body_range: Option<SourceRange>,
+    pub(crate) certainty: ParseCertainty,
+    pub(crate) signature: String,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-enum LocatorKind {
+pub(crate) enum LocatorKind {
     Declaration,
     ExecutableScope,
     Match,
@@ -1615,6 +1615,74 @@ fn encode_locator(
         body_range: entry.body_range.clone(),
         certainty: entry.certainty,
         signature: entry.signature.clone(),
+    })?))
+}
+
+pub(crate) fn decode_source_locator(encoded: &str) -> Result<SourceLocator, String> {
+    let bytes = URL_SAFE_NO_PAD
+        .decode(encoded)
+        .map_err(|error| format!("locator is not valid base64url: {error}"))?;
+    let locator: SourceLocator = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("locator payload is invalid: {error}"))?;
+    if locator.version != LOCATOR_VERSION {
+        return Err(format!(
+            "locator version {} is unsupported; worker uses {LOCATOR_VERSION}",
+            locator.version
+        ));
+    }
+    Ok(locator)
+}
+
+pub(crate) fn encode_executable_scope_locator(
+    entry: &OutlineEntry,
+    path: &str,
+    language: LanguageId,
+    source_fingerprint: &str,
+) -> Result<String, serde_json::Error> {
+    Ok(URL_SAFE_NO_PAD.encode(serde_json::to_vec(&SourceLocator {
+        version: LOCATOR_VERSION,
+        path: path.to_owned(),
+        language,
+        source_fingerprint: source_fingerprint.to_owned(),
+        include_private: true,
+        locator_kind: LocatorKind::ExecutableScope,
+        qualified_name: entry.qualified_name.clone(),
+        declaration_kind: entry.ast_kind.clone(),
+        range: entry.range.clone(),
+        name_range: entry.name_range.clone(),
+        receiver_range: entry.receiver_range.clone(),
+        body_range: entry.body_range.clone(),
+        certainty: entry.certainty,
+        signature: entry.signature.clone(),
+    })?))
+}
+
+pub(crate) fn encode_synthetic_scope_locator(
+    path: &str,
+    language: LanguageId,
+    source_fingerprint: &str,
+    qualified_name: &str,
+    declaration_kind: &str,
+    range: SourceRange,
+    body_range: Option<SourceRange>,
+    certainty: ParseCertainty,
+    signature: &str,
+) -> Result<String, serde_json::Error> {
+    Ok(URL_SAFE_NO_PAD.encode(serde_json::to_vec(&SourceLocator {
+        version: LOCATOR_VERSION,
+        path: path.to_owned(),
+        language,
+        source_fingerprint: source_fingerprint.to_owned(),
+        include_private: true,
+        locator_kind: LocatorKind::ExecutableScope,
+        qualified_name: qualified_name.to_owned(),
+        declaration_kind: declaration_kind.to_owned(),
+        name_range: range.clone(),
+        range,
+        receiver_range: None,
+        body_range,
+        certainty,
+        signature: signature.to_owned(),
     })?))
 }
 

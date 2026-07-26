@@ -1,7 +1,7 @@
 # Phase 7: Relationships and Editable Scopes
 
-Status: implementation unapproved  
-Depends on: API discovery, structural search, and addressable declarations  
+Status: complete
+Depends on: API discovery, structural search, and addressable declarations
 Produces: references, callers, tests, and nearest editable-scope locators
 
 ## Current state
@@ -12,13 +12,11 @@ Tree-sitter cannot provide compiler-grade resolution for aliases, overloads, inf
 
 This phase begins in process memory. A persistent graph would add versioning, grammar invalidation, locking, crash-safe writes, repository-move handling, and compaction before measured reuse justifies those costs.
 
-## Decisions required before coding
+## Recorded decisions
 
-Resolve and record:
-
-1. Tool names and strict schemas for references, callers and callees, implementations, and tests.
-2. The first language and validation repository for reference resolution.
-3. Which framework-shaped handlers and test forms are reliable enough to receive dedicated scope locators.
+1. Public tools are `references`, `callers`, `callees`, `implementations`, and `tests`. Each requires a repository path, one numeric declaration locator, and a bounded result limit.
+2. TypeScript against the `pi` reference repository is the first exact cross-file resolver. Other adapters use conservative syntactic inference and preserve ambiguity.
+3. Dedicated callback locators cover parser-identified closures, lambdas, anonymous functions, and procedure literals. Standard test file conventions and attached test annotations classify tests; arbitrary callback names do not.
 
 Do not combine all relationship operations into an untyped action bag.
 
@@ -92,6 +90,8 @@ Ambiguous relationships may be displayed but must not silently enter an edit set
 ## Required reference validation
 
 Before this phase is complete, run its applicable acceptance workflow against all nine read-only reference repositories and the Markdown fixture in [`language-verification-corpus.md`](./language-verification-corpus.md). Unit tests and phase-specific fixtures do not replace this pass. Treat a failure in any supported language as a phase blocker and record parser recovery or uncertainty explicitly.
+
+Acceptance passed against the required TypeScript, TSX, Rust, C#, Go, Java, Odin, Kotlin, Swift, and Markdown targets. Every selected declaration produced a fresh locator and completed its applicable relationship scans without traversal limits or diagnostics. Non-empty results returned editable-scope locators that resolved through `symbol(declaration)`. The code-language probes also preserved documented signatures, plain signatures, attributes and modifiers, and exact declarations. The corpus produced exact, inferred, and ambiguous relationships plus production and test classifications; ambiguous results remained non-actionable. The known Java parser recovery on `Preconditions.checkArgument` remained explicit and its locator still resolved.
 
 ## Completion
 

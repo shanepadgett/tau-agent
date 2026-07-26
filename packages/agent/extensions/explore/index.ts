@@ -29,6 +29,11 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 	pi.registerTool(ast.symbol);
 	pi.registerTool(ast.api_discover);
 	pi.registerTool(ast.ast_search);
+	pi.registerTool(ast.references);
+	pi.registerTool(ast.callers);
+	pi.registerTool(ast.callees);
+	pi.registerTool(ast.implementations);
+	pi.registerTool(ast.tests);
 	pi.registerTool(createLsTool(rowState));
 	pi.registerTool(createFindTool(rowState));
 	pi.registerTool(createGrepTool(rowState));

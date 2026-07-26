@@ -283,6 +283,69 @@ export interface AstSearchResult {
 	summary: AstSearchSummary;
 }
 
+export type RelationshipOperation = "references" | "callers" | "callees" | "implementations" | "tests";
+
+export interface EditableScope {
+	locator: string;
+	language: AstLanguage;
+	kind: string;
+	qualifiedIdentity: string;
+	range: SourceRange;
+	bodyRange: SourceRange | null;
+	sourceFingerprint: string;
+	certainty: "certain" | "recovered" | "nearRecovery";
+	certaintyReason: string | null;
+}
+
+export interface RelationshipLocation {
+	relativePath: string;
+	language: AstLanguage;
+	range: SourceRange;
+	relationshipKind:
+		| "reference"
+		| "typeUsage"
+		| "caller"
+		| "callee"
+		| "implementation"
+		| "override"
+		| "reExport"
+		| "test";
+	certainty: "exact" | "inferred" | "ambiguous";
+	parseCertainty: "certain" | "recovered" | "nearRecovery";
+	certaintyReason: string | null;
+	classification: "production" | "test" | "generated" | "reExport";
+	targetLocator: string;
+	targetPath: string;
+	candidateLocators: string[];
+	candidatePaths: string[];
+	competingCandidatesOmitted: number;
+	actionable: boolean;
+	enclosingScope: EditableScope;
+}
+
+export interface RelationshipResult {
+	path: string;
+	operation: RelationshipOperation;
+	targetName: string;
+	targetLocator: string;
+	relationships: RelationshipLocation[];
+	summary: {
+		filesScanned: number;
+		sourceBytes: number;
+		parserDegradedFiles: number;
+		relationshipsFound: number;
+		relationshipsReturned: number;
+		resultLimit: number;
+		resultLimitReached: boolean;
+		ambiguousRelationships: number;
+		diagnostics: number;
+		fileLimitReached: boolean;
+		sourceByteLimitReached: boolean;
+		depthLimitReached: boolean;
+		elapsedLimitReached: boolean;
+	};
+}
+
 export interface AstClient {
 	getGeneration(): number;
 	outline(
@@ -320,6 +383,13 @@ export interface AstClient {
 		resultLimit: number,
 		signal: AbortSignal | undefined,
 	): Promise<AstSearchResult>;
+	relationships(
+		path: string,
+		locator: string,
+		relationship: RelationshipOperation,
+		resultLimit: number,
+		signal: AbortSignal | undefined,
+	): Promise<RelationshipResult>;
 	shutdown(): Promise<void>;
 }
 
@@ -352,6 +422,14 @@ type WorkerRequestPayload =
 			language: AstLanguage;
 			budgets: RecursiveOutlineBudgets;
 			pattern: string;
+			resultLimit: number;
+	  }
+	| {
+			operation: "relationships";
+			path: string;
+			budgets: RecursiveOutlineBudgets;
+			locator: string;
+			relationship: RelationshipOperation;
 			resultLimit: number;
 	  };
 
@@ -393,7 +471,7 @@ interface PendingStreamRequest {
 
 type PendingRequest = PendingUnaryRequest | PendingStreamRequest;
 
-const PROTOCOL_VERSION = 10;
+const PROTOCOL_VERSION = 11;
 const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 const STDERR_BYTES = 16 * 1024;
 const HANDSHAKE_TIMEOUT_MS = 2000;
@@ -535,6 +613,21 @@ export class AstWorkerClient implements AstClient {
 		);
 		if (result.kind !== "astSearch") throw new Error("tau-ast returned the wrong result for ast_search");
 		return result as unknown as AstSearchResult;
+	}
+
+	async relationships(
+		path: string,
+		locator: string,
+		relationship: RelationshipOperation,
+		resultLimit: number,
+		signal: AbortSignal | undefined,
+	): Promise<RelationshipResult> {
+		const result = await this.request(
+			{ operation: "relationships", path, budgets: RECURSIVE_OUTLINE_BUDGETS, locator, relationship, resultLimit },
+			signal,
+		);
+		if (result.kind !== "relationships") throw new Error("tau-ast returned the wrong result for relationships");
+		return result as unknown as RelationshipResult;
 	}
 
 	async shutdown(): Promise<void> {

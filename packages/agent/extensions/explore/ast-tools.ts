@@ -35,6 +35,8 @@ import {
 	type OutlineTarget,
 	type OutlineTargetResult,
 	type RecursiveOutlineSummary,
+	type RelationshipOperation,
+	type RelationshipResult,
 	type SymbolBatchResult,
 	type SymbolView,
 } from "./ast-worker.ts";
@@ -162,14 +164,23 @@ const astSearchParams = Type.Object(
 	},
 	{ additionalProperties: false },
 );
+const relationshipParams = Type.Object(
+	{
+		path: Type.String({ description: "Repository, package, or subtree directory" }),
+		locator: Type.Integer({ minimum: 1, description: "Numeric declaration locator" }),
+		resultLimit: Type.Integer({ minimum: 1, maximum: 100 }),
+	},
+	{ additionalProperties: false },
+);
 
 interface AstToolDetails {
-	kind: "outline" | "symbol" | "apiDiscover" | "astSearch";
+	kind: "outline" | "symbol" | "apiDiscover" | "astSearch" | "relationship";
 	result:
 		| OutlineTargetResult
 		| SymbolBatchResult
 		| ApiDiscoveryResult
 		| AstSearchResult
+		| RelationshipResult
 		| { path: string; summary: RecursiveOutlineSummary; visibleFiles: string[] };
 	declarationCount: number;
 	sourceBytes: number;
@@ -1184,11 +1195,166 @@ export function createAstTools(
 		},
 	});
 
+	function relationshipTool(name: RelationshipOperation, description: string, guideline: string) {
+		return defineTool<typeof relationshipParams, AstToolDetails>({
+			name,
+			label: name,
+			description,
+			promptSnippet: description,
+			promptGuidelines: [guideline, "Inspect ambiguous candidate locators before selecting an edit target."],
+			parameters: relationshipParams,
+			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+				const path = await realpath(resolveExplorePath(ctx.cwd, params.path));
+				if (!(await stat(path)).isDirectory()) throw new Error(`${name} requires a directory scope`);
+				const record = locators.get(params.locator);
+				if (!record)
+					throw new Error(`Unknown declaration locator: ${params.locator}. Run outline or api_discover again.`);
+				if (record.stale || record.generation !== client.getGeneration()) {
+					throw new Error(`Declaration locator ${params.locator} is stale. Run outline or api_discover again.`);
+				}
+				const result = await client.relationships(path, record.token, name, params.resultLimit, signal);
+				const builder = new BoundedTextResultBuilder(temporaryOutput, "completeBlocks");
+				const locatorByUnit = new Map<string, number[]>();
+				try {
+					for (const [index, relationship] of result.relationships.entries()) {
+						const sourcePath = resolve(path, relationship.relativePath);
+						const targetId =
+							relationship.targetLocator === record.token
+								? record.id
+								: registerLocator(
+										relationship.targetLocator,
+										relationship.targetPath,
+										`${relationship.relationshipKind} target`,
+									);
+						const candidateIds = relationship.candidateLocators.map((token, candidateIndex) =>
+							token === record.token
+								? record.id
+								: registerLocator(
+										token,
+										relationship.candidatePaths[candidateIndex] ?? relationship.targetPath,
+										"relationship candidate",
+									),
+						);
+						const scopeId = registerLocator(
+							relationship.enclosingScope.locator,
+							sourcePath,
+							relationship.enclosingScope.qualifiedIdentity,
+						);
+						const ids = [targetId, ...candidateIds, scopeId];
+						const unit = `${relationship.relativePath}:${relationship.range.startByte}:${index}`;
+						locatorByUnit.set(unit, ids);
+						const lines = [
+							`${relationship.relativePath}:${displayLineRange(relationship.range)} [${relationship.relationshipKind}, ${relationship.certainty}, ${relationship.classification}]`,
+							`  target (${targetId}); enclosing ${displayLineRange(relationship.enclosingScope.range)}(${scopeId}): ${relationship.enclosingScope.qualifiedIdentity}`,
+						];
+						if (relationship.certainty === "ambiguous") {
+							lines.push(
+								`  candidates: ${candidateIds.map((id) => `(${id})`).join(", ")}${relationship.competingCandidatesOmitted ? `; ${relationship.competingCandidatesOmitted} omitted` : ""}`,
+							);
+						}
+						if (relationship.certaintyReason) lines.push(`  uncertainty: ${relationship.certaintyReason}`);
+						await builder.appendBlock(unit, relationship.relativePath, lines.join("\n"));
+					}
+					if (result.relationships.length === 0)
+						await builder.appendRequiredBlock("no relationships", `No direct ${name} found`);
+					const summary = result.summary;
+					const limits = [
+						...(summary.resultLimitReached ? ["results"] : []),
+						...(summary.fileLimitReached ? ["files"] : []),
+						...(summary.sourceByteLimitReached ? ["source bytes"] : []),
+						...(summary.depthLimitReached ? ["depth"] : []),
+						...(summary.elapsedLimitReached ? ["elapsed time"] : []),
+					];
+					await builder.appendRequiredBlock(
+						"relationship summary",
+						`summary: ${summary.filesScanned} files scanned, ${summary.relationshipsFound} found, ${summary.relationshipsReturned} returned, ${summary.ambiguousRelationships} ambiguous; source: ${formatSize(summary.sourceBytes)}; parser degraded: ${summary.parserDegradedFiles}; diagnostics: ${summary.diagnostics}; limits reached: ${limits.join(", ") || "none"}`,
+					);
+					const bounded = await builder.finish();
+					if (!bounded.overflow.fullOutputComplete) {
+						const visible = new Set(bounded.visibleUnitIds);
+						for (const [unit, ids] of locatorByUnit)
+							if (!visible.has(unit)) for (const id of ids) if (id !== record.id) locators.delete(id);
+					}
+					if (bounded.overflow.temporaryPath) orientation.recordTemporaryOutput(bounded.overflow.temporaryPath);
+					const returnedBytes = Buffer.byteLength(bounded.content);
+					return {
+						content: [{ type: "text", text: bounded.content }],
+						details: {
+							kind: "relationship",
+							result,
+							declarationCount: summary.relationshipsReturned,
+							sourceBytes: summary.sourceBytes,
+							returnedBytes,
+							avoidedBytes: Math.max(0, summary.sourceBytes - returnedBytes),
+							truncated: bounded.overflow.truncated,
+							overflow: bounded.overflow,
+						},
+					};
+				} catch (error) {
+					await builder.abort();
+					for (const ids of locatorByUnit.values())
+						for (const id of ids) if (id !== record.id) locators.delete(id);
+					throw error;
+				}
+			},
+			renderCall(args, theme, context) {
+				rowState.watch(context.toolCallId, context.invalidate);
+				const component =
+					(context.lastComponent as AstCallComponent | undefined) ??
+					new AstCallComponent(
+						rowState,
+						context.toolCallId,
+						name,
+						[stripLeadingAt(args.path)],
+						[`[${args.locator} limit=${args.resultLimit}]`],
+						theme,
+					);
+				component.set([stripLeadingAt(args.path)], [`[${args.locator} limit=${args.resultLimit}]`], theme);
+				return component;
+			},
+			renderResult(result, options, theme, context) {
+				rowState.watch(context.toolCallId, context.invalidate);
+				return renderAstResult(result, options.expanded, theme, context);
+			},
+		});
+	}
+
+	const references = relationshipTool(
+		"references",
+		"Find direct references and type usages for a declaration locator.",
+		"Use references to inspect direct repository usage and re-exports.",
+	);
+	const callers = relationshipTool(
+		"callers",
+		"Find direct callers for a declaration locator.",
+		"Use callers for syntactic call sites; inferred dispatch is labelled.",
+	);
+	const callees = relationshipTool(
+		"callees",
+		"Find direct callees inside a declaration locator.",
+		"Use callees to inspect direct dependencies of one executable scope.",
+	);
+	const implementations = relationshipTool(
+		"implementations",
+		"Find implementations and overrides for a declaration locator.",
+		"Use implementations for syntactic inheritance and conservative same-name overrides.",
+	);
+	const tests = relationshipTool(
+		"tests",
+		"Find directly affected tests for a declaration locator.",
+		"Use tests for direct references in standard test files and containers.",
+	);
+
 	return {
 		outline,
 		symbol,
 		api_discover: apiDiscover,
 		ast_search: astSearch,
+		references,
+		callers,
+		callees,
+		implementations,
+		tests,
 		clear() {
 			locators.clear();
 			nextLocator = 1;
