@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { resolve } from "node:path";
 import { onTauEvent } from "../../shared/events.js";
 import { createToolRowStateStore } from "../../shared/tool-row-state.js";
+import { AST_DISCOVERY_BUDGET, effectiveAstGuidance } from "./ast-guidance.ts";
 import { createAstTools } from "./ast-tools.ts";
 import { AstWorkerClient } from "./ast-worker.ts";
 import { registerAutoread } from "./autoread.ts";
@@ -26,6 +27,14 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 	pi.registerTool(createFindTool(rowState));
 	pi.registerTool(createGrepTool(rowState));
 	pi.registerTool(createExploreReadTool(rowState, readCache, readSnapshots));
+	pi.on("before_agent_start", async (event, ctx) => {
+		const guidance = await effectiveAstGuidance({
+			cwd: ctx.cwd,
+			workerLanguages: () => astClient.supportedLanguages(),
+			discoveryBudget: AST_DISCOVERY_BUDGET,
+		});
+		return guidance ? { systemPrompt: `${event.systemPrompt}\n\n${guidance}` } : undefined;
+	});
 	pi.registerCommand("read-stats", {
 		description: "Show estimated read token and cost savings for this session",
 		async handler(_args, ctx) {

@@ -51,6 +51,13 @@ function branchContext(
 }
 
 describe("explore read", () => {
+	it("describes ranges and cache behavior without prescribing whole-file-first reads", () => {
+		const tool = createExploreReadTool(testRowState);
+		expect(tool.description).toContain("optional line ranges");
+		expect(tool.description).not.toContain("Read a relevant file as a whole");
+		expect(tool.description).not.toContain("Use ranges only");
+	});
+
 	it("delegates plain text, 1-indexed offset, continuation, and truncation", async () => {
 		const workspace = await createWorkspace();
 		try {

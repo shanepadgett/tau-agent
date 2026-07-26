@@ -21,7 +21,12 @@ process.stdin.on("data", (chunk) => {
     const request = JSON.parse(incoming.subarray(4, length + 4));
     incoming = incoming.subarray(length + 4);
     if (request.operation === "handshake") {
-      send({ requestId: request.requestId, protocolVersion: 5, success: true, result: { kind: "handshake" } });
+      send({
+        requestId: request.requestId,
+        protocolVersion: 5,
+        success: true,
+        result: { kind: "handshake", supportedLanguages: ["typeScript", "odin"] }
+      });
       continue;
     }
     if (request.target?.path === "crash") process.exit(2);
@@ -86,6 +91,7 @@ describe("AST worker client", () => {
 	it("keeps explicit command injection, dispatches framed requests, and shuts down", async () => {
 		const worker = client();
 		try {
+			expect(await worker.supportedLanguages()).toEqual(["typeScript", "odin"]);
 			const [typescript, odin] = await Promise.all([
 				worker.outline({ kind: "file", path: "one.ts", language: "typeScript" }, false, false, [], undefined),
 				worker.outline({ kind: "file", path: "two.odin", language: "odin" }, true, true, ["Circle"], undefined),

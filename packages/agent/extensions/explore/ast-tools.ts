@@ -10,13 +10,18 @@ import {
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Text, truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
 import { stat } from "node:fs/promises";
-import { basename, extname, resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { Type } from "typebox";
 import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.js";
+import {
+	AST_LANGUAGE_REGISTRY,
+	formatAstLanguageLabels,
+	requireAstLanguageForPath,
+	type AstLanguage,
+} from "./ast-languages.ts";
 import { formatPathForDisplay, resolveExplorePath, stripLeadingAt } from "./path-display.ts";
 import type {
 	AstClient,
-	AstLanguage,
 	OutlineEntry,
 	OutlineFileResult,
 	SourceRange,
@@ -26,10 +31,12 @@ import type {
 	SymbolView,
 } from "./ast-worker.ts";
 
+const supportedLanguageLabels = formatAstLanguageLabels(AST_LANGUAGE_REGISTRY, "or");
+
 const outlineParams = Type.Object(
 	{
 		path: Type.String({
-			description: "TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, Swift, or Markdown source file or directory",
+			description: `${supportedLanguageLabels} source file or directory`,
 		}),
 		includePrivate: Type.Optional(Type.Boolean({ description: "Include private declarations and members" })),
 		includeDocs: Type.Optional(
@@ -51,8 +58,7 @@ const symbolParams = Type.Object(
 			description: "Numeric locators shown in parentheses by outline",
 		}),
 		view: StringEnum(["signature", "declaration", "declarationWithImports"] as const, {
-			description:
-				"Source view to retrieve; TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, Swift, and Markdown support selective views",
+			description: `Source view to retrieve; ${supportedLanguageLabels} support selective views`,
 		}),
 		contextLines: Type.Optional(
 			Type.Integer({ minimum: 0, description: "Lines of source context before and after each declaration" }),
@@ -468,7 +474,6 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 			"Inspect public declarations in one supported source file or non-recursive package directory without returning implementation bodies. Parenthesized numbers are locators for symbol.",
 		promptSnippet: "Inspect public declarations and get symbol locators without reading implementation bodies",
 		promptGuidelines: [
-			"Use a public package outline first to discover reusable APIs; add exact names when likely symbols are known.",
 			"Set includePrivate when internal implementation discovery is needed.",
 			"Leave includeDocs off for routine exploration; enable it when documentation comments are needed.",
 			"Treat each parenthesized number after a line range as that declaration's symbol locator.",
@@ -480,7 +485,7 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore) {
 			const metadata = await stat(path);
 			const target: OutlineTarget = metadata.isDirectory()
 				? { kind: "directory", path }
-				: { kind: "file", path, language: languageForPath(path) };
+				: { kind: "file", path, language: requireAstLanguageForPath(path) };
 			const names = params.names ?? [];
 			const result = await client.outline(
 				target,
@@ -794,35 +799,4 @@ function symbolTargetVariants(ids: readonly number[], locators: ReadonlyMap<numb
 	}
 	variants.push(`${records.length} symbols in ${fileCount} files`);
 	return variants;
-}
-
-function languageForPath(path: string): AstLanguage {
-	switch (extname(path).toLowerCase()) {
-		case ".ts":
-			return "typeScript";
-		case ".tsx":
-			return "tsx";
-		case ".odin":
-			return "odin";
-		case ".go":
-			return "go";
-		case ".rs":
-			return "rust";
-		case ".cs":
-			return "cSharp";
-		case ".java":
-			return "java";
-		case ".kt":
-		case ".ktm":
-		case ".kts":
-			return "kotlin";
-		case ".swift":
-			return "swift";
-		case ".md":
-		case ".markdown":
-		case ".mdown":
-			return "markdown";
-		default:
-			throw new Error(`Unsupported outline file type: ${extname(path) || "no extension"}`);
-	}
 }

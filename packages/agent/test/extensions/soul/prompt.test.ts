@@ -8,5 +8,7 @@ describe("Rok soul", () => {
 		expect(ROK_SOUL).not.toContain("Available tools:");
 		expect(ROK_SOUL).not.toContain("Pi documentation");
 		expect(ROK_SOUL).not.toContain("Current working directory:");
+		expect(ROK_SOUL).not.toContain("request whole file");
+		expect(ROK_SOUL).not.toContain("whole-file read");
 	});
 });

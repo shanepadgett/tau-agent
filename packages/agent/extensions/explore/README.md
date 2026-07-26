@@ -8,9 +8,11 @@ When the source baseline is no longer available, such as after compaction or a c
 
 Agents invoke it with `ls`, `find`, `grep`, `outline`, `symbol`, and `read`. `outline` returns public declaration signatures and parenthesized numeric locators for TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, Swift, and Markdown files. Markdown headings locate their complete sections. It also accepts a package directory, which inspects supported files directly inside it. Exact-name filters narrow the result, `includePrivate` exposes internal declarations, and `includeDocs` adds attached documentation comments when they are needed. Annotations and attributes remain in normal outlines. `symbol` accepts those numbers to retrieve several exact declarations in one call, can add bounded surrounding lines, and rejects the whole batch when any locator is stale. Users run `/read-stats` to see estimated token and cost savings for the session.
 
+Explore scans a bounded, ignore-aware slice of the working root before each agent run. When the repository contains supported source and the selected native worker is usable, Explore adds language-specific AST-first guidance to the agent prompt. Unsupported repositories and hosts get the ordinary filesystem workflow. `outline` and `symbol` stay registered either way.
+
 Installed packages support `outline` and `symbol` on Apple Silicon Macs. They include the worker, so users do not need Rust or Cargo. On other platforms, the rest of Explore remains available and AST tools report the platform limit when invoked.
 
-Use the cheapest useful step:
+For supported source, use the cheapest useful step:
 
 1. Outline a package directory to discover its public API.
 2. Add exact names when likely declarations are known.
@@ -18,4 +20,4 @@ Use the cheapest useful step:
 4. Set `includeDocs` when declaration documentation affects the task.
 5. Send several locators to `symbol` for complete declarations.
 6. Add context lines when the edit needs nearby source.
-7. Use ranged or whole-file `read` for cross-cutting logic, exact formatting, or parser gaps.
+7. Use `read` for unsupported files, cross-cutting logic, exact formatting, parser gaps, or source outside declaration boundaries.

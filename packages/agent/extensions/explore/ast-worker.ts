@@ -2,18 +2,9 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isAstLanguage, type AstLanguage } from "./ast-languages.ts";
 
-export type AstLanguage =
-	| "typeScript"
-	| "tsx"
-	| "odin"
-	| "go"
-	| "rust"
-	| "cSharp"
-	| "java"
-	| "kotlin"
-	| "swift"
-	| "markdown";
+export type { AstLanguage } from "./ast-languages.ts";
 
 export type OutlineTarget = { kind: "file"; path: string; language: AstLanguage } | { kind: "directory"; path: string };
 
@@ -131,6 +122,7 @@ interface PendingRequest {
 const PROTOCOL_VERSION = 5;
 const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 const STDERR_BYTES = 16 * 1024;
+const HANDSHAKE_TIMEOUT_MS = 2000;
 
 export type AstWorkerResolution = { command: string } | { error: Error };
 
@@ -159,6 +151,10 @@ export function resolveAstWorkerCommand(
 	};
 }
 
+function resolveDefaultAstWorkerCommand(): AstWorkerResolution {
+	return resolveAstWorkerCommand(fileURLToPath(new URL("../../", import.meta.url)), process.platform, process.arch);
+}
+
 export class AstWorkerClient implements AstClient {
 	private readonly command: string | undefined;
 	private readonly args: readonly string[];
@@ -169,6 +165,7 @@ export class AstWorkerClient implements AstClient {
 	private incoming = Buffer.alloc(0);
 	private stderr = "";
 	private generation = 0;
+	private capabilities: readonly AstLanguage[] | undefined;
 
 	constructor(command: string | undefined = undefined, args: readonly string[] = []) {
 		this.command = command;
@@ -177,6 +174,16 @@ export class AstWorkerClient implements AstClient {
 
 	getGeneration(): number {
 		return this.generation;
+	}
+
+	private resolveCommand(): AstWorkerResolution {
+		return this.command ? { command: this.command } : resolveDefaultAstWorkerCommand();
+	}
+
+	async supportedLanguages(): Promise<readonly AstLanguage[]> {
+		await this.ensureStarted();
+		if (!this.capabilities) throw new Error("tau-ast handshake omitted supported languages");
+		return this.capabilities;
 	}
 
 	async outline(
@@ -207,6 +214,7 @@ export class AstWorkerClient implements AstClient {
 		if (!child) return;
 		this.child = undefined;
 		this.startPromise = undefined;
+		this.capabilities = undefined;
 		this.rejectPending(new Error("tau-ast worker shut down"));
 		child.stdin.end();
 		if (child.exitCode !== null) return;
@@ -238,9 +246,7 @@ export class AstWorkerClient implements AstClient {
 	}
 
 	private async start(): Promise<void> {
-		const resolution = this.command
-			? { command: this.command }
-			: resolveAstWorkerCommand(fileURLToPath(new URL("../../", import.meta.url)), process.platform, process.arch);
+		const resolution = this.resolveCommand();
 		if ("error" in resolution) throw resolution.error;
 		const child = spawn(resolution.command, this.args, { stdio: ["pipe", "pipe", "pipe"] });
 		this.generation += 1;
@@ -259,13 +265,23 @@ export class AstWorkerClient implements AstClient {
 			const suffix = this.stderr.trim() ? `: ${this.stderr.trim()}` : "";
 			this.fail(child, new Error(`tau-ast exited (${signal ?? code ?? "unknown"})${suffix}`), false);
 		});
+		const handshakeTimeout = setTimeout(
+			() => this.fail(child, new Error(`tau-ast handshake timed out after ${HANDSHAKE_TIMEOUT_MS}ms`)),
+			HANDSHAKE_TIMEOUT_MS,
+		);
 		try {
 			const result = await this.send({ operation: "handshake" }, undefined);
 			if (result.kind !== "handshake") throw new Error("tau-ast handshake returned the wrong result");
+			if (!Array.isArray(result.supportedLanguages)) {
+				throw new Error("tau-ast handshake omitted supported languages");
+			}
+			this.capabilities = result.supportedLanguages.filter(isAstLanguage);
 		} catch (error) {
 			const failure = error instanceof Error ? error : new Error(String(error));
 			this.fail(child, failure);
 			throw failure;
+		} finally {
+			clearTimeout(handshakeTimeout);
 		}
 	}
 
@@ -342,6 +358,7 @@ export class AstWorkerClient implements AstClient {
 		this.child = undefined;
 		this.generation += 1;
 		this.incoming = Buffer.alloc(0);
+		this.capabilities = undefined;
 		this.rejectPending(error);
 		if (kill && child.exitCode === null) child.kill();
 	}

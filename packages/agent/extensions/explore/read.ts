@@ -211,7 +211,7 @@ export function createExploreReadTool(
 	return {
 		...baseDefinition,
 		description:
-			"Read a relevant file as a whole by omitting offset, limit, and lineNumbers. Later whole-file reads avoid repeating unchanged content and return useful diffs or current source after changes. Use ranges only for targeted peripheral inspection or to continue after truncation.",
+			"Read a text or image file with optional line ranges and line numbers. Repeated complete-file reads avoid repeating unchanged content and can return a useful diff or current source after changes.",
 		parameters: readSchema,
 		async execute(
 			toolCallId: Parameters<ReadExecute>[0],

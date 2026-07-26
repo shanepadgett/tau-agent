@@ -1,5 +1,5 @@
 import type { Stats } from "node:fs";
-import { lstat, readdir, readFile } from "node:fs/promises";
+import { lstat, opendir, readFile } from "node:fs/promises";
 import { dirname, join, matchesGlob, resolve, sep } from "node:path";
 import { formatPathForDisplay, isWithinPath, relativeSlash, toSlashPath } from "./path-display.ts";
 
@@ -18,6 +18,7 @@ export interface CollectPathOptions {
 	cwd: string;
 	root: string;
 	maxDepth?: number;
+	maxEntries?: number;
 	includeRoot: boolean;
 	includeHidden: boolean;
 	includeIgnored: boolean;
@@ -149,9 +150,14 @@ function sortEntries(entries: TraversalEntry[]): TraversalEntry[] {
 	});
 }
 
-async function readDirectoryNames(directory: string, cwd: string): Promise<string[]> {
+async function readDirectoryNames(directory: string, cwd: string, limit: number | undefined): Promise<string[]> {
 	try {
-		return await readdir(directory);
+		const names: string[] = [];
+		for await (const entry of await opendir(directory)) {
+			names.push(entry.name);
+			if (limit !== undefined && names.length >= limit) break;
+		}
+		return names;
 	} catch {
 		throw new Error(`Cannot read directory: ${formatPathForDisplay(directory, cwd)}`);
 	}
@@ -160,6 +166,7 @@ async function readDirectoryNames(directory: string, cwd: string): Promise<strin
 export async function collectPaths(options: CollectPathOptions): Promise<TraversalEntry[]> {
 	const entries: TraversalEntry[] = [];
 	const entryByPath = new Map<string, TraversalEntry>();
+	let inspectedEntries = 0;
 	const rootStats = await lstat(options.root);
 	const rootKind = entryKind(rootStats);
 	const rootDirectory = rootKind === "dir" ? options.root : dirname(options.root);
@@ -183,13 +190,17 @@ export async function collectPaths(options: CollectPathOptions): Promise<Travers
 
 	async function walkDirectory(directory: string, depth: number, rules: readonly IgnoreRule[]): Promise<number> {
 		if (options.maxDepth !== undefined && depth >= options.maxDepth) return 0;
+		if (options.maxEntries !== undefined && inspectedEntries >= options.maxEntries) return 0;
 
-		const names = await readDirectoryNames(directory, options.cwd);
+		const remaining = options.maxEntries === undefined ? undefined : options.maxEntries - inspectedEntries;
+		const names = await readDirectoryNames(directory, options.cwd, remaining);
 
 		const children: TraversalEntry[] = [];
 		for (const name of names) {
+			if (options.maxEntries !== undefined && inspectedEntries >= options.maxEntries) break;
 			const childPath = `${directory}/${name}`;
 			const stats = await lstat(childPath);
+			inspectedEntries += 1;
 			const kind = entryKind(stats);
 			if (shouldSkipPath(childPath, kind, rules, options)) continue;
 			children.push({
