@@ -83,7 +83,7 @@ Tau assigns one display name to each fresh child and keeps it for follow-up turn
 ## Built-ins
 
 - `review` — adversarial, read-only review for correctness, runtime risks, duplication, and over- or under-engineering
-- `scout` — find local files, symbols, data flow, constraints, and unknowns without changing anything
+- `scout` — tiered, AST-first local discovery of files, symbols, data flow, constraints, and unknowns without changing anything
 - `web-research` — `websearch`, `codesearch`, `webfetch`
 - `context-sync` — maps meaningful uncommitted work into `.pi/contexts`. Offered to the coding agent when `extensions.context.sync.enabled` and `sync.automation` are true. Manual `/context-sync` remains when sync is enabled with `automation` false. Validation can auto-run it when `validation.enabled` and `sync.enabled`
 
