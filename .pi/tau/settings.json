@@ -12,6 +12,9 @@
 				]
 			}
 		},
+		"contextPruning": {
+			"enabled": false
+		},
 		"silentCommandRunner": {
 			"commands": [
 				{
