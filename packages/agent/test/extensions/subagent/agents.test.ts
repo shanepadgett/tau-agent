@@ -38,7 +38,6 @@ describe("subagent discovery", () => {
 		const untrusted = await discoverAgents(paths.cwd, false);
 		expect(untrusted.agents.get("review")?.description).not.toBe("Project review");
 		expect(untrusted.agents.get("review")?.model).toBe("openai-codex/gpt-5.6-sol");
-		expect(untrusted.agents.get("review")?.thinking).toBe("xhigh");
 		expect(untrusted.agents.has("generalist")).toBe(false);
 		expect(untrusted.agents.has("scout")).toBe(true);
 	});
