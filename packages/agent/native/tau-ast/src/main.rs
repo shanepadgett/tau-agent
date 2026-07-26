@@ -9,6 +9,7 @@ mod odin;
 mod outline;
 mod protocol;
 mod rust;
+mod search;
 mod source;
 mod swift;
 mod typescript;
@@ -91,6 +92,11 @@ fn run() -> Result<(), Box<dyn Error>> {
                     request_id,
                     "handshake_required",
                     "complete the protocol handshake before API discovery requests".to_owned(),
+                ),
+                Request::AstSearch { .. } if !handshake_complete => error_response(
+                    request_id,
+                    "handshake_required",
+                    "complete the protocol handshake before ast_search requests".to_owned(),
                 ),
                 Request::Outline {
                     target,
@@ -302,6 +308,41 @@ fn run() -> Result<(), Box<dyn Error>> {
                         Err(error) => {
                             error_response(request_id, "api_discovery_failed", error.to_string())
                         }
+                    }
+                }
+                Request::AstSearch {
+                    path,
+                    language,
+                    budgets,
+                    pattern,
+                    result_limit,
+                    ..
+                } => {
+                    if engine.is_none() {
+                        match OutlineEngine::new() {
+                            Ok(new_engine) => engine = Some(new_engine),
+                            Err(error) => {
+                                write_frame(
+                                    &mut writer,
+                                    &error_response(
+                                        request_id,
+                                        "rule_initialization_failed",
+                                        error.to_string(),
+                                    ),
+                                )?;
+                                continue;
+                            }
+                        }
+                    }
+                    match engine
+                        .as_ref()
+                        .expect("engine is initialized above")
+                        .search(&path, language, budgets, &pattern, result_limit)
+                    {
+                        Ok(search) => {
+                            success_response(request_id, ResponseResult::AstSearch { search })
+                        }
+                        Err(error) => error_response(request_id, error.code, error.message),
                     }
                 }
             }

@@ -214,6 +214,75 @@ export interface ApiDiscoveryResult {
 	summary: ApiDiscoverySummary;
 }
 
+export interface AstSearchBindingValue {
+	range: SourceRange;
+	preview: string;
+	previewTruncated: boolean;
+}
+
+export interface AstSearchBinding {
+	name: string;
+	values: AstSearchBindingValue[];
+	valuesTruncated: boolean;
+}
+
+export interface AstSearchScope {
+	astKind: string;
+	range: SourceRange;
+	preview: string;
+	previewTruncated: boolean;
+	locator: string;
+}
+
+export interface AstSearchMatch {
+	relativePath: string;
+	language: AstLanguage;
+	range: SourceRange;
+	preview: string;
+	previewTruncated: boolean;
+	bindings: AstSearchBinding[];
+	bindingsTruncated: boolean;
+	certainty: "certain" | "recovered" | "nearRecovery";
+	certaintyReason?: string;
+	locator: string;
+	enclosingScope?: AstSearchScope;
+}
+
+export interface AstSearchSummary {
+	filesDiscovered: number;
+	filesFiltered: number;
+	languageFilteredFiles: number;
+	literalFilteredFiles: number;
+	filesRead: number;
+	filesParsed: number;
+	filesSearched: number;
+	unreadableFiles: number;
+	oversizedFiles: number;
+	failedFiles: number;
+	parserDegradedFiles: number;
+	sourceBytes: number;
+	matchesFound: number;
+	matchesReturned: number;
+	resultLimit: number;
+	resultLimitReached: boolean;
+	literalPrefilterApplied: boolean;
+	potentialKindPrefilterApplied: boolean;
+	diagnosticsOmitted: number;
+	fileLimitReached: boolean;
+	sourceByteLimitReached: boolean;
+	depthLimitReached: boolean;
+	elapsedLimitReached: boolean;
+}
+
+export interface AstSearchResult {
+	path: string;
+	language: AstLanguage;
+	pattern: string;
+	matches: AstSearchMatch[];
+	diagnostics: Array<{ relativePath: string; code: string; message: string }>;
+	summary: AstSearchSummary;
+}
+
 export interface AstClient {
 	getGeneration(): number;
 	outline(
@@ -244,6 +313,13 @@ export interface AstClient {
 		resultLimit: number,
 		signal: AbortSignal | undefined,
 	): Promise<ApiDiscoveryResult>;
+	search(
+		path: string,
+		language: AstLanguage,
+		pattern: string,
+		resultLimit: number,
+		signal: AbortSignal | undefined,
+	): Promise<AstSearchResult>;
 	shutdown(): Promise<void>;
 }
 
@@ -268,6 +344,14 @@ type WorkerRequestPayload =
 			budgets: RecursiveOutlineBudgets;
 			query: ApiQuery;
 			surface: ApiSurfaceFilter;
+			resultLimit: number;
+	  }
+	| {
+			operation: "astSearch";
+			path: string;
+			language: AstLanguage;
+			budgets: RecursiveOutlineBudgets;
+			pattern: string;
 			resultLimit: number;
 	  };
 
@@ -309,7 +393,7 @@ interface PendingStreamRequest {
 
 type PendingRequest = PendingUnaryRequest | PendingStreamRequest;
 
-const PROTOCOL_VERSION = 9;
+const PROTOCOL_VERSION = 10;
 const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 const STDERR_BYTES = 16 * 1024;
 const HANDSHAKE_TIMEOUT_MS = 2000;
@@ -333,7 +417,7 @@ export function resolveAstWorkerCommand(
 	if (platform === "darwin" && arch === "arm64")
 		return {
 			error: new Error(
-				"tau-ast is missing from this @shanepadgett/tau-agent installation. Reinstall the package before using outline or symbol.",
+				"tau-ast is missing from this @shanepadgett/tau-agent installation. Reinstall the package before using api_discover, ast_search, outline, or symbol.",
 			),
 		};
 	return {
@@ -436,6 +520,21 @@ export class AstWorkerClient implements AstClient {
 		);
 		if (result.kind !== "apiDiscovery") throw new Error("tau-ast returned the wrong result for API discovery");
 		return result as unknown as ApiDiscoveryResult;
+	}
+
+	async search(
+		path: string,
+		language: AstLanguage,
+		pattern: string,
+		resultLimit: number,
+		signal: AbortSignal | undefined,
+	): Promise<AstSearchResult> {
+		const result = await this.request(
+			{ operation: "astSearch", path, language, budgets: RECURSIVE_OUTLINE_BUDGETS, pattern, resultLimit },
+			signal,
+		);
+		if (result.kind !== "astSearch") throw new Error("tau-ast returned the wrong result for ast_search");
+		return result as unknown as AstSearchResult;
 	}
 
 	async shutdown(): Promise<void> {

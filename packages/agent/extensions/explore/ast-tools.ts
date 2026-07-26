@@ -13,6 +13,7 @@ import type { TemporaryOutputStore } from "../../shared/temporary-output-store.t
 import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.js";
 import {
 	AST_LANGUAGE_REGISTRY,
+	astLanguageForPath,
 	formatAstLanguageLabels,
 	requireAstLanguageForPath,
 	type AstLanguage,
@@ -26,6 +27,7 @@ import {
 	type ApiDiscoveryResult,
 	type ApiQuery,
 	type ApiSurfaceFilter,
+	type AstSearchResult,
 	type AstClient,
 	type OutlineEntry,
 	type OutlineFileResult,
@@ -146,13 +148,28 @@ const apiDiscoverParams = Type.Object(
 	},
 	{ additionalProperties: false },
 );
+const astSearchParams = Type.Object(
+	{
+		path: Type.String({ description: "Supported source file, repository, package, or subtree" }),
+		pattern: Type.String({ minLength: 1, maxLength: 16 * 1024, description: "ast-grep code pattern" }),
+		language: Type.Optional(
+			StringEnum(
+				["typeScript", "tsx", "odin", "go", "rust", "cSharp", "java", "kotlin", "swift", "markdown"] as const,
+				{ description: "Explicit pattern and target language; required for directory targets" },
+			),
+		),
+		resultLimit: Type.Integer({ minimum: 1, maximum: 100 }),
+	},
+	{ additionalProperties: false },
+);
 
 interface AstToolDetails {
-	kind: "outline" | "symbol" | "apiDiscover";
+	kind: "outline" | "symbol" | "apiDiscover" | "astSearch";
 	result:
 		| OutlineTargetResult
 		| SymbolBatchResult
 		| ApiDiscoveryResult
+		| AstSearchResult
 		| { path: string; summary: RecursiveOutlineSummary; visibleFiles: string[] };
 	declarationCount: number;
 	sourceBytes: number;
@@ -1033,10 +1050,145 @@ export function createAstTools(
 		},
 	});
 
+	const astSearch = defineTool<typeof astSearchParams, AstToolDetails>({
+		name: "ast_search",
+		label: "ast_search",
+		description:
+			"Search one canonical source file, repository, package, or subtree with an ast-grep code pattern. Returns bounded deterministic matches, metavariable bindings, parser certainty, and numeric locators for exact source or enclosing scopes.",
+		promptSnippet: "Search repository code shapes with ast-grep patterns and retrievable locators",
+		promptGuidelines: [
+			"Use ast_search for code shapes; use grep for literal text.",
+			"Pass language for repository, package, and subtree targets. Supported files can infer it.",
+			"Use $NAME and $$$NAME metavariables. Keep resultLimit narrow, then retrieve selected numeric locators with symbol(declaration).",
+		],
+		parameters: astSearchParams,
+		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+			const path = await realpath(resolveExplorePath(ctx.cwd, params.path));
+			const metadata = await stat(path);
+			const inferred = metadata.isFile() ? astLanguageForPath(path) : undefined;
+			if (metadata.isFile() && !inferred) throw new Error(`Unsupported ast_search file type: ${path}`);
+			if (metadata.isDirectory() && !params.language) {
+				throw new Error("ast_search requires language for repository, package, and subtree targets");
+			}
+			if (inferred && params.language && inferred !== params.language) {
+				throw new Error(`ast_search language ${params.language} does not match ${inferred} target ${path}`);
+			}
+			const language = params.language ?? inferred;
+			if (!language) throw new Error("ast_search could not infer a language; pass language explicitly");
+			const result = await client.search(path, language, params.pattern, params.resultLimit, signal);
+			const builder = new BoundedTextResultBuilder(temporaryOutput, "completeBlocks");
+			const locatorByUnit = new Map<string, number[]>();
+			try {
+				for (const [index, match] of result.matches.entries()) {
+					const sourcePath = metadata.isDirectory() ? resolve(path, match.relativePath) : path;
+					const matchId = registerLocator(match.locator, sourcePath, `match ${match.relativePath}`);
+					const ids = [matchId];
+					const unit = `${match.relativePath}:${match.range.startByte}:${index}`;
+					const lines = [
+						`${match.relativePath}:${displayLineRange(match.range)}(${matchId}) [${match.language}, ${match.certainty}]`,
+						...match.preview.split("\n").map((line) => `  ${line}`),
+					];
+					if (match.previewTruncated) lines.push("  [preview truncated]");
+					for (const binding of match.bindings) {
+						const values = binding.values.map((value) => JSON.stringify(value.preview)).join(", ");
+						lines.push(`  $${binding.name} = ${values}${binding.valuesTruncated ? ", …" : ""}`);
+					}
+					if (match.bindingsTruncated) lines.push("  [bindings truncated]");
+					if (match.certaintyReason) lines.push(`  uncertainty: ${match.certaintyReason}`);
+					if (match.enclosingScope) {
+						const scopeId = registerLocator(
+							match.enclosingScope.locator,
+							sourcePath,
+							match.enclosingScope.astKind,
+						);
+						ids.push(scopeId);
+						lines.push(
+							`  enclosing ${displayLineRange(match.enclosingScope.range)}(${scopeId}): ${match.enclosingScope.astKind}`,
+						);
+					}
+					locatorByUnit.set(unit, ids);
+					await builder.appendBlock(unit, match.relativePath, lines.join("\n"));
+				}
+				if (result.matches.length === 0) await builder.appendRequiredBlock("no matches", "No structural matches");
+				for (const [index, diagnostic] of result.diagnostics.entries()) {
+					await builder.appendBlock(
+						undefined,
+						`diagnostic-${index}`,
+						`diagnostic: ${diagnostic.relativePath} [${diagnostic.code}]: ${diagnostic.message}`,
+					);
+				}
+				const summary = result.summary;
+				const limits = [
+					...(summary.resultLimitReached ? ["results"] : []),
+					...(summary.fileLimitReached ? ["files"] : []),
+					...(summary.sourceByteLimitReached ? ["source bytes"] : []),
+					...(summary.depthLimitReached ? ["depth"] : []),
+					...(summary.elapsedLimitReached ? ["elapsed time"] : []),
+				];
+				await builder.appendRequiredBlock(
+					"structural search summary",
+					[
+						`summary: ${summary.filesDiscovered} discovered, ${summary.filesFiltered} filtered, ${summary.filesRead} read, ${summary.filesParsed} parsed, ${summary.filesSearched} searched`,
+						`matches: ${summary.matchesFound} found, ${summary.matchesReturned} returned (limit ${summary.resultLimit}); source: ${formatSize(summary.sourceBytes)}; parser degraded: ${summary.parserDegradedFiles}`,
+						`failures: ${summary.unreadableFiles} unreadable, ${summary.oversizedFiles} oversized, ${summary.failedFiles} failed; diagnostics omitted: ${summary.diagnosticsOmitted}`,
+						`prefilters: literal=${summary.literalPrefilterApplied ? "yes" : "no"}, node-kind=${summary.potentialKindPrefilterApplied ? "yes" : "no"}; limits reached: ${limits.join(", ") || "none"}`,
+					].join("\n"),
+				);
+				const bounded = await builder.finish();
+				if (!bounded.overflow.fullOutputComplete) {
+					const visible = new Set(bounded.visibleUnitIds);
+					for (const [unit, ids] of locatorByUnit) {
+						if (!visible.has(unit)) for (const id of ids) locators.delete(id);
+					}
+				}
+				if (bounded.overflow.temporaryPath) orientation.recordTemporaryOutput(bounded.overflow.temporaryPath);
+				const returnedBytes = Buffer.byteLength(bounded.content);
+				return {
+					content: [{ type: "text", text: bounded.content }],
+					details: {
+						kind: "astSearch",
+						result,
+						declarationCount: summary.matchesReturned,
+						sourceBytes: summary.sourceBytes,
+						returnedBytes,
+						avoidedBytes: Math.max(0, summary.sourceBytes - returnedBytes),
+						truncated: bounded.overflow.truncated,
+						overflow: bounded.overflow,
+					},
+				};
+			} catch (error) {
+				await builder.abort();
+				for (const ids of locatorByUnit.values()) for (const id of ids) locators.delete(id);
+				throw error;
+			}
+		},
+		renderCall(args, theme, context) {
+			rowState.watch(context.toolCallId, context.invalidate);
+			const options = `[${args.language ?? "infer"} limit=${args.resultLimit}]`;
+			const component =
+				(context.lastComponent as AstCallComponent | undefined) ??
+				new AstCallComponent(
+					rowState,
+					context.toolCallId,
+					"ast_search",
+					[stripLeadingAt(args.path)],
+					[options],
+					theme,
+				);
+			component.set([stripLeadingAt(args.path)], [options], theme);
+			return component;
+		},
+		renderResult(result, options, theme, context) {
+			rowState.watch(context.toolCallId, context.invalidate);
+			return renderAstResult(result, options.expanded, theme, context);
+		},
+	});
+
 	return {
 		outline,
 		symbol,
 		api_discover: apiDiscover,
+		ast_search: astSearch,
 		clear() {
 			locators.clear();
 			nextLocator = 1;

@@ -36,7 +36,7 @@ describe("explore extension", () => {
 		} as unknown as ExtensionAPI;
 		expect(() => exploreExtension(pi)).not.toThrow();
 		expect(tools).toEqual(
-			expect.arrayContaining(["outline", "symbol", "api_discover", "ls", "find", "grep", "read"]),
+			expect.arrayContaining(["outline", "symbol", "api_discover", "ast_search", "ls", "find", "grep", "read"]),
 		);
 		expect(guidance).not.toHaveBeenCalled();
 	});

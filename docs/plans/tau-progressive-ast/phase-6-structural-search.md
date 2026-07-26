@@ -1,6 +1,6 @@
 # Phase 6: Repository Structural Search
 
-Status: implementation unapproved  
+Status: complete
 Depends on: recursive traversal, bounded overflow, and stale-safe locators  
 Produces: `ast_search`
 
@@ -87,6 +87,12 @@ Ambiguous pattern parsing must fail with a direct request for an explicit langua
 ## Required reference validation
 
 Before this phase is complete, run its applicable acceptance workflow against all nine read-only reference repositories and the Markdown fixture in [`language-verification-corpus.md`](./language-verification-corpus.md). Unit tests and phase-specific fixtures do not replace this pass. Treat a failure in any supported language as a phase blocker and record parser recovery or uncertainty explicitly.
+
+## Implementation record
+
+Implemented protocol 10 structural search with Tau-owned request and result types, pinned `ast-grep` libraries, a custom Odin adapter, ignore-aware traversal, literal and node-kind prefilters, chunked parallel matching, elapsed-work checks, deterministic ordering, bounded bindings and previews, stale-safe match and enclosing-scope locators, and complete bounded overflow handling in Explore. Markdown validates its nesting limit before matching and returns complete heading sections as enclosing scopes. YAML rules, rewriting, fixers, and replacement APIs remain outside the tool.
+
+Native tests pass with 46 unit tests and the framed worker integration test. Explore's targeted worker, tool, and registration tests pass with 35 tests. The required acceptance pass searched all nine production files with `$A`, retrieved every returned exact locator through `symbol(declaration)`, and preserved expected recovery signals for Java, Odin, and Swift. Markdown used `## $A`; both its exact match and complete heading-section locator resolved. A repository-wide TypeScript search over the `pi` reference scanned 644 candidate files, found 129 function shapes, returned a deterministic limited set of three, and retrieved one exact result. Cancellation restarts the killed worker and leaves the client usable, as covered by the worker client test.
 
 ## Completion
 

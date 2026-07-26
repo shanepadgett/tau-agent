@@ -76,6 +76,7 @@ function astClient(overrides: Partial<AstClient>): AstClient {
 		getGeneration: () => 1,
 		outline: vi.fn(),
 		outlineRecursive: vi.fn(),
+		search: vi.fn(),
 		symbol: vi.fn(),
 		shutdown: vi.fn(async () => {}),
 		...overrides,
@@ -278,6 +279,106 @@ describe("AST exploration tools", () => {
 			undefined,
 			extensionContext(workspace.dir),
 		);
+	});
+
+	it("searches code shapes and exposes exact and enclosing locators", async () => {
+		const path = workspace.path("src/parser.ts");
+		const client = astClient({
+			search: vi.fn(async () => ({
+				path: workspace.path("src"),
+				language: "typeScript" as const,
+				pattern: "parse($ARG)",
+				matches: [
+					{
+						relativePath: "parser.ts",
+						language: "typeScript" as const,
+						range,
+						preview: "parse(input)",
+						previewTruncated: false,
+						bindings: [
+							{
+								name: "ARG",
+								values: [{ range, preview: "input", previewTruncated: false }],
+								valuesTruncated: false,
+							},
+						],
+						bindingsTruncated: false,
+						certainty: "certain" as const,
+						locator: "match-locator",
+						enclosingScope: {
+							astKind: "function_declaration",
+							range,
+							preview: "function run() {}",
+							previewTruncated: false,
+							locator: "scope-locator",
+						},
+					},
+				],
+				diagnostics: [],
+				summary: {
+					filesDiscovered: 1,
+					filesFiltered: 0,
+					languageFilteredFiles: 0,
+					literalFilteredFiles: 0,
+					filesRead: 1,
+					filesParsed: 1,
+					filesSearched: 1,
+					unreadableFiles: 0,
+					oversizedFiles: 0,
+					failedFiles: 0,
+					parserDegradedFiles: 0,
+					sourceBytes: 200,
+					matchesFound: 1,
+					matchesReturned: 1,
+					resultLimit: 10,
+					resultLimitReached: false,
+					literalPrefilterApplied: true,
+					potentialKindPrefilterApplied: true,
+					diagnosticsOmitted: 0,
+					fileLimitReached: false,
+					sourceByteLimitReached: false,
+					depthLimitReached: false,
+					elapsedLimitReached: false,
+				},
+			})),
+			symbol: vi.fn(async (tokens) => ({
+				declarations: [
+					{
+						locator: tokens[0] ?? "",
+						path,
+						language: "typeScript" as const,
+						sourceFingerprint: "blake3:test",
+						declarationRange: range,
+						diagnostics: [],
+					},
+				],
+				blocks: [{ path, returnedRange: range, declarationIndexes: [0], source: "parse(input)" }],
+			})),
+		});
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
+		);
+		const searched = await ast.ast_search.execute(
+			"search-1",
+			{ path: "src", pattern: "parse($ARG)", language: "typeScript", resultLimit: 10 },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		expect(firstText(searched)).toContain("parser.ts:1-3(1)");
+		expect(firstText(searched)).toContain('$ARG = "input"');
+		expect(firstText(searched)).toContain("enclosing 1-3(2): function_declaration");
+		await ast.symbol.execute(
+			"search-symbol",
+			{ locators: [1], view: "declaration" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		expect(client.symbol).toHaveBeenCalledWith(["match-locator"], "declaration", 0, undefined);
 	});
 
 	it("infers a symlinked file from its canonical target", async () => {

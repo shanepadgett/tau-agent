@@ -49,7 +49,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 1,
-            "protocolVersion": 9,
+            "protocolVersion": 10,
             "target": { "kind": "file", "path": typescript_path, "language": "typeScript" },
             "includePrivate": true,
             "includeDocs": false,
@@ -65,7 +65,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "handshake",
             "requestId": 2,
-            "protocolVersion": 9
+            "protocolVersion": 10
         }),
     );
     let handshake = read_response(&mut stdout);
@@ -92,7 +92,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 99,
-            "protocolVersion": 9,
+            "protocolVersion": 10,
             "target": { "kind": "file", "path": deep_markdown_path, "language": "markdown" },
             "includePrivate": false,
             "includeDocs": false,
@@ -114,7 +114,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 3,
-            "protocolVersion": 9,
+            "protocolVersion": 10,
             "target": { "kind": "file", "path": typescript_path, "language": "typeScript" },
             "includePrivate": true,
             "includeDocs": false,
@@ -149,7 +149,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 4,
-            "protocolVersion": 9,
+            "protocolVersion": 10,
             "locators": [locator],
             "view": "declaration",
             "contextLines": 0
@@ -174,7 +174,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 401,
-            "protocolVersion": 9,
+            "protocolVersion": 10,
             "locators": [locator],
             "view": "signatureWithDocs",
             "contextLines": 0
@@ -194,7 +194,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 5,
-            "protocolVersion": 9,
+            "protocolVersion": 10,
             "target": { "kind": "file", "path": odin_path, "language": "odin" },
             "includePrivate": true,
             "includeDocs": false,
@@ -229,7 +229,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 100,
-            "protocolVersion": 9,
+            "protocolVersion": 10,
             "locators": [mapped_locator],
             "view": "declarationWithImports",
             "contextLines": 0
@@ -258,7 +258,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
             json!({
                 "operation": "outline",
                 "requestId": index + 6,
-                "protocolVersion": 9,
+                "protocolVersion": 10,
                 "target": {
                     "kind": "file",
                     "path": manifest_dir.join("fixtures").join(fixture),
@@ -442,7 +442,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
                 json!({
                     "operation": "symbol",
                     "requestId": 200,
-                    "protocolVersion": 9,
+                    "protocolVersion": 10,
                     "locators": [locator],
                     "view": "declarationWithImports",
                     "contextLines": 0
@@ -467,7 +467,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
             json!({
                 "operation": "outline",
                 "requestId": request_id,
-                "protocolVersion": 9,
+                "protocolVersion": 10,
                 "target": { "kind": "file", "path": java_path, "language": "java" },
                 "includePrivate": true,
                 "includeDocs": include_docs,
@@ -503,7 +503,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 12,
-            "protocolVersion": 9,
+            "protocolVersion": 10,
             "target": { "kind": "file", "path": local_export_path, "language": "typeScript" },
             "includePrivate": false,
             "includeDocs": false,
@@ -535,7 +535,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 13,
-            "protocolVersion": 9,
+            "protocolVersion": 10,
             "locators": [local_locator],
             "view": "declaration",
             "contextLines": 0
@@ -565,7 +565,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 300,
-            "protocolVersion": 9,
+            "protocolVersion": 10,
             "target": {
                 "kind": "recursiveDirectory",
                 "path": recursive_path,
@@ -621,7 +621,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "apiDiscover",
             "requestId": 301,
-            "protocolVersion": 9,
+            "protocolVersion": 10,
             "path": manifest_dir.join("fixtures/api-discovery"),
             "budgets": {
                 "maxFiles": 20,
@@ -658,7 +658,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 302,
-            "protocolVersion": 9,
+            "protocolVersion": 10,
             "locators": [discovered_locator],
             "view": "signatureWithDocs",
             "contextLines": 0
@@ -676,9 +676,45 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
     send_request(
         &mut worker,
         json!({
+            "operation": "astSearch",
+            "requestId": 304,
+            "protocolVersion": 10,
+            "path": manifest_dir.join("fixtures/typescript.ts"),
+            "language": "typeScript",
+            "budgets": { "maxFiles": 20, "maxSourceBytes": 1048576, "maxDepth": 8, "maxElapsedMs": 5000 },
+            "pattern": "class $NAME implements $INTERFACE { $$$MEMBERS }",
+            "resultLimit": 10
+        }),
+    );
+    let searched = read_response(&mut stdout);
+    assert_eq!(searched["success"], true);
+    assert_eq!(searched["result"]["kind"], "astSearch");
+    assert!(
+        searched["result"]["summary"]["matchesFound"]
+            .as_u64()
+            .is_some_and(|count| count > 0)
+    );
+    let search_locator = searched["result"]["matches"][0]["locator"]
+        .as_str()
+        .expect("search locator");
+    send_request(
+        &mut worker,
+        json!({ "operation": "symbol", "requestId": 305, "protocolVersion": 10, "locators": [search_locator], "view": "declaration", "contextLines": 0 }),
+    );
+    let searched_symbol = read_response(&mut stdout);
+    assert_eq!(searched_symbol["success"], true);
+    assert!(
+        searched_symbol["result"]["blocks"][0]["source"]
+            .as_str()
+            .is_some_and(|source| source.contains("class"))
+    );
+
+    send_request(
+        &mut worker,
+        json!({
             "operation": "apiDiscover",
             "requestId": 303,
-            "protocolVersion": 9,
+            "protocolVersion": 10,
             "path": manifest_dir.join("fixtures"),
             "budgets": {
                 "maxFiles": 20,

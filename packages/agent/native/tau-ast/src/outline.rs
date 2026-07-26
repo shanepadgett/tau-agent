@@ -392,6 +392,7 @@ struct SourceLocator {
 enum LocatorKind {
     Declaration,
     ExecutableScope,
+    Match,
 }
 
 pub struct OutlineEngine;
@@ -1360,7 +1361,7 @@ fn entry_matches_locator(entry: &OutlineEntry, locator: &SourceLocator) -> bool 
         && entry.name_range.end_byte == locator.name_range.end_byte
 }
 
-fn validate_recursive_budgets(budgets: RecursiveBudgets) -> Result<(), Box<dyn Error>> {
+pub(crate) fn validate_recursive_budgets(budgets: RecursiveBudgets) -> Result<(), Box<dyn Error>> {
     if budgets.max_files == 0 || budgets.max_files > MAX_RECURSIVE_FILES {
         return Err(
             format!("recursive maxFiles must be between 1 and {MAX_RECURSIVE_FILES}").into(),
@@ -1386,7 +1387,7 @@ fn validate_recursive_budgets(budgets: RecursiveBudgets) -> Result<(), Box<dyn E
     Ok(())
 }
 
-fn relative_path(path: &Path) -> String {
+pub(crate) fn relative_path(path: &Path) -> String {
     path.components()
         .map(|component| component.as_os_str().to_string_lossy())
         .collect::<Vec<_>>()
@@ -1530,7 +1531,7 @@ fn language_family(language: LanguageId) -> LanguageFamily {
     }
 }
 
-fn language_for_path(path: &Path) -> Option<LanguageId> {
+pub(crate) fn language_for_path(path: &Path) -> Option<LanguageId> {
     match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
         "ts" => Some(LanguageId::TypeScript),
         "tsx" => Some(LanguageId::Tsx),
@@ -1614,6 +1615,71 @@ fn encode_locator(
         body_range: entry.body_range.clone(),
         certainty: entry.certainty,
         signature: entry.signature.clone(),
+    })?))
+}
+
+pub(crate) fn encode_search_match_locator(
+    path: &str,
+    language: LanguageId,
+    source_fingerprint: &str,
+    range: SourceRange,
+    ast_kind: &str,
+    signature: &str,
+) -> Result<String, serde_json::Error> {
+    encode_search_locator(
+        path,
+        language,
+        source_fingerprint,
+        range,
+        ast_kind,
+        signature,
+        LocatorKind::Match,
+    )
+}
+
+pub(crate) fn encode_search_scope_locator(
+    path: &str,
+    language: LanguageId,
+    source_fingerprint: &str,
+    range: SourceRange,
+    ast_kind: &str,
+    signature: &str,
+) -> Result<String, serde_json::Error> {
+    encode_search_locator(
+        path,
+        language,
+        source_fingerprint,
+        range,
+        ast_kind,
+        signature,
+        LocatorKind::ExecutableScope,
+    )
+}
+
+fn encode_search_locator(
+    path: &str,
+    language: LanguageId,
+    source_fingerprint: &str,
+    range: SourceRange,
+    ast_kind: &str,
+    signature: &str,
+    locator_kind: LocatorKind,
+) -> Result<String, serde_json::Error> {
+    Ok(URL_SAFE_NO_PAD.encode(serde_json::to_vec(&SourceLocator {
+        version: LOCATOR_VERSION,
+        path: path.to_owned(),
+        language,
+        source_fingerprint: source_fingerprint.to_owned(),
+        include_private: true,
+        locator_kind,
+        qualified_name: format!("<search:{ast_kind}:{}>", range.start_byte),
+        declaration_kind: ast_kind.to_owned(),
+        name_range: range.clone(),
+        range,
+        receiver_range: None,
+        body_range: None,
+        certainty: ParseCertainty::Certain,
+        signature: signature.to_owned(),
     })?))
 }
 
@@ -1726,7 +1792,7 @@ fn matching_imports<'a, D: ast_grep_core::Doc>(
         .collect()
 }
 
-fn source_fingerprint(source: &[u8]) -> String {
+pub(crate) fn source_fingerprint(source: &[u8]) -> String {
     format!("sha256:{:x}", Sha256::digest(source))
 }
 
