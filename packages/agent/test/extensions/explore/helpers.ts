@@ -1,9 +1,10 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import type { Component } from "@earendil-works/pi-tui";
 import { createExploreReadTool } from "../../../extensions/explore/read.ts";
+import { createOrientationState } from "../../../extensions/explore/orientation-state.ts";
 import { firstTextContent } from "../../../extensions/explore/result.ts";
 import type { ToolRowStateStore } from "../../../shared/tool-row-state.ts";
 
@@ -16,7 +17,7 @@ export interface Workspace {
 }
 
 export async function createWorkspace(): Promise<Workspace> {
-	const dir = await mkdtemp(join(tmpdir(), "tau-explore-test-"));
+	const dir = await realpath(await mkdtemp(join(tmpdir(), "tau-explore-test-")));
 	return {
 		dir,
 		path(relativePath) {
@@ -43,6 +44,8 @@ export const testRowState: ToolRowStateStore = {
 	watch() {},
 	clear() {},
 };
+
+export const testOrientation = createOrientationState(async () => []);
 
 export const testTheme = {
 	fg(name: string, text: string) {
@@ -79,7 +82,7 @@ export function branchExtensionContext(cwd: string, branch: unknown[]): Extensio
 }
 
 export function executeExploreRead(ctx: ExtensionContext, toolCallId: string, path: string) {
-	return createExploreReadTool(testRowState).execute(toolCallId, { path }, undefined, undefined, ctx);
+	return createExploreReadTool(testRowState, testOrientation).execute(toolCallId, { path }, undefined, undefined, ctx);
 }
 
 interface TestToolRenderContext<TArgs> {

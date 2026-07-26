@@ -2,7 +2,7 @@
 
 Explore is Tau's first-party filesystem exploration extension.
 
-It exists so agents can inspect paths, discover files, search text, inspect declarations in supported source languages, and read exact source with compact model payloads and readable tool rows. Autoread establishes complete-file knowledge while that source remains in active context. Later reads can return an unchanged marker or a smaller diff instead of resending the file.
+It exists so agents can inspect paths, discover files, search text, inspect declarations in supported source languages, and read exact source with compact model payloads and readable tool rows. The official `read` tool requires a current visible outline before it returns supported source. Unsupported files and unavailable workers keep the ordinary read path. Autoread establishes complete-file knowledge while that source remains in active context. Later reads can return an unchanged marker or a smaller diff instead of resending the file.
 
 When the source baseline is no longer available, such as after compaction or a cold subagent resume, `read` safely returns the current full source.
 
@@ -21,4 +21,4 @@ For supported source, use the cheapest useful step:
 5. Set `includeDocs` when declaration documentation affects the task.
 6. Send several locators to `symbol` for complete declarations.
 7. Add context lines when the edit needs nearby source.
-8. Use `read` for unsupported files, cross-cutting logic, exact formatting, parser gaps, or source outside declaration boundaries.
+8. Use `read` after a visible outline when cross-cutting logic, exact formatting, parser gaps, or source outside declaration boundaries requires the file. Fatal per-file parser failures allow a fingerprinted fallback read.

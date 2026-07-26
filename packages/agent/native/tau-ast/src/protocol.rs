@@ -131,6 +131,8 @@ pub enum ResponseResult {
 pub struct ProtocolError {
     pub code: &'static str,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_fingerprint: Option<String>,
 }
 
 pub fn read_frame(reader: &mut impl Read) -> io::Result<Option<Vec<u8>>> {
@@ -159,6 +161,16 @@ pub fn write_frame(writer: &mut impl Write, response: &Response) -> Result<(), s
             Response::Success(response) => response.request_id,
             Response::Error(response) => response.request_id,
         };
+        let source_fingerprint = match response {
+            Response::Success(SuccessResponse {
+                result: ResponseResult::Outline { outline },
+                ..
+            }) if outline.files.len() == 1 => outline
+                .files
+                .first()
+                .map(|file| file.source_fingerprint.clone()),
+            _ => None,
+        };
         payload = serde_json::to_vec(&Response::Error(ErrorResponse {
             request_id,
             protocol_version: PROTOCOL_VERSION,
@@ -168,6 +180,7 @@ pub fn write_frame(writer: &mut impl Write, response: &Response) -> Result<(), s
                 message: format!(
                     "response frame exceeds the {MAX_FRAME_BYTES}-byte protocol limit; narrow the target"
                 ),
+                source_fingerprint,
             },
         }))?;
     }

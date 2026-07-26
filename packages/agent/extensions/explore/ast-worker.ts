@@ -88,6 +88,7 @@ export interface RecursiveOutlineDiagnostic {
 	language: AstLanguage | undefined;
 	code: string;
 	message: string;
+	sourceFingerprint: string | undefined;
 }
 
 export interface RecursiveOutlineSummary {
@@ -179,7 +180,19 @@ interface WorkerResponse {
 	protocolVersion: number;
 	success: boolean;
 	result?: Record<string, unknown>;
-	error?: { code?: string; message?: string };
+	error?: { code?: string; message?: string; sourceFingerprint?: string };
+}
+
+export class AstWorkerError extends Error {
+	readonly code: string;
+	readonly sourceFingerprint: string | undefined;
+
+	constructor(code: string, message: string, sourceFingerprint: string | undefined = undefined) {
+		super(message);
+		this.name = "AstWorkerError";
+		this.code = code;
+		this.sourceFingerprint = sourceFingerprint;
+	}
 }
 
 interface PendingUnaryRequest {
@@ -486,7 +499,13 @@ export class AstWorkerClient implements AstClient {
 				if (!response.success) {
 					this.pending.delete(response.requestId);
 					pending.removeAbortListener();
-					pending.reject(new Error(response.error?.message ?? response.error?.code ?? "tau-ast request failed"));
+					pending.reject(
+						new AstWorkerError(
+							response.error?.code ?? "worker_error",
+							response.error?.message ?? response.error?.code ?? "tau-ast request failed",
+							response.error?.sourceFingerprint,
+						),
+					);
 					continue;
 				}
 				if (!response.result || typeof response.result !== "object") {
@@ -596,7 +615,8 @@ function parseRecursiveDiagnostic(result: Record<string, unknown>): RecursiveOut
 		typeof result.relativePath !== "string" ||
 		typeof result.code !== "string" ||
 		typeof result.message !== "string" ||
-		(result.language !== undefined && !isAstLanguage(result.language))
+		(result.language !== undefined && !isAstLanguage(result.language)) ||
+		(result.sourceFingerprint !== undefined && typeof result.sourceFingerprint !== "string")
 	) {
 		return undefined;
 	}
@@ -605,6 +625,7 @@ function parseRecursiveDiagnostic(result: Record<string, unknown>): RecursiveOut
 		language: result.language as AstLanguage | undefined,
 		code: result.code,
 		message: result.message,
+		sourceFingerprint: result.sourceFingerprint as string | undefined,
 	};
 }
 

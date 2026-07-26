@@ -10,6 +10,7 @@ import { registerAutoread } from "./autoread.ts";
 import { createFindTool } from "./find.ts";
 import { createGrepTool } from "./grep.ts";
 import { createLsTool } from "./ls.ts";
+import { createOrientationState } from "./orientation-state.ts";
 import { createReadCacheStore } from "./read-cache.ts";
 import { createReadSnapshotStore } from "./read-snapshots.ts";
 import { showReadStats } from "./read-stats.ts";
@@ -20,15 +21,16 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 	const readCache = createReadCacheStore();
 	const readSnapshots = createReadSnapshotStore();
 	const astClient = new AstWorkerClient();
+	const orientation = createOrientationState(() => astClient.supportedLanguages());
 	const temporaryOutput = createTemporaryOutputStore();
-	const ast = createAstTools(astClient, rowState, temporaryOutput);
+	const ast = createAstTools(astClient, rowState, temporaryOutput, orientation);
 	registerAutoread(pi, rowState);
 	pi.registerTool(ast.outline);
 	pi.registerTool(ast.symbol);
 	pi.registerTool(createLsTool(rowState));
 	pi.registerTool(createFindTool(rowState));
 	pi.registerTool(createGrepTool(rowState));
-	pi.registerTool(createExploreReadTool(rowState, readCache, readSnapshots));
+	pi.registerTool(createExploreReadTool(rowState, orientation, readCache, readSnapshots));
 	pi.on("before_agent_start", async (event, ctx) => {
 		const guidance = await effectiveAstGuidance({
 			cwd: ctx.cwd,
@@ -44,7 +46,7 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 				ctx.ui.notify("Read stats require TUI mode", "error");
 				return;
 			}
-			await showReadStats(ctx);
+			await showReadStats(ctx, orientation);
 		},
 	});
 	pi.on("session_start", async () => {
@@ -62,7 +64,10 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 		ast.invalidate(paths);
 	});
 	pi.on("session_compact", () => readSnapshots.clear());
-	pi.on("session_tree", () => readSnapshots.clear());
+	pi.on("session_tree", () => {
+		readSnapshots.clear();
+		ast.resetForTree();
+	});
 	pi.on("session_shutdown", async () => {
 		ast.clear();
 		await astClient.shutdown();

@@ -14,7 +14,8 @@ mod typescript;
 
 use crate::{
     outline::{
-        LanguageId, OutlineEngine, OutlineTarget, RecursiveDiagnostic, RecursiveOutlineEvent,
+        LanguageId, OutlineEngine, OutlineFileError, OutlineTarget, RecursiveDiagnostic,
+        RecursiveOutlineEvent,
     },
     protocol::{
         ErrorResponse, PROTOCOL_VERSION, ProtocolError, Request, Response, ResponseResult,
@@ -136,7 +137,9 @@ fn run() -> Result<(), Box<dyn Error>> {
                                                 relative_path,
                                                 file,
                                             } => {
-                                                let language = file.language;
+                                                    let language = file.language;
+                                                    let source_fingerprint =
+                                                        file.source_fingerprint.clone();
                                                 let response = success_response(
                                                     request_id,
                                                     ResponseResult::RecursiveFile {
@@ -157,6 +160,9 @@ fn run() -> Result<(), Box<dyn Error>> {
                                                                 code: "resultFrameTooLarge",
                                                                 message: "rendered AST result exceeds the 8 MiB worker frame limit; outline this file directly"
                                                                     .to_owned(),
+                                                                source_fingerprint: Some(
+                                                                    source_fingerprint,
+                                                                ),
                                                             },
                                                         },
                                                     )
@@ -207,9 +213,14 @@ fn run() -> Result<(), Box<dyn Error>> {
                             Ok(outline) => {
                                 success_response(request_id, ResponseResult::Outline { outline })
                             }
-                            Err(error) => {
-                                error_response(request_id, "outline_failed", error.to_string())
-                            }
+                            Err(error) => error_response_with_fingerprint(
+                                request_id,
+                                "outline_failed",
+                                error.to_string(),
+                                error
+                                    .downcast_ref::<OutlineFileError>()
+                                    .and_then(|failure| failure.source_fingerprint.clone()),
+                            ),
                         },
                     }
                 }
@@ -257,11 +268,24 @@ fn run() -> Result<(), Box<dyn Error>> {
 }
 
 fn error_response(request_id: u64, code: &'static str, message: String) -> Response {
+    error_response_with_fingerprint(request_id, code, message, None)
+}
+
+fn error_response_with_fingerprint(
+    request_id: u64,
+    code: &'static str,
+    message: String,
+    source_fingerprint: Option<String>,
+) -> Response {
     Response::Error(ErrorResponse {
         request_id,
         protocol_version: PROTOCOL_VERSION,
         success: false,
-        error: ProtocolError { code, message },
+        error: ProtocolError {
+            code,
+            message,
+            source_fingerprint,
+        },
     })
 }
 

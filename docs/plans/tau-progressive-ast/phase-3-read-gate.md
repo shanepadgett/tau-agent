@@ -1,6 +1,6 @@
 # Phase 3: First-Outline Read Gate
 
-Status: implementation unapproved  
+Status: implemented
 Depends on: Phase 2 complete-file visibility metadata  
 Produces: a fingerprinted AST-first gate on Tau's official `read` tool
 
@@ -12,12 +12,10 @@ Tau's AST tools already use source fingerprints for stale locators. `tau:file-mu
 
 Explore does not currently record which supported files were structurally shown to the model. The gate must add that state without breaking existing read-cache behavior.
 
-## Decisions required before coding
+## Resolved implementation decisions
 
-Resolve and record:
-
-1. The exact worker diagnostic or typed error that means an outline attempt could not produce any usable model-visible file result and therefore creates a read fallback.
-2. Whether orientation records survive context compaction. Session continuity favors retaining them; conservative behavior favors clearing them.
+1. A direct file outline creates a fingerprinted fallback only when the worker returns typed error code `outline_failed` or `response_too_large`. A recursive outline creates one only for that file's `outlineFailed` or `resultFrameTooLarge` diagnostic. Parser recovery diagnostics attached to a rendered file remain ordinary orientation and never create fallback.
+2. Orientation records survive context compaction. Session start, session tree changes, and shutdown clear them. Known mutation and fingerprint mismatch invalidate the affected file state.
 
 The fallback must be tied to canonical path and current source fingerprint. Ordinary recovery warnings do not create it because a rendered degraded outline already satisfies orientation.
 

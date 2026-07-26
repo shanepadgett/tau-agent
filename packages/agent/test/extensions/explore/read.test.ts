@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
+import { symlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { generateUnifiedPatch, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { createExploreReadTool } from "../../../extensions/explore/read.ts";
+import { createOrientationState, sourceFingerprint } from "../../../extensions/explore/orientation-state.ts";
 import { createReadSnapshotStore } from "../../../extensions/explore/read-snapshots.ts";
 import {
 	branchExtensionContext,
@@ -12,6 +14,7 @@ import {
 	firstText,
 	renderedText,
 	renderContext,
+	testOrientation,
 	testRowState,
 	testTheme,
 } from "./helpers.ts";
@@ -52,17 +55,156 @@ function branchContext(
 
 describe("explore read", () => {
 	it("describes ranges and cache behavior without prescribing whole-file-first reads", () => {
-		const tool = createExploreReadTool(testRowState);
+		const tool = createExploreReadTool(testRowState, testOrientation);
 		expect(tool.description).toContain("optional line ranges");
 		expect(tool.description).not.toContain("Read a relevant file as a whole");
 		expect(tool.description).not.toContain("Use ranges only");
+	});
+
+	it("blocks the first whole-file and ranged reads of supported source", async () => {
+		const workspace = await createWorkspace();
+		try {
+			await workspace.write("src/parser.ts", "export function parse(): void {}\n");
+			const orientation = createOrientationState(async () => ["typeScript"]);
+			const tool = createExploreReadTool(testRowState, orientation);
+			for (const args of [{ path: "src/parser.ts" }, { path: "src/parser.ts", offset: 1, limit: 1 }]) {
+				await expect(
+					tool.execute("blocked", args, undefined, undefined, extensionContext(workspace.dir)),
+				).rejects.toThrow("Run outline on src/parser.ts or an owning subtree");
+			}
+			expect(orientation.telemetry(undefined).blockedReadAttempts).toBe(2);
+		} finally {
+			await workspace.cleanup();
+		}
+	});
+
+	it("permits the exact fingerprint after a visible filtered outline and rejects siblings or changed source", async () => {
+		const workspace = await createWorkspace();
+		try {
+			const source = "export function parse(): void {}\n";
+			await workspace.write("src/parser.ts", source);
+			await workspace.write("src/sibling.ts", source);
+			const orientation = createOrientationState(async () => ["typeScript"]);
+			orientation.recordVisible({
+				path: workspace.path("src/parser.ts"),
+				toolCallId: "outline",
+				fingerprint: sourceFingerprint(Buffer.from(source)),
+				includePrivate: false,
+				names: ["parse"],
+				diagnostics: { errorNodes: 0, missingNodes: 0 },
+				locatorIds: [1],
+				sourceBytesDeflected: 10,
+			});
+			const tool = createExploreReadTool(testRowState, orientation);
+			expect(
+				firstText(
+					await tool.execute(
+						"allowed",
+						{ path: "src/parser.ts" },
+						undefined,
+						undefined,
+						extensionContext(workspace.dir),
+					),
+				),
+			).toBe(source);
+			await expect(
+				tool.execute("sibling", { path: "src/sibling.ts" }, undefined, undefined, extensionContext(workspace.dir)),
+			).rejects.toThrow("no current model-visible outline");
+			await workspace.write("src/parser.ts", `${source}// changed\n`);
+			await expect(
+				tool.execute("changed", { path: "src/parser.ts" }, undefined, undefined, extensionContext(workspace.dir)),
+			).rejects.toThrow("no current model-visible outline");
+		} finally {
+			await workspace.cleanup();
+		}
+	});
+
+	it("gates a symlink by its canonical target language and orientation", async () => {
+		const workspace = await createWorkspace();
+		try {
+			const source = "export function parse(): void {}\n";
+			await workspace.write("src/parser.ts", source);
+			await symlink("parser.ts", workspace.path("src/parser.txt"));
+			const orientation = createOrientationState(async () => ["typeScript"]);
+			const tool = createExploreReadTool(testRowState, orientation);
+			await expect(
+				tool.execute("blocked", { path: "src/parser.txt" }, undefined, undefined, extensionContext(workspace.dir)),
+			).rejects.toThrow("no current model-visible outline");
+			orientation.recordVisible({
+				path: workspace.path("src/parser.ts"),
+				toolCallId: "outline",
+				fingerprint: sourceFingerprint(Buffer.from(source)),
+				includePrivate: false,
+				names: [],
+				diagnostics: { errorNodes: 0, missingNodes: 0 },
+				locatorIds: [1],
+				sourceBytesDeflected: 0,
+			});
+			expect(
+				firstText(
+					await tool.execute(
+						"allowed",
+						{ path: "src/parser.txt" },
+						undefined,
+						undefined,
+						extensionContext(workspace.dir),
+					),
+				),
+			).toBe(source);
+		} finally {
+			await workspace.cleanup();
+		}
+	});
+
+	it("permits a matching fatal-parser fallback and never strands reads when the worker is unavailable", async () => {
+		const workspace = await createWorkspace();
+		try {
+			const source = "export const broken = ;\n";
+			await workspace.write("src/broken.ts", source);
+			const fallback = createOrientationState(async () => ["typeScript"]);
+			fallback.recordFatal({
+				path: workspace.path("src/broken.ts"),
+				fingerprint: sourceFingerprint(Buffer.from(source)),
+				includePrivate: false,
+				names: [],
+				code: "outline_failed",
+				message: "parser failed",
+			});
+			const fallbackTool = createExploreReadTool(testRowState, fallback);
+			expect(
+				firstText(
+					await fallbackTool.execute(
+						"fallback",
+						{ path: "src/broken.ts" },
+						undefined,
+						undefined,
+						extensionContext(workspace.dir),
+					),
+				),
+			).toBe(source);
+			expect(fallback.telemetry(undefined).fallbackReadAttempts).toBe(1);
+
+			const unavailable = createOrientationState(async () => {
+				throw new Error("worker missing");
+			});
+			const ordinary = await createExploreReadTool(testRowState, unavailable).execute(
+				"unavailable",
+				{ path: "src/broken.ts" },
+				undefined,
+				undefined,
+				extensionContext(workspace.dir),
+			);
+			expect(firstText(ordinary)).toBe(source);
+		} finally {
+			await workspace.cleanup();
+		}
 	});
 
 	it("delegates plain text, 1-indexed offset, continuation, and truncation", async () => {
 		const workspace = await createWorkspace();
 		try {
 			await workspace.write("file.txt", "one\ntwo\nthree\nfour");
-			const tool = createExploreReadTool(testRowState);
+			const tool = createExploreReadTool(testRowState, testOrientation);
 
 			const whole = await tool.execute(
 				"read",
@@ -102,7 +244,7 @@ describe("explore read", () => {
 		try {
 			await workspace.write("file.txt", "one\ntwo");
 			await workspace.mkdir("dir");
-			const tool = createExploreReadTool(testRowState);
+			const tool = createExploreReadTool(testRowState, testOrientation);
 			await expect(
 				tool.execute("read", { path: "missing.txt" }, undefined, undefined, extensionContext(workspace.dir)),
 			).rejects.toThrow();
@@ -128,7 +270,7 @@ describe("explore read", () => {
 		const outside = await createWorkspace();
 		try {
 			await outside.write("file.txt", "outside");
-			const tool = createExploreReadTool(testRowState);
+			const tool = createExploreReadTool(testRowState, testOrientation);
 			const result = await tool.execute(
 				"read",
 				{ path: outside.path("file.txt") },
@@ -147,7 +289,7 @@ describe("explore read", () => {
 		const workspace = await createWorkspace();
 		try {
 			await workspace.write("file.txt", "one\ntwo\nthree\nfour");
-			const tool = createExploreReadTool(testRowState);
+			const tool = createExploreReadTool(testRowState, testOrientation);
 			const result = await tool.execute(
 				"read",
 				{ path: "file.txt", offset: 2, limit: 2, lineNumbers: true },
@@ -165,7 +307,7 @@ describe("explore read", () => {
 		const workspace = await createWorkspace();
 		try {
 			await workspace.write("file.txt", "one\ntwo\nthree");
-			const tool = createExploreReadTool(testRowState);
+			const tool = createExploreReadTool(testRowState, testOrientation);
 			const context = branchContext(workspace.dir);
 			const first = await tool.execute("first", { path: "file.txt" }, undefined, undefined, context.ctx);
 			context.appendRead(first);
@@ -182,7 +324,7 @@ describe("explore read", () => {
 		try {
 			const original = Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join("\n");
 			await workspace.write("file.txt", original);
-			const tool = createExploreReadTool(testRowState);
+			const tool = createExploreReadTool(testRowState, testOrientation);
 			const context = branchContext(workspace.dir);
 			const first = await tool.execute("first", { path: "file.txt" }, undefined, undefined, context.ctx);
 			context.appendRead(first);
@@ -201,7 +343,7 @@ describe("explore read", () => {
 		const workspace = await createWorkspace();
 		try {
 			await workspace.write("file.txt", "one\ntwo\nthree");
-			const tool = createExploreReadTool(testRowState);
+			const tool = createExploreReadTool(testRowState, testOrientation);
 			const context = branchContext(workspace.dir);
 			const numbered = await tool.execute(
 				"numbered",
@@ -255,7 +397,7 @@ describe("explore read", () => {
 					},
 				},
 			]);
-			const tool = createExploreReadTool(testRowState);
+			const tool = createExploreReadTool(testRowState, testOrientation);
 			const unchanged = await tool.execute("same", { path: "file.txt" }, undefined, undefined, context.ctx);
 			expect(firstText(unchanged)).toBe("unchanged, 100 lines");
 			await workspace.write("file.txt", source.replace("line 50", "line fifty"));
@@ -277,7 +419,7 @@ describe("explore read", () => {
 			const pathKey = resolve(workspace.dir, "file.txt");
 			await workspace.write("file.txt", currentText);
 			const snapshots = createReadSnapshotStore();
-			const tool = createExploreReadTool(testRowState, undefined, snapshots);
+			const tool = createExploreReadTool(testRowState, testOrientation, undefined, snapshots);
 			const common = {
 				v: 1,
 				pathKey,
@@ -345,7 +487,7 @@ describe("explore read", () => {
 		const workspace = await createWorkspace();
 		try {
 			await workspace.write("file.txt", "one\ntwo\nthree");
-			const tool = createExploreReadTool(testRowState);
+			const tool = createExploreReadTool(testRowState, testOrientation);
 			const context = branchContext(workspace.dir);
 			const baseline = await tool.execute("seed", { path: "file.txt" }, undefined, undefined, context.ctx);
 			context.appendRead(baseline);
@@ -411,7 +553,7 @@ describe("explore read", () => {
 		try {
 			const original = Array.from({ length: 20 }, (_, index) => `line ${index + 1}`).join("\n");
 			await workspace.write("file.txt", original);
-			const tool = createExploreReadTool(testRowState);
+			const tool = createExploreReadTool(testRowState, testOrientation);
 			const ctx = extensionContext(workspace.dir);
 			await tool.execute("first", { path: "file.txt", offset: 10, limit: 5 }, undefined, undefined, ctx);
 
@@ -443,7 +585,7 @@ describe("explore read", () => {
 		const workspace = await createWorkspace();
 		try {
 			await workspace.write("file.txt", "one\ntwo\nthree");
-			const tool = createExploreReadTool(testRowState);
+			const tool = createExploreReadTool(testRowState, testOrientation);
 			const ctx = {
 				...extensionContext(workspace.dir),
 				sessionManager: {
@@ -482,7 +624,7 @@ describe("explore read", () => {
 	});
 
 	it("renders collapsed errors as a summarized row and expanded errors with body", () => {
-		const tool = createExploreReadTool(testRowState);
+		const tool = createExploreReadTool(testRowState, testOrientation);
 		const result = {
 			content: [{ type: "text" as const, text: "Offset 99 is beyond end of file" }],
 			details: undefined,
@@ -510,7 +652,7 @@ describe("explore read", () => {
 	});
 
 	it("hides the completed call renderer after reload", () => {
-		const tool = createExploreReadTool(testRowState);
+		const tool = createExploreReadTool(testRowState, testOrientation);
 		const context = {
 			...renderContext({ path: "file.txt" }, false),
 			executionStarted: false,

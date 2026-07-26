@@ -29,6 +29,7 @@ use ast_grep_language::SupportLang;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use ignore::WalkBuilder;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
     error::Error,
@@ -102,6 +103,8 @@ pub struct RecursiveDiagnostic {
     pub language: Option<LanguageId>,
     pub code: &'static str,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_fingerprint: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -297,6 +300,20 @@ pub struct SymbolError {
     pub message: String,
 }
 
+#[derive(Debug)]
+pub struct OutlineFileError {
+    pub source_fingerprint: Option<String>,
+    message: String,
+}
+
+impl fmt::Display for OutlineFileError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl Error for OutlineFileError {}
+
 impl fmt::Display for SymbolError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.message)
@@ -471,8 +488,12 @@ impl OutlineEngine {
         include_private: bool,
         include_docs: bool,
         names: &[String],
-    ) -> Result<OutlineFileResult, Box<dyn Error>> {
-        let source_bytes = fs::read(path)?;
+    ) -> Result<OutlineFileResult, OutlineFileError> {
+        let source_bytes = fs::read(path).map_err(|error| OutlineFileError {
+            source_fingerprint: None,
+            message: error.to_string(),
+        })?;
+        let fingerprint = source_fingerprint(&source_bytes);
         self.outline_source(
             path,
             language,
@@ -481,6 +502,10 @@ impl OutlineEngine {
             include_docs,
             names,
         )
+        .map_err(|error| OutlineFileError {
+            source_fingerprint: Some(fingerprint),
+            message: error.to_string(),
+        })
     }
 
     fn outline_source(
@@ -685,6 +710,7 @@ impl OutlineEngine {
                         language: None,
                         code: "unreadable",
                         message: error.to_string(),
+                        source_fingerprint: None,
                     }))?;
                     continue;
                 }
@@ -717,6 +743,7 @@ impl OutlineEngine {
                         language: Some(language),
                         code: "unreadable",
                         message: error.to_string(),
+                        source_fingerprint: None,
                     }))?;
                     continue;
                 }
@@ -760,6 +787,7 @@ impl OutlineEngine {
                     language: Some(candidate.language),
                     code: "unreadable",
                     message: error.to_string(),
+                    source_fingerprint: None,
                 }))?;
                 continue;
             }
@@ -773,10 +801,12 @@ impl OutlineEngine {
                     message: format!(
                         "file exceeds the remaining {remaining}-byte recursive source budget"
                     ),
+                    source_fingerprint: None,
                 }))?;
                 continue;
             }
             summary.total_byte_length += source.len();
+            let failed_source_fingerprint = source_fingerprint(&source);
             let outlined = self.outline_source(
                 &candidate.path,
                 candidate.language,
@@ -794,6 +824,7 @@ impl OutlineEngine {
                         language: Some(candidate.language),
                         code: "outlineFailed",
                         message: error.to_string(),
+                        source_fingerprint: Some(failed_source_fingerprint),
                     }))?;
                     continue;
                 }
@@ -1363,7 +1394,7 @@ fn matching_imports<'a, D: ast_grep_core::Doc>(
 }
 
 fn source_fingerprint(source: &[u8]) -> String {
-    format!("blake3:{}", blake3::hash(source).to_hex())
+    format!("sha256:{:x}", Sha256::digest(source))
 }
 
 #[cfg(test)]

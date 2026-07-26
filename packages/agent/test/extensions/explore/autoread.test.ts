@@ -11,6 +11,7 @@ import {
 	executeExploreRead,
 	firstText,
 	renderedText,
+	testOrientation,
 	testRowState,
 	testTheme,
 } from "./helpers.ts";
@@ -213,7 +214,7 @@ describe("explore autoread", () => {
 				},
 			});
 
-			const tool = createExploreReadTool(testRowState);
+			const tool = createExploreReadTool(testRowState, testOrientation);
 			const ctx = contextWithMessage(workspace.dir, message);
 			const unchanged = await tool.execute("same", { path: "file.txt" }, undefined, undefined, ctx);
 			expect(firstText(unchanged)).toBe("unchanged, 100 lines");

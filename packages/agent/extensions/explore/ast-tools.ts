@@ -1,7 +1,7 @@
 import { defineTool, formatSize, keyHint, type Theme } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Text, truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
-import { stat } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { Type } from "typebox";
 import {
@@ -17,17 +17,19 @@ import {
 	requireAstLanguageForPath,
 	type AstLanguage,
 } from "./ast-languages.ts";
+import type { OrientationState } from "./orientation-state.ts";
 import { formatPathForDisplay, resolveExplorePath, stripLeadingAt } from "./path-display.ts";
-import type {
-	AstClient,
-	OutlineEntry,
-	OutlineFileResult,
-	SourceRange,
-	OutlineTarget,
-	OutlineTargetResult,
-	RecursiveOutlineSummary,
-	SymbolBatchResult,
-	SymbolView,
+import {
+	AstWorkerError,
+	type AstClient,
+	type OutlineEntry,
+	type OutlineFileResult,
+	type SourceRange,
+	type OutlineTarget,
+	type OutlineTargetResult,
+	type RecursiveOutlineSummary,
+	type SymbolBatchResult,
+	type SymbolView,
 } from "./ast-worker.ts";
 
 const supportedLanguageLabels = formatAstLanguageLabels(AST_LANGUAGE_REGISTRY, "or");
@@ -101,7 +103,12 @@ type OutlineArgs = {
 	recursive?: boolean;
 };
 
-export function createAstTools(client: AstClient, rowState: ToolRowStateStore, temporaryOutput: TemporaryOutputStore) {
+export function createAstTools(
+	client: AstClient,
+	rowState: ToolRowStateStore,
+	temporaryOutput: TemporaryOutputStore,
+	orientation: OrientationState,
+) {
 	const locators = new Map<number, LocatorRecord>();
 	let nextLocator = 1;
 
@@ -111,7 +118,7 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore, t
 		declarationCount: number,
 		kind: AstToolDetails["kind"],
 		result: OutlineTargetResult | SymbolBatchResult,
-	): { text: string; details: AstToolDetails } {
+	): { text: string; visibleText: string; details: AstToolDetails } {
 		const truncation = truncateBoundedHead(text);
 		const returned = truncation.truncated
 			? `${truncation.content}\n\n[Output truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines (${formatSize(truncation.outputBytes)} of ${formatSize(truncation.totalBytes)})]`
@@ -119,6 +126,7 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore, t
 		const returnedBytes = Buffer.byteLength(returned);
 		return {
 			text: returned,
+			visibleText: truncation.content,
 			details: {
 				kind,
 				result,
@@ -494,15 +502,24 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore, t
 			"Use symbol with several locators when complete declaration source is needed.",
 		],
 		parameters: outlineParams,
-		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-			const path = resolveExplorePath(ctx.cwd, params.path);
+		async execute(toolCallId, params, signal, _onUpdate, ctx) {
+			const path = await realpath(resolveExplorePath(ctx.cwd, params.path));
 			const metadata = await stat(path);
 			if (params.recursive) {
 				if (!metadata.isDirectory()) throw new Error("recursive outline requires a directory target");
 				const names = params.names ?? [];
 				const builder = new BoundedTextResultBuilder(temporaryOutput, "completeBlocks");
-				const locatorIdsByFile = new Map<string, number[]>();
+				const filesByPath = new Map<
+					string,
+					{ file: OutlineFileResult; locatorIds: number[]; renderedBytes: number }
+				>();
 				const allLocatorIds = new Set<number>();
+				const fatalFallbacks: Array<{
+					path: string;
+					fingerprint: string;
+					message: string;
+					code: "outlineFailed" | "resultFrameTooLarge";
+				}> = [];
 				let declarationCount = 0;
 				try {
 					const summary = await client.outlineRecursive(
@@ -518,7 +535,11 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore, t
 									{ length: nextLocator - firstLocator },
 									(_, index) => firstLocator + index,
 								);
-								locatorIdsByFile.set(file.path, fileLocatorIds);
+								filesByPath.set(file.path, {
+									file,
+									locatorIds: fileLocatorIds,
+									renderedBytes: Buffer.byteLength(block),
+								});
 								for (const id of fileLocatorIds) allLocatorIds.add(id);
 								declarationCount += file.items.reduce(
 									(count, item) => count + (item.rowKind === "declaration" ? 1 + item.members.length : 0),
@@ -527,6 +548,17 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore, t
 								await builder.appendBlock(file.path, formatPathForDisplay(file.path, ctx.cwd), block);
 							},
 							async onDiagnostic(diagnostic) {
+								if (
+									(diagnostic.code === "outlineFailed" || diagnostic.code === "resultFrameTooLarge") &&
+									diagnostic.sourceFingerprint
+								) {
+									fatalFallbacks.push({
+										path: resolve(path, diagnostic.relativePath),
+										fingerprint: diagnostic.sourceFingerprint,
+										message: diagnostic.message,
+										code: diagnostic.code,
+									});
+								}
 								const language = diagnostic.language ? ` (${diagnostic.language})` : "";
 								await builder.appendBlock(
 									undefined,
@@ -553,12 +585,42 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore, t
 					const bounded = await builder.finish();
 					if (!bounded.overflow.fullOutputComplete) {
 						const visible = new Set(bounded.visibleUnitIds);
-						for (const [file, ids] of locatorIdsByFile) {
+						for (const [file, { locatorIds: ids }] of filesByPath) {
 							if (visible.has(file)) continue;
 							for (const id of ids) locators.delete(id);
 						}
 					}
 					const returnedBytes = Buffer.byteLength(bounded.content);
+					for (const filePath of bounded.visibleUnitIds) {
+						const record = filesByPath.get(filePath);
+						if (!record) continue;
+						orientation.recordVisible({
+							path: record.file.path,
+							toolCallId,
+							fingerprint: record.file.sourceFingerprint,
+							includePrivate: params.includePrivate ?? false,
+							names,
+							diagnostics: record.file.diagnostics,
+							locatorIds: record.locatorIds,
+							sourceBytesDeflected: Math.max(0, record.file.byteLength - record.renderedBytes),
+						});
+					}
+					for (const fallback of fatalFallbacks) {
+						orientation.recordFatal({
+							...fallback,
+							includePrivate: params.includePrivate ?? false,
+							names,
+						});
+					}
+					if (bounded.overflow.temporaryPath) {
+						orientation.recordTemporaryOutput(bounded.overflow.temporaryPath);
+					}
+					orientation.recordOutlineTelemetry(toolCallId, {
+						workerInputBytes: summary.totalByteLength,
+						completeRenderedBytes: bounded.overflow.totalBytes,
+						modelVisibleAstBytes: returnedBytes,
+						temporaryOutputBytes: bounded.overflow.temporaryPath ? bounded.overflow.totalBytes : 0,
+					});
 					return {
 						content: [{ type: "text", text: bounded.content }],
 						details: {
@@ -582,17 +644,43 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore, t
 				? { kind: "directory", path }
 				: { kind: "file", path, language: requireAstLanguageForPath(path) };
 			const names = params.names ?? [];
-			const result = await client.outline(
-				target,
-				params.includePrivate ?? false,
-				params.includeDocs ?? false,
-				names,
-				signal,
-			);
-			const lines = result.files.flatMap((file, index) => [
-				...(index === 0 ? [] : [""]),
-				...renderOutlineFile(file, ctx.cwd, result.files.length > 1),
-			]);
+			let result: OutlineTargetResult;
+			try {
+				result = await client.outline(
+					target,
+					params.includePrivate ?? false,
+					params.includeDocs ?? false,
+					names,
+					signal,
+				);
+			} catch (error) {
+				if (
+					target.kind === "file" &&
+					error instanceof AstWorkerError &&
+					(error.code === "outline_failed" || error.code === "response_too_large") &&
+					error.sourceFingerprint
+				) {
+					orientation.recordFatal({
+						path,
+						fingerprint: error.sourceFingerprint,
+						includePrivate: params.includePrivate ?? false,
+						names,
+						code: error.code,
+						message: error.message,
+					});
+				}
+				throw error;
+			}
+			const renderedFiles = result.files.map((file) => {
+				const firstLocator = nextLocator;
+				const text = renderOutlineFile(file, ctx.cwd, result.files.length > 1).join("\n");
+				return {
+					file,
+					text,
+					locatorIds: Array.from({ length: nextLocator - firstLocator }, (_, index) => firstLocator + index),
+				};
+			});
+			const lines = renderedFiles.flatMap((file, index) => [...(index === 0 ? [] : [""]), file.text]);
 			const declarationCount = result.files.reduce(
 				(count, file) =>
 					count +
@@ -603,7 +691,36 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore, t
 				0,
 			);
 			if (declarationCount === 0) lines.push(names.length > 0 ? "No matching declarations" : "No declarations");
-			const output = compact(lines.join("\n"), result.totalByteLength, declarationCount, "outline", result);
+			const completeText = lines.join("\n");
+			const output = compact(completeText, result.totalByteLength, declarationCount, "outline", result);
+			let offset = 0;
+			for (const [index, rendered] of renderedFiles.entries()) {
+				const start = offset;
+				const end = start + rendered.text.length;
+				const visible =
+					!output.details.truncated ||
+					(output.visibleText.length >= end && output.visibleText.slice(start, end) === rendered.text);
+				if (visible) {
+					const renderedBytes = Buffer.byteLength(rendered.text);
+					orientation.recordVisible({
+						path: rendered.file.path,
+						toolCallId,
+						fingerprint: rendered.file.sourceFingerprint,
+						includePrivate: params.includePrivate ?? false,
+						names,
+						diagnostics: rendered.file.diagnostics,
+						locatorIds: rendered.locatorIds,
+						sourceBytesDeflected: Math.max(0, rendered.file.byteLength - renderedBytes),
+					});
+				}
+				offset = end + (index + 1 < renderedFiles.length ? 2 : 0);
+			}
+			orientation.recordOutlineTelemetry(toolCallId, {
+				workerInputBytes: result.totalByteLength,
+				completeRenderedBytes: Buffer.byteLength(completeText),
+				modelVisibleAstBytes: output.details.returnedBytes,
+				temporaryOutputBytes: 0,
+			});
 			return { content: [{ type: "text", text: output.text }], details: output.details };
 		},
 		renderCall(args, theme, context) {
@@ -681,6 +798,9 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore, t
 				throw new Error("Symbol result exceeded the output limit. Request fewer locators.");
 			}
 			if (params.view === "declaration") for (const record of records) record.declarationRetrieved = true;
+			orientation.recordSymbols(
+				records.map((record) => ({ path: record.path, locatorId: record.id, view: params.view })),
+			);
 			return { content: [{ type: "text", text: output.text }], details: output.details };
 		},
 		renderCall(args, theme, context) {
@@ -711,12 +831,19 @@ export function createAstTools(client: AstClient, rowState: ToolRowStateStore, t
 		clear() {
 			locators.clear();
 			nextLocator = 1;
+			orientation.clear();
+		},
+		resetForTree() {
+			locators.clear();
+			nextLocator = 1;
+			orientation.resetGate();
 		},
 		invalidate(paths: readonly string[]) {
 			const changed = new Set(paths.map((path) => resolve(path)));
 			for (const record of locators.values()) {
 				if (changed.has(record.path)) record.stale = true;
 			}
+			orientation.invalidate(paths);
 		},
 	};
 }

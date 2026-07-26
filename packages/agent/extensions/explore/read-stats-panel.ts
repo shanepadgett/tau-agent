@@ -1,7 +1,8 @@
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import { formatSize, type Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, type KeybindingsManager, truncateToWidth, type TUI } from "@earendil-works/pi-tui";
 import { bindingHint, Tabs, ToolPanel, type ToolPanelConfig } from "@shanepadgett/tau-tui";
 import type { ReadCacheMode } from "./read-cache.ts";
+import type { OrientationTelemetry } from "./orientation-state.ts";
 
 export interface ReadSavingsSnapshot {
 	label: string;
@@ -12,6 +13,7 @@ export interface ReadSavingsSnapshot {
 	unchangedCost: number;
 	diffCost: number;
 	counts: Record<ReadCacheMode, number>;
+	gate: OrientationTelemetry;
 }
 
 export function createReadStatsPanel(
@@ -100,6 +102,7 @@ class SavingsBody implements Component {
 	render(width: number): string[] {
 		const avoided = Math.max(0, this.snapshot.baselineTokens - this.snapshot.returnedTokens);
 		const reduction = this.snapshot.baselineTokens > 0 ? avoided / this.snapshot.baselineTokens : 0;
+		const sourceAvoided = Math.max(0, this.snapshot.gate.sourceBytesDeflected - this.snapshot.gate.overflowReadBytes);
 		return [
 			this.theme.bold("Tokens"),
 			metricRow("Without cache", formatTokens(this.snapshot.baselineTokens), width),
@@ -118,6 +121,25 @@ class SavingsBody implements Component {
 			this.theme.bold("Read results"),
 			countRow("Baseline", this.snapshot.counts.baseline, "Unchanged", this.snapshot.counts.unchanged, width),
 			countRow("Changes", this.snapshot.counts.diff, "Recovery", this.snapshot.counts.recovery, width),
+			"",
+			this.theme.bold("AST-first reads"),
+			countRow(
+				"Blocked",
+				this.snapshot.gate.blockedReadAttempts,
+				"Permitted",
+				this.snapshot.gate.permittedReadAttempts,
+				width,
+			),
+			metricRow("Fallback reads", String(this.snapshot.gate.fallbackReadAttempts), width),
+			metricRow("Source avoided", formatSize(sourceAvoided), width),
+			metricRow("Direct returned", formatSize(this.snapshot.gate.directReadBytes), width),
+			metricRow("Overflow reread", formatSize(this.snapshot.gate.overflowReadBytes), width),
+			"",
+			this.theme.bold("AST bytes"),
+			metricRow("Worker input", formatSize(this.snapshot.gate.workerInputBytes), width),
+			metricRow("Full rendered", formatSize(this.snapshot.gate.completeRenderedBytes), width),
+			metricRow("Model visible", formatSize(this.snapshot.gate.modelVisibleAstBytes), width),
+			metricRow("Temporary", formatSize(this.snapshot.gate.temporaryOutputBytes), width),
 			"",
 			truncateToWidth(
 				this.theme.fg("dim", "Estimates include repeated chat history and prompt caching."),

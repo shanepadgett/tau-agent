@@ -1,4 +1,5 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { OrientationState } from "./orientation-state.ts";
 import { readMetaFromMessage, type ReadCacheMode } from "./read-cache.ts";
 import { createReadStatsPanel, type ReadSavingsSnapshot } from "./read-stats-panel.ts";
 
@@ -9,11 +10,16 @@ interface ContextTotals {
 	diffSaved: number;
 }
 
-export async function showReadStats(ctx: ExtensionCommandContext): Promise<void> {
+export async function showReadStats(ctx: ExtensionCommandContext, orientation: OrientationState): Promise<void> {
 	const entries = ctx.sessionManager.getEntries();
 	const branchIds = new Set(ctx.sessionManager.getBranch().map((entry) => entry.id));
-	const current = calculateSnapshot(entries, branchIds, "Current chat");
-	const whole = calculateSnapshot(entries, undefined, "Whole session");
+	const current = calculateSnapshot(
+		entries,
+		branchIds,
+		"Current chat",
+		orientation.telemetry(toolCallIds(entries, branchIds)),
+	);
+	const whole = calculateSnapshot(entries, undefined, "Whole session", orientation.telemetry(undefined));
 	await ctx.ui.custom(
 		(tui, theme, keybindings, done) => createReadStatsPanel(tui, theme, keybindings, done, current, whole),
 		{
@@ -27,6 +33,7 @@ function calculateSnapshot(
 	entries: readonly unknown[],
 	includedIds: ReadonlySet<string> | undefined,
 	label: string,
+	gate: ReadSavingsSnapshot["gate"],
 ): ReadSavingsSnapshot {
 	const states = new Map<string, ContextTotals>();
 	const counts: Record<ReadCacheMode, number> = { baseline: 0, recovery: 0, unchanged: 0, diff: 0 };
@@ -91,7 +98,18 @@ function calculateSnapshot(
 		unchangedCost,
 		diffCost,
 		counts,
+		gate,
 	};
+}
+
+function toolCallIds(entries: readonly unknown[], includedIds: ReadonlySet<string>): Set<string> {
+	const ids = new Set<string>();
+	for (const entry of entries) {
+		if (!isRecord(entry) || typeof entry.id !== "string" || !includedIds.has(entry.id)) continue;
+		if (entry.type !== "message" || !isRecord(entry.message)) continue;
+		if (typeof entry.message.toolCallId === "string") ids.add(entry.message.toolCallId);
+	}
+	return ids;
 }
 
 function isAssistantMessage(value: unknown): value is {

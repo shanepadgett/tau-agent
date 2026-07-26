@@ -11,7 +11,7 @@ import {
 import { createReadCacheStore } from "../../../extensions/explore/read-cache.ts";
 import { createExploreReadTool } from "../../../extensions/explore/read.ts";
 import { createReadSnapshotStore, type ReadSnapshotStore } from "../../../extensions/explore/read-snapshots.ts";
-import { branchExtensionContext, createWorkspace, firstText, testRowState } from "./helpers.ts";
+import { branchExtensionContext, createWorkspace, firstText, testOrientation, testRowState } from "./helpers.ts";
 
 function hash(text: string): string {
 	return createHash("sha256").update(text).digest("hex");
@@ -89,7 +89,7 @@ describe("deterministic complete-file validation", () => {
 			await workspace.write("file.txt", original);
 			const baseline = baselineMessage(workspace.dir, "file.txt", original, "line-numbered");
 			await workspace.write("file.txt", current);
-			const result = await createExploreReadTool(testRowState).execute(
+			const result = await createExploreReadTool(testRowState, testOrientation).execute(
 				"changed",
 				{ path: "file.txt" },
 				undefined,
@@ -120,7 +120,7 @@ describe("deterministic complete-file validation", () => {
 			for (const presentation of ["plain", "line-numbered"] as const) {
 				const message = baselineMessage(workspace.dir, "file.txt", source, presentation);
 				for (const lineNumbers of [false, true]) {
-					const result = await createExploreReadTool(testRowState).execute(
+					const result = await createExploreReadTool(testRowState, testOrientation).execute(
 						`${presentation}:${lineNumbers}`,
 						{ path: "file.txt", lineNumbers },
 						undefined,
@@ -161,7 +161,7 @@ describe("deterministic complete-file validation", () => {
 				},
 			};
 			for (const branch of [[], [{ type: "message", message: malformed }]]) {
-				const result = await createExploreReadTool(testRowState).execute(
+				const result = await createExploreReadTool(testRowState, testOrientation).execute(
 					"fallback",
 					{ path: "file.txt" },
 					undefined,
@@ -188,7 +188,7 @@ describe("deterministic complete-file validation", () => {
 				baselineText: undefined,
 				recovery: false,
 			});
-			const result = await createExploreReadTool(testRowState).execute(
+			const result = await createExploreReadTool(testRowState, testOrientation).execute(
 				"large",
 				{ path: "large.txt" },
 				undefined,
@@ -245,7 +245,7 @@ describe("deterministic complete-file validation", () => {
 					},
 				},
 			];
-			const evicted = await createExploreReadTool(testRowState, undefined, snapshots).execute(
+			const evicted = await createExploreReadTool(testRowState, testOrientation, undefined, snapshots).execute(
 				"evicted",
 				{ path: "file.txt" },
 				undefined,
@@ -263,7 +263,7 @@ describe("deterministic complete-file validation", () => {
 				set: () => false,
 				clear() {},
 			};
-			const stale = await createExploreReadTool(testRowState, undefined, staleSnapshots).execute(
+			const stale = await createExploreReadTool(testRowState, testOrientation, undefined, staleSnapshots).execute(
 				"stale",
 				{ path: "file.txt" },
 				undefined,
@@ -283,7 +283,7 @@ describe("deterministic complete-file validation", () => {
 		const workspace = await createWorkspace();
 		try {
 			await writeFile(workspace.path("binary.dat"), Buffer.from([0xc3, 0x28]));
-			const result = await createExploreReadTool(testRowState).execute(
+			const result = await createExploreReadTool(testRowState, testOrientation).execute(
 				"binary",
 				{ path: "binary.dat" },
 				undefined,

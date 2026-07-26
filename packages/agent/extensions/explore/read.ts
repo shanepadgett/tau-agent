@@ -8,7 +8,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Container, Text } from "@earendil-works/pi-tui";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { Type, type Static } from "typebox";
 import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.js";
@@ -19,6 +19,7 @@ import {
 	selectCompleteFileResponse,
 } from "./full-file-knowledge.ts";
 import { normalizeCountLimit } from "./limits.ts";
+import type { OrientationState } from "./orientation-state.ts";
 import { stripLeadingAt } from "./path-display.ts";
 import {
 	createReadCacheStore,
@@ -204,6 +205,7 @@ function createMeta(
 
 export function createExploreReadTool(
 	rowState: ToolRowStateStore,
+	orientation: OrientationState,
 	cache: ReadCacheStore = createReadCacheStore(),
 	snapshots: ReadSnapshotStore = createReadSnapshotStore(),
 ): ReadDefinition {
@@ -211,7 +213,7 @@ export function createExploreReadTool(
 	return {
 		...baseDefinition,
 		description:
-			"Read a text or image file with optional line ranges and line numbers. Repeated complete-file reads avoid repeating unchanged content and can return a useful diff or current source after changes.",
+			"Read a text or image file with optional line ranges and line numbers. Supported source requires a current model-visible outline first. Repeated complete-file reads avoid repeating unchanged content and can return a useful diff or current source after changes.",
 		parameters: readSchema,
 		async execute(
 			toolCallId: Parameters<ReadExecute>[0],
@@ -222,13 +224,16 @@ export function createExploreReadTool(
 		) {
 			const definition = readDefinitionForCwd(ctx.cwd);
 			const normalized = normalizeReadParams(params);
-			const path = isAbsolute(normalized.path) ? resolve(normalized.path) : resolve(ctx.cwd, normalized.path);
+			const requestedPath = isAbsolute(normalized.path)
+				? resolve(normalized.path)
+				: resolve(ctx.cwd, normalized.path);
+			const path = await realpath(requestedPath);
 			const snapshotEpoch = snapshots.epoch();
 			const buffer = await readFile(path);
 			if (isSupportedImage(buffer)) {
 				return definition.execute(
 					toolCallId,
-					{ path: normalized.path, offset: normalized.offset, limit: normalized.limit },
+					{ path, offset: normalized.offset, limit: normalized.limit },
 					signal,
 					onUpdate,
 					ctx,
@@ -240,18 +245,31 @@ export function createExploreReadTool(
 			try {
 				text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(buffer);
 			} catch {
-				return definition.execute(toolCallId, normalized, signal, onUpdate, ctx);
+				return definition.execute(toolCallId, { ...normalized, path }, signal, onUpdate, ctx);
+			}
+			const hash = createHash("sha256").update(buffer).digest("hex");
+			let permission: "oriented" | "fallback" | "ungated" = "ungated";
+			if (await orientation.supports(path)) {
+				const decision = orientation.check(path, `sha256:${hash}`);
+				if (decision === "blocked") {
+					orientation.recordBlockedRead(toolCallId, path);
+					throw new Error(
+						`Read blocked for ${normalized.path}: supported source has no current model-visible outline. Run outline on ${normalized.path} or an owning subtree, then retry read.`,
+					);
+				}
+				permission = decision;
 			}
 
 			const baseline = baselineText(text, normalized);
 			if (!baseline.cacheable) {
-				return { content: [{ type: "text", text: baseline.text }], details: baseline.details };
+				const result = { content: [{ type: "text" as const, text: baseline.text }], details: baseline.details };
+				orientation.recordRead(toolCallId, path, permission, Buffer.byteLength(baseline.text));
+				return result;
 			}
-			const hash = createHash("sha256").update(buffer).digest("hex");
 			const staleEpoch = !snapshots.isCurrent(snapshotEpoch);
 			const decision = staleEpoch
 				? { baseHash: undefined, baselineText: undefined, recovery: false }
-				: cache.decision(ctx, path, baseline.scopeKey);
+				: cache.decision(ctx, requestedPath, baseline.scopeKey);
 			let output = baseline.text;
 			let mode: ReadCacheMetaV1["mode"] = decision.recovery ? "recovery" : "baseline";
 			let summary = baseline.summary;
@@ -280,8 +298,10 @@ export function createExploreReadTool(
 
 			if (signal?.aborted) throw new Error("Operation aborted");
 			snapshots.set(hash, text, buffer.byteLength, snapshotEpoch);
-			const meta = createMeta(baseline, path, hash, mode, output, decision.baseHash, summary);
-			return withMeta(baseline, meta, output);
+			const meta = createMeta(baseline, requestedPath, hash, mode, output, decision.baseHash, summary);
+			const result = withMeta(baseline, meta, output);
+			orientation.recordRead(toolCallId, path, permission, Buffer.byteLength(output));
+			return result;
 		},
 		renderCall(
 			args: Parameters<ReadRenderCall>[0],

@@ -1,9 +1,20 @@
 import { resolve } from "node:path";
+import { symlink } from "node:fs/promises";
 import { initTheme } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAstTools } from "../../../extensions/explore/ast-tools.ts";
+import {
+	createOrientationState,
+	sourceFingerprint,
+	type OrientationState,
+} from "../../../extensions/explore/orientation-state.ts";
 import { TemporaryOutputStore } from "../../../shared/temporary-output-store.ts";
-import type { AstClient, OutlineTargetResult, SymbolBatchResult } from "../../../extensions/explore/ast-worker.ts";
+import {
+	AstWorkerError,
+	type AstClient,
+	type OutlineTargetResult,
+	type SymbolBatchResult,
+} from "../../../extensions/explore/ast-worker.ts";
 import {
 	createWorkspace,
 	extensionContext,
@@ -60,9 +71,22 @@ function outlineResult(path: string): OutlineTargetResult {
 
 describe("AST exploration tools", () => {
 	let workspace: Workspace;
+	let orientation: OrientationState;
 	beforeAll(() => initTheme());
 
 	beforeEach(async () => {
+		orientation = createOrientationState(async () => [
+			"typeScript",
+			"tsx",
+			"odin",
+			"go",
+			"rust",
+			"cSharp",
+			"java",
+			"kotlin",
+			"swift",
+			"markdown",
+		]);
 		workspace = await createWorkspace();
 		await workspace.write("src/parser.ts", "function parse(): void {}\n");
 	});
@@ -106,6 +130,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 
 		const outlined = await ast.outline.execute(
@@ -117,6 +142,7 @@ describe("AST exploration tools", () => {
 		);
 		expect(firstText(outlined)).toContain("declarations\n1-3(1): function parse(): void");
 		expect(firstText(outlined)).not.toContain("parser.ts (typeScript");
+		expect(orientation.check(path, "blake3:test")).toBe("oriented");
 
 		const symbolArgs = { locators: [1], view: "declaration" as const, contextLines: 2 };
 		const symbolCall = ast.symbol.renderCall?.(symbolArgs, testTheme, renderContext(symbolArgs, false));
@@ -138,6 +164,36 @@ describe("AST exploration tools", () => {
 		expect(firstText(symbol)).not.toContain("parser.ts");
 	});
 
+	it("infers a symlinked file from its canonical target", async () => {
+		const path = workspace.path("src/parser.ts");
+		await symlink("parser.ts", workspace.path("src/parser.txt"));
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
+			outline: vi.fn(async (target) => {
+				expect(target).toEqual({ kind: "file", path, language: "typeScript" });
+				return outlineResult(path);
+			}),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
+		);
+
+		await ast.outline.execute(
+			"outline-symlink",
+			{ path: "src/parser.txt" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		expect(client.outline).toHaveBeenCalledOnce();
+	});
+
 	it("sends directories and public-surface options to the worker", async () => {
 		await workspace.mkdir("src/package");
 		const path = workspace.path("src/package");
@@ -152,6 +208,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		const result = await ast.outline.execute(
 			"outline-1",
@@ -201,7 +258,7 @@ describe("AST exploration tools", () => {
 			shutdown: vi.fn(async () => {}),
 		};
 		const outputStore = new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1);
-		const ast = createAstTools(client, testRowState, outputStore);
+		const ast = createAstTools(client, testRowState, outputStore, orientation);
 		const result = await ast.outline.execute(
 			"recursive",
 			{ path: "src", recursive: true },
@@ -220,7 +277,82 @@ describe("AST exploration tools", () => {
 			expect.any(Object),
 			undefined,
 		);
+		expect(orientation.check(typescriptPath, "blake3:test")).toBe("oriented");
+		expect(orientation.check(goPath, "blake3:test")).toBe("oriented");
 		await outputStore.shutdown();
+	});
+
+	it("does not orient a recursive file whose block is partial", async () => {
+		const path = workspace.path("src/parser.ts");
+		const file = outlineResult(path).files[0];
+		const declaration = file?.items[0];
+		if (!file || !declaration) throw new Error("outline fixture omitted its declaration");
+		declaration.signature = `function parse(): void /* ${"x".repeat(60 * 1024)} */`;
+		const summary = {
+			discoveredFiles: 1,
+			supportedFiles: 1,
+			unsupportedFiles: 0,
+			emittedFiles: 1,
+			unreadableFiles: 0,
+			oversizedFiles: 0,
+			failedFiles: 0,
+			parserDegradedFiles: 0,
+			totalByteLength: file.byteLength,
+			totalLineCount: file.lineCount,
+			fileLimitReached: false,
+			sourceByteLimitReached: false,
+			depthLimitReached: false,
+			elapsedLimitReached: false,
+		};
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outline: vi.fn(),
+			outlineRecursive: vi.fn(async (_path, _private, _docs, _names, callbacks) => {
+				await callbacks.onFile("src/parser.ts", file);
+				return summary;
+			}),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const outputStore = new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1);
+		const ast = createAstTools(client, testRowState, outputStore, orientation);
+		await ast.outline.execute(
+			"partial",
+			{ path: "src", recursive: true },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		expect(orientation.check(path, "blake3:test")).toBe("blocked");
+		await outputStore.shutdown();
+	});
+
+	it("records a fingerprinted fallback only for the typed fatal outline error", async () => {
+		const path = workspace.path("src/parser.ts");
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
+			outline: vi.fn(async () => {
+				throw new AstWorkerError(
+					"outline_failed",
+					"parser failed",
+					sourceFingerprint(Buffer.from("function parse(): void {}\n")),
+				);
+			}),
+			symbol: vi.fn(),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
+		);
+		await expect(
+			ast.outline.execute("fatal", { path: "src/parser.ts" }, undefined, undefined, extensionContext(workspace.dir)),
+		).rejects.toThrow("parser failed");
+		const source = Buffer.from("function parse(): void {}\n");
+		expect(orientation.check(path, sourceFingerprint(source))).toBe("fallback");
 	});
 
 	it("does not expose a disconnected body-only symbol view", () => {
@@ -235,6 +367,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		const schema = ast.symbol.parameters as unknown as {
 			properties?: { view?: { enum?: string[] } };
@@ -255,6 +388,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		const schema = ast.outline.parameters as unknown as {
 			properties?: { includeDocs?: { type?: string; description?: string } };
@@ -314,6 +448,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		const outlined = await ast.outline.execute(
 			"outline-structure",
@@ -367,6 +502,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		const outlined = await ast.outline.execute(
 			"outline-markdown",
@@ -422,6 +558,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		const outlined = await ast.outline.execute(
 			"outline-namespace",
@@ -500,6 +637,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		const outlined = await ast.outline.execute(
 			"outline-go",
@@ -579,6 +717,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		const outlined = await ast.outline.execute(
 			"outline-odin",
@@ -656,6 +795,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		const outlined = await ast.outline.execute(
 			"outline-rust",
@@ -741,6 +881,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		const outlined = await ast.outline.execute(
 			"outline-java",
@@ -819,6 +960,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		const outlined = await ast.outline.execute(
 			"outline-csharp",
@@ -871,6 +1013,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		const outlined = await ast.outline.execute(
 			"outline-kotlin",
@@ -921,6 +1064,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		const outlined = await ast.outline.execute(
 			"outline-swift",
@@ -1066,6 +1210,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		const outlined = await ast.outline.execute(
 			"outline-contracts",
@@ -1113,6 +1258,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		const outlined = await ast.outline.execute(
 			"outline-aliases",
@@ -1148,6 +1294,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		const args = {
 			path: "src/a/very/long/package/parser.ts",
@@ -1201,6 +1348,7 @@ describe("AST exploration tools", () => {
 			client,
 			testRowState,
 			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
 		);
 		await expect(
 			ast.outline.execute(
