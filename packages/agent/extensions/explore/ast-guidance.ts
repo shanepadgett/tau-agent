@@ -57,6 +57,6 @@ AST-backed exploration is available here for ${labels}.
 - For an unfamiliar repository or subtree, use recursive \`outline\` when the active tool supports it. With a non-recursive \`outline\`, find a likely package first and outline that directory.
 - Outline known packages or files before reading their source.
 - Add exact \`names\` and set \`includePrivate\` when the likely declaration or internal surface is known.
-- Use \`symbol\` for exact declaration source, batching locators when useful.
+- Use \`symbol(signatureWithDocs)\` for one documented contract without its implementation body. Use the other symbol views for exact declaration source, batching locators when useful.
 - Use ordinary \`read\` for unsupported files and for source outside declaration boundaries after structural orientation.`;
 }

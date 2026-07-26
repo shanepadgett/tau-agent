@@ -1078,17 +1078,21 @@ fn using_is_used<D: ast_grep_core::Doc>(
 fn attached_doc_start<D: ast_grep_core::Doc>(node: Node<D>, source: &str) -> Option<usize> {
     let mut previous = node.prev()?;
     let mut start = None;
+    let mut next_line = node.start_pos().line();
+    let mut next_start = node.range().start;
     loop {
         if previous.kind() != "comment"
             || !previous.text().trim_start().starts_with("///")
-            || previous.end_pos().line() + 1 < node.start_pos().line()
-            || !source[previous.range().end..node.range().start]
+            || previous.end_pos().line() + 1 < next_line
+            || !source[previous.range().end..next_start]
                 .lines()
                 .all(|line| line.trim().is_empty() || line.trim_start().starts_with("///"))
         {
             break;
         }
         start = Some(previous.range().start);
+        next_line = previous.start_pos().line();
+        next_start = previous.range().start;
         let Some(earlier) = previous.prev() else {
             break;
         };

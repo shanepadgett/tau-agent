@@ -1,6 +1,6 @@
 # Phase 1: Explore Policy and Capability Awareness
 
-Status: implementation unapproved  
+Status: implemented
 Depends on: approved Phase 0 contract  
 Produces: one capability-aware AST exploration policy owned by Explore
 

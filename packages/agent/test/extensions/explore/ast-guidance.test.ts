@@ -38,7 +38,8 @@ describe("effective AST guidance", () => {
 		const result = await guidance();
 		expect(result).toContain("available here for TypeScript");
 		expect(result).toContain("Outline known packages or files before reading their source");
-		expect(result).toContain("Use `symbol` for exact declaration source");
+		expect(result).toContain("other symbol views for exact declaration source");
+		expect(result).toContain("symbol(signatureWithDocs)");
 		expect(result).not.toContain("Odin");
 	});
 

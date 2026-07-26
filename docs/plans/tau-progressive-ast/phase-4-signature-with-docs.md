@@ -1,6 +1,6 @@
 # Phase 4: Documented Signature Retrieval
 
-Status: implementation unapproved  
+Status: implemented
 Depends on: stable outline locators and existing symbol views  
 Produces: `signatureWithDocs`
 

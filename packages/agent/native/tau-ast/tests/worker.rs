@@ -49,7 +49,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 1,
-            "protocolVersion": 6,
+            "protocolVersion": 7,
             "target": { "kind": "file", "path": typescript_path, "language": "typeScript" },
             "includePrivate": true,
             "includeDocs": false,
@@ -65,7 +65,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "handshake",
             "requestId": 2,
-            "protocolVersion": 6
+            "protocolVersion": 7
         }),
     );
     let handshake = read_response(&mut stdout);
@@ -92,7 +92,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 99,
-            "protocolVersion": 6,
+            "protocolVersion": 7,
             "target": { "kind": "file", "path": deep_markdown_path, "language": "markdown" },
             "includePrivate": false,
             "includeDocs": false,
@@ -114,7 +114,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 3,
-            "protocolVersion": 6,
+            "protocolVersion": 7,
             "target": { "kind": "file", "path": typescript_path, "language": "typeScript" },
             "includePrivate": true,
             "includeDocs": false,
@@ -149,7 +149,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 4,
-            "protocolVersion": 6,
+            "protocolVersion": 7,
             "locators": [locator],
             "view": "declaration",
             "contextLines": 0
@@ -172,9 +172,29 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
     send_request(
         &mut worker,
         json!({
+            "operation": "symbol",
+            "requestId": 401,
+            "protocolVersion": 7,
+            "locators": [locator],
+            "view": "signatureWithDocs",
+            "contextLines": 0
+        }),
+    );
+    let documented_symbol = read_response(&mut stdout);
+    assert_eq!(documented_symbol["success"], true);
+    assert!(documented_symbol["result"]["declarations"][0]["diagnostics"].is_array());
+    assert!(
+        documented_symbol["result"]["blocks"][0]["source"]
+            .as_str()
+            .is_some_and(|source| !source.contains("async execute"))
+    );
+
+    send_request(
+        &mut worker,
+        json!({
             "operation": "outline",
             "requestId": 5,
-            "protocolVersion": 6,
+            "protocolVersion": 7,
             "target": { "kind": "file", "path": odin_path, "language": "odin" },
             "includePrivate": true,
             "includeDocs": false,
@@ -209,7 +229,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 100,
-            "protocolVersion": 6,
+            "protocolVersion": 7,
             "locators": [mapped_locator],
             "view": "declarationWithImports",
             "contextLines": 0
@@ -238,7 +258,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
             json!({
                 "operation": "outline",
                 "requestId": index + 6,
-                "protocolVersion": 6,
+                "protocolVersion": 7,
                 "target": {
                     "kind": "file",
                     "path": manifest_dir.join("fixtures").join(fixture),
@@ -422,7 +442,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
                 json!({
                     "operation": "symbol",
                     "requestId": 200,
-                    "protocolVersion": 6,
+                    "protocolVersion": 7,
                     "locators": [locator],
                     "view": "declarationWithImports",
                     "contextLines": 0
@@ -447,7 +467,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
             json!({
                 "operation": "outline",
                 "requestId": request_id,
-                "protocolVersion": 6,
+                "protocolVersion": 7,
                 "target": { "kind": "file", "path": java_path, "language": "java" },
                 "includePrivate": true,
                 "includeDocs": include_docs,
@@ -483,7 +503,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 12,
-            "protocolVersion": 6,
+            "protocolVersion": 7,
             "target": { "kind": "file", "path": local_export_path, "language": "typeScript" },
             "includePrivate": false,
             "includeDocs": false,
@@ -515,7 +535,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "symbol",
             "requestId": 13,
-            "protocolVersion": 6,
+            "protocolVersion": 7,
             "locators": [local_locator],
             "view": "declaration",
             "contextLines": 0
@@ -545,7 +565,7 @@ fn worker_requires_handshake_then_outlines_and_retrieves_a_symbol() {
         json!({
             "operation": "outline",
             "requestId": 300,
-            "protocolVersion": 6,
+            "protocolVersion": 7,
             "target": {
                 "kind": "recursiveDirectory",
                 "path": recursive_path,

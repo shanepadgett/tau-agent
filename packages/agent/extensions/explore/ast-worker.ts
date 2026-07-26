@@ -57,7 +57,7 @@ export interface OutlineEntry {
 	locator?: string;
 }
 
-export type SymbolView = "signature" | "declaration" | "declarationWithImports";
+export type SymbolView = "signature" | "signatureWithDocs" | "declaration" | "declarationWithImports";
 
 export interface OutlineItem extends OutlineEntry {
 	rowKind: "package" | "import" | "declaration" | "export" | "sideEffect";
@@ -119,6 +119,7 @@ export interface SymbolDeclaration {
 	language: AstLanguage;
 	sourceFingerprint: string;
 	declarationRange: SourceRange;
+	diagnostics: string[];
 }
 
 export interface SymbolBlock {
@@ -213,7 +214,7 @@ interface PendingStreamRequest {
 
 type PendingRequest = PendingUnaryRequest | PendingStreamRequest;
 
-const PROTOCOL_VERSION = 6;
+const PROTOCOL_VERSION = 7;
 const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 const STDERR_BYTES = 16 * 1024;
 const HANDSHAKE_TIMEOUT_MS = 2000;

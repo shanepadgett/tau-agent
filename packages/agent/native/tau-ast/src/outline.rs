@@ -40,7 +40,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-const LOCATOR_VERSION: u32 = 2;
+const LOCATOR_VERSION: u32 = 3;
 const MAX_RECURSIVE_FILES: usize = 10_000;
 const MAX_RECURSIVE_SOURCE_BYTES: usize = 256 * 1024 * 1024;
 const MAX_RECURSIVE_DEPTH: usize = 128;
@@ -275,6 +275,7 @@ pub struct SymbolDeclaration {
     pub language: LanguageId,
     pub source_fingerprint: String,
     pub declaration_range: SourceRange,
+    pub diagnostics: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -290,6 +291,7 @@ pub struct SymbolBlock {
 #[serde(rename_all = "camelCase")]
 pub enum SymbolView {
     Signature,
+    SignatureWithDocs,
     Declaration,
     DeclarationWithImports,
 }
@@ -329,6 +331,7 @@ struct SourceLocator {
     path: String,
     language: LanguageId,
     source_fingerprint: String,
+    include_private: bool,
     locator_kind: LocatorKind,
     qualified_name: String,
     declaration_kind: String,
@@ -630,7 +633,13 @@ impl OutlineEngine {
                 LanguageId::Markdown => {}
                 _ => finalize_typescript_signatures(&mut items),
             }
-            finalize_locators(&mut items, &path, language, &source_fingerprint)?;
+            finalize_locators(
+                &mut items,
+                &path,
+                language,
+                &source_fingerprint,
+                include_private,
+            )?;
         }
 
         Ok(OutlineFileResult {
@@ -932,7 +941,7 @@ impl OutlineEngine {
         {
             return Err(SymbolError {
                 code: "unsupported_symbol_view",
-                message: "signature and declarationWithImports views support TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, Swift, and Markdown"
+                message: "signature, signatureWithDocs, and declarationWithImports views support TypeScript, TSX, Odin, Go, Rust, C#, Java, Kotlin, Swift, and Markdown"
                     .to_owned(),
             });
         }
@@ -994,15 +1003,122 @@ impl OutlineEngine {
                 })?;
         }
 
+        let mut reparsed = BTreeMap::<
+            (String, bool),
+            Result<(OutlineFileResult, Option<OutlineFileResult>), String>,
+        >::new();
+        if matches!(view, SymbolView::Signature | SymbolView::SignatureWithDocs) {
+            for (_, locator) in &locators {
+                let key = (locator.path.clone(), locator.include_private);
+                if reparsed.contains_key(&key) {
+                    continue;
+                }
+                let source = sources.get(&locator.path).ok_or_else(|| SymbolError {
+                    code: "symbol_failed",
+                    message: format!("failed to retain source for {}", locator.path),
+                })?;
+                let plain = self.outline_source(
+                    Path::new(&locator.path),
+                    locator.language,
+                    source.as_bytes().to_vec(),
+                    locator.include_private,
+                    false,
+                    &[],
+                );
+                let documented = if matches!(view, SymbolView::SignatureWithDocs) {
+                    Some(self.outline_source(
+                        Path::new(&locator.path),
+                        locator.language,
+                        source.as_bytes().to_vec(),
+                        locator.include_private,
+                        true,
+                        &[],
+                    ))
+                } else {
+                    None
+                };
+                reparsed.insert(
+                    key,
+                    match (plain, documented) {
+                        (Ok(plain), Some(Ok(documented))) => Ok((plain, Some(documented))),
+                        (Ok(plain), None) => Ok((plain, None)),
+                        (Err(error), _) | (_, Some(Err(error))) => Err(error.to_string()),
+                    },
+                );
+            }
+        }
+        let rendered_signatures = locators
+            .iter()
+            .map(|(_, locator)| {
+                if !matches!(view, SymbolView::Signature | SymbolView::SignatureWithDocs) {
+                    return (locator.signature.clone(), Vec::new());
+                }
+                let Some(reparsed) = reparsed.get(&(locator.path.clone(), locator.include_private)) else {
+                    return (
+                        locator.signature.clone(),
+                        vec!["could not reparse attached documentation; returning the stored signature"
+                            .to_owned()],
+                    );
+                };
+                let (plain, documented) = match reparsed {
+                    Ok(results) => results,
+                    Err(error) => {
+                        return (
+                            locator.signature.clone(),
+                            vec![format!(
+                                "could not reparse attached documentation; returning the stored signature: {error}"
+                            )],
+                        );
+                    }
+                };
+                let Some(plain_entry) = matching_entry(plain, locator) else {
+                    return (
+                        locator.signature.clone(),
+                        vec!["could not confidently associate attached documentation with the current declaration; returning the stored signature"
+                            .to_owned()],
+                    );
+                };
+                if matches!(view, SymbolView::Signature) {
+                    return (plain_entry.signature.clone(), Vec::new());
+                }
+                let Some(documented) = documented else {
+                    return (
+                        plain_entry.signature.clone(),
+                        vec!["could not reparse attached documentation; returning the signature"
+                            .to_owned()],
+                    );
+                };
+                let Some(documented_entry) = matching_entry(documented, locator) else {
+                    return (
+                        plain_entry.signature.clone(),
+                        vec!["could not confidently associate attached documentation with the current declaration; returning the signature"
+                            .to_owned()],
+                    );
+                };
+                let diagnostics = if locator.language != LanguageId::Markdown
+                    && documented_entry.signature == plain_entry.signature
+                {
+                    vec!["no attached documentation was identified; nearby comments are not inferred by proximity"
+                        .to_owned()]
+                } else {
+                    Vec::new()
+                };
+                (documented_entry.signature.clone(), diagnostics)
+            })
+            .collect::<Vec<_>>();
         let declarations = locators
             .iter()
-            .map(|(encoded_locator, locator)| SymbolDeclaration {
-                locator: encoded_locator.clone(),
-                path: locator.path.clone(),
-                language: locator.language,
-                source_fingerprint: locator.source_fingerprint.clone(),
-                declaration_range: locator.range.clone(),
-            })
+            .zip(&rendered_signatures)
+            .map(
+                |((encoded_locator, locator), (_, diagnostics))| SymbolDeclaration {
+                    locator: encoded_locator.clone(),
+                    path: locator.path.clone(),
+                    language: locator.language,
+                    source_fingerprint: locator.source_fingerprint.clone(),
+                    declaration_range: locator.range.clone(),
+                    diagnostics: diagnostics.clone(),
+                },
+            )
             .collect::<Vec<_>>();
         let mut padded = Vec::<(String, usize, usize, Vec<usize>)>::new();
         for (index, (_, locator)) in locators.iter().enumerate() {
@@ -1011,11 +1127,12 @@ impl OutlineEngine {
                 message: format!("failed to retain source for {}", locator.path),
             })?;
             let selected = locator.range.clone();
-            let (start_byte, end_byte) = if matches!(view, SymbolView::Signature) {
-                (selected.start_byte, selected.end_byte)
-            } else {
-                padded_range(source.as_bytes(), &selected, context_lines)
-            };
+            let (start_byte, end_byte) =
+                if matches!(view, SymbolView::Signature | SymbolView::SignatureWithDocs) {
+                    (selected.start_byte, selected.end_byte)
+                } else {
+                    padded_range(source.as_bytes(), &selected, context_lines)
+                };
             if let Some((path, _, previous_end, declaration_indexes)) = padded.last_mut()
                 && *path == locator.path
                 && start_byte <= *previous_end
@@ -1033,21 +1150,22 @@ impl OutlineEngine {
                     code: "symbol_failed",
                     message: format!("failed to retain source for {path}"),
                 })?;
-                let block_source = if matches!(view, SymbolView::Signature) {
-                    declaration_indexes
-                        .iter()
-                        .map(|index| locators[*index].1.signature.as_str())
-                        .collect::<Vec<_>>()
-                        .join("\n\n")
-                } else if matches!(view, SymbolView::DeclarationWithImports) {
-                    declaration_indexes
-                        .iter()
-                        .map(|index| declaration_with_imports(source, &locators[*index].1))
-                        .collect::<Vec<_>>()
-                        .join("\n\n")
-                } else {
-                    source[start_byte..end_byte].to_owned()
-                };
+                let block_source =
+                    if matches!(view, SymbolView::Signature | SymbolView::SignatureWithDocs) {
+                        declaration_indexes
+                            .iter()
+                            .map(|index| rendered_signatures[*index].0.as_str())
+                            .collect::<Vec<_>>()
+                            .join("\n\n")
+                    } else if matches!(view, SymbolView::DeclarationWithImports) {
+                        declaration_indexes
+                            .iter()
+                            .map(|index| declaration_with_imports(source, &locators[*index].1))
+                            .collect::<Vec<_>>()
+                            .join("\n\n")
+                    } else {
+                        source[start_byte..end_byte].to_owned()
+                    };
                 Ok(SymbolBlock {
                     path,
                     returned_range: source_range(source.as_bytes(), start_byte, end_byte),
@@ -1062,6 +1180,34 @@ impl OutlineEngine {
             blocks,
         })
     }
+}
+
+fn matching_entry<'a>(
+    file: &'a OutlineFileResult,
+    locator: &SourceLocator,
+) -> Option<&'a OutlineEntry> {
+    for item in &file.items {
+        if entry_matches_locator(&item.entry, locator) {
+            return Some(&item.entry);
+        }
+        if let Some(member) = item
+            .members
+            .iter()
+            .find(|member| entry_matches_locator(&member.entry, locator))
+        {
+            return Some(&member.entry);
+        }
+    }
+    None
+}
+
+fn entry_matches_locator(entry: &OutlineEntry, locator: &SourceLocator) -> bool {
+    entry.qualified_name == locator.qualified_name
+        && entry.ast_kind == locator.declaration_kind
+        && entry.range.start_byte == locator.range.start_byte
+        && entry.range.end_byte == locator.range.end_byte
+        && entry.name_range.start_byte == locator.name_range.start_byte
+        && entry.name_range.end_byte == locator.name_range.end_byte
 }
 
 fn validate_recursive_budgets(budgets: RecursiveBudgets) -> Result<(), Box<dyn Error>> {
@@ -1237,6 +1383,7 @@ fn finalize_locators(
     path: &str,
     language: LanguageId,
     source_fingerprint: &str,
+    include_private: bool,
 ) -> Result<(), serde_json::Error> {
     for item in items {
         if item.row_kind != OutlineRowKind::Declaration {
@@ -1248,6 +1395,7 @@ fn finalize_locators(
             path,
             language,
             source_fingerprint,
+            include_private,
         )?);
         for member in &mut item.members {
             member.entry.locator = Some(encode_locator(
@@ -1255,6 +1403,7 @@ fn finalize_locators(
                 path,
                 language,
                 source_fingerprint,
+                include_private,
             )?);
         }
     }
@@ -1266,12 +1415,14 @@ fn encode_locator(
     path: &str,
     language: LanguageId,
     source_fingerprint: &str,
+    include_private: bool,
 ) -> Result<String, serde_json::Error> {
     Ok(URL_SAFE_NO_PAD.encode(serde_json::to_vec(&SourceLocator {
         version: LOCATOR_VERSION,
         path: path.to_owned(),
         language,
         source_fingerprint: source_fingerprint.to_owned(),
+        include_private,
         locator_kind: LocatorKind::Declaration,
         qualified_name: entry.qualified_name.clone(),
         declaration_kind: entry.ast_kind.clone(),
@@ -1515,6 +1666,15 @@ mod tests {
             .symbol(std::slice::from_ref(locator), SymbolView::Signature, 0)
             .expect("Markdown signature should resolve");
         assert_eq!(signature.blocks[0].source, "## Installation");
+        let documented_signature = engine
+            .symbol(
+                std::slice::from_ref(locator),
+                SymbolView::SignatureWithDocs,
+                0,
+            )
+            .expect("Markdown documented signature should preserve the heading model");
+        assert_eq!(documented_signature.blocks[0].source, "## Installation");
+        assert!(documented_signature.declarations[0].diagnostics.is_empty());
         let declaration = engine
             .symbol(std::slice::from_ref(locator), SymbolView::Declaration, 0)
             .expect("Markdown declaration should resolve");
@@ -1983,6 +2143,15 @@ mod tests {
                 "@logged",
             ),
             (
+                LanguageId::Tsx,
+                "tsx",
+                "/** Service docs. */\n@sealed\nexport class Service {\n  /** Run docs. */\n  @logged\n  run(): void {}\n}\n",
+                "Service",
+                "run",
+                "@sealed",
+                "@logged",
+            ),
+            (
                 LanguageId::Go,
                 "go",
                 "package docs\n\n/* Service docs.\n//go:noescape\n*/\n/*line generated.go:10*/\n//go:noinline\ntype Service struct {\n\t// Run docs.\n\tRun func()\n}\n",
@@ -2021,7 +2190,7 @@ mod tests {
             (
                 LanguageId::CSharp,
                 "cs",
-                "/// Service docs.\n[Obsolete]\npublic class Service {\n    /// Run docs.\n    [Obsolete]\n    public void Run() {}\n}\n",
+                "/// <summary>\n/// Service docs.\n/// </summary>\n[Obsolete]\npublic class Service {\n    /// <summary>\n    /// Run docs.\n    /// </summary>\n    [Obsolete]\n    public void Run() {}\n}\n",
                 "Service",
                 "Run",
                 "[Obsolete]",
@@ -2101,10 +2270,9 @@ mod tests {
                         "/* Service docs."
                     } else if language == LanguageId::Odin {
                         "// Service docs."
-                    } else if matches!(
-                        language,
-                        LanguageId::Rust | LanguageId::CSharp | LanguageId::Swift
-                    ) {
+                    } else if language == LanguageId::CSharp {
+                        "/// <summary>"
+                    } else if matches!(language, LanguageId::Rust | LanguageId::Swift) {
                         "/// Service docs."
                     } else {
                         "/** Service docs. */"
@@ -2126,6 +2294,38 @@ mod tests {
                 .expect("exact member declaration should resolve");
             assert!(exact.blocks[0].source.contains("Run docs."), "{extension}");
 
+            let documented_signature = engine
+                .symbol(
+                    std::slice::from_ref(
+                        member
+                            .entry
+                            .locator
+                            .as_ref()
+                            .expect("member should have a locator"),
+                    ),
+                    SymbolView::SignatureWithDocs,
+                    0,
+                )
+                .expect("documented signature should resolve from a default outline locator");
+            assert!(
+                documented_signature.blocks[0].source.contains("Run docs."),
+                "{extension}"
+            );
+            assert!(
+                documented_signature.blocks[0]
+                    .source
+                    .contains(member_attribute),
+                "{extension}"
+            );
+            assert!(
+                !documented_signature.blocks[0].source.contains("{}"),
+                "{extension}"
+            );
+            assert!(
+                documented_signature.declarations[0].diagnostics.is_empty(),
+                "{extension}"
+            );
+
             let documented = engine
                 .outline(
                     OutlineTarget::File {
@@ -2143,12 +2343,28 @@ mod tests {
                 .find(|item| item.entry.name == item_name)
                 .expect("documented item should remain");
             assert!(documented_item.entry.signature.contains("Service docs."));
+            let documented_member = documented_item
+                .members
+                .iter()
+                .find(|member| member.entry.name == member_name)
+                .expect("documented member should remain");
+            assert!(documented_member.entry.signature.contains("Run docs."));
+            let plain_signature = engine
+                .symbol(
+                    std::slice::from_ref(
+                        documented_member
+                            .entry
+                            .locator
+                            .as_ref()
+                            .expect("documented member should have a locator"),
+                    ),
+                    SymbolView::Signature,
+                    0,
+                )
+                .expect("plain signature should resolve from a documented outline locator");
             assert!(
-                documented_item
-                    .members
-                    .iter()
-                    .find(|member| member.entry.name == member_name)
-                    .is_some_and(|member| member.entry.signature.contains("Run docs."))
+                !plain_signature.blocks[0].source.contains("Run docs."),
+                "{extension}"
             );
 
             let filtered = engine
@@ -2202,6 +2418,277 @@ mod tests {
 
             fs::remove_file(path).expect("documentation fixture should be removable");
         }
+    }
+
+    #[test]
+    fn documented_signatures_do_not_capture_unrelated_comments() {
+        let engine = OutlineEngine::new().expect("outline engine should initialize");
+        let cases = [
+            (
+                LanguageId::TypeScript,
+                "ts",
+                "/** Unrelated note. */\n\nexport function parse(): string { return 'value'; }\n",
+                "parse",
+            ),
+            (
+                LanguageId::Tsx,
+                "tsx",
+                "/** Unrelated note. */\n\nexport function parse(): string { return 'value'; }\n",
+                "parse",
+            ),
+            (
+                LanguageId::Odin,
+                "odin",
+                "package fixture\n\n// Unrelated note.\n\nparse :: proc() -> string { return \"value\" }\n",
+                "parse",
+            ),
+            (
+                LanguageId::Go,
+                "go",
+                "package fixture\n\n// Unrelated note.\n\nfunc Parse() string { return \"value\" }\n",
+                "Parse",
+            ),
+            (
+                LanguageId::Rust,
+                "rs",
+                "/// Unrelated note.\n\npub fn parse() -> &'static str { \"value\" }\n",
+                "parse",
+            ),
+            (
+                LanguageId::CSharp,
+                "cs",
+                "/// Unrelated note.\n\npublic class Parse {}\n",
+                "Parse",
+            ),
+            (
+                LanguageId::Java,
+                "java",
+                "/** Unrelated note. */\n\npublic class Parse {}\n",
+                "Parse",
+            ),
+            (
+                LanguageId::Kotlin,
+                "kt",
+                "/** Unrelated note. */\n\nfun parse(): String = \"value\"\n",
+                "parse",
+            ),
+            (
+                LanguageId::Swift,
+                "swift",
+                "/// Unrelated note.\n\npublic func parse() -> String { \"value\" }\n",
+                "parse",
+            ),
+        ];
+
+        for (language, extension, source, name) in cases {
+            let path = std::env::temp_dir().join(format!(
+                "tau-ast-unrelated-doc-comment-{}.{extension}",
+                std::process::id()
+            ));
+            fs::write(&path, source).expect("documentation fixture should be writable");
+            let outlined = engine
+                .outline(
+                    OutlineTarget::File {
+                        path: path.to_string_lossy().into_owned(),
+                        language,
+                    },
+                    true,
+                    false,
+                    &[],
+                )
+                .expect("fixture should parse");
+            let declaration = outlined.files[0]
+                .items
+                .iter()
+                .find(|item| item.entry.name == name)
+                .expect("declaration should be extracted");
+            let documented = engine
+                .symbol(
+                    std::slice::from_ref(declaration.entry.locator.as_ref().expect("locator")),
+                    SymbolView::SignatureWithDocs,
+                    0,
+                )
+                .expect("documented signature should resolve conservatively");
+
+            assert!(
+                !documented.blocks[0].source.contains("Unrelated note"),
+                "{extension}"
+            );
+            assert_eq!(
+                documented.declarations[0].diagnostics.len(),
+                1,
+                "{extension}"
+            );
+            assert!(
+                documented.declarations[0].diagnostics[0].contains("nearby comments"),
+                "{extension}"
+            );
+            fs::remove_file(path).expect("documentation fixture should be removable");
+        }
+    }
+
+    #[test]
+    fn signature_reparsing_preserves_public_outline_visibility() {
+        let engine = OutlineEngine::new().expect("outline engine should initialize");
+        let path = std::env::temp_dir().join(format!(
+            "tau-ast-public-signature-{}.ts",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "/** Service docs. */\nexport class Service {\n  public run(): void {}\n  private hidden(): void {}\n}\n",
+        )
+        .expect("visibility fixture should be writable");
+        let outlined = engine
+            .outline(
+                OutlineTarget::File {
+                    path: path.to_string_lossy().into_owned(),
+                    language: LanguageId::TypeScript,
+                },
+                false,
+                false,
+                &[],
+            )
+            .expect("public outline should parse");
+        let service = outlined.files[0]
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Service")
+            .expect("public class should be extracted");
+        for view in [SymbolView::Signature, SymbolView::SignatureWithDocs] {
+            let signature = engine
+                .symbol(
+                    std::slice::from_ref(service.entry.locator.as_ref().expect("locator")),
+                    view,
+                    0,
+                )
+                .expect("public signature should resolve");
+            assert!(signature.blocks[0].source.contains("run"));
+            assert!(!signature.blocks[0].source.contains("hidden"));
+        }
+        fs::remove_file(path).expect("visibility fixture should be removable");
+    }
+
+    #[test]
+    fn signature_reparsing_keeps_visibility_separate_within_one_batch() {
+        let engine = OutlineEngine::new().expect("outline engine should initialize");
+        let path = std::env::temp_dir().join(format!(
+            "tau-ast-mixed-visibility-signature-{}.ts",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "/** Service docs. */\nexport class Service {\n  public run(): void {}\n  private hidden(): void {}\n}\n",
+        )
+        .expect("visibility fixture should be writable");
+        let public = engine
+            .outline(
+                OutlineTarget::File {
+                    path: path.to_string_lossy().into_owned(),
+                    language: LanguageId::TypeScript,
+                },
+                false,
+                false,
+                &[],
+            )
+            .expect("public outline should parse");
+        let private = engine
+            .outline(
+                OutlineTarget::File {
+                    path: path.to_string_lossy().into_owned(),
+                    language: LanguageId::TypeScript,
+                },
+                true,
+                false,
+                &[],
+            )
+            .expect("private outline should parse");
+        let public_service = public.files[0]
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Service")
+            .expect("public class should be extracted");
+        let private_hidden = private.files[0]
+            .items
+            .iter()
+            .find(|item| item.entry.name == "Service")
+            .and_then(|item| {
+                item.members
+                    .iter()
+                    .find(|member| member.entry.name == "hidden")
+            })
+            .expect("private member should be extracted");
+        let signatures = engine
+            .symbol(
+                &[
+                    public_service
+                        .entry
+                        .locator
+                        .as_ref()
+                        .expect("public locator")
+                        .clone(),
+                    private_hidden
+                        .entry
+                        .locator
+                        .as_ref()
+                        .expect("private locator")
+                        .clone(),
+                ],
+                SymbolView::Signature,
+                0,
+            )
+            .expect("mixed-visibility signatures should resolve");
+
+        assert!(
+            signatures
+                .declarations
+                .iter()
+                .all(|declaration| declaration.diagnostics.is_empty())
+        );
+        assert_eq!(signatures.blocks[0].source.matches("hidden").count(), 1);
+        fs::remove_file(path).expect("visibility fixture should be removable");
+    }
+
+    #[test]
+    fn rust_documented_signature_excludes_an_interleaved_ordinary_comment() {
+        let engine = OutlineEngine::new().expect("outline engine should initialize");
+        let path = std::env::temp_dir().join(format!(
+            "tau-ast-rust-interleaved-comment-{}.rs",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "/// Parse docs.\n// Unrelated café implementation note.\n#[doc = r#\"// keep raw attribute text\"#]\n#[inline]\npub fn parse() -> usize { 1 }\n",
+        )
+        .expect("Rust documentation fixture should be writable");
+        let outlined = outline_file(&engine, &path, LanguageId::Rust);
+        let parse = outlined
+            .items
+            .iter()
+            .find(|item| item.entry.name == "parse")
+            .expect("Rust function should be extracted");
+        let documented = engine
+            .symbol(
+                std::slice::from_ref(parse.entry.locator.as_ref().expect("locator")),
+                SymbolView::SignatureWithDocs,
+                0,
+            )
+            .expect("Rust documented signature should resolve");
+
+        assert!(documented.blocks[0].source.contains("/// Parse docs."));
+        assert!(
+            documented.blocks[0]
+                .source
+                .contains("#[doc = r#\"// keep raw attribute text\"#]")
+        );
+        assert!(documented.blocks[0].source.contains("#[inline]"));
+        assert!(
+            !documented.blocks[0]
+                .source
+                .contains("Unrelated implementation note")
+        );
+        assert!(documented.declarations[0].diagnostics.is_empty());
+        fs::remove_file(path).expect("Rust documentation fixture should be removable");
     }
 
     #[test]
@@ -3570,7 +4057,16 @@ func Render(source string) string {
                 0,
             )
             .expect("Java signature should resolve");
-        assert_eq!(signature.blocks[0].source, implementation.entry.signature);
+        assert!(
+            signature.blocks[0]
+                .source
+                .starts_with("@Override\npublic Result parse(")
+        );
+        assert!(
+            !signature.blocks[0]
+                .source
+                .contains("Parses one source value.")
+        );
 
         let with_imports = engine
             .symbol(
@@ -4142,6 +4638,46 @@ func Render(source string) string {
     }
 
     #[test]
+    fn rejects_a_mixed_symbol_batch_atomically_when_one_locator_is_stale() {
+        let engine = OutlineEngine::new().expect("outline engine should initialize");
+        let directory = std::env::temp_dir().join(format!(
+            "tau-ast-mixed-stale-symbols-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&directory).expect("symbol fixture directory should be writable");
+        let first_path = directory.join("first.ts");
+        let second_path = directory.join("second.ts");
+        fs::write(&first_path, "export function first() { return 1; }\n")
+            .expect("first symbol fixture should be writable");
+        fs::write(&second_path, "export function second() { return 2; }\n")
+            .expect("second symbol fixture should be writable");
+        let first = outline_file(&engine, &first_path, LanguageId::TypeScript);
+        let second = outline_file(&engine, &second_path, LanguageId::TypeScript);
+        let first_locator = first.items[0]
+            .entry
+            .locator
+            .as_ref()
+            .expect("first locator");
+        let second_locator = second.items[0]
+            .entry
+            .locator
+            .as_ref()
+            .expect("second locator");
+        fs::write(&second_path, "export function second() { return 3; }\n")
+            .expect("second symbol fixture should be mutable");
+
+        let error = engine
+            .symbol(
+                &[first_locator.clone(), second_locator.clone()],
+                SymbolView::Declaration,
+                0,
+            )
+            .expect_err("one stale locator should reject the complete mixed batch");
+        assert_eq!(error.code, "stale_locator");
+        fs::remove_dir_all(directory).expect("symbol fixture directory should be removable");
+    }
+
+    #[test]
     fn marks_declarations_uncertain_when_their_owner_contains_recovery() {
         let engine = OutlineEngine::new().expect("outline rules should compile");
         let temporary = std::env::temp_dir().join(format!(
@@ -4400,19 +4936,32 @@ export { buildThing as createThing, buildThing as makeThing };
     }
 
     #[test]
-    fn recursively_outlines_mixed_languages_in_stable_ignore_aware_order() {
+    fn recursively_outlines_every_language_in_stable_ignore_aware_order() {
         let engine = OutlineEngine::new().expect("outline engine should initialize");
         let temporary =
             std::env::temp_dir().join(format!("tau-ast-recursive-fixture-{}", std::process::id()));
         let nested = temporary.join("nested");
         fs::create_dir_all(&nested).expect("recursive fixture should be writable");
-        fs::write(temporary.join("z.ts"), "export const z = 1;\n").expect("TypeScript fixture");
-        fs::write(nested.join("a.go"), "package nested\n\nfunc A() {}\n").expect("Go fixture");
+        fs::write(temporary.join("a.ts"), "export const a = 1;\n").expect("TypeScript fixture");
+        fs::write(temporary.join("b.tsx"), "export const B = () => <div />;\n")
+            .expect("TSX fixture");
+        fs::write(
+            temporary.join("c.odin"),
+            "package fixture\n\nC :: struct { value: int, }\n",
+        )
+        .expect("Odin fixture");
+        fs::write(temporary.join("d.go"), "package fixture\n\nfunc D() {}\n").expect("Go fixture");
+        fs::write(temporary.join("e.rs"), "pub fn e() {}\n").expect("Rust fixture");
+        fs::write(temporary.join("f.cs"), "public class F {}\n").expect("C# fixture");
+        fs::write(temporary.join("g.java"), "public class G {}\n").expect("Java fixture");
+        fs::write(temporary.join("h.kt"), "fun h() = 1\n").expect("Kotlin fixture");
+        fs::write(temporary.join("i.swift"), "public func i() {}\n").expect("Swift fixture");
+        fs::write(temporary.join("j.md"), "# J\n\nBody.\n").expect("Markdown fixture");
         fs::write(nested.join("ignored.rs"), "pub fn ignored() {}\n").expect("ignored fixture");
         fs::write(temporary.join("README.txt"), "unsupported\n").expect("unsupported fixture");
         fs::write(temporary.join(".gitignore"), "nested/ignored.rs\n").expect("ignore rules");
 
-        let mut paths = Vec::new();
+        let mut files = Vec::new();
         let summary = engine
             .outline_recursive(
                 &temporary.to_string_lossy(),
@@ -4426,16 +4975,34 @@ export { buildThing as createThing, buildThing as makeThing };
                 false,
                 &[],
                 &mut |event| {
-                    if let RecursiveOutlineEvent::File { relative_path, .. } = event {
-                        paths.push(relative_path);
+                    if let RecursiveOutlineEvent::File {
+                        relative_path,
+                        file,
+                    } = event
+                    {
+                        files.push((relative_path, file.language));
                     }
                     Ok(())
                 },
             )
             .expect("recursive outline should complete");
 
-        assert_eq!(paths, ["nested/a.go", "z.ts"]);
-        assert_eq!(summary.emitted_files, 2);
+        assert_eq!(
+            files,
+            [
+                ("a.ts".to_owned(), LanguageId::TypeScript),
+                ("b.tsx".to_owned(), LanguageId::Tsx),
+                ("c.odin".to_owned(), LanguageId::Odin),
+                ("d.go".to_owned(), LanguageId::Go),
+                ("e.rs".to_owned(), LanguageId::Rust),
+                ("f.cs".to_owned(), LanguageId::CSharp),
+                ("g.java".to_owned(), LanguageId::Java),
+                ("h.kt".to_owned(), LanguageId::Kotlin),
+                ("i.swift".to_owned(), LanguageId::Swift),
+                ("j.md".to_owned(), LanguageId::Markdown),
+            ]
+        );
+        assert_eq!(summary.emitted_files, 10);
         assert_eq!(summary.unsupported_files, 1);
         assert_eq!(summary.failed_files, 0);
         fs::remove_dir_all(temporary).expect("recursive fixture should be removable");

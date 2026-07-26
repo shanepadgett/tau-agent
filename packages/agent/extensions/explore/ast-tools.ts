@@ -61,8 +61,8 @@ const symbolParams = Type.Object(
 			minItems: 1,
 			description: "Numeric locators shown in parentheses by outline",
 		}),
-		view: StringEnum(["signature", "declaration", "declarationWithImports"] as const, {
-			description: `Source view to retrieve; ${supportedLanguageLabels} support selective views`,
+		view: StringEnum(["signature", "signatureWithDocs", "declaration", "declarationWithImports"] as const, {
+			description: `Source view to retrieve: signature omits docs and bodies; signatureWithDocs adds attached docs; declaration returns exact source; declarationWithImports adds required imports. ${supportedLanguageLabels} support selective views`,
 		}),
 		contextLines: Type.Optional(
 			Type.Integer({ minimum: 0, description: "Lines of source context before and after each declaration" }),
@@ -499,6 +499,7 @@ export function createAstTools(
 			"Set includePrivate when internal implementation discovery is needed.",
 			"Leave includeDocs off for routine exploration; enable it when documentation comments are needed.",
 			"Treat each parenthesized number after a line range as that declaration's symbol locator.",
+			"Use symbol(signatureWithDocs) when one documented contract is needed without its implementation body.",
 			"Use symbol with several locators when complete declaration source is needed.",
 		],
 		parameters: outlineParams,
@@ -748,8 +749,8 @@ export function createAstTools(
 		name: "symbol",
 		label: "symbol",
 		description:
-			"Return exact declaration source for one or more numeric outline locators, with optional surrounding lines; stale locators fail atomically.",
-		promptSnippet: "Retrieve exact declaration source for several outline locators",
+			"Return signatures, documented signatures, exact declarations, or declarations with required imports for numeric outline locators; stale locators fail atomically.",
+		promptSnippet: "Retrieve signatures or exact declarations for several outline locators",
 		parameters: symbolParams,
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			if (params.contextLines !== undefined && params.view !== "declaration") {
@@ -789,6 +790,12 @@ export function createAstTools(
 				lines.push(
 					...(includePaths ? [formatPathForDisplay(block.path, ctx.cwd)] : []),
 					`${lineRange}(${represented.map((record) => record.id).join(",")}): ${represented.map((record) => record.name).join(", ")}`,
+					...block.declarationIndexes.flatMap((index) => {
+						const declaration = result.declarations[index];
+						if (!declaration) return [];
+						const ids = (requestedByToken.get(declaration.locator) ?? []).map((record) => record.id).join(",");
+						return declaration.diagnostics.map((diagnostic) => `warning (${ids}): ${diagnostic}`);
+					}),
 					block.source,
 				);
 			}

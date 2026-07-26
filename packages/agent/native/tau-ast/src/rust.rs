@@ -176,11 +176,11 @@ pub fn extract_rust_items<D: ast_grep_core::Doc>(
         }
     }
 
-    if !include_docs {
-        for item in &mut items {
-            if item.row_kind != OutlineRowKind::Declaration {
-                continue;
-            }
+    for item in &mut items {
+        if item.row_kind != OutlineRowKind::Declaration {
+            continue;
+        }
+        if !include_docs {
             item.entry.signature = without_rust_docs(&item.entry.signature);
             for member in &mut item.members {
                 member.entry.signature = without_rust_docs(&member.entry.signature);
@@ -397,7 +397,7 @@ fn container_item<D: ast_grep_core::Doc>(
         )
     });
     Some(outline_item(
-        node,
+        node.clone(),
         name_node,
         name.clone(),
         name,
@@ -549,7 +549,7 @@ fn macro_item<D: ast_grep_core::Doc>(
     let body_bytes = macro_body_bytes(node.clone());
     let start_byte = attached_start(node.clone(), source).unwrap_or(node_range.start);
     let mut item = outline_item(
-        node,
+        node.clone(),
         name_node,
         name.clone(),
         name,
@@ -561,7 +561,9 @@ fn macro_item<D: ast_grep_core::Doc>(
         Vec::new(),
     );
     if let Some(body_bytes) = body_bytes {
-        let prefix = source[start_byte..body_bytes.start].trim_end();
+        let prefix =
+            source_without_attached_comments(node.clone(), source, start_byte, body_bytes.start);
+        let prefix = prefix.trim_end();
         let opener = source[body_bytes.start..body_bytes.end]
             .chars()
             .next()
@@ -787,7 +789,13 @@ fn named_member<D: ast_grep_core::Doc>(
                 .or_else(|| body.as_ref().map(Node::range))
                 .map(|body| source_range(source.as_bytes(), body)),
             signature: if let Some(body_bytes) = body_bytes {
-                let prefix = source[start_byte..body_bytes.start].trim_end();
+                let prefix = source_without_attached_comments(
+                    member.clone(),
+                    source,
+                    start_byte,
+                    body_bytes.start,
+                );
+                let prefix = prefix.trim_end();
                 let opener = source[body_bytes.start..body_bytes.end]
                     .chars()
                     .next()
@@ -888,24 +896,39 @@ fn item_signature<D: ast_grep_core::Doc>(
     symbol_type: SymbolType,
 ) -> String {
     let Some(body) = body else {
-        return source[start_byte..node.range().end].trim().to_owned();
+        return source_without_attached_comments(
+            node.clone(),
+            source,
+            start_byte,
+            node.range().end,
+        )
+        .trim()
+        .to_owned();
     };
     if node.kind() == "macro_definition" {
-        let prefix = source[start_byte..body.range().start].trim_end();
+        let prefix =
+            source_without_attached_comments(node.clone(), source, start_byte, body.range().start);
+        let prefix = prefix.trim_end();
         return format!("{prefix} {{ … }}");
     }
     if matches!(symbol_type, SymbolType::Constant | SymbolType::Variable) {
-        let prefix = source[start_byte..body.range().start].trim_end();
+        let prefix =
+            source_without_attached_comments(node.clone(), source, start_byte, body.range().start);
+        let prefix = prefix.trim_end();
         return format!("{prefix} …;");
     }
     if matches!(symbol_type, SymbolType::Function | SymbolType::Method) {
-        return source[start_byte..body.range().start].trim_end().to_owned();
+        return source_without_attached_comments(node, source, start_byte, body.range().start)
+            .trim_end()
+            .to_owned();
     }
     let raw_prefix = &source[start_byte..body.range().start];
-    let prefix = raw_prefix.trim_end();
+    let rendered_prefix =
+        source_without_attached_comments(node.clone(), source, start_byte, body.range().start);
+    let prefix = rendered_prefix.trim_end();
     let separator = if opener_at(body, source) == Some('(') {
         ""
-    } else if raw_prefix[prefix.len()..].contains('\n') {
+    } else if raw_prefix[raw_prefix.trim_end().len()..].contains('\n') {
         "\n"
     } else {
         " "
@@ -930,25 +953,33 @@ fn member_signature<D: ast_grep_core::Doc>(
 ) -> String {
     let column = node.start_pos().column(&node);
     let Some(body) = body else {
-        return dedent(source[start_byte..node.range().end].trim(), column);
+        let signature =
+            source_without_attached_comments(node.clone(), source, start_byte, node.range().end);
+        return dedent(signature.trim(), column);
     };
     if matches!(symbol_type, SymbolType::Constant | SymbolType::Variable) {
-        let prefix = source[start_byte..body.range().start].trim_end();
+        let prefix =
+            source_without_attached_comments(node.clone(), source, start_byte, body.range().start);
+        let prefix = prefix.trim_end();
         return dedent(&format!("{prefix} …;"), column);
     }
     if matches!(symbol_type, SymbolType::Function | SymbolType::Method) {
-        return dedent(source[start_byte..body.range().start].trim_end(), column);
+        let signature =
+            source_without_attached_comments(node.clone(), source, start_byte, body.range().start);
+        return dedent(signature.trim_end(), column);
     }
     if matches!(
         symbol_type,
         SymbolType::Namespace | SymbolType::Struct | SymbolType::Enum | SymbolType::Interface
     ) {
         let raw_prefix = &source[start_byte..body.range().start];
-        let prefix = raw_prefix.trim_end();
+        let rendered_prefix =
+            source_without_attached_comments(node.clone(), source, start_byte, body.range().start);
+        let prefix = rendered_prefix.trim_end();
         let opener = opener_at(body, source);
         let separator = if opener == Some('(') {
             ""
-        } else if raw_prefix[prefix.len()..].contains('\n') {
+        } else if raw_prefix[raw_prefix.trim_end().len()..].contains('\n') {
             "\n"
         } else {
             " "
@@ -960,7 +991,9 @@ fn member_signature<D: ast_grep_core::Doc>(
         };
         return dedent(&signature, column);
     }
-    dedent(source[start_byte..node.range().end].trim(), column)
+    let signature =
+        source_without_attached_comments(node.clone(), source, start_byte, node.range().end);
+    dedent(signature.trim(), column)
 }
 
 fn opener_at<D: ast_grep_core::Doc>(body: &Node<D>, source: &str) -> Option<char> {
@@ -1159,19 +1192,27 @@ fn type_name_node<D: ast_grep_core::Doc>(node: Node<D>) -> Option<Node<D>> {
 
 fn attached_start<D: ast_grep_core::Doc>(node: Node<D>, source: &str) -> Option<usize> {
     let mut previous = node.prev();
-    let mut next_line = node.start_pos().line();
     let mut next_start = node.range().start;
     let mut start = None;
     let mut has_outer_syntax = false;
     while let Some(attached) = previous {
         let kind = attached.kind();
         let is_comment = matches!(kind.as_ref(), "line_comment" | "block_comment");
-        let is_doc = is_comment && {
-            let text = attached.text();
-            text.starts_with("///") || text.starts_with("/**")
+        let is_doc = is_comment && is_rust_doc_comment(attached.text().trim_start());
+        let attached_range = attached.range();
+        let comment_end = if kind == "line_comment" {
+            source[attached_range.start..next_start]
+                .find('\n')
+                .map_or(attached_range.end, |offset| attached_range.start + offset)
+        } else {
+            attached_range.end
         };
+        let gap_newlines = source[comment_end..next_start]
+            .bytes()
+            .filter(|byte| *byte == b'\n')
+            .count();
         if (!is_comment && kind != "attribute_item")
-            || (is_comment && !is_doc && attached.end_pos().line() + 1 < next_line)
+            || (is_comment && gap_newlines > 1)
             || !source[attached.range().end..next_start]
                 .lines()
                 .all(|line| line.trim().is_empty())
@@ -1180,11 +1221,47 @@ fn attached_start<D: ast_grep_core::Doc>(node: Node<D>, source: &str) -> Option<
         }
         start = Some(attached.range().start);
         has_outer_syntax |= is_doc || kind == "attribute_item";
-        next_line = attached.start_pos().line();
         next_start = attached.range().start;
         previous = attached.prev();
     }
     has_outer_syntax.then_some(start).flatten()
+}
+
+fn is_rust_doc_comment(text: &str) -> bool {
+    (text.starts_with("///") && !text.starts_with("////"))
+        || (text.starts_with("/**") && !text.starts_with("/***"))
+}
+
+fn source_without_attached_comments<D: ast_grep_core::Doc>(
+    node: Node<D>,
+    source: &str,
+    start: usize,
+    end: usize,
+) -> String {
+    let mut excluded = Vec::new();
+    let mut previous = node.prev();
+    while let Some(attached) = previous {
+        let range = attached.range();
+        if range.start < start {
+            break;
+        }
+        if matches!(attached.kind().as_ref(), "line_comment" | "block_comment")
+            && !is_rust_doc_comment(attached.text().trim_start())
+            && range.end <= end
+        {
+            excluded.push(range);
+        }
+        previous = attached.prev();
+    }
+    excluded.sort_by_key(|range| range.start);
+    let mut rendered = String::new();
+    let mut cursor = start;
+    for range in excluded {
+        rendered.push_str(&source[cursor..range.start]);
+        cursor = range.end;
+    }
+    rendered.push_str(&source[cursor..end]);
+    rendered
 }
 
 fn without_rust_docs(signature: &str) -> String {
@@ -1206,10 +1283,10 @@ fn without_rust_docs(signature: &str) -> String {
             }
             continue;
         }
-        if trimmed.starts_with("///") {
+        if trimmed.starts_with("///") && !trimmed.starts_with("////") {
             continue;
         }
-        if trimmed.starts_with("/**") {
+        if trimmed.starts_with("/**") && !trimmed.starts_with("/***") {
             if let Some(end) = trimmed.find("*/") {
                 let tail = &trimmed[end + 2..];
                 if !tail.trim().is_empty() {

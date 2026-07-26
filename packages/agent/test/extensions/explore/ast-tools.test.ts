@@ -104,6 +104,7 @@ describe("AST exploration tools", () => {
 					language: "typeScript",
 					sourceFingerprint: "blake3:test",
 					declarationRange: range,
+					diagnostics: [],
 				},
 			],
 			blocks: [{ path, returnedRange: range, declarationIndexes: [0], source }],
@@ -372,7 +373,61 @@ describe("AST exploration tools", () => {
 		const schema = ast.symbol.parameters as unknown as {
 			properties?: { view?: { enum?: string[] } };
 		};
-		expect(schema.properties?.view?.enum).toEqual(["signature", "declaration", "declarationWithImports"]);
+		expect(schema.properties?.view?.enum).toEqual([
+			"signature",
+			"signatureWithDocs",
+			"declaration",
+			"declarationWithImports",
+		]);
+	});
+
+	it("retrieves documented signatures and renders native association diagnostics", async () => {
+		const path = workspace.path("src/parser.ts");
+		const result: SymbolBatchResult = {
+			declarations: [
+				{
+					locator: "native-locator",
+					path,
+					language: "typeScript",
+					sourceFingerprint: "blake3:test",
+					declarationRange: range,
+					diagnostics: ["no attached documentation was identified"],
+				},
+			],
+			blocks: [{ path, returnedRange: range, declarationIndexes: [0], source: "function parse(): void" }],
+		};
+		const client: AstClient = {
+			getGeneration: () => 1,
+			outlineRecursive: vi.fn(),
+			outline: vi.fn(async () => outlineResult(path)),
+			symbol: vi.fn(async (_locators, view) => {
+				expect(view).toBe("signatureWithDocs");
+				return result;
+			}),
+			shutdown: vi.fn(async () => {}),
+		};
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
+		);
+		await ast.outline.execute(
+			"outline-signature-docs",
+			{ path: "src/parser.ts" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		const symbol = await ast.symbol.execute(
+			"symbol-signature-docs",
+			{ locators: [1], view: "signatureWithDocs" },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+		expect(firstText(symbol)).toContain("warning (1): no attached documentation was identified");
+		expect(firstText(symbol)).toContain("function parse(): void");
 	});
 
 	it("exposes documentation as an opt-in outline parameter and call-row option", async () => {
@@ -1243,6 +1298,7 @@ describe("AST exploration tools", () => {
 					language: "typeScript",
 					sourceFingerprint: "blake3:test",
 					declarationRange: range,
+					diagnostics: [],
 				},
 			],
 			blocks: [{ path, returnedRange: range, declarationIndexes: [0], source: "function buildThing() {}" }],

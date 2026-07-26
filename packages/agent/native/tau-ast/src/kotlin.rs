@@ -1571,12 +1571,13 @@ fn recovered_header_public(header: &str) -> bool {
 
 fn attached_doc_start(node_start: usize, source: &str) -> Option<usize> {
     let before = &source[..node_start];
-    let trimmed_end = before.trim_end().len();
-    if !before[..trimmed_end].ends_with("*/") {
+    let comment_end = before.rfind("*/")? + 2;
+    let between = &before[comment_end..];
+    if !between.trim().is_empty() || between.bytes().filter(|byte| *byte == b'\n').count() > 1 {
         return None;
     }
-    let start = before[..trimmed_end].rfind("/*")?;
-    before[start..trimmed_end]
+    let start = before[..comment_end].rfind("/*")?;
+    before[start..comment_end]
         .starts_with("/**")
         .then_some(start)
 }

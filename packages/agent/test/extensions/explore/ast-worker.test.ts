@@ -39,7 +39,7 @@ process.stdin.on("data", (chunk) => {
     if (request.operation === "handshake") {
       send({
         requestId: request.requestId,
-        protocolVersion: 6,
+        protocolVersion: 7,
         success: true,
         result: { kind: "handshake", supportedLanguages: ["typeScript", "odin"] }
       });
@@ -49,15 +49,15 @@ process.stdin.on("data", (chunk) => {
     if (request.target?.path === "hang") continue;
     if (request.operation === "outline") {
       if (request.target.kind === "recursiveDirectory") {
-        send({ requestId: request.requestId, protocolVersion: 6, success: true, result: { kind: "recursiveStart", path: request.target.path, budgets: request.target.budgets } });
-        send({ requestId: request.requestId, protocolVersion: 6, success: true, result: { kind: "recursiveFile", relativePath: "src/one.ts", file: { path: "/repo/src/one.ts", language: "typeScript", sourceFingerprint: "blake3:test", byteLength: 20, lineCount: 1, diagnostics: { errorNodes: 0, missingNodes: 0 }, items: [] } } });
-        send({ requestId: request.requestId, protocolVersion: 6, success: true, result: { kind: "recursiveDiagnostic", relativePath: "src/bad.odin", language: "odin", code: "outlineFailed", message: "bad source" } });
-        send({ requestId: request.requestId, protocolVersion: 6, success: true, result: { kind: "recursiveComplete", discoveredFiles: 3, supportedFiles: 2, unsupportedFiles: 1, emittedFiles: 1, unreadableFiles: 0, oversizedFiles: 0, failedFiles: 1, parserDegradedFiles: 0, totalByteLength: 20, totalLineCount: 1, fileLimitReached: false, sourceByteLimitReached: false, depthLimitReached: false, elapsedLimitReached: false } });
+        send({ requestId: request.requestId, protocolVersion: 7, success: true, result: { kind: "recursiveStart", path: request.target.path, budgets: request.target.budgets } });
+        send({ requestId: request.requestId, protocolVersion: 7, success: true, result: { kind: "recursiveFile", relativePath: "src/one.ts", file: { path: "/repo/src/one.ts", language: "typeScript", sourceFingerprint: "blake3:test", byteLength: 20, lineCount: 1, diagnostics: { errorNodes: 0, missingNodes: 0 }, items: [] } } });
+        send({ requestId: request.requestId, protocolVersion: 7, success: true, result: { kind: "recursiveDiagnostic", relativePath: "src/bad.odin", language: "odin", code: "outlineFailed", message: "bad source" } });
+        send({ requestId: request.requestId, protocolVersion: 7, success: true, result: { kind: "recursiveComplete", discoveredFiles: 3, supportedFiles: 2, unsupportedFiles: 1, emittedFiles: 1, unreadableFiles: 0, oversizedFiles: 0, failedFiles: 1, parserDegradedFiles: 0, totalByteLength: 20, totalLineCount: 1, fileLimitReached: false, sourceByteLimitReached: false, depthLimitReached: false, elapsedLimitReached: false } });
         continue;
       }
       const response = {
         requestId: request.requestId,
-        protocolVersion: 6,
+        protocolVersion: 7,
         success: true,
         result: {
           kind: "outline",
@@ -73,7 +73,7 @@ process.stdin.on("data", (chunk) => {
     }
     send({
       requestId: request.requestId,
-      protocolVersion: 6,
+      protocolVersion: 7,
       success: true,
       result: {
         kind: "symbol",
@@ -82,7 +82,8 @@ process.stdin.on("data", (chunk) => {
           path: "/tmp/file.ts",
           language: "typeScript",
           sourceFingerprint: "blake3:test",
-          declarationRange: { startByte: 0, endByte: 1, start: { line: 0, column: 0 }, end: { line: 0, column: 1 } }
+          declarationRange: { startByte: 0, endByte: 1, start: { line: 0, column: 0 }, end: { line: 0, column: 1 } },
+          diagnostics: []
         }],
         blocks: [{
           path: "/tmp/file.ts",
