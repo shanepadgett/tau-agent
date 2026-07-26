@@ -6,7 +6,7 @@ import {
 	renderContextPruningNudge,
 } from "../../../extensions/context-pruning/render.ts";
 import type { ContextPruneDetailsV2 } from "../../../shared/context-pruning-state.ts";
-import { renderedText, testRowState, testTheme } from "../explore/helpers.ts";
+import { renderedText, testRowState, testTheme } from "../../helpers.ts";
 
 function details(): ContextPruneDetailsV2 {
 	return {

@@ -37,6 +37,20 @@ Tau is a Pi package. Try the whole workspace with `pi -e .`, or only the agent p
 
 Extensions live in `packages/agent/extensions/`. Run `/reload` after changing an extension. Shared terminal UI components live in `packages/tui/src/`.
 
+## Grammar artifacts
+
+Explore's structural engine parses source code through WebAssembly. Most grammar `.wasm` files arrive prebuilt via npm dependencies; kotlin, swift, and odin are committed at `packages/agent/extensions/explore/ast/grammars/` and only need rebuilding when you bump their pins in `manifest.json` there.
+
+Rebuilding on macOS requires a Docker-compatible container runtime — install [OrbStack](https://orbstack.dev/) or [Rancher Desktop](https://rancherdesktop.io/). A local wasm toolchain is neither required nor supported. Then:
+
+```bash
+mise run grammars:build
+```
+
+The host downloads the pinned toolchain and grammar sources; compilation runs offline inside the container. If your environment only allows images from a registry mirror, set `TAU_GRAMMAR_IMAGE` (default `node:24-trixie`), e.g. `TAU_GRAMMAR_IMAGE=<mirror-host>/node:24-trixie`.
+
+On Linux the same task builds natively without a container. CI (`.github/workflows/grammars.yml`) rebuilds the artifacts and fails on byte drift, so a forgotten rebuild cannot land silently.
+
 ## Publishing
 
 Both publishable packages use the same version. The TUI package publishes first because the agent depends on it.

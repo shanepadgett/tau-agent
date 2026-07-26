@@ -109,7 +109,7 @@ describe("cold subagent request integration", () => {
 			},
 			ui: { notify() {} },
 		} as unknown as ExtensionContext;
-		const extensionPath = join(import.meta.dirname, "../../../extensions/explore/index.ts");
+		const extensionPath = join(import.meta.dirname, "../../../extensions/subagent/index.ts");
 		const pi = {
 			getAllTools: () => [{ name: "read", sourceInfo: { path: extensionPath } }],
 		} as unknown as ExtensionAPI;

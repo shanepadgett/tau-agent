@@ -12,7 +12,7 @@ import {
 	type ExtensionAPI,
 	type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { createCompleteFileMeta } from "../explore/full-file-knowledge.ts";
+import { createCompleteFileMeta } from "../../shared/full-file-knowledge.ts";
 import type { AgentDefinition } from "./agents.ts";
 import { emptySubagentResumeState, type RetainedTurnOutcome, type SubagentResumeState } from "./resume.ts";
 import {

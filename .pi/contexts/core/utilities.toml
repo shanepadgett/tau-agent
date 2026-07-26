@@ -1,11 +1,13 @@
 name = "Shared utilities"
-description = "Reusable repository, text, range, description, bounded-output, and durable storage primitives"
+description = "Reusable repository, text, range, description, bounded-output, file-reading, and durable storage primitives"
 
 [all]
 description = "Every general-purpose shared utility"
 files = [
   "packages/agent/shared/description.ts",
+  "packages/agent/shared/autoread.ts",
   "packages/agent/shared/bounded-text-result.ts",
+  "packages/agent/shared/full-file-knowledge.ts",
   "packages/agent/shared/git.ts",
   "packages/agent/shared/jsonl-store.ts",
   "packages/agent/shared/ranges.ts",

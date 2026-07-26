@@ -9,26 +9,17 @@ import { createContextPruningPreviewWidget } from "./widgets/context-pruning.ts"
 import { createFindPreviewWidget } from "./widgets/find.ts";
 import { createGrepPreviewWidget } from "./widgets/grep.ts";
 import { framePreviewWidget } from "./widgets/layout.ts";
-import {
-	createInsertDeclarationPreviewWidget,
-	createRenameDeclarationPreviewWidget,
-	createReplaceBodyPreviewWidget,
-	createReplaceDeclarationPreviewWidget,
-} from "./widgets/locator-edits.ts";
 import { createLsPreviewWidget } from "./widgets/ls.ts";
 import { createOutlinePreviewWidget } from "./widgets/outline.ts";
 import { createPatchPreviewWidget } from "./widgets/patch.ts";
 import { createPublishPreviewWidget } from "./widgets/publish.ts";
 import { createReadPreviewWidget } from "./widgets/read.ts";
-import { createReadStatsPreviewOverlay } from "./widgets/read-stats.ts";
 import {
 	createCalleesPreviewWidget,
 	createCallersPreviewWidget,
 	createImplementationsPreviewWidget,
 	createReferencesPreviewWidget,
-	createTestsPreviewWidget,
 } from "./widgets/relationships.ts";
-import { createSymbolPreviewWidget } from "./widgets/symbol.ts";
 import { createTabsListPreviewWidget } from "./widgets/tabs-list.ts";
 import { createToolPanelPreviewWidget } from "./widgets/tool-panel.ts";
 import { createTurnBudgetPreviewWidget } from "./widgets/turn-budget.ts";
@@ -50,19 +41,13 @@ const STORIES: readonly PreviewStory[] = [
 	{ label: "find — row states", createWidget: createFindPreviewWidget },
 	{ label: "grep — row states", createWidget: createGrepPreviewWidget },
 	{ label: "implementations — row states", createWidget: createImplementationsPreviewWidget },
-	{ label: "insert_declaration — row states", createWidget: createInsertDeclarationPreviewWidget },
 	{ label: "ls — row states", createWidget: createLsPreviewWidget },
 	{ label: "outline — row states", createWidget: createOutlinePreviewWidget },
 	{ label: "patch — row states", createWidget: createPatchPreviewWidget },
 	{ label: "publish — activity panel", createWidget: createPublishPreviewWidget },
 	{ label: "read — row states", createWidget: createReadPreviewWidget },
 	{ label: "references — row states", createWidget: createReferencesPreviewWidget },
-	{ label: "rename_declaration — row states", createWidget: createRenameDeclarationPreviewWidget },
-	{ label: "replace_body — row states", createWidget: createReplaceBodyPreviewWidget },
-	{ label: "replace_declaration — row states", createWidget: createReplaceDeclarationPreviewWidget },
-	{ label: "symbol — row states", createWidget: createSymbolPreviewWidget },
 	{ label: "tabs-list — Tabs and SelectableList", createWidget: createTabsListPreviewWidget },
-	{ label: "tests — row states", createWidget: createTestsPreviewWidget },
 	{ label: "tool-panel — shell states", createWidget: createToolPanelPreviewWidget },
 	{ label: "turn-budget — marker states", createWidget: createTurnBudgetPreviewWidget },
 ];
@@ -97,7 +82,6 @@ export default function toolPreview(pi: ExtensionAPI): void {
 
 			const label = await ctx.ui.select("Tool preview", [
 				"context — selection overlay",
-				"read-stats — savings overlay",
 				...STORIES.map((story) => story.label),
 			]);
 			const story = STORIES.find((item) => item.label === label);
@@ -105,13 +89,6 @@ export default function toolPreview(pi: ExtensionAPI): void {
 				await ctx.ui.custom((tui, theme, _keys, done) => createContextPreviewOverlay(tui, theme, done), {
 					overlay: true,
 					overlayOptions: { anchor: "center", width: "70%", minWidth: 64, maxHeight: "80%", margin: 2 },
-				});
-				return;
-			}
-			if (label === "read-stats — savings overlay") {
-				await ctx.ui.custom((tui, theme, keys, done) => createReadStatsPreviewOverlay(tui, theme, keys, done), {
-					overlay: true,
-					overlayOptions: { anchor: "center", width: "54%", minWidth: 50, maxHeight: "85%", margin: 2 },
 				});
 				return;
 			}

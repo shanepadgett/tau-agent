@@ -14,7 +14,7 @@ anchors = [ "packages/agent/shared/glob.ts" ]
 [selection]
 description = "Tabbed context selector, context-sync status, hover previews, and autoread injection"
 files = [ ".pi/extensions/tool-preview/widgets/context.ts", "packages/agent/extensions/context/index.ts", "packages/agent/extensions/context/panel.ts" ]
-anchors = [ "packages/agent/shared/events.ts", "packages/agent/shared/injected-context.ts" ]
+anchors = [ "packages/agent/shared/autoread.ts", "packages/agent/shared/events.ts", "packages/agent/shared/injected-context.ts" ]
 
 [maintenance]
 description = "Automatic validation, settings, evidence, write-scope enforcement, and subagent-driven catalog synchronization"

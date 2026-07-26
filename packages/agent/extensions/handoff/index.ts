@@ -6,7 +6,7 @@ import {
 	type ExtensionAPI,
 	serializeConversation,
 } from "@earendil-works/pi-coding-agent";
-import { prepareAutoreadMessage, type AutoreadDetails } from "../explore/autoread.ts";
+import { prepareAutoreadMessage, type AutoreadDetails } from "../../shared/autoread.ts";
 import { generateToolValidated, resolveCandidates } from "../../shared/model-fallback/index.ts";
 import { errorText } from "../../shared/text.ts";
 import { buildHandoffRequest, type HandoffDraft, handoffDraftFromToolInput, HANDOFF_TOOL } from "./model.ts";

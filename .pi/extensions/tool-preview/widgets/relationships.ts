@@ -175,36 +175,3 @@ export function createImplementationsPreviewWidget(tui: TUI, cwd: string, theme:
 		},
 	]);
 }
-
-export function createTestsPreviewWidget(tui: TUI, cwd: string, theme: Theme): Container {
-	return createAstToolPreviewWidget(tui, cwd, theme, "tests", [
-		{
-			name: "tests",
-			sampleTitle: "Affected Tests",
-			args: { path: "packages/agent", locator: 2, resultLimit: 20 },
-			target: "packages/agent",
-			options: "[2 limit=20]",
-			result: [
-				"extensions/explore/ls.test.ts:12(100) [test, test]",
-				"  await createLsTool(rowState);",
-				"",
-				"extensions/explore/ls.test.ts:48(101) [test, test]",
-				"  await createLsTool(rowState);",
-			].join("\n"),
-			declarationCount: 2,
-			returnedBytes: 420,
-			avoidedBytes: 2_199_580,
-		},
-		{
-			name: "tests",
-			sampleTitle: "No Tests",
-			args: { path: "packages/agent/extensions/explore", locator: 7, resultLimit: 20 },
-			target: "packages/agent/extensions/explore",
-			options: "[7 limit=20]",
-			result: "No direct tests found",
-			declarationCount: 0,
-			returnedBytes: 160,
-			avoidedBytes: 151_840,
-		},
-	]);
-}

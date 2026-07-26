@@ -225,9 +225,6 @@ function changedCatalogPaths(before: Map<string, string>, after: Map<string, str
 // Ensure evidence tool name stays aligned with agent definition tooling.
 export const CONTEXT_SYNC_REQUIRED_TOOLS = [
 	"read",
-	"ls",
-	"find",
-	"grep",
 	"bash",
 	"patch",
 	CONTEXT_SYNC_EVIDENCE_TOOL,

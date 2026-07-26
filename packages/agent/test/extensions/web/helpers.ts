@@ -1,6 +1,6 @@
-import { extensionContext as createExtensionContext } from "../explore/helpers.ts";
+import { extensionContext as createExtensionContext } from "../../helpers.ts";
 
-export { renderedText, renderContext, testRowState, testTheme } from "../explore/helpers.ts";
+export { renderedText, renderContext, testRowState, testTheme } from "../../helpers.ts";
 
 export interface FetchCallInit {
 	headers?: Headers | Record<string, string> | Array<[string, string]>;

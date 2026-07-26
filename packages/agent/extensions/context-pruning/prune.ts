@@ -2,8 +2,8 @@ import { resolve } from "node:path";
 import { type ExtensionContext, type SessionEntry } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import type { ContextPruneDeferredFileV2, ContextPruneDetailsV2 } from "../../shared/context-pruning-state.ts";
-import { prepareAutoreadMessage, type PreparedAutoreadMessage } from "../explore/autoread.ts";
-import { MAX_COMPLETE_FILE_SNAPSHOT_BYTES } from "../explore/full-file-knowledge.ts";
+import { prepareAutoreadMessage, type PreparedAutoreadMessage } from "../../shared/autoread.ts";
+import { MAX_COMPLETE_FILE_SNAPSHOT_BYTES } from "../../shared/full-file-knowledge.ts";
 
 export const contextPruneParameters = Type.Object(
 	{

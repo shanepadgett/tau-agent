@@ -47,7 +47,6 @@ files = [
 ]
 anchors = [
   "packages/agent/extensions/context/panel.ts",
-  "packages/agent/extensions/explore/read-stats-panel.ts",
   "packages/agent/extensions/manage-sessions/manager-ui.ts",
   "packages/agent/extensions/qna/panel.ts",
 ]
@@ -80,7 +79,7 @@ files = [
   "packages/tui/src/text.ts",
 ]
 anchors = [
-  "packages/agent/extensions/explore/autoread.ts",
+  "packages/agent/shared/autoread.ts",
   "packages/agent/extensions/ideas/browser.ts",
   "packages/agent/extensions/qna/choice-question-body.ts",
   "packages/agent/extensions/run-summary/index.ts",

@@ -4,6 +4,7 @@ import {
 	type ExtensionContext,
 	type SessionEntry,
 } from "@earendil-works/pi-coding-agent";
+import { registerAutoread } from "../../shared/autoread.ts";
 import {
 	replayContextPruningState,
 	setContextPruningEnabled,
@@ -52,6 +53,7 @@ export default function contextPruningExtension(pi: ExtensionAPI): void {
 		terminalTierReached: false,
 	};
 	const rowState = createToolRowStateStore(pi, "context-pruning.tool-row-state");
+	registerAutoread(pi, rowState);
 	pi.registerMessageRenderer<ContextPruningNudgeDetailsV3>(NUDGE_MESSAGE_TYPE, (message, _options, theme) =>
 		renderContextPruningNudge(message.details, theme),
 	);

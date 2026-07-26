@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import type { ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { executeContextPrune } from "../../../extensions/context-pruning/prune.ts";
-import { createWorkspace } from "../explore/helpers.ts";
+import { createWorkspace } from "../../helpers.ts";
 
 function result(id: string, name: string, text = "result"): ToolResultMessage {
 	return {

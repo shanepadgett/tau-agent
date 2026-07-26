@@ -51,5 +51,6 @@ files = [
   "packages/agent/test/extensions/web/html.test.ts",
   "packages/agent/test/extensions/web/tools.test.ts",
   "packages/agent/test/extensions/web/webfetch.test.ts",
+  "packages/agent/test/helpers.ts",
 ]
 anchors = [ "packages/agent/shared/tool-row-state.ts" ]

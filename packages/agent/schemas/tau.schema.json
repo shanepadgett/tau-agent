@@ -86,47 +86,6 @@
 					},
 					"additionalProperties": false
 				},
-				"explore": {
-					"type": "object",
-					"required": [
-						"readGate"
-					],
-					"properties": {
-						"readGate": {
-							"type": "object",
-							"required": [
-								"includeGlobs",
-								"excludeGlobs"
-							],
-							"properties": {
-								"includeGlobs": {
-									"type": "array",
-									"items": {
-										"type": "string"
-									},
-									"default": [
-										"**/*"
-									],
-									"description": "Working-directory-relative supported source paths that require a structural attempt before read."
-								},
-								"excludeGlobs": {
-									"type": "array",
-									"items": {
-										"type": "string"
-									},
-									"default": [
-										"**/*.md",
-										"**/*.markdown",
-										"**/*.mdown"
-									],
-									"description": "Working-directory-relative paths excluded from the Explore read gate. Exclusions win."
-								}
-							},
-							"additionalProperties": false
-						}
-					},
-					"additionalProperties": false
-				},
 				"footer": {
 					"type": "object",
 					"properties": {

@@ -2,18 +2,8 @@
 name: scout
 description: Tiered, AST-first local discovery of files, symbols, data flow, constraints, and unknowns without changes
 tools:
-  - ls
-  - find
-  - grep
-  - api_discover
-  - ast_search
-  - outline
-  - symbol
-  - references
-  - callers
-  - callees
-  - implementations
-  - tests
+  - read
+  - bash
 names:
   - Pathfinder
   - Trailblazer

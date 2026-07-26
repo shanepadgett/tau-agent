@@ -1,5 +1,4 @@
 import { fauxAssistantMessage, fauxThinking, fauxToolCall, type ToolResultMessage } from "@earendil-works/pi-ai";
-import { resolve } from "node:path";
 import {
 	createEventBus,
 	type ContextEvent,
@@ -9,9 +8,8 @@ import {
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { replayReadCache } from "../../../extensions/explore/read-cache.ts";
 import { setContextPruningEnabled, type ContextPruneDetailsV2 } from "../../../shared/context-pruning-state.ts";
-import { createWorkspace } from "../explore/helpers.ts";
+import { createWorkspace } from "../../helpers.ts";
 
 const settings = vi.hoisted(() => ({
 	enabled: true,
@@ -300,14 +298,6 @@ describe("context pruning extension wiring", () => {
 					}),
 					options: { deliverAs: "steer" },
 				},
-			]);
-			const replay = replayReadCache(
-				test.sent.map(({ message }) => ({ type: "custom_message", ...(message as Record<string, unknown>) })),
-				workspace.dir,
-			);
-			expect([...replay.completeFileChains.keys()]).toEqual([
-				resolve(workspace.dir, "current.ts"),
-				resolve(workspace.dir, "other.ts"),
 			]);
 		} finally {
 			await workspace.cleanup();

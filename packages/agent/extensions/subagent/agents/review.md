@@ -2,18 +2,8 @@
 name: review
 description: Perform an adversarial, read-only review for correctness, runtime risks, duplication, and over- or under-engineering
 tools:
-  - ls
-  - find
-  - grep
-  - api_discover
-  - ast_search
-  - outline
-  - symbol
-  - references
-  - callers
-  - callees
-  - implementations
-  - tests
+  - read
+  - bash
 names:
   - Auditor
   - Inspector
