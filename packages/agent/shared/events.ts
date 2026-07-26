@@ -25,6 +25,7 @@ export type TauAgentEvents = {
 			move?: { from: string; to: string };
 			linesAdded: number;
 			linesRemoved: number;
+			resultingFingerprint: string | null;
 			snapshotRanges?: Array<{ startLine: number; endLine: number }>;
 		}>;
 	};

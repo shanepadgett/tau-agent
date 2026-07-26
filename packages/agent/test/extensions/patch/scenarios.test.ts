@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { cp, lstat, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
@@ -83,6 +84,14 @@ describe("patch fixture scenarios", async () => {
 				expect(summary.status).toBe(expectedSummary.status);
 				expect(summary.changes.map(changeKey)).toEqual(expectedSummary.changes ?? []);
 				expect(summary.failures).toHaveLength(expectedSummary.failureCount ?? 0);
+				for (const change of summary.changes) {
+					if (change.kind === "delete") {
+						expect(change.resultingFingerprint).toBeNull();
+						continue;
+					}
+					const source = await readFile(join(workspace, change.path));
+					expect(change.resultingFingerprint).toBe(`sha256:${createHash("sha256").update(source).digest("hex")}`);
+				}
 			} finally {
 				await rm(workspace, { recursive: true, force: true });
 			}

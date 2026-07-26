@@ -1,12 +1,16 @@
-# Phase 9: Progressive Exploration Policy Ratification
+# Phase 10: Progressive Exploration Policy Ratification
 
 Status: implementation unapproved  
-Depends on: observed use of Phases 1 through 8  
+Depends on: observed use of Phases 1 through 9  
 Produces: an evidence-backed final exploration policy
 
 ## Current policy under review
 
-Tau's rollout policy requires one complete model-visible outline at the current fingerprint before official whole-file or ranged reads of supported source. It has no tiny-file exemption. Public-only and exact-name-filtered outlines satisfy orientation. Overflow-only and partial blocks do not. Fatal per-file AST failures can create a fingerprinted read fallback. Missing worker capability disables the gate.
+Tau's rollout policy requires a current structural attempt before official whole-file or ranged reads of configured source. Explore applies the gate only to worker-supported paths that match its include globs and no exclude glob. Markdown is excluded by default while its AST tools remain available.
+
+A completed direct-file outline or structural search qualifies at the exact file fingerprint, including zero-result and truncated-preview responses. API candidates, structural matches, symbol declarations, relationship locations, and editable scopes qualify the files they represent. Result records still qualify when bounded rendering moves them to temporary overflow. Background traversal or scanning alone does not qualify every visited file. Invalid requests, cancellations, and failures without a trustworthy fingerprint do not qualify. Fatal per-file AST failures can create a fingerprinted read fallback. Missing worker capability disables the gate.
+
+A successful Tau `patch` may also permit a complete-file cached diff when the model-visible branch retains the prior complete-file baseline and the mutation event identifies the exact resulting fingerprint. This permit does not preserve stale AST locators or let an external edit bypass current-source checks.
 
 The intended mature workflow is:
 
@@ -20,13 +24,14 @@ orient
 → use textual source when structural access cannot answer safely
 ```
 
-Phase 9 decides whether recorded behavior justifies keeping or revising that policy. Do not tighten or relax the gate as an incidental change in another phase.
+Phase 10 decides whether recorded behavior justifies keeping or revising that policy. Do not tighten or relax the gate as an incidental change in another phase.
 
 ## Evidence required
 
 Collect real session cases covering:
 
-- supported tiny files where orientation helped or created waste;
+- configured tiny files where a structural attempt helped or created waste;
+- include and exclude glob choices, especially teams that gate Markdown explicitly;
 - targeted reads needed for formatting, comments, or source outside declaration boundaries;
 - recovered and fatal parser failures in every supported language;
 - lexical queries where `grep` was more accurate or cheaper than structural tools;
@@ -34,6 +39,8 @@ Collect real session cases covering:
 - implementation changes with direct caller and test discovery;
 - locator edits across implementation and test files;
 - stale-source and ambiguous-reference failures;
+- direct-file and result-based structural attempts used to satisfy the read gate;
+- post-patch cached diffs, including missing or pruned baselines and later external edits;
 - recursive overflow use, including later reads from temporary files;
 - missing-worker behavior; and
 - shell escape use when official tools could not complete the task.
@@ -59,7 +66,7 @@ Performance evidence may record cold worker startup, first parse by grammar, war
 
 ## Review questions
 
-1. Does the first-outline rule cause avoidable failures or repeated overhead in tiny supported files?
+1. Does the structural-attempt rule avoid repeated orientation work without allowing one broad background scan to permit unrelated files?
 2. Which targeted reads remain the safest way to inspect formatting, comments, or non-declaration source?
 3. Does the fatal-parser fallback trigger only when structural access is unusable?
 4. When is lexical `grep` the correct tool rather than a structural substitute?
@@ -68,7 +75,9 @@ Performance evidence may record cold worker startup, first parse by grammar, war
 7. Do editable-scope locators cover framework callbacks and test structures accurately enough?
 8. Do locator edits fail safely on stale and ambiguous input?
 9. Are read statistics measuring model-visible context rather than worker or temporary-file volume?
-10. Does any supported language have adapter quality too weak for mandatory gating?
+10. Does any supported language or configured file class have adapter quality too weak for mandatory gating?
+11. Do known-patch diff permits remain tied to retained model knowledge and the exact resulting fingerprint?
+12. Are include and exclude globs understandable enough to tune gated file classes without creating accidental coverage gaps?
 
 ## Decision procedure
 
@@ -79,7 +88,7 @@ Performance evidence may record cold worker startup, first parse by grammar, war
 5. Update Explore guidance, read-gate behavior, `/read-stats`, Explore docs, and Tau help together.
 6. Record the final policy in maintained product or architecture documentation.
 
-Changing the no-size-exemption rule requires explicit evidence. Shell guidance may prefer dedicated tools but must not claim unrestricted shell access is enforceable. No bypass setting is introduced without separate approval.
+Changing the no-size-exemption rule requires explicit evidence. Shell guidance may prefer dedicated tools but must not claim unrestricted shell access is enforceable. Glob configuration is the file-class policy surface; no per-call bypass is introduced without separate approval.
 
 ## Likely files
 
@@ -98,4 +107,4 @@ Before this phase is complete, run its applicable acceptance workflow against al
 
 ## Completion
 
-Phase 9 is complete when evidence supports an explicit keep-or-revise decision, the chosen policy has regression coverage and maintained documentation, and temporary planning evidence can be removed.
+Phase 10 is complete when evidence supports an explicit keep-or-revise decision, the chosen policy has regression coverage and maintained documentation, and temporary planning evidence can be removed.

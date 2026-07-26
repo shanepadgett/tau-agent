@@ -1,4 +1,4 @@
-# Phase 8: Locator-Based Edits
+# Phase 9: Locator-Based Edits
 
 Status: implementation unapproved  
 Depends on: relationship certainty and editable-scope locators  
@@ -41,7 +41,7 @@ Every operation must:
 - use Pi's per-file mutation queue in deterministic path order;
 - preserve encoding and line-ending behavior already guaranteed by patch;
 - emit Tau's normal file-mutation events;
-- invalidate every affected locator and orientation record;
+- invalidate every affected locator and stale structural-attempt record;
 - report all changed paths and invalidated locator IDs; and
 - return a bounded verification diff or exact changed source.
 
@@ -84,7 +84,7 @@ Do not create a second filesystem mutation implementation inside the AST worker.
 - Stale source stops every operation before file mutation.
 - Ambiguous rename references remain unchanged and are reported.
 - Concurrent writes serialize through the per-file mutation queue.
-- Mutation events invalidate old locators and orientation records.
+- Mutation events invalidate old locators and structural-attempt records.
 - Verification output identifies every changed path and remains within Pi limits.
 - An implementation-and-test change can be discovered, retrieved, edited, and verified without textual `grep`, ranged `read`, or whole-file `read` for supported source.
 
@@ -94,4 +94,4 @@ Before this phase is complete, run its applicable acceptance workflow against al
 
 ## Completion
 
-Phase 8 is complete when Tau can safely apply the core declaration and impact-edit workflow through stale-safe structural identity while preserving its existing mutation, event, and verification guarantees.
+Phase 9 is complete when Tau can safely apply the core declaration and impact-edit workflow through stale-safe structural identity while preserving its existing mutation, event, and verification guarantees.

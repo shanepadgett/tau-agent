@@ -117,6 +117,7 @@ pub enum ApiProvenance {
 pub struct ApiCandidate {
     pub locator: String,
     pub language: LanguageId,
+    pub source_fingerprint: String,
     pub name: String,
     pub qualified_name: String,
     pub symbol_type: SymbolType,
@@ -297,6 +298,7 @@ impl OutlineEngine {
                     &item.entry.name,
                     file.language,
                     &file.path,
+                    &file.source_fingerprint,
                     declaration_visibility(file.language, &item.entry.signature, item.is_exported),
                     !typescript && file.language != LanguageId::Markdown && item.is_exported,
                 ) {
@@ -308,6 +310,7 @@ impl OutlineEngine {
                         &item.entry.name,
                         file.language,
                         &file.path,
+                        &file.source_fingerprint,
                         declaration_visibility(
                             file.language,
                             &member.entry.signature,
@@ -573,6 +576,7 @@ fn candidate_from_entry(
     owner_name: &str,
     language: LanguageId,
     defining_file: &str,
+    source_fingerprint: &str,
     visibility: ApiVisibility,
     source_exported: bool,
 ) -> Option<ApiCandidate> {
@@ -599,6 +603,7 @@ fn candidate_from_entry(
     Some(ApiCandidate {
         locator,
         language,
+        source_fingerprint: source_fingerprint.to_owned(),
         name: entry.name.clone(),
         qualified_name: entry.qualified_name.clone(),
         symbol_type: entry.symbol_type,

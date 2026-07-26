@@ -19,7 +19,7 @@ import {
 	selectCompleteFileResponse,
 } from "./full-file-knowledge.ts";
 import { normalizeCountLimit } from "./limits.ts";
-import type { OrientationState } from "./orientation-state.ts";
+import type { OrientationState, ReadPermission } from "./orientation-state.ts";
 import { stripLeadingAt } from "./path-display.ts";
 import {
 	createReadCacheStore,
@@ -28,6 +28,7 @@ import {
 	type ReadCacheStore,
 } from "./read-cache.ts";
 import { createReadSnapshotStore, type ReadSnapshotStore } from "./read-snapshots.ts";
+import exploreSettings, { matchesExploreReadGate, type ExploreReadGateSettings } from "./settings.ts";
 
 const readSchema = Type.Object({
 	path: Type.String({ description: "Path to the file to read (relative or absolute)" }),
@@ -208,12 +209,13 @@ export function createExploreReadTool(
 	orientation: OrientationState,
 	cache: ReadCacheStore = createReadCacheStore(),
 	snapshots: ReadSnapshotStore = createReadSnapshotStore(),
+	readGate: () => ExploreReadGateSettings = () => exploreSettings.defaults.readGate,
 ): ReadDefinition {
 	const baseDefinition = readDefinitionForCwd(process.cwd());
 	return {
 		...baseDefinition,
 		description:
-			"Read a text or image file with optional line ranges and line numbers. Supported source requires a current model-visible outline first. Repeated complete-file reads avoid repeating unchanged content and can return a useful diff or current source after changes.",
+			"Read a text or image file with optional line ranges and line numbers. Configured supported source requires a current structural attempt first. Repeated complete-file reads avoid repeating unchanged content and can return a useful diff or current source after changes.",
 		parameters: readSchema,
 		async execute(
 			toolCallId: Parameters<ReadExecute>[0],
@@ -248,57 +250,72 @@ export function createExploreReadTool(
 				return definition.execute(toolCallId, { ...normalized, path }, signal, onUpdate, ctx);
 			}
 			const hash = createHash("sha256").update(buffer).digest("hex");
-			let permission: "oriented" | "fallback" | "ungated" = "ungated";
-			if (await orientation.supports(path)) {
-				const decision = orientation.check(path, `sha256:${hash}`);
-				if (decision === "blocked") {
-					orientation.recordBlockedRead(toolCallId, path);
-					throw new Error(
-						`Read blocked for ${normalized.path}: supported source has no current model-visible outline. Run outline on ${normalized.path} or an owning subtree, then retry read.`,
-					);
-				}
-				permission = decision;
-			}
-
 			const baseline = baselineText(text, normalized);
-			if (!baseline.cacheable) {
-				const result = { content: [{ type: "text" as const, text: baseline.text }], details: baseline.details };
-				orientation.recordRead(toolCallId, path, permission, Buffer.byteLength(baseline.text));
-				return result;
-			}
 			const staleEpoch = !snapshots.isCurrent(snapshotEpoch);
-			const decision = staleEpoch
+			const cacheDecision = staleEpoch
 				? { baseHash: undefined, baselineText: undefined, recovery: false }
 				: cache.decision(ctx, requestedPath, baseline.scopeKey);
 			let output = baseline.text;
-			let mode: ReadCacheMetaV1["mode"] = decision.recovery ? "recovery" : "baseline";
+			let mode: ReadCacheMetaV1["mode"] = cacheDecision.recovery ? "recovery" : "baseline";
 			let summary = baseline.summary;
 
-			if (baseline.completeFile) {
+			if (baseline.cacheable && baseline.completeFile) {
 				const selected = selectCompleteFileResponse({
 					displayPath: normalized.path,
 					currentText: text,
 					currentHash: hash,
 					fullText: baseline.text,
 					totalLines: baseline.totalLines,
-					recovery: decision.recovery,
-					baseHash: decision.baseHash,
+					recovery: cacheDecision.recovery,
+					baseHash: cacheDecision.baseHash,
 					baselineText:
-						decision.baselineText ??
-						(decision.baseHash === undefined ? undefined : snapshots.get(decision.baseHash)),
+						cacheDecision.baselineText ??
+						(cacheDecision.baseHash === undefined ? undefined : snapshots.get(cacheDecision.baseHash)),
 				});
 				output = selected.text;
 				mode = selected.mode;
 				summary = selected.summary;
-			} else if (!decision.recovery && decision.baseHash === hash) {
+			} else if (baseline.cacheable && !cacheDecision.recovery && cacheDecision.baseHash === hash) {
 				output = `unchanged, lines ${baseline.startLine}-${baseline.endLine} of ${baseline.totalLines}`;
 				mode = "unchanged";
 				summary = output;
 			}
 
+			let permission: ReadPermission = "ungated";
+			if ((await orientation.supports(path)) && matchesExploreReadGate(path, ctx.cwd, readGate())) {
+				const fingerprint = `sha256:${hash}`;
+				const gateDecision = orientation.check(path, fingerprint);
+				if (gateDecision === "blocked") {
+					const patchDiffPermitted =
+						baseline.cacheable &&
+						baseline.completeFile &&
+						normalized.offset === undefined &&
+						normalized.limit === undefined &&
+						!cacheDecision.recovery &&
+						cacheDecision.baselineText !== undefined &&
+						(mode === "diff" || mode === "unchanged") &&
+						orientation.checkPatch(path, fingerprint);
+					if (!patchDiffPermitted) {
+						orientation.recordBlockedRead(toolCallId, path);
+						throw new Error(
+							`Read blocked for ${normalized.path}: configured source has no current structural attempt. Use exact-name outline, focused api_discover, file-scoped ast_search, or symbol with a fresh locator, then retry read.`,
+						);
+					}
+					permission = "postPatchDiff";
+				} else {
+					permission = gateDecision;
+				}
+			}
+
+			if (!baseline.cacheable) {
+				const result = { content: [{ type: "text" as const, text: baseline.text }], details: baseline.details };
+				orientation.recordRead(toolCallId, path, permission, Buffer.byteLength(baseline.text));
+				return result;
+			}
+
 			if (signal?.aborted) throw new Error("Operation aborted");
 			snapshots.set(hash, text, buffer.byteLength, snapshotEpoch);
-			const meta = createMeta(baseline, requestedPath, hash, mode, output, decision.baseHash, summary);
+			const meta = createMeta(baseline, requestedPath, hash, mode, output, cacheDecision.baseHash, summary);
 			const result = withMeta(baseline, meta, output);
 			orientation.recordRead(toolCallId, path, permission, Buffer.byteLength(output));
 			return result;

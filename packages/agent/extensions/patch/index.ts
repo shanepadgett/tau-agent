@@ -165,6 +165,7 @@ export default function patchExtension(pi: ExtensionAPI): void {
 					move: change.move,
 					linesAdded: change.linesAdded,
 					linesRemoved: change.linesRemoved,
+					resultingFingerprint: change.resultingFingerprint,
 					snapshotRanges: change.snapshotRanges,
 				})),
 			});

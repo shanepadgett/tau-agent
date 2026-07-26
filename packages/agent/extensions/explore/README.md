@@ -2,7 +2,7 @@
 
 Explore is Tau's first-party filesystem exploration extension.
 
-It exists so agents can inspect paths, discover files, search text, inspect declarations in supported source languages, and read exact source with compact model payloads and readable tool rows. The official `read` tool requires a current visible outline before it returns supported source. Unsupported files and unavailable workers keep the ordinary read path. Autoread establishes complete-file knowledge while that source remains in active context. Later reads can return an unchanged marker or a smaller diff instead of resending the file.
+It exists so agents can inspect paths, discover files, search text, inspect declarations in supported source languages, and read exact source with compact model payloads and readable tool rows. For configured supported source, the official `read` tool requires a current structural attempt for that exact file fingerprint. Direct file outlines and searches qualify, along with files returned by `symbol`, `api_discover`, structural search, and relationship tools. Markdown is ungated by default. Unsupported files and unavailable workers keep the ordinary read path. Autoread establishes complete-file knowledge while that source remains in active context. Later reads can return an unchanged marker or a smaller diff instead of resending the file. A successful Tau patch can return a trusted cached complete-file diff without another structural attempt when the current branch still contains the prior complete-file baseline and the resulting fingerprint matches.
 
 When the source baseline is no longer available, such as after compaction or a cold subagent resume, `read` safely returns the current full source.
 
@@ -24,4 +24,4 @@ For supported source, use the cheapest useful step:
 8. Send several locators to the other `symbol` views for exact declarations.
 9. Use `references`, `callers`, `callees`, `implementations`, or `tests` to expand a declaration into direct impact and retrievable editable scopes.
 10. Add context lines when the edit needs nearby source.
-11. Use `read` after a visible outline when cross-cutting logic, exact formatting, parser gaps, or source outside declaration boundaries requires the file. Fatal per-file parser failures allow a fingerprinted fallback read.
+11. Use `read` after a qualifying structural attempt when cross-cutting logic, exact formatting, parser gaps, or source outside declaration boundaries requires the file. Fatal per-file parser failures allow a fingerprinted fallback read.

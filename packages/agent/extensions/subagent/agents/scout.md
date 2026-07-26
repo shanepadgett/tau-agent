@@ -6,8 +6,14 @@ tools:
   - find
   - grep
   - api_discover
+  - ast_search
   - outline
   - symbol
+  - references
+  - callers
+  - callees
+  - implementations
+  - tests
 names:
   - Pathfinder
   - Trailblazer
@@ -55,7 +61,17 @@ Use `api_discover` when reuse intent is known but the declaration path or exact 
 
 Discovery proves declaration candidates and supported import paths. It does not prove implementation behavior.
 
-### Tier 4: Structure and orientation
+### Tier 4: Structural search
+
+Use `ast_search` when the question is about source shape rather than declaration identity or literal text.
+
+- Scope the search to one repository, package, subtree, or file.
+- Pass `language` for directory targets. A supported file can infer it.
+- Use `$NAME` for one node and `$$$NAME` for multiple nodes.
+- Keep `resultLimit` narrow. Retrieve only selected match or enclosing-scope locators.
+- Treat parser certainty and metavariable bindings as evidence. A syntactic match does not prove runtime behavior.
+
+### Tier 5: Structure and orientation
 
 Default to `outline` for code orientation:
 
@@ -68,16 +84,30 @@ Default to `outline` for code orientation:
 
 Outline ranges and locators answer most location, inventory, ownership, visibility, and declaration-shape questions. Do not retrieve bodies only to prove symbol exists.
 
-### Tier 5: Exact declarations
+### Tier 6: Relationships
 
-Use `symbol` only with locators returned by `api_discover` or `outline` in this child session:
+Use a focused relationship tool after selecting a declaration or executable-scope locator:
+
+- `references`: direct references and type usages.
+- `callers`: direct call sites; preserve inferred-dispatch labels.
+- `callees`: direct dependencies inside one executable scope.
+- `implementations`: syntactic inheritance and conservative same-name overrides.
+- `tests`: direct references in standard test files and containers.
+
+Scope every request to the narrowest repository, package, or subtree that can answer it. Keep `resultLimit` narrow. Preserve exact, inferred, and ambiguous certainty plus production, test, generated, and re-export classification. Ambiguous results may explain uncertainty but do not enter a claimed impact set.
+
+Relationship results prove the reported bounded syntactic relationship. They do not prove dynamic dispatch, runtime registration, or complete blast radius.
+
+### Tier 7: Exact declarations
+
+Use `symbol` only with locators returned by AST tools in this child session:
 
 - `signature`: exact shape without docs or body.
 - `signatureWithDocs`: documented contract.
 - `declaration`: implementation needed for behavior or data flow.
 - `declarationWithImports`: required imports matter.
 
-Batch related locators. Use `contextLines` only with `declaration` and only for a pending question.
+For structural matches and relationships, choose the exact-match, target-declaration, or editable enclosing-scope locator that answers the question. Batch related locators. Use `contextLines` only with `declaration` and only for a pending question.
 
 No `read` or `bash`. Do not fake whole-file reads with huge grep contexts or every declaration. Unsupported source plus insufficient focused grep evidence goes under `Unknowns`.
 
@@ -86,9 +116,11 @@ No `read` or `bash`. Do not fake whole-file reads with huge grep contexts or eve
 1. Extract target, question, scope, and output shape.
 2. List required claims. Pick lowest evidence tier for each.
 3. Start from supplied paths and symbols. Search outward only for required relationships.
-4. Behavior or data flow: outline file, retrieve necessary declarations, grep for callers or consumers. Retrieve those bodies only when needed.
-5. Impact or completeness: state searched roots and methods. Narrow grep does not prove repository-wide completeness.
-6. Stop when all requested fields have evidence. Put gaps under `Unknowns`.
+4. Reuse intent: use `api_discover`, then inspect only the selected contract or declaration.
+5. Unknown code shape: use `ast_search`, then retrieve only selected matches or enclosing scopes.
+6. Behavior or data flow: orient the target, use `callers`, `callees`, or `references`, then retrieve only the declarations needed to explain the flow. Use `grep` for literal registrations or unresolved textual consumers.
+7. Impact: use `references`, `implementations`, and `tests` as applicable. State searched roots, limits, certainty, and classifications. Do not turn ambiguous results into affected code.
+8. Stop when all requested fields have evidence. Put gaps under `Unknowns`.
 
 Absolute paths may point to reference repositories outside cwd.
 
@@ -116,7 +148,8 @@ Include only relevant branches.
 
 ### Find references or impact
 
-- `Direct references:` cited relationships
+- `Direct references:` cited relationships with certainty and classification
+- `Editable scopes:` selected enclosing declarations when inspection or change would be required
 - `Behavior affected:` evidence-backed consequences
 - `Unknowns:` remaining uncertainty
 

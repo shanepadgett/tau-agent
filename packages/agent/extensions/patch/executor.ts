@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { access, mkdir, readFile, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
@@ -11,6 +12,7 @@ export interface ApplyPatchChange {
 	move?: { from: string; to: string };
 	linesAdded: number;
 	linesRemoved: number;
+	resultingFingerprint: string | null;
 	snapshotRanges?: Array<{ startLine: number; endLine: number }>;
 }
 
@@ -80,6 +82,10 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
 	if (signal?.aborted) throw new Error("Operation aborted");
 }
 
+function fingerprint(source: string): string {
+	return `sha256:${createHash("sha256").update(source, "utf8").digest("hex")}`;
+}
+
 async function pathExists(path: string): Promise<boolean> {
 	try {
 		await access(path);
@@ -136,6 +142,7 @@ async function stageWholeFile(
 			path: op.path,
 			linesAdded: op.linesAdded,
 			linesRemoved,
+			resultingFingerprint: fingerprint(op.content),
 			snapshotRanges: lineCount > 0 ? [{ startLine: 1, endLine: Math.min(lineCount, 120) }] : undefined,
 		},
 		async commit() {
@@ -156,6 +163,7 @@ async function stageDelete(cwd: string, op: Extract<PatchOperation, { type: "del
 			path: op.path,
 			linesAdded: 0,
 			linesRemoved: countLogicalLines(current),
+			resultingFingerprint: null,
 		},
 		async commit() {
 			await unlink(target);
@@ -180,6 +188,7 @@ async function stageUpdate(cwd: string, op: Extract<PatchOperation, { type: "upd
 				path: op.path,
 				linesAdded: op.linesAdded,
 				linesRemoved: op.linesRemoved,
+				resultingFingerprint: fingerprint(next),
 				snapshotRanges: result?.snapshotRanges,
 			},
 			async commit() {
@@ -203,6 +212,7 @@ async function stageUpdate(cwd: string, op: Extract<PatchOperation, { type: "upd
 			move: { from: op.path, to: movePath },
 			linesAdded: op.linesAdded,
 			linesRemoved: op.linesRemoved,
+			resultingFingerprint: fingerprint(next),
 			snapshotRanges: result?.snapshotRanges,
 		},
 		async commit() {

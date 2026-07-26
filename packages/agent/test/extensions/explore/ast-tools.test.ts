@@ -13,6 +13,7 @@ import {
 	AstWorkerError,
 	type ApiDiscoveryResult,
 	type AstClient,
+	type AstSearchSummary,
 	type OutlineTargetResult,
 	type RelationshipResult,
 	type SymbolBatchResult,
@@ -81,6 +82,35 @@ function astClient(overrides: Partial<AstClient>): AstClient {
 		search: vi.fn(),
 		symbol: vi.fn(),
 		shutdown: vi.fn(async () => {}),
+		...overrides,
+	};
+}
+
+function astSearchSummary(overrides: Partial<AstSearchSummary> = {}): AstSearchSummary {
+	return {
+		filesDiscovered: 1,
+		filesFiltered: 0,
+		languageFilteredFiles: 0,
+		literalFilteredFiles: 0,
+		filesRead: 1,
+		filesParsed: 1,
+		filesSearched: 1,
+		unreadableFiles: 0,
+		oversizedFiles: 0,
+		failedFiles: 0,
+		parserDegradedFiles: 0,
+		sourceBytes: 200,
+		matchesFound: 1,
+		matchesReturned: 1,
+		resultLimit: 10,
+		resultLimitReached: false,
+		literalPrefilterApplied: true,
+		potentialKindPrefilterApplied: true,
+		diagnosticsOmitted: 0,
+		fileLimitReached: false,
+		sourceByteLimitReached: false,
+		depthLimitReached: false,
+		elapsedLimitReached: false,
 		...overrides,
 	};
 }
@@ -156,7 +186,7 @@ describe("AST exploration tools", () => {
 		);
 		expect(firstText(outlined)).toContain("declarations\n1-3(1): function parse(): void");
 		expect(firstText(outlined)).not.toContain("parser.ts (typeScript");
-		expect(orientation.check(path, "blake3:test")).toBe("oriented");
+		expect(orientation.check(path, "blake3:test")).toBe("directOutline");
 
 		const symbolArgs = { locators: [1], view: "declaration" as const, contextLines: 2 };
 		const symbolCall = ast.symbol.renderCall?.(symbolArgs, testTheme, renderContext(symbolArgs, false));
@@ -186,6 +216,7 @@ describe("AST exploration tools", () => {
 				{
 					locator: "discovery-locator",
 					language: "typeScript",
+					sourceFingerprint: "blake3:test",
 					name: "blendColor",
 					qualifiedName: "blendColor",
 					symbolType: "function",
@@ -274,6 +305,7 @@ describe("AST exploration tools", () => {
 		expect(text).toContain("parser.ts:1-3(1): blendColor — function");
 		expect(text).toContain('caller: import { blendColor } from "./mod.ts"; use blendColor');
 		expect(text).toContain("summary: 3 files scanned, 8 declarations considered, 1 results returned");
+		expect(orientation.check(path, "blake3:test")).toBe("apiCandidate");
 		await ast.symbol.execute(
 			"symbol-discovered",
 			{ locators: [1], view: "signatureWithDocs" },
@@ -290,10 +322,12 @@ describe("AST exploration tools", () => {
 				path: workspace.path("src"),
 				language: "typeScript" as const,
 				pattern: "parse($ARG)",
+				targetSourceFingerprint: null,
 				matches: [
 					{
 						relativePath: "parser.ts",
 						language: "typeScript" as const,
+						sourceFingerprint: "blake3:test",
 						range,
 						preview: "parse(input)",
 						previewTruncated: false,
@@ -317,31 +351,7 @@ describe("AST exploration tools", () => {
 					},
 				],
 				diagnostics: [],
-				summary: {
-					filesDiscovered: 1,
-					filesFiltered: 0,
-					languageFilteredFiles: 0,
-					literalFilteredFiles: 0,
-					filesRead: 1,
-					filesParsed: 1,
-					filesSearched: 1,
-					unreadableFiles: 0,
-					oversizedFiles: 0,
-					failedFiles: 0,
-					parserDegradedFiles: 0,
-					sourceBytes: 200,
-					matchesFound: 1,
-					matchesReturned: 1,
-					resultLimit: 10,
-					resultLimitReached: false,
-					literalPrefilterApplied: true,
-					potentialKindPrefilterApplied: true,
-					diagnosticsOmitted: 0,
-					fileLimitReached: false,
-					sourceByteLimitReached: false,
-					depthLimitReached: false,
-					elapsedLimitReached: false,
-				},
+				summary: astSearchSummary(),
 			})),
 			symbol: vi.fn(async (tokens) => ({
 				declarations: [
@@ -373,6 +383,7 @@ describe("AST exploration tools", () => {
 		expect(firstText(searched)).toContain("parser.ts:1-3(1)");
 		expect(firstText(searched)).toContain('$ARG = "input"');
 		expect(firstText(searched)).toContain("enclosing 1-3(2): function_declaration");
+		expect(orientation.check(path, "blake3:test")).toBe("structuralMatch");
 		await ast.symbol.execute(
 			"search-symbol",
 			{ locators: [1], view: "declaration" },
@@ -381,6 +392,45 @@ describe("AST exploration tools", () => {
 			extensionContext(workspace.dir),
 		);
 		expect(client.symbol).toHaveBeenCalledWith(["match-locator"], "declaration", 0, undefined);
+	});
+
+	it("records a completed zero-match direct-file search at its reported fingerprint", async () => {
+		const path = workspace.path("src/parser.ts");
+		const client = astClient({
+			search: vi.fn(async () => ({
+				path,
+				language: "typeScript" as const,
+				pattern: "missing($ARG)",
+				targetSourceFingerprint: "blake3:zero-match",
+				matches: [],
+				diagnostics: [],
+				summary: astSearchSummary({
+					filesFiltered: 1,
+					literalFilteredFiles: 1,
+					filesParsed: 0,
+					filesSearched: 0,
+					matchesFound: 0,
+					matchesReturned: 0,
+				}),
+			})),
+		});
+		const ast = createAstTools(
+			client,
+			testRowState,
+			new TemporaryOutputStore(workspace.dir, 1024 * 1024, 4 * 1024 * 1024, 1),
+			orientation,
+		);
+
+		const searched = await ast.ast_search.execute(
+			"search-zero",
+			{ path: "src/parser.ts", pattern: "missing($ARG)", resultLimit: 10 },
+			undefined,
+			undefined,
+			extensionContext(workspace.dir),
+		);
+
+		expect(firstText(searched)).toContain("No structural matches");
+		expect(orientation.check(path, "blake3:zero-match")).toBe("structuralMatch");
 	});
 
 	it("expands declaration relationships into retrievable editable-scope locators", async () => {
@@ -394,6 +444,7 @@ describe("AST exploration tools", () => {
 				{
 					relativePath: "parser.ts",
 					language: "typeScript",
+					sourceFingerprint: "blake3:test",
 					range,
 					relationshipKind: "reference",
 					certainty: "exact",
@@ -402,8 +453,10 @@ describe("AST exploration tools", () => {
 					classification: "production",
 					targetLocator: "native-locator",
 					targetPath: path,
+					targetSourceFingerprint: "blake3:test",
 					candidateLocators: ["native-locator"],
 					candidatePaths: [path],
+					candidateSourceFingerprints: ["blake3:test"],
 					competingCandidatesOmitted: 0,
 					actionable: true,
 					enclosingScope: {
@@ -480,6 +533,7 @@ describe("AST exploration tools", () => {
 		);
 		expect(firstText(related)).toContain("parser.ts:1-3 [reference, exact, production]");
 		expect(firstText(related)).toContain("enclosing 1-3(2): caller");
+		expect(orientation.check(path, "blake3:test")).toBe("relationshipScope");
 		await ast.symbol.execute(
 			"relationship-scope",
 			{ locators: [2], view: "declaration" },
@@ -591,12 +645,12 @@ describe("AST exploration tools", () => {
 			expect.any(Object),
 			undefined,
 		);
-		expect(orientation.check(typescriptPath, "blake3:test")).toBe("oriented");
-		expect(orientation.check(goPath, "blake3:test")).toBe("oriented");
+		expect(orientation.check(typescriptPath, "blake3:test")).toBe("directOutline");
+		expect(orientation.check(goPath, "blake3:test")).toBe("directOutline");
 		await outputStore.shutdown();
 	});
 
-	it("does not orient a recursive file whose block is partial", async () => {
+	it("records a recursive structural attempt even when its preview block is partial", async () => {
 		const path = workspace.path("src/parser.ts");
 		const file = outlineResult(path).files[0];
 		const declaration = file?.items[0];
@@ -633,7 +687,7 @@ describe("AST exploration tools", () => {
 			undefined,
 			extensionContext(workspace.dir),
 		);
-		expect(orientation.check(path, "blake3:test")).toBe("blocked");
+		expect(orientation.check(path, "blake3:test")).toBe("directOutline");
 		await outputStore.shutdown();
 	});
 
@@ -658,7 +712,7 @@ describe("AST exploration tools", () => {
 			ast.outline.execute("fatal", { path: "src/parser.ts" }, undefined, undefined, extensionContext(workspace.dir)),
 		).rejects.toThrow("parser failed");
 		const source = Buffer.from("function parse(): void {}\n");
-		expect(orientation.check(path, sourceFingerprint(source))).toBe("fallback");
+		expect(orientation.check(path, sourceFingerprint(source))).toBe("fatalFallback");
 	});
 
 	it("does not expose a disconnected body-only symbol view", () => {

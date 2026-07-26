@@ -409,6 +409,7 @@ impl OutlineEngine {
         include_docs: bool,
         names: &[String],
     ) -> Result<OutlineTargetResult, Box<dyn Error>> {
+        let direct_file_target = matches!(&target, OutlineTarget::File { .. });
         let (path, mut files) = match target {
             OutlineTarget::File { path, language } => {
                 let path = fs::canonicalize(&path)?;
@@ -513,7 +514,7 @@ impl OutlineEngine {
         };
         let total_byte_length = files.iter().map(|file| file.byte_length).sum();
         let total_line_count = files.iter().map(|file| file.line_count).sum();
-        if !names.is_empty() {
+        if !direct_file_target && !names.is_empty() {
             files.retain(|file| {
                 file.items
                     .iter()
@@ -5372,5 +5373,33 @@ export { buildThing as createThing, buildThing as makeThing };
         );
 
         fs::remove_dir_all(temporary).expect("temporary directory should be removable");
+    }
+
+    #[test]
+    fn keeps_a_direct_file_result_when_an_exact_name_filter_matches_nothing() {
+        let engine = OutlineEngine::new().expect("outline engine should initialize");
+        let path = std::env::temp_dir().join(format!(
+            "tau-ast-empty-direct-outline-{}-{:?}.ts",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::write(&path, "export const present = true;\n").expect("fixture should be writable");
+
+        let result = engine
+            .outline(
+                OutlineTarget::File {
+                    path: path.to_string_lossy().into_owned(),
+                    language: LanguageId::TypeScript,
+                },
+                false,
+                false,
+                &["missing".to_owned()],
+            )
+            .expect("direct outline should complete");
+
+        assert_eq!(result.files.len(), 1);
+        assert!(result.files[0].items.is_empty());
+        assert!(result.files[0].source_fingerprint.starts_with("sha256:"));
+        fs::remove_file(path).expect("fixture should be removable");
     }
 }

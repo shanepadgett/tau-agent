@@ -39,6 +39,7 @@ pub struct AstSearchResult {
     pub path: String,
     pub language: LanguageId,
     pub pattern: String,
+    pub target_source_fingerprint: Option<String>,
     pub matches: Vec<AstSearchMatch>,
     pub diagnostics: Vec<AstSearchDiagnostic>,
     pub summary: AstSearchSummary,
@@ -49,6 +50,7 @@ pub struct AstSearchResult {
 pub struct AstSearchMatch {
     pub relative_path: String,
     pub language: LanguageId,
+    pub source_fingerprint: String,
     pub range: SourceRange,
     pub preview: String,
     pub preview_truncated: bool,
@@ -219,6 +221,8 @@ impl crate::outline::OutlineEngine {
         let deadline = started + elapsed_limit;
         let root = fs::canonicalize(path)
             .map_err(|error| search_error("invalid_search_target", error.to_string()))?;
+        let direct_file_target = root.is_file();
+        let mut target_source_fingerprint = None;
         let fixed_literal = pattern.fixed_string().into_owned();
         let mut summary = AstSearchSummary {
             files_discovered: 0,
@@ -395,6 +399,10 @@ impl crate::outline::OutlineEngine {
                 continue;
             }
             summary.source_bytes += source_bytes.len();
+            let fingerprint = source_fingerprint(&source_bytes);
+            if direct_file_target {
+                target_source_fingerprint = Some(fingerprint.clone());
+            }
             if !fixed_literal.is_empty()
                 && !source_bytes
                     .windows(fixed_literal.len())
@@ -403,7 +411,6 @@ impl crate::outline::OutlineEngine {
                 summary.literal_filtered_files += 1;
                 continue;
             }
-            let source_fingerprint = source_fingerprint(&source_bytes);
             let source = match String::from_utf8(source_bytes) {
                 Ok(source) => source,
                 Err(error) => {
@@ -422,7 +429,7 @@ impl crate::outline::OutlineEngine {
                 path: candidate.path,
                 relative_path: candidate.relative_path,
                 source,
-                source_fingerprint,
+                source_fingerprint: fingerprint,
             });
         }
         summary.files_filtered += summary.literal_filtered_files;
@@ -488,6 +495,7 @@ impl crate::outline::OutlineEngine {
             path: root.to_string_lossy().into_owned(),
             language,
             pattern: pattern_source.to_owned(),
+            target_source_fingerprint,
             matches,
             diagnostics,
             summary,
@@ -749,6 +757,7 @@ fn search_root<D: Doc>(
         matches.push(AstSearchMatch {
             relative_path: file.relative_path.clone(),
             language,
+            source_fingerprint: file.source_fingerprint.clone(),
             range,
             preview,
             preview_truncated,

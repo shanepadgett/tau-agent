@@ -723,20 +723,15 @@ export function createAstTools(
 						}
 					}
 					const returnedBytes = Buffer.byteLength(bounded.content);
-					for (const filePath of bounded.visibleUnitIds) {
-						const record = filesByPath.get(filePath);
-						if (!record) continue;
-						orientation.recordVisible({
+					orientation.recordAttempts(
+						[...filesByPath.values()].map((record) => ({
 							path: record.file.path,
 							toolCallId,
 							fingerprint: record.file.sourceFingerprint,
-							includePrivate: params.includePrivate ?? false,
-							names,
-							diagnostics: record.file.diagnostics,
-							locatorIds: record.locatorIds,
+							kind: "directOutline",
 							sourceBytesDeflected: Math.max(0, record.file.byteLength - record.renderedBytes),
-						});
-					}
+						})),
+					);
 					for (const fallback of fatalFallbacks) {
 						orientation.recordFatal({
 							...fallback,
@@ -825,28 +820,18 @@ export function createAstTools(
 			if (declarationCount === 0) lines.push(names.length > 0 ? "No matching declarations" : "No declarations");
 			const completeText = lines.join("\n");
 			const output = compact(completeText, result.totalByteLength, declarationCount, "outline", result);
-			let offset = 0;
-			for (const [index, rendered] of renderedFiles.entries()) {
-				const start = offset;
-				const end = start + rendered.text.length;
-				const visible =
-					!output.details.truncated ||
-					(output.visibleText.length >= end && output.visibleText.slice(start, end) === rendered.text);
-				if (visible) {
+			orientation.recordAttempts(
+				renderedFiles.map((rendered) => {
 					const renderedBytes = Buffer.byteLength(rendered.text);
-					orientation.recordVisible({
+					return {
 						path: rendered.file.path,
 						toolCallId,
 						fingerprint: rendered.file.sourceFingerprint,
-						includePrivate: params.includePrivate ?? false,
-						names,
-						diagnostics: rendered.file.diagnostics,
-						locatorIds: rendered.locatorIds,
+						kind: "directOutline" as const,
 						sourceBytesDeflected: Math.max(0, rendered.file.byteLength - renderedBytes),
-					});
-				}
-				offset = end + (index + 1 < renderedFiles.length ? 2 : 0);
-			}
+					};
+				}),
+			);
 			orientation.recordOutlineTelemetry(toolCallId, {
 				workerInputBytes: result.totalByteLength,
 				completeRenderedBytes: Buffer.byteLength(completeText),
@@ -883,7 +868,7 @@ export function createAstTools(
 			"Return signatures, documented signatures, exact declarations, or declarations with required imports for numeric outline locators; stale locators fail atomically.",
 		promptSnippet: "Retrieve signatures or exact declarations for several outline locators",
 		parameters: symbolParams,
-		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+		async execute(toolCallId, params, signal, _onUpdate, ctx) {
 			if (params.contextLines !== undefined && params.view !== "declaration") {
 				throw new Error("contextLines is supported only with view=declaration");
 			}
@@ -901,6 +886,15 @@ export function createAstTools(
 				params.view,
 				params.contextLines ?? 0,
 				signal,
+			);
+			orientation.recordAttempts(
+				result.declarations.map((declaration) => ({
+					path: declaration.path,
+					fingerprint: declaration.sourceFingerprint,
+					kind: "symbol" as const,
+					toolCallId,
+					sourceBytesDeflected: 0,
+				})),
 			);
 			const requestedByToken = new Map<string, LocatorRecord[]>();
 			for (const record of records) {
@@ -936,9 +930,6 @@ export function createAstTools(
 				throw new Error("Symbol result exceeded the output limit. Request fewer locators.");
 			}
 			if (params.view === "declaration") for (const record of records) record.declarationRetrieved = true;
-			orientation.recordSymbols(
-				records.map((record) => ({ path: record.path, locatorId: record.id, view: params.view })),
-			);
 			return { content: [{ type: "text", text: output.text }], details: output.details };
 		},
 		renderCall(args, theme, context) {
@@ -985,6 +976,15 @@ export function createAstTools(
 				params.surface as ApiSurfaceFilter,
 				params.resultLimit,
 				signal,
+			);
+			orientation.recordAttempts(
+				result.candidates.map((candidate) => ({
+					path: candidate.definingFile,
+					fingerprint: candidate.sourceFingerprint,
+					kind: "apiCandidate" as const,
+					toolCallId,
+					sourceBytesDeflected: 0,
+				})),
 			);
 			const builder = new BoundedTextResultBuilder(temporaryOutput, "completeBlocks");
 			const locatorByUnit = new Map<string, number>();
@@ -1073,7 +1073,7 @@ export function createAstTools(
 			"Use $NAME and $$$NAME metavariables. Keep resultLimit narrow, then retrieve selected numeric locators with symbol(declaration).",
 		],
 		parameters: astSearchParams,
-		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+		async execute(toolCallId, params, signal, _onUpdate, ctx) {
 			const path = await realpath(resolveExplorePath(ctx.cwd, params.path));
 			const metadata = await stat(path);
 			const inferred = metadata.isFile() ? astLanguageForPath(path) : undefined;
@@ -1087,6 +1087,26 @@ export function createAstTools(
 			const language = params.language ?? inferred;
 			if (!language) throw new Error("ast_search could not infer a language; pass language explicitly");
 			const result = await client.search(path, language, params.pattern, params.resultLimit, signal);
+			orientation.recordAttempts([
+				...(metadata.isFile() && result.targetSourceFingerprint
+					? [
+							{
+								path,
+								fingerprint: result.targetSourceFingerprint,
+								kind: "structuralMatch" as const,
+								toolCallId,
+								sourceBytesDeflected: 0,
+							},
+						]
+					: []),
+				...result.matches.map((match) => ({
+					path: metadata.isDirectory() ? resolve(path, match.relativePath) : path,
+					fingerprint: match.sourceFingerprint,
+					kind: "structuralMatch" as const,
+					toolCallId,
+					sourceBytesDeflected: 0,
+				})),
+			]);
 			const builder = new BoundedTextResultBuilder(temporaryOutput, "completeBlocks");
 			const locatorByUnit = new Map<string, number[]>();
 			try {
@@ -1203,7 +1223,7 @@ export function createAstTools(
 			promptSnippet: description,
 			promptGuidelines: [guideline, "Inspect ambiguous candidate locators before selecting an edit target."],
 			parameters: relationshipParams,
-			async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+			async execute(toolCallId, params, signal, _onUpdate, ctx) {
 				const path = await realpath(resolveExplorePath(ctx.cwd, params.path));
 				if (!(await stat(path)).isDirectory()) throw new Error(`${name} requires a directory scope`);
 				const record = locators.get(params.locator);
@@ -1213,6 +1233,45 @@ export function createAstTools(
 					throw new Error(`Declaration locator ${params.locator} is stale. Run outline or api_discover again.`);
 				}
 				const result = await client.relationships(path, record.token, name, params.resultLimit, signal);
+				orientation.recordAttempts(
+					result.relationships.flatMap((relationship) => [
+						{
+							path: resolve(path, relationship.relativePath),
+							fingerprint: relationship.sourceFingerprint,
+							kind: "relationshipLocation" as const,
+							toolCallId,
+							sourceBytesDeflected: 0,
+						},
+						{
+							path: relationship.targetPath,
+							fingerprint: relationship.targetSourceFingerprint,
+							kind: "relationshipLocation" as const,
+							toolCallId,
+							sourceBytesDeflected: 0,
+						},
+						...relationship.candidatePaths.flatMap((candidatePath, index) => {
+							const fingerprint = relationship.candidateSourceFingerprints[index];
+							return fingerprint
+								? [
+										{
+											path: candidatePath,
+											fingerprint,
+											kind: "relationshipLocation" as const,
+											toolCallId,
+											sourceBytesDeflected: 0,
+										},
+									]
+								: [];
+						}),
+						{
+							path: resolve(path, relationship.relativePath),
+							fingerprint: relationship.enclosingScope.sourceFingerprint,
+							kind: "relationshipScope" as const,
+							toolCallId,
+							sourceBytesDeflected: 0,
+						},
+					]),
+				);
 				const builder = new BoundedTextResultBuilder(temporaryOutput, "completeBlocks");
 				const locatorByUnit = new Map<string, number[]>();
 				try {

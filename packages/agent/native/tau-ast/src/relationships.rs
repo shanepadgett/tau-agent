@@ -81,6 +81,7 @@ pub struct EditableScope {
 pub struct Relationship {
     pub relative_path: String,
     pub language: LanguageId,
+    pub source_fingerprint: String,
     pub range: SourceRange,
     pub relationship_kind: RelationshipKind,
     pub certainty: RelationshipCertainty,
@@ -89,8 +90,10 @@ pub struct Relationship {
     pub classification: LocationClassification,
     pub target_locator: String,
     pub target_path: String,
+    pub target_source_fingerprint: String,
     pub candidate_locators: Vec<String>,
     pub candidate_paths: Vec<String>,
+    pub candidate_source_fingerprints: Vec<String>,
     pub competing_candidates_omitted: usize,
     pub actionable: bool,
     pub enclosing_scope: EditableScope,
@@ -134,6 +137,7 @@ struct IndexedFile {
 #[derive(Clone)]
 struct IndexedDeclaration {
     path: String,
+    source_fingerprint: String,
     entry: OutlineEntry,
     locator: String,
 }
@@ -362,6 +366,7 @@ fn push_declaration(
     };
     output.push(IndexedDeclaration {
         path: file.outlined.path.clone(),
+        source_fingerprint: file.outlined.source_fingerprint.clone(),
         entry: entry.clone(),
         locator: locator.clone(),
     });
@@ -403,7 +408,7 @@ fn collect_target_occurrences(
                     file.outlined.language,
                     LanguageId::TypeScript | LanguageId::Tsx
                 );
-            let (certainty, candidate_locators, candidate_paths, omitted) =
+            let (certainty, candidate_locators, candidate_paths, candidate_fingerprints, omitted) =
                 relationship_certainty(candidates, exact_binding);
             let kind = match operation {
                 RelationshipOperation::Tests => RelationshipKind::Test,
@@ -420,8 +425,10 @@ fn collect_target_occurrences(
                 classification,
                 encoded_target.to_owned(),
                 target.path.clone(),
+                target.source_fingerprint.clone(),
                 candidate_locators,
                 candidate_paths,
+                candidate_fingerprints,
                 omitted,
             )?);
         }
@@ -460,7 +467,7 @@ fn collect_callees(
             continue;
         };
         let exact = candidates.len() == 1 && candidates[0].path == file.outlined.path;
-        let (certainty, candidate_locators, candidate_paths, omitted) =
+        let (certainty, candidate_locators, candidate_paths, candidate_fingerprints, omitted) =
             relationship_certainty(candidates, exact);
         let target_locator = candidates.first().map_or_else(
             || encoded_target.to_owned(),
@@ -469,6 +476,10 @@ fn collect_callees(
         let target_path = candidates
             .first()
             .map_or_else(|| target.path.clone(), |candidate| candidate.path.clone());
+        let target_fingerprint = candidates.first().map_or_else(
+            || target.source_fingerprint.clone(),
+            |candidate| candidate.source_fingerprint.clone(),
+        );
         output.push(make_relationship(
             file,
             occurrence,
@@ -477,8 +488,10 @@ fn collect_callees(
             classify_location(file, &(selected.start_byte..selected.end_byte), false),
             target_locator,
             target_path,
+            target_fingerprint,
             candidate_locators,
             candidate_paths,
+            candidate_fingerprints,
             omitted,
         )?);
     }
@@ -531,9 +544,14 @@ fn collect_implementations(
                 .iter()
                 .map(|item| item.path.clone())
                 .collect::<Vec<_>>();
+            let mut fingerprints = competing
+                .iter()
+                .map(|item| item.source_fingerprint.clone())
+                .collect::<Vec<_>>();
             let omitted = locators.len().saturating_sub(MAX_COMPETING_CANDIDATES);
             locators.truncate(MAX_COMPETING_CANDIDATES);
             paths.truncate(MAX_COMPETING_CANDIDATES);
+            fingerprints.truncate(MAX_COMPETING_CANDIDATES);
             output.push(make_relationship(
                 file,
                 occurrence,
@@ -550,8 +568,10 @@ fn collect_implementations(
                 ),
                 candidate.locator.clone(),
                 candidate.path.clone(),
+                candidate.source_fingerprint.clone(),
                 locators,
                 paths,
+                fingerprints,
                 omitted,
             )?);
         }
@@ -568,7 +588,7 @@ fn collect_implementations(
             if !occurrence.implementation || is_declaration_name(file, &occurrence.range) {
                 continue;
             }
-            let (certainty, candidate_locators, candidate_paths, omitted) =
+            let (certainty, candidate_locators, candidate_paths, candidate_fingerprints, omitted) =
                 relationship_certainty(candidates, true);
             output.push(make_relationship(
                 file,
@@ -582,8 +602,10 @@ fn collect_implementations(
                 ),
                 encoded_target.to_owned(),
                 target.path.clone(),
+                target.source_fingerprint.clone(),
                 candidate_locators,
                 candidate_paths,
+                candidate_fingerprints,
                 omitted,
             )?);
         }
@@ -600,8 +622,10 @@ fn make_relationship(
     classification: LocationClassification,
     target_locator: String,
     target_path: String,
+    target_source_fingerprint: String,
     candidate_locators: Vec<String>,
     candidate_paths: Vec<String>,
+    candidate_source_fingerprints: Vec<String>,
     omitted: usize,
 ) -> Result<Relationship, Box<dyn Error>> {
     let range = source_range(file.source.as_bytes(), occurrence.range.clone());
@@ -617,6 +641,7 @@ fn make_relationship(
     Ok(Relationship {
         relative_path: file.relative_path.clone(),
         language: file.outlined.language,
+        source_fingerprint: file.outlined.source_fingerprint.clone(),
         range,
         relationship_kind: kind,
         certainty,
@@ -625,8 +650,10 @@ fn make_relationship(
         classification,
         target_locator,
         target_path,
+        target_source_fingerprint,
         candidate_locators,
         candidate_paths,
+        candidate_source_fingerprints,
         competing_candidates_omitted: omitted,
         actionable: certainty != RelationshipCertainty::Ambiguous,
         enclosing_scope,
@@ -833,7 +860,13 @@ fn text_occurrences(file: &IndexedFile, names: &BTreeSet<String>) -> Vec<RawOccu
 fn relationship_certainty(
     candidates: &[IndexedDeclaration],
     exact_binding: bool,
-) -> (RelationshipCertainty, Vec<String>, Vec<String>, usize) {
+) -> (
+    RelationshipCertainty,
+    Vec<String>,
+    Vec<String>,
+    Vec<String>,
+    usize,
+) {
     let certainty = if candidates.len() > 1 && !exact_binding {
         RelationshipCertainty::Ambiguous
     } else if exact_binding {
@@ -849,10 +882,15 @@ fn relationship_certainty(
         .iter()
         .map(|candidate| candidate.path.clone())
         .collect::<Vec<_>>();
+    let mut fingerprints = candidates
+        .iter()
+        .map(|candidate| candidate.source_fingerprint.clone())
+        .collect::<Vec<_>>();
     let omitted = locators.len().saturating_sub(MAX_COMPETING_CANDIDATES);
     locators.truncate(MAX_COMPETING_CANDIDATES);
     paths.truncate(MAX_COMPETING_CANDIDATES);
-    (certainty, locators, paths, omitted)
+    fingerprints.truncate(MAX_COMPETING_CANDIDATES);
+    (certainty, locators, paths, fingerprints, omitted)
 }
 
 fn target_names_for_file(

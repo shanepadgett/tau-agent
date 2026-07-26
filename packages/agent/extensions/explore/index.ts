@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { resolve } from "node:path";
 import { onTauEvent } from "../../shared/events.js";
+import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { createTemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { createToolRowStateStore } from "../../shared/tool-row-state.js";
 import { AST_DISCOVERY_BUDGET, effectiveAstGuidance } from "./ast-guidance.ts";
@@ -15,8 +16,10 @@ import { createReadCacheStore } from "./read-cache.ts";
 import { createReadSnapshotStore } from "./read-snapshots.ts";
 import { showReadStats } from "./read-stats.ts";
 import { createExploreReadTool } from "./read.ts";
+import exploreSettings from "./settings.ts";
 
 export default function exploreExtension(pi: ExtensionAPI): void {
+	let settings = exploreSettings.defaults;
 	const rowState = createToolRowStateStore(pi, "explore.tool-row-state");
 	const readCache = createReadCacheStore();
 	const readSnapshots = createReadSnapshotStore();
@@ -37,7 +40,7 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 	pi.registerTool(createLsTool(rowState));
 	pi.registerTool(createFindTool(rowState));
 	pi.registerTool(createGrepTool(rowState));
-	pi.registerTool(createExploreReadTool(rowState, orientation, readCache, readSnapshots));
+	pi.registerTool(createExploreReadTool(rowState, orientation, readCache, readSnapshots, () => settings.readGate));
 	pi.on("before_agent_start", async (event, ctx) => {
 		const guidance = await effectiveAstGuidance({
 			cwd: ctx.cwd,
@@ -56,7 +59,8 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 			await showReadStats(ctx, orientation);
 		},
 	});
-	pi.on("session_start", async () => {
+	pi.on("session_start", async (_event, ctx) => {
+		settings = await loadTauExtensionSettings(ctx, exploreSettings);
 		await temporaryOutput.shutdown();
 		await temporaryOutput.start();
 		rowState.clear();
@@ -69,6 +73,12 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 			...(change.move ? [resolve(event.cwd, change.move.from), resolve(event.cwd, change.move.to)] : []),
 		]);
 		ast.invalidate(paths);
+		orientation.recordPatched(
+			event.changes.map((change) => ({
+				path: resolve(event.cwd, change.path),
+				resultingFingerprint: change.resultingFingerprint,
+			})),
+		);
 	});
 	pi.on("session_compact", () => readSnapshots.clear());
 	pi.on("session_tree", () => {

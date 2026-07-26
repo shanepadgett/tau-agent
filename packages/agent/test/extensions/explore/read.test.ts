@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { createExploreReadTool } from "../../../extensions/explore/read.ts";
 import { createOrientationState, sourceFingerprint } from "../../../extensions/explore/orientation-state.ts";
 import { createReadSnapshotStore } from "../../../extensions/explore/read-snapshots.ts";
+import { matchesExploreReadGate } from "../../../extensions/explore/settings.ts";
 import {
 	branchExtensionContext,
 	createWorkspace,
@@ -70,9 +71,132 @@ describe("explore read", () => {
 			for (const args of [{ path: "src/parser.ts" }, { path: "src/parser.ts", offset: 1, limit: 1 }]) {
 				await expect(
 					tool.execute("blocked", args, undefined, undefined, extensionContext(workspace.dir)),
-				).rejects.toThrow("Run outline on src/parser.ts or an owning subtree");
+				).rejects.toThrow("no current structural attempt");
 			}
 			expect(orientation.telemetry(undefined).blockedReadAttempts).toBe(2);
+		} finally {
+			await workspace.cleanup();
+		}
+	});
+
+	it("matches root and nested gate globs with exclusion precedence", () => {
+		const cwd = "/repo";
+		const settings = { includeGlobs: ["**/*"], excludeGlobs: ["**/*.md"] };
+		expect(matchesExploreReadGate("/repo/main.ts", cwd, settings)).toBe(true);
+		expect(matchesExploreReadGate("/repo/README.md", cwd, settings)).toBe(false);
+		expect(matchesExploreReadGate("/repo/docs/guide.md", cwd, settings)).toBe(false);
+		expect(
+			matchesExploreReadGate("/repo/src/generated.ts", cwd, {
+				includeGlobs: ["src/**"],
+				excludeGlobs: ["src/generated.ts"],
+			}),
+		).toBe(false);
+	});
+
+	it("leaves Markdown ungated by default and allows configuration to gate it", async () => {
+		const workspace = await createWorkspace();
+		try {
+			await workspace.write("README.md", "# Guide\n");
+			const orientation = createOrientationState(async () => ["markdown"]);
+			const ordinary = createExploreReadTool(testRowState, orientation);
+			expect(
+				firstText(
+					await ordinary.execute(
+						"markdown",
+						{ path: "README.md" },
+						undefined,
+						undefined,
+						extensionContext(workspace.dir),
+					),
+				),
+			).toBe("# Guide\n");
+
+			const gated = createExploreReadTool(testRowState, orientation, undefined, undefined, () => ({
+				includeGlobs: ["**/*"],
+				excludeGlobs: [],
+			}));
+			await expect(
+				gated.execute("gated", { path: "README.md" }, undefined, undefined, extensionContext(workspace.dir)),
+			).rejects.toThrow("no current structural attempt");
+		} finally {
+			await workspace.cleanup();
+		}
+	});
+
+	it("returns a trusted cached diff after a matching successful patch", async () => {
+		const workspace = await createWorkspace();
+		try {
+			const original = Array.from({ length: 100 }, (_, index) => `// line ${index + 1}`).join("\n");
+			const changed = original.replace("// line 50", "// line fifty");
+			await workspace.write("src/parser.ts", original);
+			const path = workspace.path("src/parser.ts");
+			const orientation = createOrientationState(async () => ["typeScript"]);
+			orientation.recordAttempts([
+				{
+					path,
+					fingerprint: sourceFingerprint(Buffer.from(original)),
+					kind: "directOutline",
+					toolCallId: "outline",
+					sourceBytesDeflected: 0,
+				},
+			]);
+			const tool = createExploreReadTool(testRowState, orientation);
+			const context = branchContext(workspace.dir);
+			const baseline = await tool.execute("baseline", { path: "src/parser.ts" }, undefined, undefined, context.ctx);
+			context.appendRead(baseline);
+
+			await workspace.write("src/parser.ts", changed);
+			orientation.invalidate([path]);
+			orientation.recordPatched([{ path, resultingFingerprint: sourceFingerprint(Buffer.from(changed)) }]);
+			const result = await tool.execute("patched", { path: "src/parser.ts" }, undefined, undefined, context.ctx);
+			expect(firstText(result)).toContain("-// line 50");
+			expect(firstText(result)).toContain("+// line fifty");
+			expect(result.details?.readCache?.mode).toBe("diff");
+			expect(orientation.telemetry(undefined).permissionReadAttempts.postPatchDiff).toBe(1);
+		} finally {
+			await workspace.cleanup();
+		}
+	});
+
+	it("rejects patch permits without a complete baseline, for ranges, and after a fingerprint mismatch", async () => {
+		const workspace = await createWorkspace();
+		try {
+			const original = "export const value = 1;\n";
+			const changed = "export const value = 2;\n";
+			const external = "export const value = 3;\n";
+			await workspace.write("src/value.ts", original);
+			const path = workspace.path("src/value.ts");
+			const orientation = createOrientationState(async () => ["typeScript"]);
+			const tool = createExploreReadTool(testRowState, orientation);
+			orientation.recordPatched([{ path, resultingFingerprint: sourceFingerprint(Buffer.from(changed)) }]);
+			await workspace.write("src/value.ts", changed);
+			await expect(
+				tool.execute("missing", { path: "src/value.ts" }, undefined, undefined, extensionContext(workspace.dir)),
+			).rejects.toThrow("no current structural attempt");
+
+			orientation.recordAttempts([
+				{
+					path,
+					fingerprint: sourceFingerprint(Buffer.from(changed)),
+					kind: "directOutline",
+					toolCallId: "outline",
+					sourceBytesDeflected: 0,
+				},
+			]);
+			const context = branchContext(workspace.dir);
+			const baseline = await tool.execute("baseline", { path: "src/value.ts" }, undefined, undefined, context.ctx);
+			context.appendRead(baseline);
+			await workspace.write("src/value.ts", external);
+			orientation.invalidate([path]);
+			orientation.recordPatched([{ path, resultingFingerprint: sourceFingerprint(Buffer.from(external)) }]);
+			await expect(
+				tool.execute("range", { path: "src/value.ts", offset: 1, limit: 1 }, undefined, undefined, context.ctx),
+			).rejects.toThrow("no current structural attempt");
+
+			orientation.recordPatched([{ path, resultingFingerprint: sourceFingerprint(Buffer.from(changed)) }]);
+			await expect(
+				tool.execute("mismatch", { path: "src/value.ts" }, undefined, undefined, context.ctx),
+			).rejects.toThrow("no current structural attempt");
 		} finally {
 			await workspace.cleanup();
 		}
@@ -85,16 +209,15 @@ describe("explore read", () => {
 			await workspace.write("src/parser.ts", source);
 			await workspace.write("src/sibling.ts", source);
 			const orientation = createOrientationState(async () => ["typeScript"]);
-			orientation.recordVisible({
-				path: workspace.path("src/parser.ts"),
-				toolCallId: "outline",
-				fingerprint: sourceFingerprint(Buffer.from(source)),
-				includePrivate: false,
-				names: ["parse"],
-				diagnostics: { errorNodes: 0, missingNodes: 0 },
-				locatorIds: [1],
-				sourceBytesDeflected: 10,
-			});
+			orientation.recordAttempts([
+				{
+					path: workspace.path("src/parser.ts"),
+					toolCallId: "outline",
+					fingerprint: sourceFingerprint(Buffer.from(source)),
+					kind: "directOutline",
+					sourceBytesDeflected: 10,
+				},
+			]);
 			const tool = createExploreReadTool(testRowState, orientation);
 			expect(
 				firstText(
@@ -109,11 +232,11 @@ describe("explore read", () => {
 			).toBe(source);
 			await expect(
 				tool.execute("sibling", { path: "src/sibling.ts" }, undefined, undefined, extensionContext(workspace.dir)),
-			).rejects.toThrow("no current model-visible outline");
+			).rejects.toThrow("no current structural attempt");
 			await workspace.write("src/parser.ts", `${source}// changed\n`);
 			await expect(
 				tool.execute("changed", { path: "src/parser.ts" }, undefined, undefined, extensionContext(workspace.dir)),
-			).rejects.toThrow("no current model-visible outline");
+			).rejects.toThrow("no current structural attempt");
 		} finally {
 			await workspace.cleanup();
 		}
@@ -129,17 +252,16 @@ describe("explore read", () => {
 			const tool = createExploreReadTool(testRowState, orientation);
 			await expect(
 				tool.execute("blocked", { path: "src/parser.txt" }, undefined, undefined, extensionContext(workspace.dir)),
-			).rejects.toThrow("no current model-visible outline");
-			orientation.recordVisible({
-				path: workspace.path("src/parser.ts"),
-				toolCallId: "outline",
-				fingerprint: sourceFingerprint(Buffer.from(source)),
-				includePrivate: false,
-				names: [],
-				diagnostics: { errorNodes: 0, missingNodes: 0 },
-				locatorIds: [1],
-				sourceBytesDeflected: 0,
-			});
+			).rejects.toThrow("no current structural attempt");
+			orientation.recordAttempts([
+				{
+					path: workspace.path("src/parser.ts"),
+					toolCallId: "outline",
+					fingerprint: sourceFingerprint(Buffer.from(source)),
+					kind: "directOutline",
+					sourceBytesDeflected: 0,
+				},
+			]);
 			expect(
 				firstText(
 					await tool.execute(

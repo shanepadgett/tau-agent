@@ -76,6 +76,7 @@ const runningSummary: ApplyPatchSummary = {
 			path: "src/extensions/explore/index.ts",
 			linesAdded: 1,
 			linesRemoved: 0,
+			resultingFingerprint: "sha256:preview-add",
 		},
 		{
 			sectionIndex: 2,
@@ -83,6 +84,7 @@ const runningSummary: ApplyPatchSummary = {
 			path: "src/extensions/explore/README.md",
 			linesAdded: 3,
 			linesRemoved: 7,
+			resultingFingerprint: "sha256:preview-replace",
 		},
 	],
 	failures: [],
@@ -98,6 +100,7 @@ const completedSummary: ApplyPatchSummary = {
 			path: "src/extensions/explore/index.ts",
 			linesAdded: 1,
 			linesRemoved: 0,
+			resultingFingerprint: "sha256:preview-add",
 		},
 		{
 			sectionIndex: 2,
@@ -105,6 +108,7 @@ const completedSummary: ApplyPatchSummary = {
 			path: "src/extensions/explore/README.md",
 			linesAdded: 3,
 			linesRemoved: 7,
+			resultingFingerprint: "sha256:preview-replace",
 		},
 		{
 			sectionIndex: 3,
@@ -112,6 +116,7 @@ const completedSummary: ApplyPatchSummary = {
 			path: "src/extensions/search/index.ts",
 			linesAdded: 1,
 			linesRemoved: 1,
+			resultingFingerprint: "sha256:preview-update",
 		},
 		{
 			sectionIndex: 4,
@@ -119,6 +124,7 @@ const completedSummary: ApplyPatchSummary = {
 			path: "src/extensions/search/forget.ts",
 			linesAdded: 0,
 			linesRemoved: 42,
+			resultingFingerprint: null,
 		},
 		{
 			sectionIndex: 5,
@@ -127,6 +133,7 @@ const completedSummary: ApplyPatchSummary = {
 			move: { from: "src/extensions/search/read.ts", to: "src/extensions/explore/read.ts" },
 			linesAdded: 0,
 			linesRemoved: 0,
+			resultingFingerprint: "sha256:preview-move",
 		},
 	],
 	failures: [],
@@ -142,6 +149,7 @@ const partialFailureSummary: ApplyPatchSummary = {
 			path: "src/extensions/explore/settings.ts",
 			linesAdded: 1,
 			linesRemoved: 0,
+			resultingFingerprint: "sha256:preview-settings",
 		},
 		{
 			sectionIndex: 3,
@@ -149,6 +157,7 @@ const partialFailureSummary: ApplyPatchSummary = {
 			path: "src/extensions/search/obsolete.ts",
 			linesAdded: 0,
 			linesRemoved: 31,
+			resultingFingerprint: null,
 		},
 	],
 	failures: [

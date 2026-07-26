@@ -169,6 +169,7 @@ export type ApiSurfaceFilter = "all" | "public" | "private" | "sourceExport" | "
 export interface ApiCandidate {
 	locator: string;
 	language: AstLanguage;
+	sourceFingerprint: string;
 	name: string;
 	qualifiedName: string;
 	symbolType: ApiDeclarationKind;
@@ -237,6 +238,7 @@ export interface AstSearchScope {
 export interface AstSearchMatch {
 	relativePath: string;
 	language: AstLanguage;
+	sourceFingerprint: string;
 	range: SourceRange;
 	preview: string;
 	previewTruncated: boolean;
@@ -278,6 +280,7 @@ export interface AstSearchResult {
 	path: string;
 	language: AstLanguage;
 	pattern: string;
+	targetSourceFingerprint: string | null;
 	matches: AstSearchMatch[];
 	diagnostics: Array<{ relativePath: string; code: string; message: string }>;
 	summary: AstSearchSummary;
@@ -300,6 +303,7 @@ export interface EditableScope {
 export interface RelationshipLocation {
 	relativePath: string;
 	language: AstLanguage;
+	sourceFingerprint: string;
 	range: SourceRange;
 	relationshipKind:
 		| "reference"
@@ -316,8 +320,10 @@ export interface RelationshipLocation {
 	classification: "production" | "test" | "generated" | "reExport";
 	targetLocator: string;
 	targetPath: string;
+	targetSourceFingerprint: string;
 	candidateLocators: string[];
 	candidatePaths: string[];
+	candidateSourceFingerprints: string[];
 	competingCandidatesOmitted: number;
 	actionable: boolean;
 	enclosingScope: EditableScope;
@@ -471,7 +477,7 @@ interface PendingStreamRequest {
 
 type PendingRequest = PendingUnaryRequest | PendingStreamRequest;
 
-const PROTOCOL_VERSION = 11;
+const PROTOCOL_VERSION = 12;
 const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 const STDERR_BYTES = 16 * 1024;
 const HANDSHAKE_TIMEOUT_MS = 2000;
