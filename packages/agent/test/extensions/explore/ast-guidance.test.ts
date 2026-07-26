@@ -37,9 +37,11 @@ describe("effective AST guidance", () => {
 		await workspace.write("src/index.ts", "export const value = 1;\n");
 		const result = await guidance();
 		expect(result).toContain("available here for TypeScript");
-		expect(result).toContain("Outline known packages or files before reading their source");
-		expect(result).toContain("other symbol views for exact declaration source");
-		expect(result).toContain("symbol(signatureWithDocs)");
+		expect(result).toContain("smallest structural query");
+		expect(result).toContain("Do not preload implementation, callers, tests, or documentation");
+		expect(result).toContain("Treat a clear outline or API candidate signature as enough");
+		expect(result).toContain("Do not inspect tests up front");
+		expect(result).toContain("Prefer locator edits");
 		expect(result).not.toContain("Odin");
 	});
 
@@ -65,6 +67,7 @@ describe("effective AST guidance", () => {
 		await workspace.write("README.md", "# Guide\n");
 		const result = await guidance(async () => ["markdown"]);
 		expect(result).toContain("available here for Markdown");
+		expect(result).toContain("Outline large Markdown files first");
 		expect(result).not.toContain("TypeScript");
 	});
 

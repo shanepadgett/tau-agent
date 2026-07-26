@@ -54,9 +54,14 @@ export async function effectiveAstGuidance(request: AstGuidanceRequest): Promise
 
 AST-backed exploration is available here for ${labels}.
 
-- For an unfamiliar repository or subtree, use recursive \`outline\` when the active tool supports it. With a non-recursive \`outline\`, find a likely package first and outline that directory.
-- Outline known packages or files before reading their source.
-- Add exact \`names\` and set \`includePrivate\` when the likely declaration or internal surface is known.
-- Use \`symbol(signatureWithDocs)\` for one documented contract without its implementation body. Use the other symbol views for exact declaration source, batching locators when useful.
-- Use ordinary \`read\` for unsupported files and for source outside declaration boundaries after structural orientation.`;
+- Use the smallest structural query that can answer the current question. Stop when the result is sufficient; expand only for a specific unresolved question.
+- Identify the current job before exploring: locate, reuse, edit, explain, or debug. Do not preload implementation, callers, tests, or documentation needed only by a later stage.
+- For an unfamiliar repository or subtree, use recursive \`outline\` when available. Otherwise find a likely package, then outline that directory. For a known package or file, outline it directly.
+- Outline large Markdown files first, then retrieve only the relevant heading section with \`symbol\`.
+- For reuse work with an unknown location, use \`api_discover\` and prefer \`packageSurface\`, \`sourceExport\`, or \`public\` results. Inspect private declarations only when targeted implementation work requires them.
+- Narrow paths, exact \`names\`, query work, and result limits as soon as the likely target is known.
+- Treat a clear outline or API candidate signature as enough. Use \`symbol(signature)\` only when that selected contract needs closer inspection, \`signatureWithDocs\` only when attached documentation matters, and declaration views only for exact implementation source.
+- Discover references, callers, implementations, and affected tests after selecting a change target and when that impact information can change the plan. Do not inspect tests up front unless the task starts from test behavior or a failure.
+- Use \`ast_search\` for code shapes and \`grep\` for literal text. Use targeted \`read\` for exact formatting, comments, unsupported files, or source outside declaration boundaries.
+- Prefer locator edits for a known declaration or body when they express the complete change cleanly. Use textual patching when the change crosses structural boundaries or depends on exact surrounding text.`;
 }

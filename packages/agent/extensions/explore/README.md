@@ -16,14 +16,13 @@ Installed packages support `api_discover`, `ast_search`, `outline`, `symbol`, an
 
 For supported source, use the cheapest useful step:
 
-1. Use `api_discover` when reuse intent is known but the declaration path or exact name is not.
-2. Use a recursive outline to orient an unfamiliar repository or subtree.
-3. Outline a package directory to inspect its immediate public API.
-4. Add exact names when likely declarations are known.
-5. Set `includePrivate` when implementation work needs internals.
-6. Set `includeDocs` when declaration documentation affects the task.
-7. Use `symbol(signatureWithDocs)` when one declaration's documented contract is enough.
-8. Send several locators to the other `symbol` views for exact declarations.
-9. Use `references`, `callers`, `callees`, `implementations`, or `tests` to expand a declaration into direct impact and retrievable editable scopes.
-10. Add context lines when the edit needs nearby source.
-11. Use `read` after a qualifying structural attempt when cross-cutting logic, exact formatting, parser gaps, or source outside declaration boundaries requires the file. Fatal per-file parser failures allow a fingerprinted fallback read.
+1. Identify the current job: locate, reuse, edit, explain, or debug. Avoid loading implementation, callers, tests, or documentation needed only later.
+2. Use a recursive `outline` to orient an unfamiliar repository or subtree. Outline a known package or file directly. Outline large Markdown files before retrieving a relevant heading section.
+3. Use `api_discover` when reuse intent is known but the declaration path or exact name is not. Prefer package surfaces and public exports before private declarations.
+4. Narrow paths, exact names, query work, and result limits once the likely target is known. Enable `includePrivate` only for targeted implementation work.
+5. Stop at a clear outline or API candidate signature. Use `symbol(signature)` for closer contract inspection, `signatureWithDocs` only when attached documentation matters, and declaration views only for exact source.
+6. Use `references`, `callers`, `callees`, `implementations`, or `tests` after selecting a change target and when the result can affect the plan. Inspect tests earlier only when the task begins with test behavior or a failure.
+7. Use `ast_search` for code shapes and `grep` for literal text. Use targeted `read` for exact formatting, comments, parser gaps, unsupported files, or source outside declaration boundaries.
+8. Prefer locator edits when a complete declaration or body is the natural edit boundary. Use textual patching when the change crosses those boundaries or depends on surrounding text.
+
+Stop when the current question is answered. Expand exploration only for a specific unresolved question.

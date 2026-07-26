@@ -695,10 +695,10 @@ export function createAstTools(
 		promptSnippet: "Inspect public declarations and get symbol locators without reading implementation bodies",
 		promptGuidelines: [
 			"Set recursive=true to orient an unfamiliar repository or subtree across supported languages.",
-			"Set includePrivate when internal implementation discovery is needed.",
-			"Leave includeDocs off for routine exploration; enable it when documentation comments are needed.",
+			"Leave includePrivate off for surface discovery; enable it only for targeted internal implementation work.",
+			"Leave includeDocs off when names and signatures answer the question; enable it only when documentation comments matter.",
 			"Treat each parenthesized number after a line range as that declaration's symbol locator.",
-			"Use symbol(signatureWithDocs) when one documented contract is needed without its implementation body.",
+			"Use symbol(signatureWithDocs) only when one selected contract needs its attached documentation.",
 			"Use symbol with several locators when complete declaration source is needed.",
 		],
 		parameters: outlineParams,
@@ -1268,7 +1268,7 @@ export function createAstTools(
 			"Use api_discover when reuse intent is known but the declaration path or exact name is not.",
 			"Choose exactly one query kind and keep fuzzy or documentation work limits narrow.",
 			"Use packageSurface when the caller needs a supported public import path.",
-			"Pass a returned numeric locator to symbol(signatureWithDocs) before reading implementation source.",
+			"Treat a clear candidate signature as sufficient; retrieve a selected locator with symbol only when its contract or implementation needs closer inspection.",
 		],
 		parameters: apiDiscoverParams,
 		async execute(toolCallId, params, signal, _onUpdate, ctx) {
@@ -1705,7 +1705,7 @@ export function createAstTools(
 	const tests = relationshipTool(
 		"tests",
 		"Find directly affected tests for a declaration locator.",
-		"Use tests for direct references in standard test files and containers.",
+		"Use tests after selecting a change target, or earlier when the task starts from test behavior or a failure.",
 	);
 
 	return {
