@@ -6,6 +6,8 @@ Critique of the current explore/AST system architecture, the patterns it acciden
 
 Critique and target architecture only. No implementation approved yet.
 
+Behavioral acceptance criteria live separately in [`docs/plans/explore-specs/`](explore-specs/README.md). Those specs deliberately avoid architecture so a second design pass can propose structure against fixed product rules.
+
 ## Product goals to keep
 
 1. Structural orientation without dumping whole files
