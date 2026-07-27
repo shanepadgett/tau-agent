@@ -38,10 +38,10 @@ type Decl = {
   name: string;
   qualifiedName: string;          // dotted owner.member path
   startLine: number; endLine: number;          // 1-indexed, inclusive
-  startByte: number; endByte: number;
-  signatureEndByte: number;       // decl start → body open; signature = source slice
-  bodyStartByte?: number; bodyEndByte?: number; // absent when no body
-  docStartByte?: number; docEndByte?: number;   // attached doc comment span
+  startOffset: number; endOffset: number;      // UTF-16 code units into the decoded source (decision 12)
+  signatureEndOffset: number;       // decl start → body open; signature = source slice
+  bodyStartOffset?: number; bodyEndOffset?: number; // absent when no body
+  docStartOffset?: number; docEndOffset?: number;   // attached doc comment span
   visibility: "public" | "private" | "protected" | "internal";
   exported: boolean;
   children: Decl[];

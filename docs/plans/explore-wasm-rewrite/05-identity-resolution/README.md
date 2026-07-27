@@ -23,7 +23,7 @@ type Target = { path?: string; name: string; line?: number };
 type Candidate = {
   path: string; name: string; qualifiedName: string;
   kind: DeclKind; startLine: number; endLine: number;
-  signature: string;              // byte slice, no body
+  signature: string;              // source slice, no body
 };
 type Resolution =
   | { kind: "resolved"; decl: Decl; path: string; ir: FileIr }

@@ -25,7 +25,7 @@ Optional hand fixtures under `ast/languages/fixtures/` for live poking — not a
 
 Walk the tree with `tree.rootNode` / `namedChildren` in TS code; use `new Parser.Query(...)` only where it is genuinely shorter. Each adapter owns its node-type string constants. Doc comments: collect contiguous leading comment siblings (`//`-runs or one block comment) separated from the decl by ≤ 1 blank line; store the byte span only.
 
-**Signature is a byte slice**: decl start (excluding doc span) to body-open brace / `=>` body start. Never rebuild signatures from parts — this rule is the whole point of the rewrite (see `explore-review-rok.md` indictment 2).
+**Signature is a source slice**: decl start (excluding doc span) to body-open brace / `=>` body start. Never rebuild signatures from parts — this rule is the whole point of the rewrite (see `explore-review-rok.md` indictment 2).
 
 ## TypeScript/TSX specifics
 

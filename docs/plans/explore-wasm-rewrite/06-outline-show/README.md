@@ -39,7 +39,7 @@ Tool files are thin: typebox schema, param normalization (strip leading `@` per 
 
 - Params: `targets[] { path, name, line? }` (min 1), `view` enum, `contextLines` (declaration view only — error otherwise).
 - Resolve every target via task 05 **before** emitting anything. Any ambiguous/missing target → whole call errors with that target's candidate list; no partial bodies (spec is explicit).
-- Views are byte slices: `signature` (doc span excluded, body excluded), `signatureWithDocs` (doc span included; warn once when absent), `declaration` (full decl span, ± `contextLines` source lines), `declarationWithImports` (decl + the file's import statements that mention identifiers appearing in the decl slice — literal identifier intersection is acceptable v1; do not build a resolver).
+- Views are source slices: `signature` (doc span excluded, body excluded), `signatureWithDocs` (doc span included; warn once when absent), `declaration` (full decl span, ± `contextLines` source lines), `declarationWithImports` (decl + the file's import statements that mention identifiers appearing in the decl slice — literal identifier intersection is acceptable v1; do not build a resolver).
 - Over budget → **hard error** telling the agent to request fewer targets. Never truncate a batch (`bounded-output.md` show special case).
 - Dedupe identical targets.
 

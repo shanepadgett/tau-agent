@@ -21,9 +21,11 @@ packages/agent/extensions/explore/read/autoread.ts    large supported → outlin
 packages/agent/extensions/explore/settings.ts         read thresholds + context budget only
 ```
 
+Outline text comes from the existing pipeline: `outlinePath` in `ast/queries/outline.ts` + the file formatter in `ast/format/outline.ts`. Do not write a second outline renderer for the hook. Registered-language detection: `engine.registry.adapterForPath` (Markdown is registered but must pass through — check the adapter id, not just "has adapter"). Wire hook + autoread registration in `index.ts` next to the existing tool registrations, using `engineFor`.
+
 ## Settings
 
-`explore.read.structureThresholdLines` (200), `explore.read.maxRangeLines` (200), `explore.context.defaultBudgetTokens` (8000). No `readGate`. No read-stats keys. Follow `packages/agent/shared/settings/define.ts`. **Do not touch `packages/agent/schemas/tau.schema.json`** — schema sync regenerates it; do not read the schema in the same tool batch that writes settings.
+`explore.read.structureThresholdLines` (200), `explore.read.maxRangeLines` (200). `explore.context.defaultBudgetTokens` (8000) was already created by task 10 in `explore/settings.ts` — extend that file, do not move it. No `readGate`. No read-stats keys. Follow `packages/agent/shared/settings/define.ts`. **Do not touch `packages/agent/schemas/tau.schema.json`** — schema sync regenerates it; do not read the schema in the same tool batch that writes settings.
 
 ## Pi `read` hook (the product)
 

@@ -26,6 +26,7 @@ The old system was archived/deleted on 2026-07-26 (see `docs/plans/explore-archi
 
 ## Carried items from the outline checkpoint review
 
+- File graph (`ast/graph/file-graph.ts`): forward-edge cache is keyed by the importer's content hash, so creating a file does not repair another file's cached `unresolved` resolution until that importer changes. On `invalidate` for a **created** path, also drop forward entries containing unresolved/external results (or clear the forward cache) — decide cheaply, measure nothing.
 - Delete any registry/engine surface still without callers (`registry.adapterForExtension`, `registry.capabilitiesFor`, `registry.registeredLanguages`, `engine.irForFile` — Fallow cannot see unused object members; check by grep).
 - Simplify the engine `generation`/`assertLive` ceremony if `generation` still only changes in `shutdown()` — one `shutDown` boolean plus post-`await` checks is enough.
 - Go adapter: defined types over non-struct types (`type UserID int`) currently outline as `struct` (`typeSpecKind` fallback). Pick a truthful kind deliberately (extend `DeclKind` or use `typeAlias`).

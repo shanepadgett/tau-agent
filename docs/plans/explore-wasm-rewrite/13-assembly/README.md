@@ -12,7 +12,7 @@ Final composition: everything built in tasks 00–12 wired into one coherent ext
 
 ## Steps (order matters)
 
-1. Audit `packages/agent/extensions/explore/index.ts` as composition root: engine + registry + graph caches built once; engine/graph invalidation subscribed to `tau:file-mutation.applied` and session lifecycle events (start/compact/tree-change/shutdown per `explore-specs/cross/system.md`); all **12** Explore tools registered: `outline`, `show`, `discover`, `ast_search`, `deps`, `reverse_deps`, `callers`, `callees`, `references`, `implementations`, `impact`, `context`. Pi keeps `ls`/`find`/`grep`/`read`. Read outline hook + autoread + settings from task 12 wired.
+1. Audit `packages/agent/extensions/explore/index.ts` as composition root. As of task 08 it already builds engine + graph once, subscribes `tau:file-mutation.applied` (incl. move endpoints), `session_start`, `session_tree`, `session_shutdown`, and registers `outline`/`show`/`discover`/`deps`/`reverse_deps` — audit, do not rebuild. Close the gaps: all **12** Explore tools registered (`ast_search`, `callers`, `callees`, `references`, `implementations`, `impact`, `context` join the five above), compact lifecycle per `explore-specs/cross/system.md`, read outline hook + autoread + settings from task 12 wired. Pi keeps `ls`/`find`/`grep`/`read`.
 2. Engine shutdown (WASM object cleanup) on session shutdown; temporary store lifecycle as in other Tau tools.
 3. Pre-turn guidance per `explore-specs/session/guidance.md`: bounded 4096-entry scan, detect languages, intersect with registry advertisement, inject the guidance content the spec lists. Must not mention locators, gates, Explore fs clones, or removed tools. No platform caveat — WASM runs everywhere.
 4. Remove any remaining fallow staging headers from earlier tasks.
@@ -23,4 +23,4 @@ Final composition: everything built in tasks 00–12 wired into one coherent ext
 
 - After `/reload`, full harness smoke per [`../LIVE-PROVE.md`](../LIVE-PROVE.md): recursive `outline`, `show`, `discover`, graph/relationship tools as registered, Pi `read` large-file outline substitution, `impact`, `context` — each on corpus scopes covering the languages still claimed, plus optional monorepo TS.
 - `mise run check:ts` green (runs automatically).
-- This is the one task where calling the `review` subagent is warranted (complex integration). One initial review, at most one follow-up, per AGENTS.md limits.
+- This is the one task where calling the `review` subagent is warranted (complex integration) — but only if the subagent extension is enabled in this session (it has been disabled at times during the rewrite). If unavailable, skip; do not re-enable it for this.
