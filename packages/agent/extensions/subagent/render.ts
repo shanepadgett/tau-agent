@@ -48,7 +48,8 @@ export function renderSubagentResult(
 		return text;
 	}
 	const identity = `${details.displayName} (${details.agent})`;
-	const header = `${title(theme, context.rowState, context.rowId, context.invalidate)}  ${theme.fg("accent", identity)}  ${theme.fg("muted", `$${details.usage.cost.toFixed(4)} · ${(details.durationMs / 1000).toFixed(1)}s · ${details.toolCalls} tools`)}`;
+	const ctx = typeof details.contextPercent === "number" ? ` · ${details.contextPercent.toFixed(1)}% ctx` : "";
+	const header = `${title(theme, context.rowState, context.rowId, context.invalidate)}  ${theme.fg("accent", identity)}  ${theme.fg("muted", `$${details.usage.cost.toFixed(4)} · ${(details.durationMs / 1000).toFixed(1)}s · ${details.toolCalls} tools${ctx}`)}`;
 	if (!expanded) {
 		text.setText(`${header}  ${theme.fg("muted", details.task.replace(/\s+/g, " ").trim())}`);
 		return text;

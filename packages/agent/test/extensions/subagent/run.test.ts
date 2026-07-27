@@ -51,6 +51,9 @@ function fakeSession(options: {
 			listeners.add(listener);
 			return () => listeners.delete(listener);
 		},
+		getContextUsage() {
+			return { tokens: 1_200, contextWindow: 10_000, percent: 12 };
+		},
 		async prompt(text: string) {
 			await options.onPrompt?.(text);
 			const message = responses[responseIndex++];
@@ -336,7 +339,9 @@ describe("runSubagentTurn", () => {
 		expect(first.content).toBe("first result");
 		expect(second.content).toBe("follow-up result");
 		expect(first.details.usage.input).toBe(10);
+		expect(first.details.contextPercent).toBe(12);
 		expect(second.details.usage.input).toBe(20);
+		expect(second.details.contextPercent).toBe(12);
 		expect(first.usage).toEqual({
 			input: 10,
 			output: 2,
@@ -363,6 +368,9 @@ describe("runSubagentTurn", () => {
 			subscribe(listener: (event: AgentSessionEvent) => void) {
 				listeners.add(listener);
 				return () => listeners.delete(listener);
+			},
+			getContextUsage() {
+				return { tokens: 500, contextWindow: 10_000, percent: 5 };
 			},
 			async prompt() {
 				now = 10_100;
@@ -445,6 +453,9 @@ describe("runSubagentTurn", () => {
 			subscribe(listener: (event: AgentSessionEvent) => void) {
 				listeners.add(listener);
 				return () => listeners.delete(listener);
+			},
+			getContextUsage() {
+				return { tokens: 800, contextWindow: 10_000, percent: 8 };
 			},
 			async prompt() {
 				const chunks = [`${"x".repeat(700)}ONE`, `${"y".repeat(700)}TWO`];

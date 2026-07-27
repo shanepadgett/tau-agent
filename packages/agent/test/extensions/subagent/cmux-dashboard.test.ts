@@ -114,7 +114,13 @@ function interactiveDashboard(exec: CmuxExec, clock = new FakeClock()) {
 describe("formatDashboardMarkdown", () => {
 	it("renders an agent table and detailed inputs", () => {
 		const md = formatDashboardMarkdown([
-			snapshot({ invocationId: "inv-1", agent: "../escaped", task: "one | two", files: ["src/one.ts"] }),
+			snapshot({
+				invocationId: "inv-1",
+				agent: "../escaped",
+				task: "one | two",
+				files: ["src/one.ts"],
+				contextPercent: 12.34,
+			}),
 			snapshot({
 				invocationId: "inv-2",
 				startedAt: 2000,
@@ -126,8 +132,10 @@ describe("formatDashboardMarkdown", () => {
 		]);
 		expect(md).toContain("# Subagents");
 		expect(md).toContain("2 active · 0 done");
-		expect(md).toContain("| Agent | State | Last tool | Calls | Cost | Time |");
+		expect(md).toContain("| Agent | State | Last tool | Calls | Cost | Ctx | Time |");
 		expect(md).toContain("$0.0000");
+		expect(md).toContain("| 12.3% |");
+		expect(md).toMatch(/\| — \| [^|]+s \|/); // unknown ctx falls back to em dash
 		expect(md).not.toContain("| Agent | State | Request |");
 		expect(md).toContain("../escaped");
 		expect(md).toContain("Pathfinder (../escaped)");

@@ -124,13 +124,17 @@ export function formatDashboardMarkdown(snapshots: readonly SubagentInvocationSn
 		lines.push("_No subagents._", "");
 		return lines.join("\n");
 	}
-	lines.push("| Agent | State | Last tool | Calls | Cost | Time |", "| --- | --- | --- | ---: | ---: | ---: |");
+	lines.push(
+		"| Agent | State | Last tool | Calls | Cost | Ctx | Time |",
+		"| --- | --- | --- | ---: | ---: | ---: | ---: |",
+	);
 	for (const details of ordered) {
 		const latest = details.actions.at(-1);
 		const currentTool = details.currentActivity?.match(/^\S+/)?.[0];
 		const lastTool = currentTool ?? latest?.tool ?? "";
+		const ctx = typeof details.contextPercent === "number" ? `${details.contextPercent.toFixed(1)}%` : "—";
 		lines.push(
-			`| ${tableCell(`${details.displayName} (${details.agent})`, 48)} | ${dashboardState(details.status)} | ${tableCell(lastTool, 32) || "—"} | ${details.toolCalls} | $${details.usage.cost.toFixed(4)} | ${elapsed(details.durationMs)} |`,
+			`| ${tableCell(`${details.displayName} (${details.agent})`, 48)} | ${dashboardState(details.status)} | ${tableCell(lastTool, 32) || "—"} | ${details.toolCalls} | $${details.usage.cost.toFixed(4)} | ${ctx} | ${elapsed(details.durationMs)} |`,
 		);
 	}
 	lines.push("", "## Inputs", "");

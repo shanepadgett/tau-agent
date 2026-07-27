@@ -62,6 +62,7 @@ export interface SubagentDetails {
 	omittedActions: number;
 	omittedErrors: number;
 	usage: SubagentUsage;
+	contextPercent?: number;
 	durationMs: number;
 	truncation?: {
 		truncated: boolean;
@@ -307,6 +308,9 @@ export async function runSubagentTurn(options: {
 		if (!force && now - lastTextUpdate < 100) return;
 		lastTextUpdate = now;
 		details.durationMs = now - started;
+		const context = session.getContextUsage();
+		if (typeof context?.percent === "number") details.contextPercent = context.percent;
+		else delete details.contextPercent;
 		const snapshot = cloneSnapshot(details);
 		snapshot.actions = snapshot.actions.slice(-5);
 		// Detached observer chain — must not delay prompt completion.
