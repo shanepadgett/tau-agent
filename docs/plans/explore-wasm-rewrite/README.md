@@ -52,7 +52,7 @@ Each task README is written to stand alone for implementation **given** COLD-STA
 10-impact-context           DONE — impact/context composites + explore.context.defaultBudgetTokens (see 10 banner; 12 extends settings)
 12-read-hook-settings       (needs 06)          ← Pi read tool_result → outline; extend explore/settings.ts only
 04-adapters-remaining       (needs 03; after 06 preferred so spine is proven)
-11-ast-search               (needs 02; research gate inside; can trail)
+11-ast-search               DONE — Option A @ast-grep/wasm + pinned grammars (see 11/decision.md)
 13-assembly                 (needs 04, 07, 10, 11, 12 — most tools already registered; close gaps only)
 14-cleanup                  (needs 13)
 ```

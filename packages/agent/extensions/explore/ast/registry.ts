@@ -21,6 +21,7 @@ export type AdapterRegistry = {
 	register(adapter: LanguageAdapter): void;
 	adapterForPath(path: string): LanguageAdapter | undefined;
 	adapterForExtension(extension: string): LanguageAdapter | undefined;
+	adapterForId(languageId: string): LanguageAdapter | undefined;
 	registeredLanguages(): LanguageAdvertisement[];
 	capabilitiesFor(languageId: string): LanguageCapabilities | undefined;
 	/** Deduped package-surface resolvers from adapters that declare the capability. */
@@ -82,6 +83,9 @@ function createRegistry(seed: readonly LanguageAdapter[] = []): AdapterRegistry 
 		adapterForExtension(extension: string): LanguageAdapter | undefined {
 			const key = extension.startsWith(".") ? extension.toLowerCase() : `.${extension.toLowerCase()}`;
 			return byExtension.get(key);
+		},
+		adapterForId(languageId: string): LanguageAdapter | undefined {
+			return byId.get(languageId);
 		},
 		registeredLanguages(): LanguageAdvertisement[] {
 			return [...byId.values()].map((adapter) => ({

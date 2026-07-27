@@ -22,12 +22,12 @@ The old system was archived/deleted on 2026-07-26 (see `docs/plans/explore-archi
 - `grep -ri "tau-ast\|locator\|read-stats\|orientation\|api_discover\|createExploreRead\|explore.*\bls\b" packages/ .pi/extensions/ .github/ AGENTS.md` — every remaining hit is justified or removed (Pi upstream docs don't count).
 - Run context-sync so `.pi/contexts` reflects the final file layout.
 - `mise run check:ts` green; Fallow reports no dead files.
-- `npm pack --dry-run` on `packages/agent` shows grammar `.wasm` files and no native binaries.
+- `npm pack --dry-run` on `packages/agent` shows grammar `.wasm` files and no native binaries. `@ast-grep/wasm` is pure WASM (peer `web-tree-sitter`) — keep it; do not confuse it with banned `@ast-grep/napi`.
 
 ## Carried items from the outline checkpoint review
 
 - File graph (`ast/graph/file-graph.ts`): forward-edge cache is keyed by the importer's content hash, so creating a file does not repair another file's cached `unresolved` resolution until that importer changes. On `invalidate` for a **created** path, also drop forward entries containing unresolved/external results (or clear the forward cache) — decide cheaply, measure nothing.
-- Delete any registry/engine surface still without callers (`registry.adapterForExtension`, `registry.capabilitiesFor`, `registry.registeredLanguages`, `engine.irForFile` — Fallow cannot see unused object members; check by grep).
+- Delete any registry/engine surface still without callers (`registry.adapterForExtension`, `registry.capabilitiesFor`, `registry.registeredLanguages`, `engine.irForFile` — Fallow cannot see unused object members; check by grep). **Keep** `registry.adapterForId` and `engine.searchInSource` — used by `ast_search` (task 11). Keep adapter `patternContexts` (Go wraps).
 - Simplify the engine `generation`/`assertLive` ceremony if `generation` still only changes in `shutdown()` — one `shutDown` boolean plus post-`await` checks is enough.
 - Go adapter: defined types over non-struct types (`type UserID int`) currently outline as `struct` (`typeSpecKind` fallback). Pick a truthful kind deliberately (extend `DeclKind` or use `typeAlias`).
 

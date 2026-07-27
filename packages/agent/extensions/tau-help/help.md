@@ -40,7 +40,7 @@ Gives the agent `context_prune` for creating a hard context checkpoint after bro
 
 ## explore
 
-Structural source tools on in-process tree-sitter (WASM). Registers `outline`, `show`, `discover`, `deps`, `reverse_deps`, `callers`, `callees`, `references`, `implementations`, `impact`, and `context`. Remaining rewrite tool (`ast_search`) lands later. Pi keeps `ls` / `find` / `grep` / `read`.
+Structural source tools on in-process tree-sitter (WASM). Registers `outline`, `show`, `discover`, `ast_search`, `deps`, `reverse_deps`, `callers`, `callees`, `references`, `implementations`, `impact`, and `context`. Pi keeps `ls` / `find` / `grep` / `read`.
 
 ## footer
 

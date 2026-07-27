@@ -1,5 +1,7 @@
 # Task 11 — `ast_search` (research gate inside)
 
+**DONE 2026-07-27.** Option A (`@ast-grep/wasm@0.45.0` + pinned grammar wasm). See [`decision.md`](decision.md). Tool registered; corpus live-proved all nine search languages. Do not re-spike or re-implement unless bumping the matcher package.
+
 ## Cold start
 
 Fresh window: read [`../COLD-START.md`](../COLD-START.md), [`../LIVE-PROVE.md`](../LIVE-PROVE.md), this file, `explore-specs/shape/ast-search.md`, engine parse path. **No new tests.** Spike → `decision.md` in this folder → implement. Can trail critical path. Live patterns after register. `check:ts` green.

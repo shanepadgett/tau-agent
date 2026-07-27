@@ -526,6 +526,12 @@ function extractGo(tree: Tree, source: string): ExtractResult {
 	return { decls, imports: collectImports(root) };
 }
 
+/** Bare `pkg.Call($A)` parses as type_conversion in Go; wrap as a statement call. */
+const PATTERN_CONTEXTS = [
+	{ context: "func f() {\n$PATTERN\n}", selector: "call_expression" },
+	{ context: "_ = $PATTERN", selector: "call_expression" },
+] as const;
+
 export function goAdapter(): GrammarAdapter {
 	return {
 		mode: "grammar",
@@ -535,5 +541,6 @@ export function goAdapter(): GrammarAdapter {
 		importNoiseIdentifiers: IMPORT_NOISE,
 		extract: extractGo,
 		resolveFileDep: resolveGoFileDep,
+		patternContexts: PATTERN_CONTEXTS,
 	};
 }

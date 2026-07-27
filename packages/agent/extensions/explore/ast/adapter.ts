@@ -10,6 +10,18 @@ export type LanguageCapabilities = {
 	packageSurface: boolean;
 };
 
+/**
+ * Contextual pattern wrap for languages where a bare snippet parses as the wrong kind
+ * (e.g. Go `fmt.Println($A)` → type_conversion). Shared search substitutes the user
+ * pattern for `$PATTERN` and tries each wrap after the bare pattern.
+ */
+export type AstSearchPatternContext = {
+	/** Source template containing the literal placeholder `$PATTERN`. */
+	readonly context: string;
+	/** tree-sitter kind name selected from the parsed context. */
+	readonly selector: string;
+};
+
 export type ExtractResult = {
 	decls: Decl[];
 	imports: ImportRef[];
@@ -63,6 +75,8 @@ export type GrammarAdapter = {
 	/** Required when `capabilities.fileDeps` is true. */
 	readonly resolveFileDep?: FileDepResolver;
 	readonly resolvePackageSurface?: PackageSurfaceResolver;
+	/** Optional ast_search contextual wraps; shared matcher stays language-blind. */
+	readonly patternContexts?: readonly AstSearchPatternContext[];
 };
 
 /**

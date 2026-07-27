@@ -5,6 +5,7 @@ import { createTemporaryOutputStore } from "../../shared/temporary-output-store.
 import { createToolRowStateStore } from "../../shared/tool-row-state.ts";
 import { createExploreEngine, type ExploreEngine } from "./ast/engine.ts";
 import { createFileGraph, type ExploreFileGraph } from "./ast/graph/file-graph.ts";
+import { createAstSearchTool } from "./ast/tools/ast-search.ts";
 import { createContextTool } from "./ast/tools/context.ts";
 import { createDepsTool } from "./ast/tools/deps.ts";
 import { createDiscoverTool } from "./ast/tools/discover.ts";
@@ -46,6 +47,7 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 	pi.registerTool(createOutlineTool(rowState, temporaryOutput, engineFor));
 	pi.registerTool(createShowTool(rowState, engineFor));
 	pi.registerTool(createDiscoverTool(rowState, temporaryOutput, engineFor));
+	pi.registerTool(createAstSearchTool(rowState, temporaryOutput, engineFor));
 	pi.registerTool(createDepsTool(rowState, engineFor, graphFor));
 	pi.registerTool(createReverseDepsTool(rowState, engineFor, graphFor));
 	pi.registerTool(createCallersTool(rowState, engineFor, graphFor));
