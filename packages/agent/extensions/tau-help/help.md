@@ -40,7 +40,7 @@ Gives the agent `context_prune` for creating a hard context checkpoint after bro
 
 ## explore
 
-Structural source tools on in-process tree-sitter (WASM). Registers `outline`, `show`, `discover`, `ast_search`, `deps`, `reverse_deps`, `callers`, `callees`, `references`, `implementations`, `impact`, and `context`. Pi keeps `ls` / `find` / `grep` / `read`. Large full `read`/autoread of registered source (including Markdown) returns outline by default (`explore.read.*`); ranged `read` or `show` for bodies. Disable with `explore.read.enabled: false`.
+Structural source tools on in-process tree-sitter (WASM), available on every Node-supported platform. Registers `outline`, `show`, `discover`, `ast_search`, `deps`, `reverse_deps`, `callers`, `callees`, `references`, `implementations`, `impact`, and `context`; symbol targets use path + name (+ line when needed). Pi keeps `ls` / `find` / `grep` / `read`. Large full `read`/autoread of registered source (including Markdown) returns outline by default (`explore.read.*`); ranged `read` or `show` for bodies. Disable with `explore.read.enabled: false`.
 
 ## footer
 
