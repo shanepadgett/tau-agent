@@ -1,11 +1,38 @@
 {
   "packages": [
-    "../packages/agent",
+    {
+      "source": "../packages/agent",
+      "extensions": [
+        "-extensions/appshot/index.ts",
+        "-extensions/context-pruning/index.ts",
+        "-extensions/context/index.ts",
+        "+extensions/explore/index.ts",
+        "-extensions/runtime-context/index.ts",
+        "-extensions/subagent/index.ts",
+        "-extensions/tau-help/index.ts",
+        "-extensions/turn-budget/index.ts"
+      ],
+      "skills": [
+        "-skills/writing-preferences/SKILL.md"
+      ],
+      "prompts": [
+        "-prompts/implement.md",
+        "-prompts/interview.md",
+        "-prompts/plan-feature.md",
+        "-prompts/plan-implementation.md"
+      ]
+    },
     {
       "source": "npm:@shanepadgett/tau-agent",
       "extensions": [],
       "skills": [],
       "prompts": []
     }
+  ],
+  "skills": [
+    "-skills/agent-browser/SKILL.md",
+    "-skills/reference-repo/SKILL.md",
+    "-skills/writing-preferences/SKILL.md",
+    "-skills/teach/SKILL.md"
   ]
 }
