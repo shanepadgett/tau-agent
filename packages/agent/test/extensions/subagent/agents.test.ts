@@ -33,6 +33,7 @@ describe("subagent discovery", () => {
 		expect(trusted.agents.get("review")?.names).toEqual(["review"]);
 		expect(trusted.agents.has("generalist")).toBe(false);
 		expect(trusted.agents.has("scout")).toBe(true);
+		expect(trusted.agents.get("scout")?.tools).toContain("working_memory");
 		expect(trusted.agents.has("web-research")).toBe(true);
 
 		const untrusted = await discoverAgents(paths.cwd, false);

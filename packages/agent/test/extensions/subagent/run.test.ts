@@ -2,12 +2,13 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Api, AssistantMessage, Model, Provider } from "@earendil-works/pi-ai";
-import type { AgentSession, AgentSessionEvent, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { AgentSession, AgentSessionEvent, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import {
 	cappedTail,
 	createSubagentThread,
 	disposeSubagentThread,
+	extensionPathsForTools,
 	FifoGate,
 	runSubagentTurn,
 	type SubagentThread,
@@ -111,6 +112,22 @@ function threadOf(session: AgentSession): SubagentThread {
 		lastUsedAt: 0,
 	};
 }
+
+describe("extensionPathsForTools", () => {
+	it("loads the extension that owns each selected tool", () => {
+		const pi = {
+			getAllTools: () => [
+				{ name: "read", sourceInfo: { path: "/extensions/read.ts" } },
+				{ name: "working_memory", sourceInfo: { path: "/extensions/working-memory/index.ts" } },
+			],
+		} as unknown as ExtensionAPI;
+
+		expect(extensionPathsForTools(pi, ["read", "working_memory"])).toEqual([
+			"/extensions/read.ts",
+			"/extensions/working-memory/index.ts",
+		]);
+	});
+});
 
 describe("subagent FIFO gate", () => {
 	it("admits four calls and grants later calls in order", async () => {

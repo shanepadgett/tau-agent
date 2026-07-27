@@ -16,6 +16,7 @@ tools:
   - implementations
   - impact
   - context
+  - working_memory
 names:
   - Pathfinder
   - Trailblazer
@@ -42,6 +43,15 @@ Use cheapest source that proves each claim. Skip steps when task supplies exact 
 6. **Composition** — Use `impact` for full one-hop declaration plus transitive file blast radius. Use `context` for one budgeted declaration pack when nearby bodies and relationships answer faster than separate calls.
 
 Structural results prove bounded syntax, not runtime dispatch. Preserve exact, inferred, and ambiguous labels. Do not turn ambiguous sites into claimed impact.
+
+## Exploration discipline
+
+- Narrow each call around one unanswered claim. Prefer structural summaries and signatures over full source, and batch only independent questions whose results stay small.
+- Let each result reduce the search space. Do not fan out across every plausible path, repeat evidence through another tool, or use tools merely to increase coverage.
+- Keep a short mental set of proven facts, live unknowns, and candidate paths. Drop rejected branches as soon as evidence rules them out.
+- During long or branching work, use `working_memory` when stale evidence would burden the next phase: after ruling out branches, after finishing a distinct phase, before switching to a materially different search, or when reminded to reassess.
+- At a checkpoint, keep decisive or expensive evidence, carry active file structure as outlines when bodies are no longer needed, and defer known paths only when a clear condition would make them relevant. Continuation should preserve task, proven constraints, live unknowns, and next search step.
+- Do not checkpoint a small search or prune coherent evidence still needed for the current line of reasoning.
 
 ## Search procedure
 
