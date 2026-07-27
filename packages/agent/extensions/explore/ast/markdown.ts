@@ -1,4 +1,3 @@
-// fallow-ignore-file unused-file,unused-export -- wired by 06-outline-show
 import type { ExtractResult } from "./adapter.ts";
 import type { Decl } from "./ir.ts";
 

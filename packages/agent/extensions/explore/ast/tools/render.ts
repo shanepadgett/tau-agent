@@ -1,0 +1,105 @@
+import { formatSize, keyHint, type Theme } from "@earendil-works/pi-coding-agent";
+import { Text, truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
+import { formatToolRowTitle, type ToolRowStateStore } from "../../../../shared/tool-row-state.ts";
+
+export type ExploreToolDetails = {
+	declarationCount: number;
+	returnedBytes: number;
+	truncated: boolean;
+};
+
+/** Compact call row: `tool → target [options]` with left-truncating target variants. */
+export class ExploreCallComponent implements Component {
+	private readonly rowState: ToolRowStateStore;
+	private readonly rowId: string;
+	private readonly tool: string;
+	targetVariants: string[];
+	optionVariants: string[];
+	theme: Theme;
+
+	constructor(
+		rowState: ToolRowStateStore,
+		rowId: string,
+		tool: string,
+		targetVariants: string[],
+		optionVariants: string[],
+		theme: Theme,
+	) {
+		this.rowState = rowState;
+		this.rowId = rowId;
+		this.tool = tool;
+		this.targetVariants = targetVariants;
+		this.optionVariants = optionVariants;
+		this.theme = theme;
+	}
+
+	render(width: number): string[] {
+		if (width <= 0) return [];
+		const prefixWidth = visibleWidth(`${this.tool} → `);
+		const shortestTarget = this.targetVariants.at(-1) ?? "";
+		const minimumTargetWidth = Math.min(12, visibleWidth(shortestTarget));
+		const options =
+			this.optionVariants.find(
+				(candidate) => prefixWidth + minimumTargetWidth + (candidate ? visibleWidth(candidate) + 1 : 0) <= width,
+			) ??
+			this.optionVariants.at(-1) ??
+			"";
+		const optionsWidth = options ? visibleWidth(options) + 1 : 0;
+		const targetWidth = Math.max(1, width - prefixWidth - optionsWidth);
+		const target = this.targetVariants.find((candidate) => visibleWidth(candidate) <= targetWidth) ?? shortestTarget;
+		const displayTarget = truncateLeft(target, targetWidth);
+		const line =
+			formatToolRowTitle(this.rowState, this.rowId, this.tool, this.theme) +
+			this.theme.fg("toolOutput", " → ") +
+			this.theme.fg("accent", displayTarget) +
+			(options ? ` ${this.theme.fg("muted", options)}` : "");
+		return [truncateToWidth(line, width, "")];
+	}
+
+	invalidate(): void {}
+}
+
+function truncateLeft(text: string, width: number): string {
+	if (width <= 0) return "";
+	if (visibleWidth(text) <= width) return text;
+	if (width === 1) return "…";
+	let suffix = "";
+	for (const character of Array.from(text).reverse()) {
+		if (visibleWidth(`…${character}${suffix}`) > width) break;
+		suffix = character + suffix;
+	}
+	return `…${suffix}`;
+}
+
+export function renderExploreResult(
+	result: { content: Array<{ type: string; text?: string }>; details?: ExploreToolDetails },
+	expanded: boolean,
+	theme: Theme,
+	context: { lastComponent?: Component; isError: boolean },
+): Text {
+	const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+	if (!expanded && !context.isError) {
+		const count = result.details?.declarationCount ?? 0;
+		const noun = count === 1 ? "declaration" : "declarations";
+		const bytes = result.details === undefined ? "" : `, ${formatSize(result.details.returnedBytes)} returned`;
+		text.setText(
+			theme.fg("muted", `${count} ${noun}${bytes} (`) +
+				keyHint("app.tools.expand", "to expand") +
+				theme.fg("muted", ")"),
+		);
+		return text;
+	}
+	const output = result.content
+		.filter((item): item is { type: string; text: string } => item.type === "text" && typeof item.text === "string")
+		.map((item) => item.text)
+		.join("\n");
+	text.setText(
+		output
+			? output
+					.split("\n")
+					.map((line) => theme.fg("toolOutput", line))
+					.join("\n")
+			: "",
+	);
+	return text;
+}

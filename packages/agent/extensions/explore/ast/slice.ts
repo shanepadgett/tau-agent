@@ -1,12 +1,7 @@
-// fallow-ignore-file unused-file,unused-export -- wired by 06-outline-show
 import type { Decl } from "./ir.ts";
 
 /** UTF-8 file bytes. Prefer the buffer used to hash/parse the file. */
 export type SourceBytes = Uint8Array;
-
-export function sourceBytesFromString(source: string): Buffer {
-	return Buffer.from(source, "utf8");
-}
 
 export function utf8Slice(bytes: SourceBytes, start: number, end: number): string {
 	const lo = Math.max(0, start);
@@ -27,13 +22,6 @@ export function docsText(decl: Decl, bytes: SourceBytes): string | undefined {
 	return text.length === 0 ? undefined : text;
 }
 
-/** Body span including braces when present. */
-export function bodyText(decl: Decl, bytes: SourceBytes): string | undefined {
-	if (decl.bodyStartByte === undefined || decl.bodyEndByte === undefined) return undefined;
-	const text = utf8Slice(bytes, decl.bodyStartByte, decl.bodyEndByte);
-	return text.length === 0 ? undefined : text;
-}
-
 /** Full declaration span [startByte, endByte) — no leading docs. */
 export function declarationText(decl: Decl, bytes: SourceBytes): string {
 	return utf8Slice(bytes, decl.startByte, decl.endByte);
@@ -48,13 +36,4 @@ export function signatureWithDocsText(decl: Decl, bytes: SourceBytes): string {
 		return signatureText(decl, bytes);
 	}
 	return utf8Slice(bytes, decl.docStartByte, decl.signatureEndByte);
-}
-
-/**
- * Full declaration including leading docs when present:
- * [docStart ?? startByte, endByte).
- */
-export function declarationWithDocsText(decl: Decl, bytes: SourceBytes): string {
-	const start = decl.docStartByte ?? decl.startByte;
-	return utf8Slice(bytes, start, decl.endByte);
 }

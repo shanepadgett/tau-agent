@@ -1,4 +1,3 @@
-// fallow-ignore-file unused-file,unused-type -- wired by 06-outline-show
 import type { Tree } from "web-tree-sitter";
 import type { Decl, ImportRef } from "./ir.ts";
 

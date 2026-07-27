@@ -1,4 +1,3 @@
-// fallow-ignore-file unused-file,unused-export -- wired by 06-outline-show
 import type { Node, Tree } from "web-tree-sitter";
 import type { ExtractResult, GrammarAdapter, LanguageCapabilities } from "../adapter.ts";
 import type { Decl, ImportRef, Visibility } from "../ir.ts";
@@ -405,6 +404,8 @@ function collectImportsFrom(node: Node, imports: ImportRef[]): void {
 				imports.push({
 					specifier: unquote(source.text),
 					startLine: startLine(child),
+					startByte: child.startIndex,
+					endByte: child.endIndex,
 				});
 			}
 			continue;

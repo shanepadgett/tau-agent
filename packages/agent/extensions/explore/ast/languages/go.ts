@@ -1,4 +1,3 @@
-// fallow-ignore-file unused-file,unused-export -- wired by 06-outline-show
 import type { Node, Tree } from "web-tree-sitter";
 import type { ExtractResult, GrammarAdapter, LanguageCapabilities } from "../adapter.ts";
 import type { Decl, ImportRef, Visibility } from "../ir.ts";
@@ -342,6 +341,7 @@ function collectImports(root: Node): ImportRef[] {
 	const imports: ImportRef[] = [];
 	for (const node of root.namedChildren) {
 		if (node.type !== IMPORT_DECLARATION) continue;
+		// Per-spec specifier for file-graph; statement bytes cover the whole declaration.
 		const specs: Node[] = [];
 		for (const child of node.namedChildren) {
 			if (child.type === IMPORT_SPEC) specs.push(child);
@@ -357,6 +357,8 @@ function collectImports(root: Node): ImportRef[] {
 			imports.push({
 				specifier: unquote(pathNode.text),
 				startLine: startLine(spec),
+				startByte: node.startIndex,
+				endByte: node.endIndex,
 			});
 		}
 	}

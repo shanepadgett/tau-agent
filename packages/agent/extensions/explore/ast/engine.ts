@@ -1,4 +1,3 @@
-// fallow-ignore-file unused-file,unused-export -- wired by 06-outline-show
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -10,12 +9,20 @@ import type { Decl, FileIr } from "./ir.ts";
 import { grammarWasmPath, loadGrammarManifest, runtimeWasmPath, type GrammarPin } from "./grammars/manifest.ts";
 import { formatPathForDisplay, pathResolutionError, resolveExplorePath } from "../traverse.ts";
 
+export type FileSource = {
+	ir: FileIr;
+	/** UTF-8 file bytes used to build/hash this IR. */
+	bytes: Buffer;
+};
+
 export type ExploreEngine = {
 	/** Absolute session cwd — path resolution and directory scans use this. */
 	readonly cwd: string;
 	readonly registry: AdapterRegistry;
 	/** Resolve path, read bytes, return cached or freshly extracted FileIr. */
 	irForFile(path: string): Promise<FileIr>;
+	/** One read: IR (cached when hash matches) plus the UTF-8 bytes for slicing. */
+	sourceForFile(path: string): Promise<FileSource>;
 	invalidate(paths: readonly string[]): void;
 	clear(): void;
 	/**
@@ -121,7 +128,11 @@ function remapExtractToUtf8(extracted: ExtractResult, source: string): ExtractRe
 	const toUtf8 = makeJsToUtf8Mapper(source);
 	return {
 		decls: extracted.decls.map((decl) => remapDeclToUtf8(decl, toUtf8)),
-		imports: extracted.imports,
+		imports: extracted.imports.map((item) => ({
+			...item,
+			startByte: toUtf8(item.startByte),
+			endByte: toUtf8(item.endByte),
+		})),
 	};
 }
 
@@ -240,30 +251,39 @@ export function createExploreEngine(options: ExploreEngineOptions): ExploreEngin
 		}
 	};
 
+	const loadSource = async (path: string): Promise<FileSource> => {
+		const gen = generation;
+		assertLive(gen);
+		const absolutePath = resolveExplorePath(cwd, path);
+		let bytes: Buffer;
+		try {
+			bytes = await readFile(absolutePath);
+		} catch (error) {
+			throw pathResolutionError(error, path);
+		}
+		assertLive(gen);
+		const hash = contentHashOf(bytes);
+		const cached = irCache.get(absolutePath);
+		if (cached !== undefined && cached.contentHash === hash) {
+			return { ir: cached.ir, bytes };
+		}
+		const ir = await buildIr(absolutePath, bytes, hash);
+		assertLive(gen);
+		irCache.set(absolutePath, { contentHash: hash, ir });
+		return { ir, bytes };
+	};
+
 	return {
 		cwd,
 		registry,
 
 		async irForFile(path: string): Promise<FileIr> {
-			const gen = generation;
-			assertLive(gen);
-			const absolutePath = resolveExplorePath(cwd, path);
-			let bytes: Buffer;
-			try {
-				bytes = await readFile(absolutePath);
-			} catch (error) {
-				throw pathResolutionError(error, path);
-			}
-			assertLive(gen);
-			const hash = contentHashOf(bytes);
-			const cached = irCache.get(absolutePath);
-			if (cached !== undefined && cached.contentHash === hash) {
-				return cached.ir;
-			}
-			const ir = await buildIr(absolutePath, bytes, hash);
-			assertLive(gen);
-			irCache.set(absolutePath, { contentHash: hash, ir });
-			return ir;
+			const source = await loadSource(path);
+			return source.ir;
+		},
+
+		async sourceForFile(path: string): Promise<FileSource> {
+			return loadSource(path);
 		},
 
 		invalidate(paths: readonly string[]): void {

@@ -4,4 +4,9 @@ Structural source tools for Tau: outlines, declaration slices, discovery, graph 
 
 Pi keeps ordinary filesystem tools (`ls`, `find`, `grep`, `read`). Explore adds structure on top of supported source languages via in-process tree-sitter (WASM).
 
-Structural tools land as this rewrite wires them. Until then, Explore loads as a shell with no tools registered.
+## Tools
+
+- `outline` — declarations and structure for a file, one-level directory, or recursive subtree (no bodies).
+- `show` — exact signature / docs / declaration / declaration+imports for path+name targets.
+
+Further structural tools land as this rewrite wires them.

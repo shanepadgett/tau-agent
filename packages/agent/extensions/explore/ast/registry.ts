@@ -1,4 +1,3 @@
-// fallow-ignore-file unused-file,unused-export -- wired by 06-outline-show
 import { extname } from "node:path";
 import type { LanguageAdapter, LanguageCapabilities } from "./adapter.ts";
 import { goAdapter } from "./languages/go.ts";
@@ -29,7 +28,7 @@ const MARKDOWN_CAPABILITIES: LanguageCapabilities = {
 	packageSurface: false,
 };
 
-export function markdownAdapter(): LanguageAdapter {
+function markdownAdapter(): LanguageAdapter {
 	return {
 		mode: "source",
 		id: "markdown",
@@ -39,7 +38,7 @@ export function markdownAdapter(): LanguageAdapter {
 	};
 }
 
-export function createRegistry(seed: readonly LanguageAdapter[] = []): AdapterRegistry {
+function createRegistry(seed: readonly LanguageAdapter[] = []): AdapterRegistry {
 	const byId = new Map<string, LanguageAdapter>();
 	const byExtension = new Map<string, LanguageAdapter>();
 

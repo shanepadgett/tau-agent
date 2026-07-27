@@ -1,4 +1,3 @@
-// fallow-ignore-file unused-file,unused-export,unused-type -- wired by 06-outline-show
 import type { Node } from "web-tree-sitter";
 import type { Decl } from "../ir.ts";
 
@@ -17,7 +16,7 @@ export function endLine(node: Node): number {
 	return row + 1;
 }
 
-export function newlineCount(source: string, from: number, to: number): number {
+function newlineCount(source: string, from: number, to: number): number {
 	let count = 0;
 	const end = Math.min(to, source.length);
 	for (let i = Math.max(0, from); i < end; i += 1) {

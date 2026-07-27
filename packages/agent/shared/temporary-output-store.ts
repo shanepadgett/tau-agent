@@ -11,7 +11,6 @@ const TEMPORARY_OUTPUT_FILE_QUOTA_BYTES = 64 * 1024 * 1024;
 const TEMPORARY_OUTPUT_SESSION_QUOTA_BYTES = 256 * 1024 * 1024;
 const TEMPORARY_OUTPUT_ORPHAN_LIFETIME_MS = 24 * 60 * 60 * 1000;
 
-// fallow-ignore-next-line unused-export -- session composition root wires this when Explore tools land
 export function createTemporaryOutputStore(): TemporaryOutputStore {
 	return new TemporaryOutputStore(
 		tmpdir(),

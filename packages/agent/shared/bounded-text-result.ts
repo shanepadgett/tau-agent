@@ -31,7 +31,6 @@ export interface BoundedTextResult {
 	visibleUnitIds: string[];
 }
 
-// fallow-ignore-next-line unused-export -- Explore tools re-wire this in the WASM rewrite spine
 export function truncateBoundedHead(content: string): ReturnType<typeof truncateHead> {
 	return truncateHead(content, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
 }

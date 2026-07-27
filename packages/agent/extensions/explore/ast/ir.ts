@@ -1,5 +1,3 @@
-// fallow-ignore-file unused-file,unused-type -- wired by 05-identity-resolution
-
 /** Shared declaration-kind vocabulary. Extend only for a real new kind. */
 export type DeclKind =
 	| "module"
@@ -55,6 +53,10 @@ export type Decl = {
 export type ImportRef = {
 	specifier: string;
 	startLine: number;
+	/** UTF-8 byte offset of the full import statement (inclusive). */
+	startByte: number;
+	/** UTF-8 byte offset of the full import statement (exclusive). */
+	endByte: number;
 };
 
 export type FileIr = {

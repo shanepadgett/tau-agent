@@ -1,10 +1,8 @@
-// fallow-ignore-file unused-file -- wired by 06-outline-show
-import { readFile } from "node:fs/promises";
 import type { ExploreEngine } from "./engine.ts";
 import type { Decl, DeclKind, FileIr } from "./ir.ts";
 import { findTargets } from "./query.ts";
-import { scanIr } from "./scan.ts";
-import { signatureText } from "./slice.ts";
+import { scanSources } from "./scan.ts";
+import { signatureText, type SourceBytes } from "./slice.ts";
 
 /** Symbol target — path and line optional; name required (may be dotted). */
 export type Target = {
@@ -25,7 +23,7 @@ export type Candidate = {
 };
 
 export type Resolution =
-	| { kind: "resolved"; decl: Decl; path: string; ir: FileIr }
+	| { kind: "resolved"; decl: Decl; path: string; ir: FileIr; bytes: SourceBytes }
 	| { kind: "candidates"; candidates: Candidate[] }
 	| { kind: "notFound" };
 
@@ -36,13 +34,14 @@ type Match = {
 	decl: Decl;
 	path: string;
 	ir: FileIr;
+	bytes: SourceBytes;
 };
 
 function pathPresent(path: string | undefined): path is string {
 	return path !== undefined && path.length > 0;
 }
 
-function toCandidate(match: Match, bytes: Uint8Array): Candidate {
+function toCandidate(match: Match): Candidate {
 	return {
 		path: match.path,
 		name: match.decl.name,
@@ -50,32 +49,13 @@ function toCandidate(match: Match, bytes: Uint8Array): Candidate {
 		kind: match.decl.kind,
 		startLine: match.decl.startLine,
 		endLine: match.decl.endLine,
-		signature: signatureText(match.decl, bytes),
+		signature: signatureText(match.decl, match.bytes),
 	};
 }
 
-/**
- * Build candidate rows. Re-reads file bytes per path for signature slices.
- * Engine does not yet expose bytes alongside IR (task 06 will feel this too).
- */
-async function candidatesFrom(matches: readonly Match[]): Promise<Candidate[]> {
-	const bytesByPath = new Map<string, Uint8Array>();
-	const out: Candidate[] = [];
-	for (const match of matches) {
-		if (out.length >= MAX_CANDIDATES) break;
-		let bytes = bytesByPath.get(match.path);
-		if (bytes === undefined) {
-			bytes = await readFile(match.path);
-			bytesByPath.set(match.path, bytes);
-		}
-		out.push(toCandidate(match, bytes));
-	}
-	return out;
-}
-
-function pushMatches(matches: Match[], ir: FileIr, name: string, line: number | undefined): void {
+function pushMatches(matches: Match[], ir: FileIr, bytes: SourceBytes, name: string, line: number | undefined): void {
 	for (const decl of findTargets(ir.decls, name, line)) {
-		matches.push({ decl, path: ir.path, ir });
+		matches.push({ decl, path: ir.path, ir, bytes });
 		if (matches.length >= MAX_CANDIDATES) return;
 	}
 }
@@ -85,9 +65,10 @@ function pushMatches(matches: Match[], ir: FileIr, name: string, line: number | 
  * list, or notFound. Sole identity entry point for symbol-targeted tools.
  *
  * - `path` set → that file's IR only.
- * - `path` absent → budgeted `scanIr` of `scopeDir`.
+ * - `path` absent → budgeted `scanSources` of `scopeDir`.
  * - `line` set → keep decls whose inclusive `startLine..endLine` covers it.
  * - Multiple matches → candidates (never a silent pick). Zero → notFound.
+ * - Resolved carries the same bytes used to build the IR (no second skew window).
  */
 export async function resolveTarget(
 	engine: ExploreEngine,
@@ -100,22 +81,21 @@ export async function resolveTarget(
 	const matches: Match[] = [];
 
 	if (pathPresent(target.path)) {
-		const ir = await engine.irForFile(target.path);
+		const source = await engine.sourceForFile(target.path);
 		signal.throwIfAborted();
-		pushMatches(matches, ir, target.name, target.line);
+		pushMatches(matches, source.ir, source.bytes, target.name, target.line);
 	} else {
-		const scan = scanIr({
+		const scan = scanSources({
 			engine,
 			cwd: engine.cwd,
 			root: scopeDir,
 			signal,
 		});
-		for await (const ir of scan) {
+		for await (const source of scan) {
 			signal.throwIfAborted();
-			pushMatches(matches, ir, target.name, target.line);
+			pushMatches(matches, source.ir, source.bytes, target.name, target.line);
 			if (matches.length >= MAX_CANDIDATES) break;
 		}
-		// scan soft-stops on cancel; surface abort instead of partial resolution
 		signal.throwIfAborted();
 	}
 
@@ -123,8 +103,17 @@ export async function resolveTarget(
 
 	const only = matches.length === 1 ? matches[0] : undefined;
 	if (only !== undefined) {
-		return { kind: "resolved", decl: only.decl, path: only.path, ir: only.ir };
+		return {
+			kind: "resolved",
+			decl: only.decl,
+			path: only.path,
+			ir: only.ir,
+			bytes: only.bytes,
+		};
 	}
 
-	return { kind: "candidates", candidates: await candidatesFrom(matches) };
+	return {
+		kind: "candidates",
+		candidates: matches.slice(0, MAX_CANDIDATES).map(toCandidate),
+	};
 }

@@ -1,4 +1,3 @@
-// fallow-ignore-file unused-file,unused-export -- wired by 06-outline-show
 import type { Stats } from "node:fs";
 import { lstat, opendir, readFile } from "node:fs/promises";
 import { isAbsolute, join, matchesGlob, relative, resolve, sep } from "node:path";
@@ -92,7 +91,7 @@ export function stripLeadingAt(value: string): string {
 	return value.startsWith("@") ? value.slice(1) : value;
 }
 
-export function toSlashPath(value: string): string {
+function toSlashPath(value: string): string {
 	return value.replaceAll("\\", "/");
 }
 
@@ -109,7 +108,7 @@ export function pathResolutionError(error: unknown, input: string): Error {
 	return error instanceof Error ? error : new Error(String(error));
 }
 
-export function isWithinPath(parent: string, child: string): boolean {
+function isWithinPath(parent: string, child: string): boolean {
 	const rel = relative(resolve(parent), resolve(child));
 	return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
@@ -123,7 +122,7 @@ export function formatPathForDisplay(absolutePath: string, cwd: string): string 
 	return toSlashPath(resolvedPath);
 }
 
-export function relativeSlash(from: string, to: string): string {
+function relativeSlash(from: string, to: string): string {
 	const rel = relative(resolve(from), resolve(to));
 	return rel === "" ? "." : toSlashPath(rel);
 }
@@ -191,7 +190,10 @@ async function appendIgnoreRules(directory: string, inherited: readonly IgnoreRu
 async function collectIgnoreRulesToDirectory(cwd: string, directory: string): Promise<IgnoreRule[]> {
 	const resolvedCwd = resolve(cwd);
 	const resolvedDirectory = resolve(directory);
-	if (!isWithinPath(resolvedCwd, resolvedDirectory)) return [];
+	// Outside the session cwd (absolute foreign roots): load that directory's own ignore only.
+	if (!isWithinPath(resolvedCwd, resolvedDirectory)) {
+		return appendIgnoreRules(resolvedDirectory, []);
+	}
 
 	let current = resolvedCwd;
 	let rules = await appendIgnoreRules(current, []);
@@ -226,15 +228,19 @@ function shouldSkip(
 	kind: PathKind,
 	rules: readonly IgnoreRule[],
 	options: {
-		cwd: string;
+		walkRoot: string;
 		includeHidden: boolean;
 		includeIgnored: boolean;
 		includeNoise: boolean;
 	},
 ): boolean {
-	const displayPath = formatPathForDisplay(absolutePath, options.cwd);
-	if (!options.includeHidden && hasHiddenSegment(displayPath)) return true;
-	if (!options.includeNoise && hasNoiseSegment(displayPath)) return true;
+	// Hidden/noise are relative to the walk root — not the session cwd display path.
+	// Otherwise absolute roots under ~/.local (etc.) look entirely "hidden".
+	const rel = relativeSlash(options.walkRoot, absolutePath);
+	const underRoot = rel === "." || (!rel.startsWith("..") && !isAbsolute(rel));
+	const segmentPath = underRoot && rel !== "." ? rel : "";
+	if (!options.includeHidden && segmentPath.length > 0 && hasHiddenSegment(segmentPath)) return true;
+	if (!options.includeNoise && segmentPath.length > 0 && hasNoiseSegment(segmentPath)) return true;
 	return !options.includeIgnored && isIgnored(absolutePath, kind, rules);
 }
 
@@ -281,7 +287,6 @@ export async function walkPaths(options: WalkOptions): Promise<TraversalResult> 
 	let limit: TraversalLimit | undefined;
 
 	const elapsed = () => Date.now() - started;
-	const skipOpts = { cwd: options.cwd, includeHidden, includeIgnored, includeNoise };
 
 	const budgetHit = (): TraversalLimit | undefined => {
 		if (options.signal?.aborted) return "cancelled";
@@ -324,6 +329,8 @@ export async function walkPaths(options: WalkOptions): Promise<TraversalResult> 
 	const rootStats = await lstat(root);
 	const rootKind = entryKind(rootStats);
 	const rootDir = rootKind === "dir" ? root : resolve(root, "..");
+	const walkRoot = rootKind === "dir" ? root : rootDir;
+	const skipOpts = { walkRoot, includeHidden, includeIgnored, includeNoise };
 	const rootRules = includeIgnored ? [] : await collectIgnoreRulesToDirectory(options.cwd, rootDir);
 
 	if (includeRoot) {

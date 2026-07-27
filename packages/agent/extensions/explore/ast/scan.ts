@@ -1,6 +1,4 @@
-// fallow-ignore-file unused-file,unused-export -- wired by 06-outline-show
-import type { ExploreEngine } from "./engine.ts";
-import type { FileIr } from "./ir.ts";
+import type { ExploreEngine, FileSource } from "./engine.ts";
 import { DEFAULT_TRAVERSAL_BUDGETS, type TraversalBudgets, type TraversalLimit, walkPaths } from "../traverse.ts";
 
 export type ScanOptions = {
@@ -25,11 +23,11 @@ export type ScanOutcome = {
 };
 
 /**
- * Budgeted ignore-aware multi-file IR production.
- * Yields one FileIr per supported file; cooperative macrotask between files.
+ * Budgeted ignore-aware multi-file IR+bytes production.
+ * Yields one FileSource per supported file; cooperative macrotask between files.
  * Generator return value is the structured outcome (limit / counters).
  */
-export async function* scanIr(options: ScanOptions): AsyncGenerator<FileIr, ScanOutcome> {
+export async function* scanSources(options: ScanOptions): AsyncGenerator<FileSource, ScanOutcome> {
 	const started = Date.now();
 	const maxElapsedMs = options.budgets?.maxElapsedMs ?? DEFAULT_TRAVERSAL_BUDGETS.maxElapsedMs;
 	let filesEmitted = 0;
@@ -61,14 +59,14 @@ export async function* scanIr(options: ScanOptions): AsyncGenerator<FileIr, Scan
 		if (options.signal?.aborted) return finish("cancelled");
 		if (elapsed() >= maxElapsedMs) return finish("maxElapsedMs");
 
-		const ir = await options.engine.irForFile(hit.absolutePath);
+		const source = await options.engine.sourceForFile(hit.absolutePath);
 
-		// Do not emit work that finished after cancel/budget crossed during irForFile.
+		// Do not emit work that finished after cancel/budget crossed during sourceForFile.
 		if (options.signal?.aborted) return finish("cancelled");
 		if (elapsed() >= maxElapsedMs) return finish("maxElapsedMs");
 
 		filesEmitted += 1;
-		yield ir;
+		yield source;
 		await new Promise<void>((resolve) => {
 			setImmediate(resolve);
 		});
