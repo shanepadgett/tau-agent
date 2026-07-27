@@ -5,15 +5,21 @@
   "entry": [
     ".pi/extensions/*/index.ts",
     "packages/agent/extensions/*/index.ts",
-		"packages/agent/src/index.ts",
+    "packages/agent/src/index.ts",
     "packages/tui/src/index.ts",
-    "packages/agent/scripts/generate-tau-schema.ts"
+    "packages/agent/scripts/generate-tau-schema.ts",
+    "packages/agent/scripts/build-grammars.ts",
+    "packages/agent/scripts/check-package-sources.ts"
   ],
   "includeEntryExports": true,
+  // Archive is frozen prior art under docs/; not part of the live graph.
+  // Grammar wasm packages are resolved by path/bin, not static import.
   "ignorePatterns": [
     "packages/agent/shared/description.ts",
-    "packages/agent/shared/injected-context.ts"
+    "packages/agent/shared/injected-context.ts",
+    "docs/plans/explore-archive/**"
   ],
+  "ignoreDependencies": ["@vscode/tree-sitter-wasm", "tree-sitter-cli"],
   "ignoreExports": [
     {
       "file": "packages/agent/extensions/*/index.ts",

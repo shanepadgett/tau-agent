@@ -1,4 +1,4 @@
-// fallow-ignore-file unused-file -- wired by 02-engine-core
+// fallow-ignore-file unused-file,unused-export -- wired by 06-outline-show
 import type { Stats } from "node:fs";
 import { lstat, opendir, readFile } from "node:fs/promises";
 import { isAbsolute, join, matchesGlob, relative, resolve, sep } from "node:path";
@@ -59,6 +59,11 @@ export type WalkOptions = {
 	 * (caller owns the stop reason). Async allowed for cooperative yielding.
 	 */
 	onFile?: (hit: TraversalHit) => void | boolean | Promise<void | boolean>;
+	/**
+	 * If set, files for which this returns false are skipped without counting toward budgets.
+	 * Directories are not filtered here.
+	 */
+	matchFile?: (hit: TraversalHit) => boolean;
 };
 
 type IgnoreRule = {
@@ -294,6 +299,7 @@ export async function walkPaths(options: WalkOptions): Promise<TraversalResult> 
 	};
 
 	async function pushFile(hit: TraversalHit): Promise<boolean> {
+		if (options.matchFile !== undefined && !options.matchFile(hit)) return true;
 		if (stopIfNeeded()) return false;
 		if (filesVisited >= budgets.maxFiles) {
 			limit = "maxFiles";
@@ -314,7 +320,7 @@ export async function walkPaths(options: WalkOptions): Promise<TraversalResult> 
 		return !stopIfNeeded();
 	}
 
-	const root = resolve(options.root);
+	const root = resolveExplorePath(options.cwd, options.root);
 	const rootStats = await lstat(root);
 	const rootKind = entryKind(rootStats);
 	const rootDir = rootKind === "dir" ? root : resolve(root, "..");

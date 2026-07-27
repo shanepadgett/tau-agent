@@ -74,7 +74,8 @@ function parseGrammarPin(entry: unknown, index: number): GrammarPin {
 	const repo = requireString(record, "repo", context);
 	const tag = requireString(record, "tag", context);
 	const rev = requireString(record, "rev", context);
-	if (source === "built") return { id, source, file, repo, tag, rev, subdir: requireString(record, "subdir", context) };
+	if (source === "built")
+		return { id, source, file, repo, tag, rev, subdir: requireString(record, "subdir", context) };
 	if (source === "release") return { id, source, file, repo, tag, rev, url: requireString(record, "url", context) };
 	throw new Error(`grammar manifest: ${context}.source must be vscode, built, or release`);
 }
