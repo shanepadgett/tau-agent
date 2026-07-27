@@ -2,7 +2,7 @@
 
 ## Cold start
 
-Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, `explore-specs/shape/discover.md` + output-density/bounded-output, then outline tool + scan + engine as patterns. **No new tests.** Register when done. Live per Done when. `check:ts` green.
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), [`../LIVE-PROVE.md`](../LIVE-PROVE.md), this file, `explore-specs/shape/discover.md` + output-density/bounded-output, then outline tool + scan + engine as patterns. **No new tests.** Register when done. Live per Done when. `check:ts` green.
 
 Depends on: 06.
 
@@ -29,8 +29,8 @@ packages/agent/extensions/explore/ast/tools/discover.ts
   - name kinds: case-sensitive on `name` and `qualifiedName` tail segment.
   - `fuzzyName`: bounded edit-distance/subsequence scoring; `maxWork` counts candidate comparisons; when exceeded, stop and set the budget flag. Do not expose scores in output — scoring is selection-only.
   - `documentation`: term match over doc-span text of decls that have one; `maxWork` counts decls inspected.
-- `surface` filters: `public` (visibility public + exported where the language has exports), `private` (inverse), `sourceExport` (`exported === true`), `packageSurface` (adapter capability required; v1 only TS/TSX — resolve package entry from the nearest `package.json` `exports`/`main` and include only decls reachable from it; other languages → clear capability error per `system.md`), `all`.
-- Re-export chains: TS only, and only when cheap — follow `export * from` / `export { X } from` one file at a time through the engine cache with a small depth cap (4). Others omit; no "unknown" strings anywhere.
+- `surface` filters: `public` (visibility public + exported where the language has exports), `private` (inverse), `sourceExport` (`exported === true`), `packageSurface` (via adapter `resolvePackageSurface` capability — **not** language branches in the query/tool), `all`.
+- Package/re-export rules live on the adapter (v1: TS/TSX Node package.json + cheap re-export walk in `languages/typescript-package-surface.ts`). Discover only consumes `PackageSurfaceGraph`. New language = new resolver on that adapter. No "unknown" strings.
 
 ## Output
 
@@ -38,4 +38,9 @@ Per `output-density.md`: group by defining file, path header once; each candidat
 
 ## Done when
 
-Live: each query kind on a real subtree; surface filters; directory-only validation; resultLimit footer when cut.
+After `/reload`, call the real `discover` tool (harness, not a script) per [`../LIVE-PROVE.md`](../LIVE-PROVE.md):
+
+- Each query kind (`exactName`, `prefixName`, `substringName`, `fuzzyName`, `declarationKind`, `documentation`) on corpus scopes.
+- Languages: at least `pi` or `excalidraw` (TS/TSX), `go-tui`, `ast-bro`, `Avalonia`, `guava`, `okio`, `swift-collections`, `Odin` — narrow scopes from LIVE-PROVE.
+- Surfaces: `public`, `private`, `sourceExport`; `packageSurface` on a TS package with resolvable entry (`pi` / this monorepo).
+- Directory-only validation (file path → error); `resultLimit` footer when cut.

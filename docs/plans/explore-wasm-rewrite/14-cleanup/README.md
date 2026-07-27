@@ -2,7 +2,7 @@
 
 ## Cold start
 
-Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, `stripped.md`. Sweep dead names; fix subagents/previews. **No new tests.** `check:ts` green. Ask human before deleting plan/archive dirs.
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), [`../LIVE-PROVE.md`](../LIVE-PROVE.md), this file, `stripped.md`. Sweep dead names; fix subagents/previews. **No new tests.** Spot-check harness tools still pass LIVE-PROVE corpus after renames. `check:ts` green. Ask human before deleting plan/archive dirs.
 
 Depends on: 13.
 

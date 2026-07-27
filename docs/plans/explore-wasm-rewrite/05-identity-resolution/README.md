@@ -43,4 +43,4 @@ resolveTarget(engine, scopeDir: string, target: Target, signal: AbortSignal): Pr
 
 ## Done when
 
-Live: same-name decls disambiguated by path/line/qualified name; cross-file ambiguity returns candidates; not-found clean; abort during scope scan respected.
+Live resolve against corpus scopes per [`../LIVE-PROVE.md`](../LIVE-PROVE.md) (and monorepo): same-name decls disambiguated by path/line/qualified name; cross-file ambiguity returns candidates; not-found clean; abort during scope scan respected.

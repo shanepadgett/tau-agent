@@ -2,7 +2,7 @@
 
 ## Cold start
 
-Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, every spec listed below, then identity + engine + adapters + `packages/agent/shared/bounded-text-result.ts` + a thin Tau tool (e.g. web/patch) for `defineTool`/row-state patterns. **No new tests.** Register tools now. Live after `/reload` per Done when. `check:ts` green.
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), [`../LIVE-PROVE.md`](../LIVE-PROVE.md), this file, every spec listed below, then identity + engine + adapters + `packages/agent/shared/bounded-text-result.ts` + a thin Tau tool (e.g. web/patch) for `defineTool`/row-state patterns. **No new tests.** Register tools now. Live after `/reload` per Done when. `check:ts` green.
 
 Depends on: 05.
 
@@ -45,4 +45,8 @@ Tool files are thin: typebox schema, param normalization (strip leading `@` per 
 
 ## Done when
 
-After `/reload`: recursive `outline` on a real package path; `show` a known symbol all four views; ambiguity errors with candidates; large recursive outline hits bound/overflow cleanly.
+After `/reload`, real `outline` / `show` tools per [`../LIVE-PROVE.md`](../LIVE-PROVE.md):
+
+- Recursive `outline` on corpus package scopes (TS + at least two other registered languages).
+- `show` a known corpus symbol all four views; ambiguity errors with candidates.
+- Large recursive outline hits bound/overflow cleanly.

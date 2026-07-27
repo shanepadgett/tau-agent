@@ -22,19 +22,29 @@
 
 ### Adding a language (acceptance bar)
 
-Shipping a new language means registering an adapter that maps that language onto the existing IR and capabilities. It must **not** require:
+**Bold product claim:** shipping a language is **two required code edits** in Explore:
 
+1. `packages/agent/extensions/explore/ast/languages/<lang>.ts` (optional sibling files under `languages/` only when the adapter itself is large — e.g. package-surface helper)
+2. one registration line in `packages/agent/extensions/explore/ast/registry.ts`
+
+Grammar-backed languages also pin a WASM artifact under `ast/grammars/` (toolchain, not a tool change). That is the full surface.
+
+It must **not** require:
+
+- edits to any `tools/`, `queries/`, or `format/` module
+- `language ===` / extension switches in engine or shared base code
 - new Explore tool names or tool split
 - session locators or new identity scheme
 - changes to read threshold/range policy
 - changes to `impact` / `context` section meanings
 - per-language branches in agent-facing guidance beyond listing newly backed languages
 
-It may add:
+It may add **only on the adapter** (or adapter sibling under `languages/`):
 
 - extension ↔ language mapping
-- adapter parse/outline/show
-- optional file-dep extraction, call-edge extraction, package-surface resolution, ast-search grammar wiring
+- extract → shared IR
+- `importNoiseIdentifiers` and other adapter-owned tables
+- optional file-dep extraction, call-edge extraction, `resolvePackageSurface`, ast-search grammar wiring
 - declaration kind mappings into the shared kind vocabulary (extend vocabulary only when a real new kind exists)
 
 ### Baseline registered set (current product)

@@ -2,7 +2,7 @@
 
 ## Cold start
 
-Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, impact/context/settings specs, then relationships + file-graph + show view extraction. **No new tests.** Compose only — no new graph engine. Live per Done when. `check:ts` green.
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), [`../LIVE-PROVE.md`](../LIVE-PROVE.md), this file, impact/context/settings specs, then relationships + file-graph + show view extraction. **No new tests.** Compose only — no new graph engine. Live per Done when. `check:ts` green.
 
 Depends on: 09.
 
@@ -38,4 +38,8 @@ packages/agent/extensions/explore/ast/tools/context.ts
 
 ## Done when
 
-Live: `impact` modes on a real symbol; `context` with loose and tight budgets (signature downgrade / skip); `budget < 1` errors.
+After `/reload`, real `impact` / `context` tools per [`../LIVE-PROVE.md`](../LIVE-PROVE.md):
+
+- `impact` modes on symbols from `pi` or `excalidraw` (and optional monorepo).
+- `context` loose and tight budgets (signature downgrade / skip) on corpus symbols.
+- `budget < 1` errors.

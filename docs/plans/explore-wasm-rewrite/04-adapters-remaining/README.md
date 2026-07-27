@@ -2,7 +2,9 @@
 
 ## Cold start
 
-Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, task 03 adapters as template, `ast/adapter.ts` + registry. **No new tests.** Prefer after 06. Live: one real file per language. `check:ts` green.
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), [`../LIVE-PROVE.md`](../LIVE-PROVE.md), this file, task 03 adapters as template, `ast/adapter.ts` + registry. **No new tests.** Prefer after 06. Live per Done when. `check:ts` green.
+
+**Language separation:** each language = adapter file under `ast/languages/` + one registry line (+ grammar pin). Do **not** edit tools/queries/format. Put `importNoiseIdentifiers` and any capability hooks on the adapter only.
 
 Depends on: 03. Do not change engine/tools.
 
@@ -34,4 +36,4 @@ All six: `{ shape: true, search: true, fileDeps: false, callEdges: true, package
 
 ## Done when
 
-Live outline (or engine IR dump) on at least one real file per language available in-repo or a tiny hand fixture. Kotlin/Swift should hit external-scanner syntax once if fixtures exist. `check:ts` green.
+After `/reload`, real `outline` (preferred) or `show` on corpus scopes from [`../LIVE-PROVE.md`](../LIVE-PROVE.md) for **each** remaining language: Rust `ast-bro`, C# `Avalonia`, Java `guava`, Kotlin `okio`, Swift `swift-collections`, Odin `Odin`. External-scanner languages (Kotlin/Swift) must hit real corpus syntax once. `check:ts` green.

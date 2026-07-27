@@ -2,7 +2,7 @@
 
 ## Cold start
 
-Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, deps/reverse-deps specs + system cache section, then `FileIr.imports` + TS adapter. **No new tests.** Register tools. Live on monorepo TS module. `check:ts` green.
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), [`../LIVE-PROVE.md`](../LIVE-PROVE.md), this file, deps/reverse-deps specs + system cache section, then `FileIr.imports` + TS adapter. **No new tests.** Register tools. Live per Done when. `check:ts` green.
 
 Depends on: 03.
 
@@ -20,15 +20,11 @@ packages/agent/extensions/explore/ast/tools/deps.ts
 packages/agent/extensions/explore/ast/tools/reverse-deps.ts
 ```
 
-## Resolution (TS/TSX v1 — the only `fileDeps: true` adapters)
+## Resolution (capability on adapter — not in the tool)
 
-`FileIr.imports` specifiers resolve to files:
+`fileDeps` resolution is **adapter-owned**. v1 only TS/TSX adapters set `fileDeps: true` and supply the resolve rules (relative + extensionless + `.js`→`.ts`, bare specs as external, no `node_modules` walk, no tsconfig paths). Shared `file-graph.ts` / tools call the capability; they must not hardcode TS extensions or Node package layout.
 
-- Relative specifiers: try exact, then `.ts`, `.tsx`, then `/index.ts`, `/index.tsx`. Honor extensionless and `.js`→`.ts` rewrite (NodeNext style) since this repo uses it.
-- Bare specifiers (packages): keep as external edges labeled by specifier; do not walk into `node_modules`.
-- No tsconfig `paths` support v1 — if a specifier does not resolve, record it as unresolved; do not guess.
-
-Languages without `fileDeps` → the tools return the capability-unavailable error named in `system.md`. Honest, not fake.
+Languages without `fileDeps` → capability-unavailable error per `system.md`. Honest, not fake.
 
 ## Graph cache
 
@@ -40,4 +36,8 @@ Per spec: dependent files as a small indented tree when factoring helps, depth l
 
 ## Done when
 
-Live on this monorepo: `deps`/`reverse_deps` on a known TS module; depth BFS; Go file → capability error.
+After `/reload`, real `deps` / `reverse_deps` tools per [`../LIVE-PROVE.md`](../LIVE-PROVE.md):
+
+- TS module graph on `pi` and/or `excalidraw` (narrow package scope), plus this monorepo optional.
+- Depth BFS (`depth > 1`) on a known hub file.
+- Non-`fileDeps` language path (e.g. `go-tui` file) → clear capability error, not fake edges.

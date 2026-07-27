@@ -2,7 +2,7 @@
 
 ## Cold start
 
-Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, `explore-specs/session/guidance.md` + system lifecycle, then full `explore/index.ts` and remaining unwired modules. **No new tests.** Wire lifecycle/guidance/docs; remove fallow headers. Full live smoke. Optional `review` subagent once. `check:ts` green.
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), [`../LIVE-PROVE.md`](../LIVE-PROVE.md), this file, `explore-specs/session/guidance.md` + system lifecycle, then full `explore/index.ts` and remaining unwired modules. **No new tests.** Wire lifecycle/guidance/docs; remove fallow headers. Full live smoke. Optional `review` subagent once. `check:ts` green.
 
 Depends on: 04, 07, 10, 11, 12 (or whatever subset is actually built — wire what exists, do not invent missing tools).
 
@@ -21,6 +21,6 @@ Final composition: everything built in tasks 00–12 wired into one coherent ext
 
 ## Acceptance
 
-- Manual smoke on this repo after `/reload`: recursive `outline` on `packages/agent/extensions/explore/`, `show` a known symbol, `discover` exactName, Pi `read` large-file outline substitution, `impact` on a function, `context` within budget.
+- After `/reload`, full harness smoke per [`../LIVE-PROVE.md`](../LIVE-PROVE.md): recursive `outline`, `show`, `discover`, graph/relationship tools as registered, Pi `read` large-file outline substitution, `impact`, `context` — each on corpus scopes covering the languages still claimed, plus optional monorepo TS.
 - `mise run check:ts` green (runs automatically).
 - This is the one task where calling the `review` subagent is warranted (complex integration). One initial review, at most one follow-up, per AGENTS.md limits.

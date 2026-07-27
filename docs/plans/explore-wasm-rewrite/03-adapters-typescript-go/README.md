@@ -45,4 +45,4 @@ Walk the tree with `tree.rootNode` / `namedChildren` in TS code; use `new Parser
 
 ## Done when
 
-Live: IR for a real `.ts` and `.go` file in this monorepo shows nested decls, docs spans, exports/visibility, imports. Deliberate syntax error still yields surrounding decls + `parseDegraded: true`. Signatures are exact source slices.
+Live IR (or `outline` once task 06 exists) on corpus + monorepo per [`../LIVE-PROVE.md`](../LIVE-PROVE.md): real `.ts` from `pi`/`excalidraw` and `.go` from `go-tui` show nested decls, docs spans, exports/visibility, imports. Deliberate syntax error still yields surrounding decls + `parseDegraded: true`. Signatures are exact source slices.

@@ -2,7 +2,7 @@
 
 ## Cold start
 
-Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, read-policy/settings/autoread/fs-read specs, outline query + Pi `tool_result` docs pattern (other extensions). **No new tests. No Explore `read` tool.** Live: large Pi read → outline in context. `check:ts` green.
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), [`../LIVE-PROVE.md`](../LIVE-PROVE.md), this file, read-policy/settings/autoread/fs-read specs, outline query + Pi `tool_result` docs pattern (other extensions). **No new tests. No Explore `read` tool.** Live per Done when. `check:ts` green.
 
 Depends on: 06.
 
@@ -70,9 +70,9 @@ No dependency on complete-file unchanged/diff machinery.
 
 ## Done when
 
-Live after `/reload`:
+Live after `/reload` (real Pi `read`, not a fake). Prefer large files from [`../LIVE-PROVE.md`](../LIVE-PROVE.md) corpus (`pi`, `excalidraw`, plus one non-TS corpus file) and this monorepo:
 
-- Full Pi `read` of a >200-line `.ts` file in this repo → outline in the tool result / context, not the body.
+- Full Pi `read` of a >200-line supported source file → outline in the tool result / context, not the body.
 - Ranged Pi `read` of the same file → real slice.
 - Full read of a small file or `.md` → normal Pi body.
 - Autoread of a large supported path injects outline only.

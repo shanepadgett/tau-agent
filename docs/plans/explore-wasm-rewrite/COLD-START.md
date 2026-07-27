@@ -14,7 +14,7 @@ Explore structural tools on in-process `web-tree-sitter` (WASM). Product law: `d
 ## Fixed architecture (do not reopen)
 
 1. In-process engine. No child process, no native worker, no protocol.
-2. Language = one adapter file + one registry line. Tools never `language ===`.
+2. **Language separation (bold product claim):** adding a language is **two required edits** only — (1) `ast/languages/<lang>.ts` (or a sibling under `languages/` for large hooks), (2) one `register` line in `ast/registry.ts`. Grammar languages also need a pin/artifact under `ast/grammars/` (toolchain, not tools). Optional capability hooks (`resolvePackageSurface`, later fileDeps/callEdges tables, `importNoiseIdentifiers`) live **on that adapter**. **Never** put language keywords, package layouts, re-export syntax, or `language ===` / extension switches in `tools/`, `queries/`, `format/`, `engine.ts`, or other shared base files.
 3. Parse → plain `FileIr` → `tree.delete()` immediately. Cache IR by `(path, contentHash)`. Never cache `Tree`.
 4. Signature = byte slice of real source. Never rebuild from strings / regex.
 5. Identity = `path` + `name` + optional `line`. No numeric locators.
@@ -29,8 +29,9 @@ Explore structural tools on in-process `web-tree-sitter` (WASM). Product law: `d
 - **Do not write new unit/integration tests** for this rewrite. No new `*.test.ts` under explore except the existing grammar smoke from task 01 (leave it alone).
 - **Do not** invent fixture harnesses “for later.”
 - After the task: leave code so auto **`mise run check:ts`** (silent runner) stays green — types, lint, format, fallow. That is enough for “build good.”
-- **Live prove** only what the task “Done when” says: `/reload`, poke tools or APIs on this repo. If the task has nothing live to poke yet (e.g. scaffold only), check:ts green + loads is enough. Move on.
+- **Live prove** what the task “Done when” says, after `/reload`, by invoking the **real registered harness tool** (not a bun script, not a private query import) against the **reference corpus** in [`LIVE-PROVE.md`](LIVE-PROVE.md). This monorepo alone is not enough once a tool is registered. Languages the task touches must appear in those calls. Scaffold-only tasks with no tool yet: check:ts green + loads is enough.
 - Archive `docs/plans/explore-archive/` is **read-only prior art**. Never paste it.
+- Reference checkouts are **read-only**. Never edit them.
 
 ## How to run one task in a new window
 
@@ -41,7 +42,8 @@ Explore structural tools on in-process `web-tree-sitter` (WASM). Product law: `d
 5. Implement only that task’s file list and wiring. No bonus tools, settings, or “while I’m here.”
 6. Unreachable modules: `// fallow-ignore-file unused-file -- wired by <task>` until wired; remove when reachable from `index.ts`.
 7. Stop when “Done when” is met and check:ts would be green. Remind human `/reload` if extension surface changed.
-8. Do not start the next task unless asked.
+8. Live prove via harness tools on [`LIVE-PROVE.md`](LIVE-PROVE.md) corpus paths for every language the task touches. Do not stop at monorepo-only pokes when references exist.
+9. Do not start the next task unless asked.
 
 ## Task order (critical path)
 
@@ -59,6 +61,7 @@ Explore structural tools on in-process `web-tree-sitter` (WASM). Product law: `d
 - Explore `ls`/`find`/`grep`/`read` tools
 - Signature pretty-print by regex
 - Second parser or dual language stack
+- **Language soup in shared code** — TS/Go/Rust keywords, `package.json`, re-export regex, or extension lists inside tools/queries/format/engine
 - Copy-paste four relationship pipelines
 - Unit test suite “to be safe”
 - Reading/editing `packages/agent/schemas/tau.schema.json` by hand

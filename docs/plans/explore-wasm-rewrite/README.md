@@ -19,7 +19,7 @@ Each task README is written to stand alone for implementation **given** COLD-STA
 
 1. **Engine is in-process TypeScript.** `web-tree-sitter` runtime + pinned grammar `.wasm` artifacts. No child process, no `worker_threads`, no protocol, no codec, no protocol version. The specs' word "worker" maps to this in-process engine object; it "advertises" languages by exposing the adapter registry.
 2. **Cooperative yielding, not threads.** Directory operations `await` a macrotask between file units and check `AbortSignal` per unit. Escalate to `worker_threads` only if measured latency demands it — that is a separate future decision, not part of this plan.
-3. **One language stack.** Adapters, IR, formatting, and tools all live in TypeScript under `packages/agent/extensions/explore/ast/`. Signatures are slices of real source, never reconstructed from strings.
+3. **One language stack + hard separation.** Adapters, IR, formatting, and tools all live in TypeScript under `packages/agent/extensions/explore/ast/`. Signatures are slices of real source, never reconstructed from strings. **Bold claim:** a new language is **two required code edits** — `ast/languages/<lang>.ts` (+ optional sibling under `languages/` for large hooks) and one line in `ast/registry.ts` — plus a grammar pin/artifact when using tree-sitter. Tools/queries/format/engine stay language-agnostic; capability hooks (`packageSurface`, later `fileDeps`/`callEdges`, import-noise sets) attach to the adapter. Violating this is a stop-ship for any task.
 4. **IR offsets are UTF-16 code units into the decoded source string.** Adapters emit `node.startIndex`/`node.endIndex` as-is; consumers slice with `source.slice(...)`. No UTF-8 conversion, no `Buffer` outside engine content hashing. `FileSource.source` is the decoded string every offset indexes into.
 5. **Canonical IR, extracted eagerly.** Parse → extract plain-JS `FileIr` → `tree.delete()` immediately. Never cache `Tree` objects (WASM heap, not GC'd). Cache IR keyed by `(path, contentHash)`.
 6. **Identity is `path` + `name` (+ `line`).** No numeric locators anywhere (`explore-specs/cross/identity.md`).
@@ -34,7 +34,7 @@ Each task README is written to stand alone for implementation **given** COLD-STA
 
 `packages/agent/extensions/explore/` rebuilds fresh. **Register each AST tool as soon as it works** — no staged flip. Use `// fallow-ignore-file unused-file -- wired by <task>` only for modules genuinely not yet reachable from `index.ts`, and remove the header in the wiring task. Every task must leave `mise run check:ts` green.
 
-**No new unit tests for this rewrite.** Prove each phase live after `/reload` against this repo (and real fixtures under hand when needed). Existing grammar smoke test from task 01 stays; do not grow a vitest suite per task. Auto `check:ts` still runs (types, lint, fallow) — that is not product behavior testing.
+**No new unit tests for this rewrite.** Prove each phase live after `/reload` by calling the **real harness tool** against the fixed reference corpus in [`LIVE-PROVE.md`](LIVE-PROVE.md) (`~/.local/share/tau-agent/references/`: pi, excalidraw, go-tui, ast-bro, Avalonia, guava, okio, swift-collections, Odin). Cover every language the task touches. This monorepo is optional extra TS smoke, not a substitute. Existing grammar smoke test from task 01 stays; do not grow a vitest suite per task. Auto `check:ts` still runs (types, lint, fallow) — that is not product behavior testing.
 
 ## Task order and dependencies
 

@@ -2,7 +2,7 @@
 
 ## Cold start
 
-Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, `explore-specs/shape/ast-search.md`, engine parse path. **No new tests.** Spike → `decision.md` in this folder → implement. Can trail critical path. Live patterns after register. `check:ts` green.
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), [`../LIVE-PROVE.md`](../LIVE-PROVE.md), this file, `explore-specs/shape/ast-search.md`, engine parse path. **No new tests.** Spike → `decision.md` in this folder → implement. Can trail critical path. Live patterns after register. `check:ts` green.
 
 Depends on: 02 (+ adapters for languages you claim).
 
@@ -34,4 +34,8 @@ packages/agent/extensions/explore/ast/tools/ast-search.ts
 
 ## Done when
 
-`decision.md` exists; tool registered; live patterns on TS (and Go if easy): plain, `$NAME`, `$$$ARGS`, no-match, language errors, budget trip.
+`decision.md` exists; tool registered. After `/reload`, real `ast_search` per [`../LIVE-PROVE.md`](../LIVE-PROVE.md):
+
+- Patterns on `pi`/`excalidraw` (TS/TSX) and `go-tui` when claimed: plain, `$NAME`, `$$$ARGS`, no-match.
+- Language errors and budget trip on corpus scopes.
+- Any extra claimed language hits its corpus row once.
