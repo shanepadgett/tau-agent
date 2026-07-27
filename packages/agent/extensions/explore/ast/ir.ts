@@ -1,4 +1,4 @@
-// fallow-ignore-file unused-file,unused-type -- wired by 06-outline-show
+// fallow-ignore-file unused-file,unused-type -- wired by 05-identity-resolution
 
 /** Shared declaration-kind vocabulary. Extend only for a real new kind. */
 export type DeclKind =
@@ -12,6 +12,7 @@ export type DeclKind =
 	| "constructor"
 	| "enum"
 	| "interface"
+	| "typeAlias"
 	| "function"
 	| "variable"
 	| "constant"

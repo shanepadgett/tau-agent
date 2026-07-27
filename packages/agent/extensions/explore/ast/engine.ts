@@ -5,7 +5,8 @@ import { resolve } from "node:path";
 import { Language, Parser } from "web-tree-sitter";
 import type { AdapterRegistry } from "./registry.ts";
 import { createDefaultRegistry } from "./registry.ts";
-import type { FileIr } from "./ir.ts";
+import type { ExtractResult } from "./adapter.ts";
+import type { Decl, FileIr } from "./ir.ts";
 import { grammarWasmPath, loadGrammarManifest, runtimeWasmPath, type GrammarPin } from "./grammars/manifest.ts";
 import { formatPathForDisplay, pathResolutionError, resolveExplorePath } from "../traverse.ts";
 
@@ -56,6 +57,70 @@ function pinById(id: string): GrammarPin {
 		throw new Error(`No grammar artifact for language: ${id}`);
 	}
 	return pin;
+}
+
+/**
+ * web-tree-sitter indexes JS strings in UTF-16 code units, not UTF-8 bytes.
+ * FileIr stores UTF-8 byte offsets into file bytes — convert once at the grammar boundary.
+ * Source adapters (Markdown) already emit UTF-8 and must not pass through this.
+ */
+function makeJsToUtf8Mapper(source: string): (jsOffset: number) => number {
+	const map = new Uint32Array(source.length + 1);
+	let byte = 0;
+	let i = 0;
+	while (i < source.length) {
+		map[i] = byte;
+		const code = source.charCodeAt(i);
+		if (code < 0x80) {
+			byte += 1;
+			i += 1;
+		} else if (code < 0x800) {
+			byte += 2;
+			i += 1;
+		} else if (code >= 0xd800 && code <= 0xdbff && i + 1 < source.length) {
+			const low = source.charCodeAt(i + 1);
+			if (low >= 0xdc00 && low <= 0xdfff) {
+				map[i + 1] = byte;
+				byte += 4;
+				i += 2;
+				continue;
+			}
+			byte += 3;
+			i += 1;
+		} else {
+			byte += 3;
+			i += 1;
+		}
+	}
+	map[source.length] = byte;
+	return (jsOffset: number): number => {
+		if (jsOffset <= 0) return 0;
+		if (jsOffset >= source.length) return byte;
+		return map[jsOffset] ?? byte;
+	};
+}
+
+function remapDeclToUtf8(decl: Decl, toUtf8: (jsOffset: number) => number): Decl {
+	const next: Decl = {
+		...decl,
+		startByte: toUtf8(decl.startByte),
+		endByte: toUtf8(decl.endByte),
+		signatureEndByte: toUtf8(decl.signatureEndByte),
+		children: decl.children.map((child) => remapDeclToUtf8(child, toUtf8)),
+	};
+	if (decl.bodyStartByte !== undefined) next.bodyStartByte = toUtf8(decl.bodyStartByte);
+	if (decl.bodyEndByte !== undefined) next.bodyEndByte = toUtf8(decl.bodyEndByte);
+	if (decl.docStartByte !== undefined) next.docStartByte = toUtf8(decl.docStartByte);
+	if (decl.docEndByte !== undefined) next.docEndByte = toUtf8(decl.docEndByte);
+	return next;
+}
+
+function remapExtractToUtf8(extracted: ExtractResult, source: string): ExtractResult {
+	const toUtf8 = makeJsToUtf8Mapper(source);
+	return {
+		decls: extracted.decls.map((decl) => remapDeclToUtf8(decl, toUtf8)),
+		imports: extracted.imports,
+	};
 }
 
 /**
@@ -158,7 +223,7 @@ export function createExploreEngine(options: ExploreEngineOptions): ExploreEngin
 			throw new Error(`Parse failed for ${formatPathForDisplay(absolutePath, cwd)}`);
 		}
 		try {
-			const extracted = adapter.extract(tree, source);
+			const extracted = remapExtractToUtf8(adapter.extract(tree, source), source);
 			return {
 				path: absolutePath,
 				contentHash: hash,

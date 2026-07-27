@@ -1,6 +1,8 @@
 // fallow-ignore-file unused-file,unused-export -- wired by 06-outline-show
 import { extname } from "node:path";
 import type { LanguageAdapter, LanguageCapabilities } from "./adapter.ts";
+import { goAdapter } from "./languages/go.ts";
+import { tsxAdapter, typescriptAdapter } from "./languages/typescript.ts";
 import { extractMarkdown } from "./markdown.ts";
 
 export type LanguageAdvertisement = {
@@ -85,7 +87,7 @@ export function createRegistry(seed: readonly LanguageAdapter[] = []): AdapterRe
 	};
 }
 
-/** Session registry with Markdown always present. Grammar adapters register later. */
+/** Session registry: Markdown + grammar adapters landed so far. */
 export function createDefaultRegistry(): AdapterRegistry {
-	return createRegistry([markdownAdapter()]);
+	return createRegistry([markdownAdapter(), typescriptAdapter(), tsxAdapter(), goAdapter()]);
 }
