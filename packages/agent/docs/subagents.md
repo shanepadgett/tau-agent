@@ -82,7 +82,7 @@ Tau assigns one display name to each fresh child and keeps it for follow-up turn
 
 ## Built-ins
 
-- `review` — nuclear, architecture-first review for necessity, reuse, ownership, duplication, and simplification; runtime correctness is secondary
+- `review` — expensive, nuclear architecture review for substantial cross-cutting implementation and refactor work only; skip routine or minor changes
 - `scout` — mechanical local code lookup for paths, declarations, literals, registrations, imports, references, and direct call relationships; it returns cited facts without diagnosis or judgment
 - `web-research` — `websearch`, `codesearch`, `webfetch`
 - `context-sync` — maps meaningful uncommitted work into `.pi/contexts`. Offered to the coding agent when `extensions.context.sync.enabled` and `sync.automation` are true. Manual `/context-sync` remains when sync is enabled with `automation` false. Validation can auto-run it when `validation.enabled` and `sync.enabled`

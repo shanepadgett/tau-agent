@@ -147,7 +147,9 @@ Pass \`files\` when exact relevant files are already known. Tau autoreads curren
 
 Delegate one focused task per call. Children do not inherit parent messages. Include exact absolute reference paths when a child must inspect a repository outside the current working directory.
 
-Review limit: for one user task or coherent implementation batch, call the \`review\` agent at most twice. The first call is the initial review. The only permitted second call is a follow-up in the same retained thread to check fixes from that initial review. Never call \`review\` a third time for the same task. Do not call it for documentation-only work, trivial edits, small localized changes, or micro-adjustments after review; inspect and test those directly.`;
+Review is an expensive, exceptional escalation, not a routine completion step. Call \`review\` only after substantial implementation that changes architecture, ownership, shared abstractions, or several interacting runtime paths. File count and line count do not make work significant. Do not call it for documentation, catalog or seed entries, data updates, configuration-only edits, tests-only edits, generated changes, straightforward wiring, localized fixes, small features, or micro-adjustments; inspect and test those directly. When uncertain, do not call it.
+
+For one qualifying user task or coherent implementation batch, call \`review\` at most twice. The first call is the initial review. The only permitted second call is a follow-up in the same retained thread to check fixes from that initial review. Never call \`review\` a third time for the same task.`;
 		return { systemPrompt: `${event.systemPrompt}\n\n${prompt}` };
 	});
 	pi.registerTool(
