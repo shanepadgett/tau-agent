@@ -36,7 +36,7 @@ describe("working-memory catalog and projection", () => {
 		expect(catalog.get("t:assistant:1")?.messages).toHaveLength(2);
 	});
 
-	it("hard-checkpoints context, sanitizes continuation arguments, and annotates retained refs", () => {
+	it("hard-checkpoints context, sanitizes continuation arguments, and hides retained refs", () => {
 		const oldUser = { role: "user" as const, content: "original constraint", timestamp: 1 };
 		const oldCall = fauxAssistantMessage(fauxToolCall("read", { path: "a.ts" }, { id: "read-a" }));
 		const anchor = fauxAssistantMessage(
@@ -60,9 +60,16 @@ describe("working-memory catalog and projection", () => {
 			prunedRowIds: new Set(),
 		};
 		const projected = projectWorkingMemory(messages, state, branch, branch);
-		expect(projected).toHaveLength(3);
-		expect(projected[0]).toMatchObject({ role: "user", content: expect.stringContaining("[wm m:user]") });
-		const projectedAnchor = projected[1];
+		expect(projected).toHaveLength(4);
+		expect(projected[0]).toMatchObject({
+			role: "custom",
+			customType: "tau.working-memory.references",
+			content: expect.stringContaining("m:user (user): original constraint"),
+			display: false,
+		});
+		expect(projected[1]).toEqual(oldUser);
+		expect(JSON.stringify(projected)).not.toContain("[wm ");
+		const projectedAnchor = projected[2];
 		if (projectedAnchor?.role !== "assistant") throw new Error("expected assistant anchor");
 		const call = projectedAnchor.content.find((block) => block.type === "toolCall");
 		expect(call?.type === "toolCall" ? call.arguments : undefined).toEqual({ checkpoint: true });

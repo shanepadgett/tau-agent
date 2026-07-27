@@ -98,7 +98,7 @@ export default function workingMemoryExtension(pi: ExtensionAPI): void {
 					promptSnippet: "Reassess and selectively checkpoint active working memory",
 					promptGuidelines: [
 						"Use working_memory when stale evidence has accumulated or a memory reminder asks for reassessment; continue coherent exploration when current evidence remains useful.",
-						"Model-only [wm ...] tags provide keep refs. Message refs preserve conversational evidence; tool refs preserve one complete call/result exchange.",
+						"A hidden working-memory reference catalog provides keep refs. Message refs preserve conversational evidence; tool refs preserve one complete call/result exchange.",
 						"Keep active or expensive evidence, outline files when structure suffices, defer paths whose relevance is conditional, and discard evidence with no expected value.",
 						"Everything before working_memory leaves future model context unless selected in keep. Put durable decisions, constraints, unresolved matters, and next action in continuation without duplicating retained evidence.",
 					],

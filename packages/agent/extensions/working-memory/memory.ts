@@ -14,6 +14,7 @@ export interface MemoryUnit {
 }
 
 const EXCLUDED_CUSTOM_TYPES = new Set(["tau.autoread", "tau.runtime-context", "tau.working-memory.nudge"]);
+const REFERENCE_CATALOG_TYPE = "tau.working-memory.references";
 
 export function buildMemoryCatalog(branch: readonly SessionEntry[]): Map<string, MemoryUnit> {
 	const catalog = new Map<string, MemoryUnit>();
@@ -89,10 +90,10 @@ export function projectWorkingMemory(
 	const catalog = buildMemoryCatalog(branch);
 	const refsByMessage = referenceCurrentMessages(messages, contextEntries, catalog);
 	if (state.latestAnchorToolCallId === undefined) {
-		return messages.map((message, index) => annotate(message, refsByMessage[index] ?? []));
+		return addReferenceCatalog(messages, refsByMessage.flat());
 	}
 	const anchorIndex = findAnchor(messages, state.latestAnchorToolCallId);
-	if (anchorIndex < 0) return messages.map((message, index) => annotate(message, refsByMessage[index] ?? []));
+	if (anchorIndex < 0) return addReferenceCatalog(messages, refsByMessage.flat());
 
 	const retained = state.retainedRefs
 		.flatMap((ref) => {
@@ -101,22 +102,18 @@ export function projectWorkingMemory(
 		})
 		.sort((left, right) => left.order - right.order || left.suborder - right.suborder);
 	const projected: ContextMessage[] = [];
+	const projectedRefs: MemoryUnit[] = [];
 	for (const unit of retained) {
-		for (let index = 0; index < unit.messages.length; index += 1) {
-			projected.push(annotate(unit.messages[index] as ContextMessage, index === 0 ? [unit] : []));
-		}
+		projected.push(...unit.messages);
+		projectedRefs.push(unit);
 	}
 	for (let index = anchorIndex; index < messages.length; index += 1) {
 		const message = messages[index];
 		if (!message) continue;
-		projected.push(
-			annotate(
-				index === anchorIndex ? sanitizeAnchor(message, state.latestAnchorToolCallId) : message,
-				refsByMessage[index] ?? [],
-			),
-		);
+		projected.push(index === anchorIndex ? sanitizeAnchor(message, state.latestAnchorToolCallId) : message);
+		projectedRefs.push(...(refsByMessage[index] ?? []));
 	}
-	return projected;
+	return addReferenceCatalog(projected, projectedRefs);
 }
 
 function referenceCurrentMessages(
@@ -141,37 +138,23 @@ function referenceCurrentMessages(
 	});
 }
 
-function annotate(message: ContextMessage, units: readonly MemoryUnit[]): ContextMessage {
-	if (units.length === 0 || message.role === "toolResult") return message;
-	const marker = `[wm ${units.map((unit) => `${unit.ref}${unit.label.startsWith("tool ") ? `=${unit.label.slice(5)}` : ""}`).join("; ")}]`;
-	if (message.role === "assistant") {
-		const firstTool = message.content.findIndex((block) => block.type === "toolCall");
-		const index = firstTool < 0 ? message.content.length : firstTool;
-		return {
-			...message,
-			content: [...message.content.slice(0, index), { type: "text", text: marker }, ...message.content.slice(index)],
-		};
-	}
-	if (message.role === "user") {
-		return {
-			...message,
-			content:
-				typeof message.content === "string"
-					? `${marker}\n${message.content}`
-					: [{ type: "text", text: marker }, ...message.content],
-		};
-	}
-	if (message.role === "custom") {
-		return {
-			...message,
-			content:
-				typeof message.content === "string"
-					? `${marker}\n${message.content}`
-					: [{ type: "text", text: marker }, ...message.content],
-		};
-	}
-	if (message.role === "bashExecution") return { ...message, output: `${marker}\n${message.output}` };
-	return { ...message, summary: `${marker}\n${message.summary}` };
+function addReferenceCatalog(messages: readonly ContextMessage[], units: readonly MemoryUnit[]): ContextMessage[] {
+	const unique = new Map(units.map((unit) => [unit.ref, unit]));
+	if (unique.size === 0) return [...messages];
+	const references = [...unique.values()]
+		.sort((left, right) => left.order - right.order || left.suborder - right.suborder)
+		.map((unit) => `${unit.ref} (${unit.label}): ${unit.preview}`)
+		.join("\n");
+	return [
+		{
+			role: "custom",
+			customType: REFERENCE_CATALOG_TYPE,
+			content: `Working-memory references for this provider context. Use these exact refs in working_memory.keep; do not repeat this catalog in responses.\n${references}`,
+			display: false,
+			timestamp: 0,
+		},
+		...messages,
+	];
 }
 
 function sanitizeAnchor(message: ContextMessage, id: string): ContextMessage {
