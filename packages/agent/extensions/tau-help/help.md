@@ -92,7 +92,7 @@ Runs configured commands while keeping their output out of agent context when th
 
 ## soul
 
-Adds Rok’s persona and operating rules to Pi’s native assistant prompt.
+Adds two independently toggleable sections to Pi’s native assistant prompt: `ponytail` (a lazy-senior-dev build ethos) and `caveman` (a terse communication style). Both on by default.
 
 ## stash
 

@@ -233,10 +233,15 @@
 				"soul": {
 					"type": "object",
 					"properties": {
-						"enabled": {
+						"ponytail": {
 							"type": "boolean",
 							"default": true,
-							"description": "Enable Tau's Rok system prompt."
+							"description": "Add the lazy-senior-dev build ethos to Tau's system prompt."
+						},
+						"caveman": {
+							"type": "boolean",
+							"default": true,
+							"description": "Add the terse communication style to Tau's system prompt."
 						}
 					},
 					"additionalProperties": false
