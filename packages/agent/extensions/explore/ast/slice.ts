@@ -1,4 +1,4 @@
-// fallow-ignore-file unused-file -- wired by 06-outline-show
+// fallow-ignore-file unused-file,unused-export -- wired by 06-outline-show
 import type { Decl } from "./ir.ts";
 
 /** UTF-8 file bytes. Prefer the buffer used to hash/parse the file. */

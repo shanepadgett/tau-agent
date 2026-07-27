@@ -1,4 +1,4 @@
-// fallow-ignore-file unused-file -- wired by 06-outline-show
+// fallow-ignore-file unused-file,unused-export -- wired by 06-outline-show
 import type { ExploreEngine } from "./engine.ts";
 import type { FileIr } from "./ir.ts";
 import { DEFAULT_TRAVERSAL_BUDGETS, type TraversalBudgets, type TraversalLimit, walkPaths } from "../traverse.ts";

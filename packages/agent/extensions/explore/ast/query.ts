@@ -1,4 +1,4 @@
-// fallow-ignore-file unused-file -- wired by 05-identity-resolution
+// fallow-ignore-file unused-file,unused-export -- wired by 06-outline-show
 import type { Decl } from "./ir.ts";
 
 /** Depth-first visit of a decl forest. */

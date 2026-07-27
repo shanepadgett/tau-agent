@@ -11,6 +11,8 @@ import { grammarWasmPath, loadGrammarManifest, runtimeWasmPath, type GrammarPin 
 import { formatPathForDisplay, pathResolutionError, resolveExplorePath } from "../traverse.ts";
 
 export type ExploreEngine = {
+	/** Absolute session cwd — path resolution and directory scans use this. */
+	readonly cwd: string;
 	readonly registry: AdapterRegistry;
 	/** Resolve path, read bytes, return cached or freshly extracted FileIr. */
 	irForFile(path: string): Promise<FileIr>;
@@ -239,6 +241,7 @@ export function createExploreEngine(options: ExploreEngineOptions): ExploreEngin
 	};
 
 	return {
+		cwd,
 		registry,
 
 		async irForFile(path: string): Promise<FileIr> {
