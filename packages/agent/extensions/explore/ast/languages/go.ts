@@ -22,6 +22,49 @@ const CAPABILITIES: LanguageCapabilities = {
 	packageSurface: false,
 };
 
+const IMPORT_NOISE = new Set([
+	"break",
+	"case",
+	"chan",
+	"const",
+	"continue",
+	"default",
+	"defer",
+	"else",
+	"fallthrough",
+	"for",
+	"func",
+	"go",
+	"goto",
+	"if",
+	"import",
+	"interface",
+	"map",
+	"package",
+	"range",
+	"return",
+	"select",
+	"struct",
+	"switch",
+	"type",
+	"var",
+	"iota",
+	"true",
+	"false",
+	"nil",
+	"error",
+	"int",
+	"int32",
+	"int64",
+	"uint",
+	"byte",
+	"rune",
+	"string",
+	"bool",
+	"float64",
+	"any",
+]);
+
 const EXTENSIONS = [".go"] as const;
 
 // Node-type constants — owned by this adapter.
@@ -408,6 +451,7 @@ export function goAdapter(): GrammarAdapter {
 		id: "go",
 		extensions: EXTENSIONS,
 		capabilities: CAPABILITIES,
+		importNoiseIdentifiers: IMPORT_NOISE,
 		extract: extractGo,
 	};
 }

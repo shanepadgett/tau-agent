@@ -40,7 +40,7 @@ Gives the agent `context_prune` for creating a hard context checkpoint after bro
 
 ## explore
 
-Structural source tools on in-process tree-sitter (WASM). Currently registers `outline` (file / one-level directory / recursive) and `show` (path+name signature and declaration views). Further tools (discover, graph, relationships, impact, context) land as the rewrite continues. Pi keeps `ls` / `find` / `grep` / `read`.
+Structural source tools on in-process tree-sitter (WASM). Currently registers `outline` (file / one-level directory / recursive), `show` (path+name signature and declaration views), and `discover` (repo/package/subtree declaration search by name, kind, or docs). Further tools (graph, relationships, impact, context) land as the rewrite continues. Pi keeps `ls` / `find` / `grep` / `read`.
 
 ## footer
 

@@ -9,6 +9,7 @@ import { rustAdapter } from "./languages/rust.ts";
 import { swiftAdapter } from "./languages/swift.ts";
 import { tsxAdapter, typescriptAdapter } from "./languages/typescript.ts";
 import { extractMarkdown } from "./markdown.ts";
+import type { PackageSurfaceResolver } from "./package-surface.ts";
 
 export type LanguageAdvertisement = {
 	id: string;
@@ -22,6 +23,8 @@ export type AdapterRegistry = {
 	adapterForExtension(extension: string): LanguageAdapter | undefined;
 	registeredLanguages(): LanguageAdvertisement[];
 	capabilitiesFor(languageId: string): LanguageCapabilities | undefined;
+	/** Deduped package-surface resolvers from adapters that declare the capability. */
+	packageSurfaceResolvers(): readonly PackageSurfaceResolver[];
 };
 
 const MARKDOWN_EXTENSIONS = [".md", ".markdown", ".mdown"] as const;
@@ -40,6 +43,7 @@ function markdownAdapter(): LanguageAdapter {
 		id: "markdown",
 		extensions: MARKDOWN_EXTENSIONS,
 		capabilities: MARKDOWN_CAPABILITIES,
+		importNoiseIdentifiers: new Set(),
 		extract: extractMarkdown,
 	};
 }
@@ -88,6 +92,18 @@ function createRegistry(seed: readonly LanguageAdapter[] = []): AdapterRegistry 
 		},
 		capabilitiesFor(languageId: string): LanguageCapabilities | undefined {
 			return byId.get(languageId)?.capabilities;
+		},
+		packageSurfaceResolvers(): readonly PackageSurfaceResolver[] {
+			const out: PackageSurfaceResolver[] = [];
+			const seen = new Set<PackageSurfaceResolver>();
+			for (const adapter of byId.values()) {
+				if (!adapter.capabilities.packageSurface) continue;
+				const resolver = adapter.resolvePackageSurface;
+				if (resolver === undefined || seen.has(resolver)) continue;
+				seen.add(resolver);
+				out.push(resolver);
+			}
+			return out;
 		},
 	};
 }

@@ -30,96 +30,7 @@ export type ShowBatch = {
 
 const IDENTIFIER = /[A-Za-z_$][\w$]*/gu;
 
-const NOISE_IDENTIFIERS = new Set([
-	"abstract",
-	"as",
-	"async",
-	"await",
-	"boolean",
-	"break",
-	"case",
-	"catch",
-	"class",
-	"const",
-	"continue",
-	"debugger",
-	"declare",
-	"default",
-	"delete",
-	"do",
-	"else",
-	"enum",
-	"export",
-	"extends",
-	"false",
-	"finally",
-	"for",
-	"from",
-	"function",
-	"get",
-	"if",
-	"implements",
-	"import",
-	"in",
-	"infer",
-	"instanceof",
-	"interface",
-	"keyof",
-	"let",
-	"module",
-	"namespace",
-	"new",
-	"null",
-	"number",
-	"of",
-	"package",
-	"private",
-	"protected",
-	"public",
-	"readonly",
-	"return",
-	"satisfies",
-	"set",
-	"static",
-	"string",
-	"super",
-	"switch",
-	"symbol",
-	"this",
-	"throw",
-	"true",
-	"try",
-	"type",
-	"typeof",
-	"undefined",
-	"unique",
-	"var",
-	"void",
-	"while",
-	"with",
-	"yield",
-	"func",
-	"go",
-	"map",
-	"chan",
-	"defer",
-	"fallthrough",
-	"goto",
-	"range",
-	"select",
-	"struct",
-	"iota",
-	"any",
-	"error",
-	"int",
-	"int32",
-	"int64",
-	"uint",
-	"byte",
-	"rune",
-	"float64",
-	"bool",
-]);
+const NO_IMPORT_NOISE: ReadonlySet<string> = new Set();
 
 function targetKey(target: ShowTargetInput): string {
 	const line = target.line === undefined ? "" : String(target.line);
@@ -143,18 +54,23 @@ function dedupeShowTargets(targets: readonly ShowTargetInput[]): ShowTargetInput
 	return out;
 }
 
-function identifiersIn(text: string): Set<string> {
+function identifiersIn(text: string, noise: ReadonlySet<string>): Set<string> {
 	const out = new Set<string>();
 	for (const match of text.matchAll(IDENTIFIER)) {
 		const id = match[0];
-		if (id !== undefined && !NOISE_IDENTIFIERS.has(id)) out.add(id);
+		if (id !== undefined && !noise.has(id)) out.add(id);
 	}
 	return out;
 }
 
-/** Exact import statement text from adapter byte span. Dedupe shared Go block spans. */
-function importStatementsFor(declText: string, imports: readonly ImportRef[], source: string): string[] {
-	const declIds = identifiersIn(declText);
+/** Exact import statement text from adapter byte span. Noise set is language-owned. */
+function importStatementsFor(
+	declText: string,
+	imports: readonly ImportRef[],
+	source: string,
+	noise: ReadonlySet<string>,
+): string[] {
+	const declIds = identifiersIn(declText, noise);
 	const seenSpans = new Set<string>();
 	const out: string[] = [];
 	for (const importRef of imports) {
@@ -162,7 +78,7 @@ function importStatementsFor(declText: string, imports: readonly ImportRef[], so
 		if (seenSpans.has(spanKey)) continue;
 		const statement = source.slice(importRef.startOffset, importRef.endOffset).replace(/\s+$/u, "");
 		if (statement.length === 0) continue;
-		const hit = [...identifiersIn(statement)].some((id) => declIds.has(id));
+		const hit = [...identifiersIn(statement, noise)].some((id) => declIds.has(id));
 		if (!hit) continue;
 		seenSpans.add(spanKey);
 		out.push(statement);
@@ -204,6 +120,7 @@ function buildBlock(
 	source: string,
 	view: ShowView,
 	contextLines: number,
+	importNoise: ReadonlySet<string>,
 ): ShowBlock {
 	const warnings: string[] = [];
 	let text: string;
@@ -236,7 +153,7 @@ function buildBlock(
 		}
 		case "declarationWithImports": {
 			const declText = declarationText(decl, source);
-			const importBlocks = importStatementsFor(declText, ir.imports, source);
+			const importBlocks = importStatementsFor(declText, ir.imports, source, importNoise);
 			text = importBlocks.length > 0 ? `${importBlocks.join("\n")}\n\n${declText}` : declText;
 			break;
 		}
@@ -309,7 +226,17 @@ export async function showTargets(
 			throw new Error(formatCandidateError(label, resolution.candidates, engine.cwd));
 		}
 
-		const block = buildBlock(resolution.decl, resolution.path, resolution.ir, resolution.source, view, context);
+		const adapter = engine.registry.adapterForPath(resolution.path);
+		const importNoise = adapter?.importNoiseIdentifiers ?? NO_IMPORT_NOISE;
+		const block = buildBlock(
+			resolution.decl,
+			resolution.path,
+			resolution.ir,
+			resolution.source,
+			view,
+			context,
+			importNoise,
+		);
 		if (docsWarningEmitted) {
 			block.warnings = block.warnings.filter((warning) => warning !== "no attached documentation");
 		} else if (block.warnings.includes("no attached documentation")) {

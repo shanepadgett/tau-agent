@@ -4,6 +4,7 @@ import { onTauEvent } from "../../shared/events.ts";
 import { createTemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { createToolRowStateStore } from "../../shared/tool-row-state.ts";
 import { createExploreEngine, type ExploreEngine } from "./ast/engine.ts";
+import { createDiscoverTool } from "./ast/tools/discover.ts";
 import { createOutlineTool } from "./ast/tools/outline.ts";
 import { createShowTool } from "./ast/tools/show.ts";
 
@@ -22,6 +23,7 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 
 	pi.registerTool(createOutlineTool(rowState, temporaryOutput, engineFor));
 	pi.registerTool(createShowTool(rowState, engineFor));
+	pi.registerTool(createDiscoverTool(rowState, temporaryOutput, engineFor));
 
 	pi.on("session_start", async (_event, ctx) => {
 		await temporaryOutput.shutdown();

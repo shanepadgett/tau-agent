@@ -11,6 +11,40 @@ const CAPABILITIES: LanguageCapabilities = {
 	packageSurface: false,
 };
 
+const IMPORT_NOISE = new Set([
+	"package",
+	"import",
+	"foreign",
+	"proc",
+	"where",
+	"when",
+	"if",
+	"else",
+	"for",
+	"in",
+	"switch",
+	"case",
+	"break",
+	"continue",
+	"fallthrough",
+	"return",
+	"defer",
+	"using",
+	"struct",
+	"union",
+	"enum",
+	"bit_set",
+	"map",
+	"dynamic",
+	"cast",
+	"transmute",
+	"auto_cast",
+	"true",
+	"false",
+	"nil",
+	"context",
+]);
+
 const EXTENSIONS = [".odin"] as const;
 
 /**
@@ -311,6 +345,7 @@ export function odinAdapter(): GrammarAdapter {
 		id: "odin",
 		extensions: EXTENSIONS,
 		capabilities: CAPABILITIES,
+		importNoiseIdentifiers: IMPORT_NOISE,
 		extract: extractOdin,
 	};
 }

@@ -8,6 +8,22 @@ export type ExploreToolDetails = {
 	truncated: boolean;
 };
 
+/**
+ * TUI title width fallbacks for a list: full join, progressively shorter with `,+N`, then summary.
+ * Callers wrap each variant with path/option chrome as needed.
+ */
+export function shrinkingListVariants(items: readonly string[], summary: string, empty = ""): string[] {
+	if (items.length === 0) return [empty];
+	const variants: string[] = [];
+	for (let shown = items.length; shown >= 1; shown -= 1) {
+		const omitted = items.length - shown;
+		const head = items.slice(0, shown).join(",");
+		variants.push(omitted > 0 ? `${head},+${omitted}` : head);
+	}
+	variants.push(summary);
+	return variants;
+}
+
 /** Compact call row: `tool → target [options]` with left-truncating target variants. */
 export class ExploreCallComponent implements Component {
 	private readonly rowState: ToolRowStateStore;

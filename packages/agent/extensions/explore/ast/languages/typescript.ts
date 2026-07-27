@@ -14,6 +14,7 @@ import {
 	unquote,
 	type DocSpan,
 } from "./tree.ts";
+import { resolveTypescriptPackageSurface } from "./typescript-package-surface.ts";
 
 const CAPABILITIES: LanguageCapabilities = {
 	shape: true,
@@ -22,6 +23,78 @@ const CAPABILITIES: LanguageCapabilities = {
 	callEdges: true,
 	packageSurface: true,
 };
+
+/** Keywords/types skipped when matching imports to a decl slice. */
+const IMPORT_NOISE = new Set([
+	"abstract",
+	"as",
+	"async",
+	"await",
+	"boolean",
+	"break",
+	"case",
+	"catch",
+	"class",
+	"const",
+	"continue",
+	"debugger",
+	"declare",
+	"default",
+	"delete",
+	"do",
+	"else",
+	"enum",
+	"export",
+	"extends",
+	"false",
+	"finally",
+	"for",
+	"from",
+	"function",
+	"get",
+	"if",
+	"implements",
+	"import",
+	"in",
+	"infer",
+	"instanceof",
+	"interface",
+	"keyof",
+	"let",
+	"module",
+	"namespace",
+	"new",
+	"null",
+	"number",
+	"of",
+	"package",
+	"private",
+	"protected",
+	"public",
+	"readonly",
+	"return",
+	"satisfies",
+	"set",
+	"static",
+	"string",
+	"super",
+	"switch",
+	"symbol",
+	"this",
+	"throw",
+	"true",
+	"try",
+	"type",
+	"typeof",
+	"undefined",
+	"unique",
+	"var",
+	"void",
+	"while",
+	"with",
+	"yield",
+	"any",
+]);
 
 const TS_EXTENSIONS = [".ts", ".mts", ".cts"] as const;
 const TSX_EXTENSIONS = [".tsx", ".mtsx"] as const;
@@ -437,7 +510,10 @@ function makeAdapter(id: "typescript" | "tsx", extensions: readonly string[]): G
 		id,
 		extensions,
 		capabilities: CAPABILITIES,
+		importNoiseIdentifiers: IMPORT_NOISE,
 		extract: extractTypeScript,
+		// Same function identity for both adapters — registry dedupes resolvers.
+		resolvePackageSurface: resolveTypescriptPackageSurface,
 	};
 }
 

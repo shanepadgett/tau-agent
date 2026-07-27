@@ -7,7 +7,7 @@ import type { ExploreEngine } from "../engine.ts";
 import { formatOutlineBudgetFooter, formatOutlineEmpty, formatOutlineFile } from "../format/outline.ts";
 import { outlinePath, outlineRecursive, type OutlineFileView, type OutlineOptions } from "../queries/outline.ts";
 import { formatPathForDisplay, stripLeadingAt } from "../../traverse.ts";
-import { ExploreCallComponent, renderExploreResult, type ExploreToolDetails } from "./render.ts";
+import { ExploreCallComponent, renderExploreResult, shrinkingListVariants, type ExploreToolDetails } from "./render.ts";
 
 const outlineParams = Type.Object(
 	{
@@ -56,14 +56,9 @@ function outlineOptionVariants(params: OutlineParams): string[] {
 	];
 	const names = params.names ?? [];
 	if (names.length === 0) return [fixed.length > 0 ? `[${fixed.join(" ")}]` : ""];
-	const variants: string[] = [];
-	for (let shown = names.length; shown >= 1; shown -= 1) {
-		const omitted = names.length - shown;
-		const namesText = omitted > 0 ? `${names.slice(0, shown).join(",")},+${omitted}` : names.join(",");
-		variants.push(`[${[...fixed, `names=${namesText}`].join(" ")}]`);
-	}
-	variants.push(`[${[...fixed, `names=${names.length}`].join(" ")}]`);
-	return variants;
+	return shrinkingListVariants(names, String(names.length)).map(
+		(part) => `[${[...fixed, `names=${part}`].join(" ")}]`,
+	);
 }
 
 function emptyMessage(file: OutlineFileView, names: readonly string[]): string {

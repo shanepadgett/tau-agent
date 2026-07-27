@@ -8,7 +8,7 @@ import type { ExploreEngine } from "../engine.ts";
 import { formatShowBatch } from "../format/show.ts";
 import { showTargets, type ShowTargetInput } from "../queries/show.ts";
 import { stripLeadingAt } from "../../traverse.ts";
-import { ExploreCallComponent, renderExploreResult, type ExploreToolDetails } from "./render.ts";
+import { ExploreCallComponent, renderExploreResult, shrinkingListVariants, type ExploreToolDetails } from "./render.ts";
 
 const showTargetSchema = Type.Object(
 	{
@@ -44,35 +44,18 @@ type ShowParams = Static<typeof showParams>;
 function showTargetVariants(targets: readonly ShowTargetInput[]): string[] {
 	if (targets.length === 0) return ["targets"];
 	const fileCount = new Set(targets.map((target) => stripLeadingAt(target.path))).size;
-	const variants: string[] = [];
 	if (fileCount === 1) {
 		const first = targets[0];
 		const file = first === undefined ? "file" : basename(stripLeadingAt(first.path));
-		for (let shown = targets.length; shown >= 1; shown -= 1) {
-			const omitted = targets.length - shown;
-			const suffix = omitted > 0 ? `,+${omitted}` : "";
-			variants.push(
-				`${file}: ${targets
-					.slice(0, shown)
-					.map((target) => target.name)
-					.join(",")}${suffix}`,
-			);
-		}
-		variants.push(`${file}: ${targets.length} symbols`);
-		return variants;
+		return shrinkingListVariants(
+			targets.map((target) => target.name),
+			`${targets.length} symbols`,
+		).map((part) => `${file}: ${part}`);
 	}
-	for (let shown = targets.length; shown >= 1; shown -= 1) {
-		const omitted = targets.length - shown;
-		const suffix = omitted > 0 ? `,+${omitted}` : "";
-		variants.push(
-			`${targets
-				.slice(0, shown)
-				.map((target) => `${target.name}@${basename(stripLeadingAt(target.path))}`)
-				.join(",")}${suffix}`,
-		);
-	}
-	variants.push(`${targets.length} symbols in ${fileCount} files`);
-	return variants;
+	return shrinkingListVariants(
+		targets.map((target) => `${target.name}@${basename(stripLeadingAt(target.path))}`),
+		`${targets.length} symbols in ${fileCount} files`,
+	);
 }
 
 function showOptionLabel(params: ShowParams): string {
