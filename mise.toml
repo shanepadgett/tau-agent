@@ -8,6 +8,11 @@ node = "24.18.0"
 [settings]
 jobs = 1
 task_output = "quiet"
+# Always prepend mise tool paths when composing task/exec PATH. Without this,
+# mise re-inserts node where a previous shell activation left it — which can
+# land after /opt/homebrew/bin, so tasks silently run Homebrew node/npm and
+# npm ls fails the devEngines npm pin ("stale dependencies" false alarm).
+activate_aggressive = true
 
 [tasks.check]
 description = "Run all checks"
