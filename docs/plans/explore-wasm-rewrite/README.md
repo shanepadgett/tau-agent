@@ -47,13 +47,13 @@ Each task README is written to stand alone for implementation **given** COLD-STA
 05-identity-resolution      (needs 03)
 06-outline-show             (needs 05)          ← first live structural prove
 07-discover                 (needs 06)
-08-file-graph               (needs 03, 04 — all programming languages resolve)
+08-file-graph               DONE — deps/reverse_deps + per-lang resolveFileDep (token law: 0–1 file or external id; see 08 banner)
 09-relationships            DONE — IR CallSite/bases/bindings + queryRelationships (needs 05, 08)
-10-impact-context           (needs 09; compose only — see 09 DONE banner)
-12-read-hook-settings       (needs 06)          ← Pi read tool_result → outline
+10-impact-context           DONE — impact/context composites + explore.context.defaultBudgetTokens (see 10 banner; 12 extends settings)
+12-read-hook-settings       (needs 06)          ← Pi read tool_result → outline; extend explore/settings.ts only
 04-adapters-remaining       (needs 03; after 06 preferred so spine is proven)
 11-ast-search               (needs 02; research gate inside; can trail)
-13-assembly                 (needs 04, 07, 10, 11, 12)
+13-assembly                 (needs 04, 07, 10, 11, 12 — most tools already registered; close gaps only)
 14-cleanup                  (needs 13)
 ```
 

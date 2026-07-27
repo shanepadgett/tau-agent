@@ -25,7 +25,7 @@ Outline text comes from the existing pipeline: `outlinePath` in `ast/queries/out
 
 ## Settings
 
-`explore.read.structureThresholdLines` (200), `explore.read.maxRangeLines` (200). `explore.context.defaultBudgetTokens` (8000) was already created by task 10 in `explore/settings.ts` — extend that file, do not move it. No `readGate`. No read-stats keys. Follow `packages/agent/shared/settings/define.ts`. **Do not touch `packages/agent/schemas/tau.schema.json`** — schema sync regenerates it; do not read the schema in the same tool batch that writes settings.
+`explore.read.structureThresholdLines` (200), `explore.read.maxRangeLines` (200). `explore.context.defaultBudgetTokens` (8000) **already exists** in `packages/agent/extensions/explore/settings.ts` (task 10 DONE) — **extend that file only**, do not recreate, move, or reset the context key. No `readGate`. No read-stats keys. Follow `packages/agent/shared/settings/define.ts`. **Do not touch `packages/agent/schemas/tau.schema.json`** — schema sync regenerates it; do not read the schema in the same tool batch that writes settings.
 
 ## Pi `read` hook (the product)
 

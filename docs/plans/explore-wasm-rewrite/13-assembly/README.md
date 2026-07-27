@@ -12,7 +12,7 @@ Final composition: everything built in tasks 00–12 wired into one coherent ext
 
 ## Steps (order matters)
 
-1. Audit `packages/agent/extensions/explore/index.ts` as composition root. As of task 08 it already builds engine + graph once, subscribes `tau:file-mutation.applied` (incl. move endpoints), `session_start`, `session_tree`, `session_shutdown`, and registers `outline`/`show`/`discover`/`deps`/`reverse_deps` — audit, do not rebuild. Close the gaps: all **12** Explore tools registered (`ast_search`, `callers`, `callees`, `references`, `implementations`, `impact`, `context` join the five above), compact lifecycle per `explore-specs/cross/system.md`, read outline hook + autoread + settings from task 12 wired. Pi keeps `ls`/`find`/`grep`/`read`.
+1. Audit `packages/agent/extensions/explore/index.ts` as composition root. As of task 10 it already builds engine + graph once, lifecycle subscriptions, and registers **11/12** tools: `outline`/`show`/`discover`/`deps`/`reverse_deps`/`callers`/`callees`/`references`/`implementations`/`impact`/`context`. **Do not rebuild.** Remaining gap before/with this task: `ast_search` (11) if shipped; task 12 read hook + autoread. Compact lifecycle per `explore-specs/cross/system.md`. Pi keeps `ls`/`find`/`grep`/`read`.
 2. Engine shutdown (WASM object cleanup) on session shutdown; temporary store lifecycle as in other Tau tools.
 3. Pre-turn guidance per `explore-specs/session/guidance.md`: bounded 4096-entry scan, detect languages, intersect with registry advertisement, inject the guidance content the spec lists. Must not mention locators, gates, Explore fs clones, or removed tools. No platform caveat — WASM runs everywhere.
 4. Remove any remaining fallow staging headers from earlier tasks.

@@ -1,5 +1,21 @@
 # Task 08 — File dependency graph, `deps` and `reverse_deps`
 
+## Status: DONE (as built — read before touching resolvers or impact file sections)
+
+Shipped. Normative for downstream work is **disk + this banner**, not the first-draft resolve table alone.
+
+**As built:**
+
+- `ExploreFileGraph` in `ast/graph/file-graph.ts`; tools `deps` / `reverse_deps`; every programming adapter has `fileDeps` + `resolveFileDep` (siblings: `*-file-deps.ts`).
+- **Token law (post-LIVE-PROVE, aligned with ast-bro):** one import → **0 or 1 internal file** when a precise hit exists, else a **single external id**. Never expand one import into a crowd of files.
+  - **C#:** suffix + `namespace.Type` FQN index, `pickClosest`, framework namespaces always external; bare `using Ns` → external id (not every file in the namespace).
+  - **Java/Kotlin:** type path → one file; `pkg.*` and package-only → external package id (no directory dump).
+  - **TypeScript:** relative resolve + **tsconfig/jsconfig `paths`/`baseUrl`** (extends merge; defining-config baseDir); bare miss → package external. JSONC must not strip block comments with a regex that eats `"./*"`.
+  - **Odin:** collection/relative package files; **fat packages** (>12 files, e.g. `base:runtime`) → external collection id via `boundedInternalPaths`.
+  - **Go/Rust/Swift:** as adapters on disk; Go may still list package `*.go` files (package = multi-file unit).
+- Shared helpers: `file-dep-util.ts` (`boundedInternalPaths`, walk/index utils). Graph/tools stay language-blind.
+- `impact` file sections call `forwardEdges` / `reverseDeps` only — do not reintroduce namespace fan-out in composites.
+
 ## Cold start
 
 Fresh window: read [`../COLD-START.md`](../COLD-START.md), [`../LIVE-PROVE.md`](../LIVE-PROVE.md), this file, deps/reverse-deps specs + system cache section, then `FileIr.imports`, `ast/adapter.ts`, and every `ast/languages/*` adapter. **No new tests.** Register tools. Live per Done when. `check:ts` green.
@@ -98,14 +114,14 @@ No typechecker. No network. Stay inside `scopeRoot` for internal hits.
 
 | Language | Internal | External | Notes |
 | --- | --- | --- | --- |
-| **TypeScript / TSX** | Relative/`./`/`../`: try as-is + extensionless + `.ts` `.tsx` `.d.ts` `.js` `.jsx` + `/index` with those ext; map `.js`→`.ts` / `.jsx`→`.tsx` when that file exists. | Bare specifier (not relative) → external id = package name (strip subpath after first unscoped segment or `@scope/pkg`). | No `node_modules` walk. No tsconfig `paths`. |
-| **Go** | Walk up from `fromPath` for `go.mod`; read module path. If specifier has that prefix (or is a `./`/`../` rare path), map to dir under module root; **all** `*.go` in that package dir except `*_test.go` → internal paths. | Specifier with no dot in first path element (stdlib), or module path not this module and not a `replace`/`workspace` local dir → external id = specifier. | No GOPATH. No remote fetch. |
-| **Rust** | Crate root = nearest `Cargo.toml` ancestor under scope. Resolve `crate::a::b` / `self::` / `super::` to `a/b.rs`, `a/b/mod.rs`, or `a.rs` style module files from current file’s module path. `mod name;` in current file → `name.rs` / `name/mod.rs` beside file or in its directory. | `use` of other crates / unresolved paths → external id = leading crate/ident. | v1 module-file graph, not name resolution. |
-| **Java** | Specifier → strip `.`\*; convert dots to path segments; search under scope for `.../Segment.java` (type) or package directory `.../segment/*.java` (wildcard / package-only). Also try common roots relative to scope: `src/main/java`, `src`. | `java.*` / `javax.*` / no file hit → external id = package or type name. | First existing file set wins; do not leave scope. |
-| **Kotlin** | Same as Java with `.kt` / `.kts`; also try `src/*/kotlin`, `src/*/java`. | `kotlin.*` / `java.*` / `javax.*` / miss → external. | okio-style source sets. |
-| **C#** | `using` namespace (trim `global` / `static` / `;`) → under scope, all `.cs` files whose namespace declaration equals that namespace or is a child prefix match only when the using is exact namespace equality (exact match on file namespace). | No file with that namespace → external id = namespace. | Namespace ≠ file; fan-out to matching files is the honest v1. No assembly resolver. |
-| **Swift** | Module name → under scope, `Sources/<Module>/`, `Source/<Module>/`, or directory named `<Module>` with `.swift` files; all those `.swift` files → internal. | No module dir → external id = module name. | Good enough for `swift-collections` layout. |
-| **Odin** | Relative path → `.odin` / dir package under `dirname(fromPath)`. Collection `name:pkg/path` → package dir under a collection root found in scope (`./name`, ancestors, scope root, or Odin root with both `core/`+`base/`; `ODIN_ROOT` when inside scope). All direct `*.odin` in that package dir → internal. | Collection/package not present under scope → external id = full specifier. | No `-collection` flag parse in v1. Stdlib outside scope stays external (honest for game repos). |
+| **TypeScript / TSX** | Relative/`./`/`../` (ext + index + js→ts map). **tsconfig/jsconfig `paths`/`baseUrl`** (nearest config, `extends` merge, longest pattern first, defining-config baseDir). | Bare miss → package name. `node:` / `data:`. | No `node_modules` walk. JSONC: do not regex-strip `/*` (breaks `"./*"`). |
+| **Go** | `go.mod` module prefix → package dir; **all** non-`_test.go` in that dir. | Stdlib / other module → specifier. | Package multi-file is intentional. |
+| **Rust** | `crate`/`self`/`super`/`mod` → module files. | Other crates → leading ident. | v1 module-file graph. |
+| **Java** | `pkg.Type` → one `.java` under source roots. | `java.*`/`javax.*`/…; **`pkg.*` and package-only** → package id; type miss → external. | **No** package-dir file dumps. |
+| **Kotlin** | Same as Java with `.kt` (+ `.java`); multiplatform source roots. | `kotlin.*`/`java.*`/…; wildcards/package-only external. | okio-style roots. |
+| **C#** | `using` / `using static` → at most **one** file via path-suffix + `namespace.Type` FQN + `pickClosest`. | Framework (`System`/`Microsoft`/…); bare namespace miss → namespace id. | **Never** “all files in namespace.” No assembly resolver. |
+| **Swift** | Module dir → `.swift` files under module. | No module dir → module id. | Fat modules: prefer external id if live corpus dumps (same spirit as Odin bound). |
+| **Odin** | Relative / `collection:pkg` → direct `*.odin` in package dir when small. | Missing collection; **>12 package files** → collection id (`boundedInternalPaths`). | No `-collection` flag parse. |
 
 Unresolved: omit from output edges (do not invent). Empty internal+external after resolve → one-line empty per spec.
 

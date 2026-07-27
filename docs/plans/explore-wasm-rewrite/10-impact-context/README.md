@@ -1,5 +1,21 @@
 # Task 10 — `impact` and `context` composites
 
+## Status: DONE (as built — read before task 12/13)
+
+Shipped and LIVE-PROVEd on corpus. Normative = **disk + this banner**.
+
+**As built:**
+
+- Tools registered: `impact`, `context` in `index.ts` via `engineFor`/`graphFor`/`rowState`/`temporaryOutput`.
+- Queries: `ast/queries/impact.ts`, `ast/queries/context.ts`; shared target gate `ast/queries/composite-target.ts` (callable/type only).
+- Format: `ast/format/impact.ts`, `ast/format/context.ts`, shared `ast/format/composite.ts` section blocks; ambiguous targets reuse `formatCandidateList`.
+- Show body/sig slices: `extractShowView` exported from `ast/queries/show.ts`.
+- Settings: `packages/agent/extensions/explore/settings.ts` with **only** `explore.context.defaultBudgetTokens` = 8000. Task 12 **extends** this file (do not recreate/move).
+- **impact knobs:** section cap 50 (no public `resultLimit`); `depth` default 2 max 5 applies to **file** reverse BFS only; symbol callees/callers depth 1 via `queryRelationships`; modes `all`|`deps`|`dependents`.
+- **context knobs:** default budget from settings; token est `ceil(text.length/4)`; rel limit 20; follow-up N 8; method cap 12; body→sig→skip; depth-2 = capped second resolve pass (not relationship depth).
+- File-import quality depends on task 08 resolvers (C#/JVM/TS paths/Odin bounds). Composites must not add language switches or re-expand namespaces.
+- Kind helpers: `isTypeLike` / `isCallableLike` on `ast/ir.ts`.
+
 ## Cold start
 
 Fresh window: read [`../COLD-START.md`](../COLD-START.md), [`../LIVE-PROVE.md`](../LIVE-PROVE.md), this file, impact/context/settings specs, then **shipped** relationships + file-graph + show. Read the **Status: DONE** banner at the top of [`../09-relationships/README.md`](../09-relationships/README.md) — ignore that file’s historical `collectOccurrences` design. **No new tests.** Compose only — no new graph engine, no new call-site extraction. Live per Done when. `check:ts` green.
