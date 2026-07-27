@@ -1,8 +1,9 @@
 import type { Node, Tree } from "web-tree-sitter";
 import type { ExtractResult, GrammarAdapter, LanguageCapabilities } from "../adapter.ts";
-import type { Decl, ImportRef, Visibility } from "../ir.ts";
+import type { CallSite, Decl, ImportBinding, ImportRef, Visibility } from "../ir.ts";
 import {
 	applyDoc,
+	callSite,
 	declFromNode,
 	docSpanBefore,
 	endLine,
@@ -12,6 +13,7 @@ import {
 	qualify,
 	startLine,
 	unquote,
+	walkBodyNodes,
 	type DocSpan,
 } from "./tree.ts";
 import { resolveTypescriptFileDep } from "./typescript-file-deps.ts";
@@ -132,6 +134,145 @@ const PRIVATE_PROPERTY_IDENTIFIER = "private_property_identifier";
 const PROPERTY_IDENTIFIER = "property_identifier";
 const ENUM_ASSIGNMENT = "enum_assignment";
 const COMMENT = "comment";
+const CALL_EXPRESSION = "call_expression";
+const NEW_EXPRESSION = "new_expression";
+const MEMBER_EXPRESSION = "member_expression";
+const OPTIONAL_CHAIN = "optional_chain";
+const IDENTIFIER = "identifier";
+const TYPE_IDENTIFIER = "type_identifier";
+const EXTENDS_CLAUSE = "extends_clause";
+const IMPLEMENTS_CLAUSE = "implements_clause";
+const EXTENDS_TYPE_CLAUSE = "extends_type_clause";
+const CLASS_HERITAGE = "class_heritage";
+const IMPORT_CLAUSE = "import_clause";
+const IMPORT_SPECIFIER = "import_specifier";
+const NAMESPACE_IMPORT = "namespace_import";
+const NAMED_IMPORTS = "named_imports";
+const EXPORT_CLAUSE = "export_clause";
+const EXPORT_SPECIFIER = "export_specifier";
+
+const NESTED_CALLABLE = new Set([
+	FUNCTION_DECLARATION,
+	FUNCTION_EXPRESSION,
+	GENERATOR_FUNCTION_DECLARATION,
+	ARROW_FUNCTION,
+	METHOD_DEFINITION,
+	CLASS_DECLARATION,
+	ABSTRACT_CLASS_DECLARATION,
+	CLASS,
+]);
+
+function bareNameNode(node: Node): Node | null {
+	if (node.type === IDENTIFIER || node.type === PROPERTY_IDENTIFIER || node.type === TYPE_IDENTIFIER) return node;
+	if (node.type === MEMBER_EXPRESSION || node.type === OPTIONAL_CHAIN) {
+		const prop = field(node, "property");
+		return prop;
+	}
+	return null;
+}
+
+function extractCalls(body: Node | null): CallSite[] {
+	if (body === null) return [];
+	const out: CallSite[] = [];
+	walkBodyNodes(
+		body,
+		(node) => NESTED_CALLABLE.has(node.type),
+		(node) => {
+			if (node.type === CALL_EXPRESSION) {
+				const fn = field(node, "function");
+				if (fn === null) return;
+				const leaf = bareNameNode(fn);
+				if (leaf === null) return;
+				let receiver = "";
+				if (fn.type === MEMBER_EXPRESSION || fn.type === OPTIONAL_CHAIN) {
+					const obj = field(fn, "object");
+					receiver = obj === null ? "" : obj.text;
+				}
+				const site = callSite(leaf.text, startLine(leaf), leaf.startIndex, leaf.endIndex, "call", receiver);
+				if (site !== undefined) out.push(site);
+				return;
+			}
+			if (node.type === NEW_EXPRESSION) {
+				const ctor = field(node, "constructor");
+				if (ctor === null) return;
+				const leaf =
+					bareNameNode(ctor) ?? (ctor.type === IDENTIFIER || ctor.type === TYPE_IDENTIFIER ? ctor : null);
+				if (leaf === null) return;
+				const site = callSite(leaf.text, startLine(leaf), leaf.startIndex, leaf.endIndex, "construct");
+				if (site !== undefined) out.push(site);
+			}
+		},
+	);
+	return out;
+}
+
+function collectTypeNames(node: Node, into: string[]): void {
+	if (node.type === TYPE_IDENTIFIER || node.type === IDENTIFIER) {
+		if (node.text.length > 0) into.push(node.text);
+		return;
+	}
+	for (const child of node.namedChildren) collectTypeNames(child, into);
+}
+
+function heritageBases(node: Node): string[] {
+	const bases: string[] = [];
+	const visit = (n: Node): void => {
+		if (
+			n.type === EXTENDS_CLAUSE ||
+			n.type === IMPLEMENTS_CLAUSE ||
+			n.type === EXTENDS_TYPE_CLAUSE ||
+			n.type === CLASS_HERITAGE
+		) {
+			collectTypeNames(n, bases);
+			return;
+		}
+		for (const child of n.namedChildren) {
+			if (
+				child.type === EXTENDS_CLAUSE ||
+				child.type === IMPLEMENTS_CLAUSE ||
+				child.type === EXTENDS_TYPE_CLAUSE ||
+				child.type === CLASS_HERITAGE
+			) {
+				collectTypeNames(child, bases);
+			}
+		}
+	};
+	visit(node);
+	return [...new Set(bases)];
+}
+
+function withCallsAndBases(decl: Decl | undefined, body: Node | null, heritageNode: Node | null): Decl | undefined {
+	if (decl === undefined) return undefined;
+	decl.calls = extractCalls(body);
+	decl.bases = heritageNode === null ? [] : heritageBases(heritageNode);
+	return decl;
+}
+
+function importBindingsFromClause(clause: Node | null): ImportBinding[] {
+	if (clause === null) return [];
+	const out: ImportBinding[] = [];
+	const defaultBind = field(clause, "name");
+	if (defaultBind !== null && (defaultBind.type === IDENTIFIER || defaultBind.type === PROPERTY_IDENTIFIER)) {
+		out.push({ local: defaultBind.text, imported: "default" });
+	}
+	for (const child of clause.namedChildren) {
+		if (child.type === NAMESPACE_IMPORT) {
+			const name = field(child, "name");
+			if (name !== null) out.push({ local: name.text, imported: "*" });
+			continue;
+		}
+		if (child.type === NAMED_IMPORTS) {
+			for (const spec of child.namedChildren) {
+				if (spec.type !== IMPORT_SPECIFIER) continue;
+				const imported = field(spec, "name");
+				const local = field(spec, "alias") ?? imported;
+				if (local === null || imported === null) continue;
+				out.push({ local: local.text, imported: imported.text });
+			}
+		}
+	}
+	return out;
+}
 
 function tsDoc(node: Node, source: string): DocSpan | undefined {
 	return docSpanBefore(node, source, [DECORATOR]);
@@ -211,7 +352,10 @@ function declsFromStatement(node: Node, owner: string, source: string, parentExp
 		case GENERATOR_FUNCTION_DECLARATION:
 		case FUNCTION_SIGNATURE: {
 			const name = nameText(field(node, "name")) || "default";
-			return asList(declFromNode(node, owner, "function", name, parentExported, field(node, "body"), [], doc));
+			const body = field(node, "body");
+			return asList(
+				withCallsAndBases(declFromNode(node, owner, "function", name, parentExported, body, [], doc), body, null),
+			);
 		}
 		case CLASS_DECLARATION:
 		case ABSTRACT_CLASS_DECLARATION:
@@ -219,14 +363,26 @@ function declsFromStatement(node: Node, owner: string, source: string, parentExp
 			const name = nameText(field(node, "name")) || (parentExported ? "default" : "");
 			const body = field(node, "body");
 			const children = body === null ? [] : classMembers(body, qualify(owner, name), source);
-			return asList(declFromNode(node, owner, "class", name, parentExported, body, children, doc));
+			return asList(
+				withCallsAndBases(
+					declFromNode(node, owner, "class", name, parentExported, body, children, doc),
+					null,
+					node,
+				),
+			);
 		}
 		case INTERFACE_DECLARATION: {
 			// Judgment: TS type aliases also map to interface; this is the real interface kind.
 			const name = nameText(field(node, "name"));
 			const body = field(node, "body");
 			const children = body === null ? [] : interfaceMembers(body, qualify(owner, name), source);
-			return asList(declFromNode(node, owner, "interface", name, parentExported, body, children, doc));
+			return asList(
+				withCallsAndBases(
+					declFromNode(node, owner, "interface", name, parentExported, body, children, doc),
+					null,
+					node,
+				),
+			);
 		}
 		case TYPE_ALIAS_DECLARATION: {
 			const name = nameText(field(node, "name"));
@@ -321,6 +477,8 @@ function declsFromExport(node: Node, owner: string, source: string): Decl[] {
 				visibility: "public",
 				exported: true,
 				children,
+				calls: kind === "function" ? extractCalls(body) : [],
+				bases: kind === "class" && value !== null ? heritageBases(value) : [],
 			},
 			body,
 		);
@@ -361,6 +519,7 @@ function variableDecls(node: Node, owner: string, exported: boolean, doc: DocSpa
 				endOffset: spanNode.endIndex,
 				visibility: "public",
 				exported,
+				calls: isFn ? extractCalls(body) : [],
 			},
 			body,
 		);
@@ -391,6 +550,7 @@ function memberDecl(
 			endOffset: node.endIndex,
 			visibility,
 			exported: false,
+			calls: kind === "method" || kind === "constructor" ? extractCalls(body) : [],
 		},
 		body,
 	);
@@ -480,6 +640,34 @@ function collectImportsFrom(node: Node, imports: ImportRef[]): void {
 					startLine: startLine(child),
 					startOffset: child.startIndex,
 					endOffset: child.endIndex,
+					bindings: importBindingsFromClause(
+						child.namedChildren.find((c) => c.type === IMPORT_CLAUSE) ?? field(child, "import"),
+					),
+				});
+			}
+			continue;
+		}
+		if (child.type === EXPORT_STATEMENT) {
+			// re-export: export { X } from "mod"
+			const source = field(child, "source");
+			if (source !== null) {
+				const bindings: ImportBinding[] = [];
+				const clause = child.namedChildren.find((c) => c.type === EXPORT_CLAUSE);
+				if (clause !== undefined) {
+					for (const spec of clause.namedChildren) {
+						if (spec.type !== EXPORT_SPECIFIER) continue;
+						const exported = field(spec, "name");
+						const local = field(spec, "alias") ?? exported;
+						if (local === null || exported === null) continue;
+						bindings.push({ local: local.text, imported: exported.text });
+					}
+				}
+				imports.push({
+					specifier: unquote(source.text),
+					startLine: startLine(child),
+					startOffset: child.startIndex,
+					endOffset: child.endIndex,
+					bindings,
 				});
 			}
 			continue;

@@ -1,8 +1,19 @@
 import type { Node, Tree } from "web-tree-sitter";
 import type { ExtractResult, GrammarAdapter, LanguageCapabilities } from "../adapter.ts";
 import { resolveOdinFileDep } from "./odin-file-deps.ts";
-import type { Decl, ImportRef, Visibility } from "../ir.ts";
-import { applyDoc, docSpanBefore, endLine, finishDecl, qualify, startLine, unquote, type DocSpan } from "./tree.ts";
+import type { CallSite, Decl, ImportRef, Visibility } from "../ir.ts";
+import {
+	applyDoc,
+	callSite,
+	docSpanBefore,
+	endLine,
+	finishDecl,
+	qualify,
+	startLine,
+	unquote,
+	walkBodyNodes,
+	type DocSpan,
+} from "./tree.ts";
 
 const CAPABILITIES: LanguageCapabilities = {
 	shape: true,
@@ -79,6 +90,45 @@ const PROCEDURE = "procedure";
 const FIELD = "field";
 const BLOCK = "block";
 
+const NESTED_SCOPE = new Set([
+	"procedure_declaration",
+	"overloaded_procedure_declaration",
+	"struct_declaration",
+	"enum_declaration",
+]);
+
+function extractCalls(body: Node | null): CallSite[] {
+	if (body === null) return [];
+	const out: CallSite[] = [];
+	walkBodyNodes(
+		body,
+		(n) => NESTED_SCOPE.has(n.type),
+		(node) => {
+			if (node.type !== "call_expression" && node.type !== "selector_call_expression") return;
+			const fn = node.childForFieldName("function") ?? node.namedChildren[0];
+			if (fn === null || fn === undefined) return;
+			let leafNode = fn;
+			let receiver = "";
+			if (fn.type === "member_expression" || fn.type === "selector_expression") {
+				const fieldNode = fn.childForFieldName("field") ?? fn.namedChildren[fn.namedChildren.length - 1];
+				const obj = fn.childForFieldName("argument") ?? fn.childForFieldName("operand") ?? fn.namedChildren[0];
+				if (fieldNode !== null && fieldNode !== undefined) leafNode = fieldNode;
+				if (obj !== null && obj !== undefined) receiver = obj.text;
+			}
+			const site = callSite(
+				leafNode.text,
+				startLine(leafNode),
+				leafNode.startIndex,
+				leafNode.endIndex,
+				"call",
+				receiver,
+			);
+			if (site !== undefined) out.push(site);
+		},
+	);
+	return out;
+}
+
 function odinDoc(node: Node, source: string): DocSpan | undefined {
 	return docSpanBefore(node, source);
 }
@@ -126,6 +176,7 @@ function leaf(
 	doc: DocSpan | undefined,
 ): Decl | undefined {
 	if (name.length === 0) return undefined;
+	const callable = kind === "function" || kind === "method" || kind === "constructor";
 	const decl = finishDecl(
 		{
 			kind,
@@ -138,6 +189,8 @@ function leaf(
 			visibility,
 			exported: visibility === "public",
 			children,
+			calls: callable ? extractCalls(body) : [],
+			bases: [],
 		},
 		body,
 	);
@@ -326,6 +379,7 @@ function collectImports(root: Node): ImportRef[] {
 			startLine: startLine(node),
 			startOffset: node.startIndex,
 			endOffset: node.endIndex,
+			bindings: [],
 		});
 	}
 	return imports;

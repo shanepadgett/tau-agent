@@ -1,9 +1,10 @@
 import type { Node, Tree } from "web-tree-sitter";
 import type { ExtractResult, GrammarAdapter, LanguageCapabilities } from "../adapter.ts";
 import { resolveCsharpFileDep } from "./csharp-file-deps.ts";
-import type { Decl, ImportRef, Visibility } from "../ir.ts";
+import type { CallSite, Decl, ImportRef, Visibility } from "../ir.ts";
 import {
 	applyDoc,
+	callSite,
 	docSpanBefore,
 	endLine,
 	field,
@@ -11,6 +12,7 @@ import {
 	nameText,
 	qualify,
 	startLine,
+	walkBodyNodes,
 	type DocSpan,
 } from "./tree.ts";
 
@@ -129,6 +131,87 @@ const USING_DIRECTIVE = "using_directive";
 const MODIFIER = "modifier";
 const COMMENT = "comment";
 
+const INVOCATION = "invocation_expression";
+const OBJECT_CREATION = "object_creation_expression";
+const BASE_LIST = "base_list";
+const IDENTIFIER = "identifier";
+
+const NESTED_SCOPE = new Set([
+	"method_declaration",
+	"constructor_declaration",
+	"local_function_statement",
+	"class_declaration",
+	"struct_declaration",
+	"interface_declaration",
+	"record_declaration",
+]);
+
+function extractCalls(body: Node | null): CallSite[] {
+	if (body === null) return [];
+	const out: CallSite[] = [];
+	walkBodyNodes(
+		body,
+		(n) => NESTED_SCOPE.has(n.type),
+		(node) => {
+			if (node.type === INVOCATION) {
+				const fn = field(node, "function");
+				if (fn === null) return;
+				let leaf = fn;
+				let receiver = "";
+				if (fn.type === "member_access_expression") {
+					const name = field(fn, "name");
+					const expr = field(fn, "expression");
+					if (name !== null) leaf = name;
+					receiver = expr === null ? "" : expr.text;
+				}
+				const site = callSite(leaf.text, startLine(leaf), leaf.startIndex, leaf.endIndex, "call", receiver);
+				if (site !== undefined) out.push(site);
+				return;
+			}
+			if (node.type === OBJECT_CREATION || node.type === "implicit_object_creation_expression") {
+				const typeNode = field(node, "type");
+				if (typeNode === null) return;
+				const ids = typeNode.descendantsOfType(IDENTIFIER);
+				const leaf = ids[ids.length - 1];
+				if (leaf === undefined) return;
+				const site = callSite(leaf.text, startLine(leaf), leaf.startIndex, leaf.endIndex, "construct");
+				if (site !== undefined) out.push(site);
+			}
+		},
+	);
+	return out;
+}
+
+/** Base type simple name — drop namespace qualifiers and type arguments. */
+function typeSimpleName(node: Node): string {
+	if (node.type === IDENTIFIER) return node.text;
+	if (node.type === "generic_name") {
+		const id = node.namedChildren.find((c) => c.type === IDENTIFIER);
+		return id === undefined ? "" : id.text;
+	}
+	if (node.type === "qualified_name") {
+		const last = node.namedChildren[node.namedChildren.length - 1];
+		return last === undefined ? "" : typeSimpleName(last);
+	}
+	for (const child of node.namedChildren) {
+		const inner = typeSimpleName(child);
+		if (inner.length > 0) return inner;
+	}
+	return "";
+}
+
+function heritageBases(node: Node): string[] {
+	const bases: string[] = [];
+	for (const child of node.namedChildren) {
+		if (child.type !== BASE_LIST) continue;
+		for (const entry of child.namedChildren) {
+			const name = typeSimpleName(entry);
+			if (name.length > 0) bases.push(name);
+		}
+	}
+	return [...new Set(bases)];
+}
+
 function csDoc(node: Node, source: string): DocSpan | undefined {
 	return docSpanBefore(node, source);
 }
@@ -172,6 +255,8 @@ function leaf(
 	doc: DocSpan | undefined,
 ): Decl | undefined {
 	if (name.length === 0) return undefined;
+	const callable = kind === "function" || kind === "method" || kind === "constructor";
+	const typeLike = kind === "class" || kind === "interface" || kind === "enum" || kind === "struct";
 	const decl = finishDecl(
 		{
 			kind,
@@ -184,6 +269,8 @@ function leaf(
 			visibility,
 			exported: visibility === "public",
 			children,
+			calls: callable ? extractCalls(body) : [],
+			bases: typeLike ? heritageBases(node) : [],
 		},
 		body,
 	);
@@ -352,6 +439,7 @@ function collectImports(root: Node): ImportRef[] {
 			startLine: startLine(node),
 			startOffset: node.startIndex,
 			endOffset: node.endIndex,
+			bindings: [],
 		});
 	}
 	return imports;

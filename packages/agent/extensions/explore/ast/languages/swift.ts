@@ -1,9 +1,10 @@
 import type { Node, Tree } from "web-tree-sitter";
 import type { ExtractResult, GrammarAdapter, LanguageCapabilities } from "../adapter.ts";
 import { resolveSwiftFileDep } from "./swift-file-deps.ts";
-import type { Decl, ImportRef, Visibility } from "../ir.ts";
+import type { CallSite, Decl, ImportRef, Visibility } from "../ir.ts";
 import {
 	applyDoc,
+	callSite,
 	docSpanBefore,
 	endLine,
 	field,
@@ -11,6 +12,7 @@ import {
 	nameText,
 	qualify,
 	startLine,
+	walkBodyNodes,
 	type DocSpan,
 } from "./tree.ts";
 
@@ -103,6 +105,73 @@ const USER_TYPE = "user_type";
 const SIMPLE_IDENTIFIER = "simple_identifier";
 const COMMENT = "comment";
 
+const NESTED_SCOPE = new Set([
+	"function_declaration",
+	"class_declaration",
+	"struct_declaration",
+	"enum_declaration",
+	"protocol_declaration",
+]);
+
+function extractCalls(body: Node | null): CallSite[] {
+	if (body === null) return [];
+	const out: CallSite[] = [];
+	walkBodyNodes(
+		body,
+		(n) => NESTED_SCOPE.has(n.type),
+		(node) => {
+			if (node.type === "call_expression") {
+				const fn = node.namedChildren[0];
+				if (fn === undefined) return;
+				let leafNode = fn;
+				let receiver = "";
+				if (fn.type === "navigation_expression") {
+					const ids = fn.descendantsOfType("simple_identifier");
+					const last = ids[ids.length - 1];
+					if (last !== undefined) leafNode = last;
+					receiver = fn.text.slice(0, Math.max(0, fn.text.length - leafNode.text.length - 1));
+				}
+				const site = callSite(
+					leafNode.text,
+					startLine(leafNode),
+					leafNode.startIndex,
+					leafNode.endIndex,
+					"call",
+					receiver,
+				);
+				if (site !== undefined) out.push(site);
+				return;
+			}
+			if (node.type === "constructor_expression") {
+				const ids = node.descendantsOfType("type_identifier");
+				const leafNode = ids[0];
+				if (leafNode === undefined) return;
+				const site = callSite(
+					leafNode.text,
+					startLine(leafNode),
+					leafNode.startIndex,
+					leafNode.endIndex,
+					"construct",
+				);
+				if (site !== undefined) out.push(site);
+			}
+		},
+	);
+	return out;
+}
+
+function heritageBases(node: Node): string[] {
+	const bases: string[] = [];
+	for (const child of node.namedChildren) {
+		if (child.type === "inheritance_specifier" || child.type === "type_inheritance_clause") {
+			for (const t of child.descendantsOfType("type_identifier")) {
+				if (t.text.length > 0) bases.push(t.text);
+			}
+		}
+	}
+	return [...new Set(bases)];
+}
+
 function swiftDoc(node: Node, source: string): DocSpan | undefined {
 	return docSpanBefore(node, source);
 }
@@ -184,6 +253,9 @@ function leaf(
 	doc: DocSpan | undefined,
 ): Decl | undefined {
 	if (name.length === 0) return undefined;
+	const callable = kind === "function" || kind === "method" || kind === "constructor";
+	const typeLike =
+		kind === "class" || kind === "interface" || kind === "enum" || kind === "struct" || kind === "object";
 	const decl = finishDecl(
 		{
 			kind,
@@ -196,6 +268,8 @@ function leaf(
 			visibility,
 			exported: visibility === "public",
 			children,
+			calls: callable ? extractCalls(body) : [],
+			bases: typeLike ? heritageBases(node) : [],
 		},
 		body,
 	);
@@ -344,6 +418,7 @@ function collectImports(root: Node): ImportRef[] {
 			startLine: startLine(node),
 			startOffset: node.startIndex,
 			endOffset: node.endIndex,
+			bindings: [],
 		});
 	}
 	return imports;

@@ -127,6 +127,8 @@ export function extractMarkdown(source: string): ExtractResult {
 			visibility: "public",
 			exported: true,
 			children: [],
+			calls: [],
+			bases: [],
 		};
 
 		if (parent === undefined) roots.push(decl);

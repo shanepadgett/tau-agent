@@ -24,6 +24,30 @@ export type DeclKind =
 
 export type Visibility = "public" | "private" | "protected" | "internal";
 
+/** Syntactic call/construct site inside a callable body (adapter-owned extraction). */
+export type CallKind = "call" | "construct" | "macro" | "super";
+
+export type CallSite = {
+	/** Bare callee / type name as written. */
+	name: string;
+	/** Receiver text when method-like (`obj` in `obj.foo()`); empty when free. */
+	receiver: string;
+	/** 1-indexed. */
+	line: number;
+	/** UTF-16 offsets of the name leaf (decision 12). */
+	startOffset: number;
+	endOffset: number;
+	kind: CallKind;
+};
+
+/** One local name introduced by an import statement. */
+export type ImportBinding = {
+	/** Name visible in this file. */
+	local: string;
+	/** Remote name when distinct from local (`Foo as Bar` → imported Foo, local Bar). */
+	imported: string;
+};
+
 export type Decl = {
 	kind: DeclKind;
 	name: string;
@@ -48,6 +72,17 @@ export type Decl = {
 	visibility: Visibility;
 	exported: boolean;
 	children: Decl[];
+	/**
+	 * Direct call/construct sites textually inside this decl's body.
+	 * Nested callables own their own lists — do not hoist.
+	 * Empty for non-callables and body-less decls.
+	 */
+	calls: CallSite[];
+	/**
+	 * Heritage / supertype / trait names on this type-like decl (bare identifiers).
+	 * Empty when not a type or no heritage.
+	 */
+	bases: string[];
 };
 
 export type ImportRef = {
@@ -57,6 +92,8 @@ export type ImportRef = {
 	startOffset: number;
 	/** UTF-16 offset of the full import statement (exclusive). */
 	endOffset: number;
+	/** Local names this import binds. Empty when the statement binds nothing useful (side-effect import). */
+	bindings: ImportBinding[];
 };
 
 export type FileIr = {

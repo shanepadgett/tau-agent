@@ -1,5 +1,5 @@
 import type { Node } from "web-tree-sitter";
-import type { Decl } from "../ir.ts";
+import type { CallSite, Decl } from "../ir.ts";
 
 export type DocSpan = {
 	docStartOffset: number;
@@ -135,15 +135,19 @@ export function qualify(owner: string, name: string): string {
 	return owner.length === 0 ? name : `${owner}.${name}`;
 }
 
-export type DeclDraft = Omit<Decl, "signatureEndOffset" | "children"> &
-	Partial<Pick<Decl, "signatureEndOffset" | "bodyStartOffset" | "bodyEndOffset" | "children">>;
+export type DeclDraft = Omit<Decl, "signatureEndOffset" | "children" | "calls" | "bases"> &
+	Partial<Pick<Decl, "signatureEndOffset" | "bodyStartOffset" | "bodyEndOffset" | "children" | "calls" | "bases">>;
 
 export function finishDecl(partial: DeclDraft, body: Node | null): Decl {
+	const calls = partial.calls ?? [];
+	const bases = partial.bases ?? [];
 	if (body === null) {
 		return {
 			...partial,
 			signatureEndOffset: partial.signatureEndOffset ?? partial.endOffset,
 			children: partial.children ?? [],
+			calls,
+			bases,
 		};
 	}
 	return {
@@ -152,7 +156,34 @@ export function finishDecl(partial: DeclDraft, body: Node | null): Decl {
 		bodyStartOffset: body.startIndex,
 		bodyEndOffset: body.endIndex,
 		children: partial.children ?? [],
+		calls,
+		bases,
 	};
+}
+
+/**
+ * Walk a body for call extraction. Skips nested scope roots (`isNestedScope`)
+ * so nested callables own their own sites.
+ */
+export function walkBodyNodes(body: Node, isNestedScope: (node: Node) => boolean, visit: (node: Node) => void): void {
+	const go = (node: Node, isRoot: boolean): void => {
+		if (!isRoot && isNestedScope(node)) return;
+		visit(node);
+		for (const child of node.namedChildren) go(child, false);
+	};
+	go(body, true);
+}
+
+export function callSite(
+	name: string,
+	line: number,
+	startOffset: number,
+	endOffset: number,
+	kind: CallSite["kind"],
+	receiver = "",
+): CallSite | undefined {
+	if (name.length === 0) return undefined;
+	return { name, receiver, line, startOffset, endOffset, kind };
 }
 
 /** Build a top-level-ish decl from a grammar node span + optional body. */

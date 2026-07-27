@@ -48,8 +48,8 @@ Each task README is written to stand alone for implementation **given** COLD-STA
 06-outline-show             (needs 05)          ← first live structural prove
 07-discover                 (needs 06)
 08-file-graph               (needs 03, 04 — all programming languages resolve)
-09-relationships            (needs 05, 08)
-10-impact-context           (needs 09)
+09-relationships            DONE — IR CallSite/bases/bindings + queryRelationships (needs 05, 08)
+10-impact-context           (needs 09; compose only — see 09 DONE banner)
 12-read-hook-settings       (needs 06)          ← Pi read tool_result → outline
 04-adapters-remaining       (needs 03; after 06 preferred so spine is proven)
 11-ast-search               (needs 02; research gate inside; can trail)

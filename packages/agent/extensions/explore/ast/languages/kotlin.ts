@@ -1,9 +1,10 @@
 import type { Node, Tree } from "web-tree-sitter";
 import type { ExtractResult, GrammarAdapter, LanguageCapabilities } from "../adapter.ts";
 import { resolveKotlinFileDep } from "./jvm-file-deps.ts";
-import type { Decl, ImportRef, Visibility } from "../ir.ts";
+import type { CallSite, Decl, ImportRef, Visibility } from "../ir.ts";
 import {
 	applyDoc,
+	callSite,
 	docSpanBefore,
 	docSpanTrailingChild,
 	endLine,
@@ -11,6 +12,7 @@ import {
 	nameText,
 	qualify,
 	startLine,
+	walkBodyNodes,
 	type DocSpan,
 } from "./tree.ts";
 
@@ -129,6 +131,82 @@ const MULTILINE_COMMENT = "multiline_comment";
 
 const COMMENT_TYPES = [LINE_COMMENT, MULTILINE_COMMENT] as const;
 
+const NESTED_SCOPE = new Set(["function_declaration", "class_declaration", "object_declaration", "companion_object"]);
+
+function extractCalls(body: Node | null): CallSite[] {
+	if (body === null) return [];
+	const out: CallSite[] = [];
+	walkBodyNodes(
+		body,
+		(n) => NESTED_SCOPE.has(n.type),
+		(node) => {
+			if (node.type === "constructor_invocation") {
+				const user = node.namedChildren.find((c) => c.type === "user_type") ?? node.namedChildren[0];
+				if (user === undefined) return;
+				const ids = [...user.descendantsOfType("type_identifier"), ...user.descendantsOfType("simple_identifier")];
+				const last = ids[ids.length - 1] ?? user;
+				const site = callSite(last.text, startLine(last), last.startIndex, last.endIndex, "construct");
+				if (site !== undefined) out.push(site);
+				return;
+			}
+			if (node.type !== "call_expression") return;
+			const callee = node.namedChildren[0];
+			if (callee === undefined) return;
+			let leafNode = callee;
+			let receiver = "";
+			if (callee.type === "navigation_expression") {
+				const ids = callee.descendantsOfType("simple_identifier");
+				const last = ids[ids.length - 1];
+				if (last !== undefined) leafNode = last;
+				receiver = callee.text.slice(0, Math.max(0, callee.text.length - leafNode.text.length - 1));
+			}
+			// Bare TypeName(...) with no receiver → construct when capitalized.
+			const ch = leafNode.text[0];
+			const kind =
+				receiver.length === 0 && ch !== undefined && ch === ch.toUpperCase() && ch !== ch.toLowerCase()
+					? "construct"
+					: "call";
+			const site = callSite(
+				leafNode.text,
+				startLine(leafNode),
+				leafNode.startIndex,
+				leafNode.endIndex,
+				kind,
+				receiver,
+			);
+			if (site !== undefined) out.push(site);
+		},
+	);
+	return out;
+}
+
+function heritageBases(node: Node): string[] {
+	const bases: string[] = [];
+	const pushUserType = (typeNode: Node): void => {
+		// user_type: package.path.Name — take last simple_identifier / type_identifier.
+		const ids = [
+			...typeNode.descendantsOfType("type_identifier"),
+			...typeNode.descendantsOfType("simple_identifier"),
+		];
+		const last = ids[ids.length - 1];
+		if (last !== undefined && last.text.length > 0) bases.push(last.text);
+	};
+	const specs =
+		node.namedChildren.find((c) => c.type === "delegation_specifiers") ??
+		node.namedChildren.find((c) => c.type === "delegation_specifier");
+	if (specs === undefined) return [];
+	const list = specs.type === "delegation_specifier" ? [specs] : specs.namedChildren;
+	for (const spec of list) {
+		if (spec.type !== "delegation_specifier" && specs.type !== "delegation_specifier") {
+			if (spec.type === "user_type") pushUserType(spec);
+			continue;
+		}
+		const user = spec.descendantsOfType("user_type")[0] ?? spec.namedChildren.find((c) => c.type === "user_type");
+		if (user !== undefined) pushUserType(user);
+	}
+	return [...new Set(bases)];
+}
+
 function previousNamed(node: Node): Node | null {
 	let cursor = node.previousSibling;
 	while (cursor !== null && !cursor.isNamed) cursor = cursor.previousSibling;
@@ -215,6 +293,9 @@ function leaf(
 	doc: DocSpan | undefined,
 ): Decl | undefined {
 	if (name.length === 0) return undefined;
+	const callable = kind === "function" || kind === "method" || kind === "constructor";
+	const typeLike =
+		kind === "class" || kind === "interface" || kind === "enum" || kind === "struct" || kind === "object";
 	const decl = finishDecl(
 		{
 			kind,
@@ -227,6 +308,8 @@ function leaf(
 			visibility,
 			exported: visibility === "public" || visibility === "internal",
 			children,
+			calls: callable ? extractCalls(body) : [],
+			bases: typeLike ? heritageBases(node) : [],
 		},
 		body,
 	);
@@ -499,6 +582,7 @@ function collectImports(root: Node): ImportRef[] {
 				startLine: startLine(header),
 				startOffset: header.startIndex,
 				endOffset: header.endIndex,
+				bindings: [],
 			});
 		}
 	}

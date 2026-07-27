@@ -8,6 +8,12 @@ import { createFileGraph, type ExploreFileGraph } from "./ast/graph/file-graph.t
 import { createDepsTool } from "./ast/tools/deps.ts";
 import { createDiscoverTool } from "./ast/tools/discover.ts";
 import { createOutlineTool } from "./ast/tools/outline.ts";
+import {
+	createCalleesTool,
+	createCallersTool,
+	createImplementationsTool,
+	createReferencesTool,
+} from "./ast/tools/relationships.ts";
 import { createReverseDepsTool } from "./ast/tools/reverse-deps.ts";
 import { createShowTool } from "./ast/tools/show.ts";
 
@@ -40,6 +46,10 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 	pi.registerTool(createDiscoverTool(rowState, temporaryOutput, engineFor));
 	pi.registerTool(createDepsTool(rowState, engineFor, graphFor));
 	pi.registerTool(createReverseDepsTool(rowState, engineFor, graphFor));
+	pi.registerTool(createCallersTool(rowState, engineFor, graphFor));
+	pi.registerTool(createCalleesTool(rowState, engineFor, graphFor));
+	pi.registerTool(createReferencesTool(rowState, engineFor, graphFor));
+	pi.registerTool(createImplementationsTool(rowState, engineFor, graphFor));
 
 	pi.on("session_start", async (_event, ctx) => {
 		await temporaryOutput.shutdown();

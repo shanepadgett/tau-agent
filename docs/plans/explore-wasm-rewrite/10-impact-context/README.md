@@ -2,9 +2,9 @@
 
 ## Cold start
 
-Fresh window: read [`../COLD-START.md`](../COLD-START.md), [`../LIVE-PROVE.md`](../LIVE-PROVE.md), this file, impact/context/settings specs, then relationships + file-graph + show view extraction. **No new tests.** Compose only — no new graph engine. Live per Done when. `check:ts` green.
+Fresh window: read [`../COLD-START.md`](../COLD-START.md), [`../LIVE-PROVE.md`](../LIVE-PROVE.md), this file, impact/context/settings specs, then **shipped** relationships + file-graph + show. Read the **Status: DONE** banner at the top of [`../09-relationships/README.md`](../09-relationships/README.md) — ignore that file’s historical `collectOccurrences` design. **No new tests.** Compose only — no new graph engine, no new call-site extraction. Live per Done when. `check:ts` green.
 
-Depends on: 09.
+Depends on: 09 (done).
 
 ## Goal
 
@@ -14,9 +14,10 @@ Specs: `explore-specs/graph/impact.md`, `explore-specs/graph/context.md`, `explo
 
 ## Existing surfaces to compose (do not rebuild any of these)
 
-- Target resolution: `resolveTarget` in `ast/identity.ts` (returns `resolved` / `candidates` / `notFound`; stop at candidates like `show` does).
-- File graph: `ExploreFileGraph` from `ast/graph/file-graph.ts` — `forwardEdges(path)` for depth-1 imports, `reverseDeps(path, depth, limit)` for importers/transitive dependents. Get it through the `graphFor(cwd)` accessor in `index.ts`, same as `deps`/`reverse_deps`.
-- Relationships: the task 09 pipeline (`ast/graph/relationships.ts` operation enum) for callers/callees sections. Call the query function, not the tools.
+- Target resolution: `resolveTarget` in `ast/identity.ts` (returns `resolved` / `candidates` / `notFound`; stop at candidates like `show` does). Prefer resolving **once** in the composite, then pass a fixed target into section builders — do not thrash `resolveTarget` per section unless a section truly needs a different name.
+- File graph: `ExploreFileGraph` from `ast/graph/file-graph.ts` — `forwardEdges(path)` for depth-1 imports, `reverseDeps(path, depth, limit)` for importers/transitive **file** dependents. Get it through the `graphFor(cwd)` accessor in `index.ts`, same as `deps`/`reverse_deps`.
+- Relationships: `queryRelationships` in `ast/graph/relationships.ts` (`RelationshipOp`, `RelationshipQueryResult`, `RelationshipSite`). **Call this function, not the four tools.** Ops: `callers` | `callees` | `references` | `implementations`. Depth is **1 only** — there is no symbol-edge BFS. Certainty / overload collapse / receiver rules are already inside that query; formatters may omit `exact` labels the same way `format/relationships.ts` does.
+- IR facts already on decls (do not re-walk trees for impact/context): `Decl.calls`, `Decl.bases`, `ImportRef.bindings`. Composites must not add adapter hooks.
 - Body/signature extraction for `context` entries: `queries/show.ts` builds view text in a private `buildBlock`. Export a narrower view-extraction function from `queries/show.ts` (decl + path + ir + source + view → text) and use it from both `show` and `context`. Do not duplicate the view logic and do not export the whole batch machinery.
 - Wiring: register both tools in `index.ts` with the existing `rowState` / `temporaryOutput` / `engineFor` / `graphFor` pattern.
 
@@ -38,13 +39,23 @@ packages/agent/extensions/explore/ast/tools/context.ts
 ## `impact`
 
 - Params: `path` scope, target identity, `depth` (default 2), `mode` (`all` | `deps` | `dependents`).
-- Sections in spec order, empty sections dropped: callees / file imports (depth 1) / callers / file importers (depth 1) / transitive dependents (`2..depth`, via reverse file graph BFS from the defining file). Mode table per spec.
-- Header once: resolved target path, name, kind, line. Rows grouped by file inside sections; depth labels on transitive rows; certainty only when not exact. No test sections (stripped).
+- Sections in spec order, empty sections dropped:
+  1. **callees** — `queryRelationships({ op: "callees", … })` (symbol depth 1 only).
+  2. **file imports** — `forwardEdges(target.path)` depth 1.
+  3. **callers** — `queryRelationships({ op: "callers", … })` (symbol depth 1 only).
+  4. **file importers** — reverse file edges depth 1.
+  5. **transitive dependents** — reverse **file** graph BFS depths `2..depth` from the defining file (`reverseDeps`). Spec wording “caller-side” means dependent files, **not** multi-hop symbol callers. Do not invent symbol-call BFS.
+- Mode table per spec. Header once: resolved target path, name, kind, line. Rows grouped by file; depth labels on transitive **file** rows; certainty only when not exact. Reuse relationship row density (preview, kind). No test sections (stripped).
+- Keep scopes narrow in LIVE-PROVE (same corpus packages as 08/09). Whole-repo impact is not a goal.
 
 ## `context`
 
 - Params: `path` scope, target identity, `budget` (default from settings).
-- Packing order per spec, callable vs type variants. Entry ladder: body → signature → skip with `truncated` flag. Token estimate `Math.ceil(text.length / 4)` on the sliced string (offsets are UTF-16, decision 12 — no byte math). Never exceed `budget`; dedupe symbols across sections; external/missing body → `body_unavailable` + signature.
+- Packing order per spec, callable vs type variants, with this **depth honesty** vs `context.md`:
+  - Direct callees / direct callers / implementors = one `queryRelationships` hop each (`callees` / `callers` / `implementations`).
+  - Spec items “depth-2 callee/caller signatures”: **optional second pass only** — take first-hop site names, resolve+query again under the same scope, signatures only, hard cap on follow-ups (small fixed N, e.g. ≤ 8). If budget or N is exhausted, stop. Do **not** add a `depth` param to relationships or a new graph engine.
+  - Type “dependents (callers of methods)”: for each method child of the type (or a capped subset), `callers` once; signatures only.
+- Entry ladder: body → signature → skip with `truncated` flag. Token estimate `Math.ceil(text.length / 4)` on the sliced string (UTF-16 code units, decision 12 — ignore `context.md` “bytes” wording). Never exceed `budget`; dedupe symbols across sections; external/missing body → `body_unavailable` + signature.
 - Bodies/signatures are exact source slices via the same view logic as `show` (the exported view-extraction function above — do not duplicate it).
 - Header: target, `budget`, `used`. Then labeled groups; exact source, no tree compression inside entries. After packing, still run through the shared bounded handler (both limits apply, `bounded-output.md`).
 

@@ -1,9 +1,10 @@
 import type { Node, Tree } from "web-tree-sitter";
 import type { ExtractResult, GrammarAdapter, LanguageCapabilities } from "../adapter.ts";
 import { resolveGoFileDep } from "./go-file-deps.ts";
-import type { Decl, ImportRef, Visibility } from "../ir.ts";
+import type { CallSite, Decl, ImportRef, Visibility } from "../ir.ts";
 import {
 	applyDoc,
+	callSite,
 	docSpanBefore,
 	endLine,
 	field,
@@ -12,6 +13,7 @@ import {
 	qualify,
 	startLine,
 	unquote,
+	walkBodyNodes,
 	type DocSpan,
 } from "./tree.ts";
 
@@ -87,9 +89,77 @@ const INTERFACE_TYPE = "interface_type";
 const FIELD_DECLARATION_LIST = "field_declaration_list";
 const FIELD_DECLARATION = "field_declaration";
 const METHOD_ELEM = "method_elem";
+const CALL_EXPRESSION = "call_expression";
+const COMPOSITE_LITERAL = "composite_literal";
+const SELECTOR_EXPRESSION = "selector_expression";
+const IDENTIFIER = "identifier";
+const TYPE_IDENTIFIER = "type_identifier";
+const BLOCK = "block";
+
+const NESTED_SCOPE = new Set([FUNCTION_DECLARATION, METHOD_DECLARATION]);
+
+function extractCalls(body: Node | null): CallSite[] {
+	if (body === null) return [];
+	const out: CallSite[] = [];
+	walkBodyNodes(
+		body,
+		(node) => NESTED_SCOPE.has(node.type),
+		(node) => {
+			if (node.type === CALL_EXPRESSION) {
+				const fn = field(node, "function");
+				if (fn === null) return;
+				let name = "";
+				let receiver = "";
+				let leaf: Node | null = null;
+				if (fn.type === IDENTIFIER) {
+					name = fn.text;
+					leaf = fn;
+				} else if (fn.type === SELECTOR_EXPRESSION) {
+					const fld = field(fn, "field");
+					const op = field(fn, "operand");
+					if (fld !== null) {
+						name = fld.text;
+						leaf = fld;
+					}
+					receiver = op === null ? "" : op.text;
+				}
+				if (leaf === null || name.length === 0) return;
+				const site = callSite(name, startLine(leaf), leaf.startIndex, leaf.endIndex, "call", receiver);
+				if (site !== undefined) out.push(site);
+				return;
+			}
+			if (node.type === COMPOSITE_LITERAL) {
+				const typeNode = field(node, "type");
+				if (typeNode === null) return;
+				const leaf =
+					typeNode.type === TYPE_IDENTIFIER || typeNode.type === IDENTIFIER
+						? typeNode
+						: typeNode.namedChildren.find((c) => c.type === TYPE_IDENTIFIER || c.type === IDENTIFIER);
+				if (leaf === undefined || leaf === null) return;
+				const site = callSite(leaf.text, startLine(leaf), leaf.startIndex, leaf.endIndex, "construct");
+				if (site !== undefined) out.push(site);
+			}
+		},
+	);
+	return out;
+}
+
+function embeddedBases(list: Node | null): string[] {
+	if (list === null) return [];
+	const bases: string[] = [];
+	for (const node of list.namedChildren) {
+		if (node.type !== FIELD_DECLARATION) continue;
+		if (node.childrenForFieldName("name").length > 0) continue;
+		const typeNode = field(node, "type");
+		if (typeNode === null) continue;
+		const text = typeNode.text.replace(/^\*/, "");
+		const bare = text.includes(".") ? (text.split(".").pop() ?? text) : text;
+		if (bare.length > 0) bases.push(bare);
+	}
+	return bases;
+}
 const POINTER_TYPE = "pointer_type";
 const PARAMETER_DECLARATION = "parameter_declaration";
-const BLOCK = "block";
 
 /** Go exported = first rune uppercase (unicode letter). */
 function goExported(name: string): boolean {
@@ -152,6 +222,8 @@ function leafMember(
 		visibility: visibilityFor(name),
 		exported: goExported(name),
 		children: [],
+		calls: [],
+		bases: [],
 	};
 }
 
@@ -220,6 +292,8 @@ function declsFromTypeSpec(spec: Node, span: Node, doc: DocSpan | undefined): De
 					visibility: visibilityFor(name),
 					exported: goExported(name),
 					children: interfaceMethods(typeNode, name),
+					calls: [],
+					bases: [],
 				},
 				doc,
 			);
@@ -239,6 +313,7 @@ function declsFromTypeSpec(spec: Node, span: Node, doc: DocSpan | undefined): De
 			visibility: visibilityFor(name),
 			exported: goExported(name),
 			children,
+			bases: typeNode.type === STRUCT_TYPE ? embeddedBases(body) : [],
 		},
 		body,
 	);
@@ -339,6 +414,7 @@ function declsFromFunction(node: Node, source: string): Decl[] {
 	const name = nameText(field(node, "name"));
 	if (name.length === 0) return [];
 	const body = field(node, "body");
+	const bodyNode = body !== null && body.type === BLOCK ? body : null;
 	const decl = finishDecl(
 		{
 			kind: "function",
@@ -350,8 +426,9 @@ function declsFromFunction(node: Node, source: string): Decl[] {
 			endOffset: node.endIndex,
 			visibility: visibilityFor(name),
 			exported: goExported(name),
+			calls: extractCalls(bodyNode),
 		},
-		body !== null && body.type === BLOCK ? body : null,
+		bodyNode,
 	);
 	return [applyDoc(decl, doc)];
 }
@@ -364,6 +441,7 @@ function declsFromMethod(node: Node, source: string): Decl[] {
 	const recvName = receiver === null ? "" : receiverTypeName(receiver);
 	const qualifiedName = recvName.length === 0 ? name : `${recvName}.${name}`;
 	const body = field(node, "body");
+	const bodyNode = body !== null && body.type === BLOCK ? body : null;
 	const decl = finishDecl(
 		{
 			kind: "method",
@@ -375,8 +453,9 @@ function declsFromMethod(node: Node, source: string): Decl[] {
 			endOffset: node.endIndex,
 			visibility: visibilityFor(name),
 			exported: goExported(name),
+			calls: extractCalls(bodyNode),
 		},
-		body !== null && body.type === BLOCK ? body : null,
+		bodyNode,
 	);
 	return [applyDoc(decl, doc)];
 }
@@ -403,6 +482,7 @@ function collectImports(root: Node): ImportRef[] {
 				startLine: startLine(spec),
 				startOffset: node.startIndex,
 				endOffset: node.endIndex,
+				bindings: [],
 			});
 		}
 	}

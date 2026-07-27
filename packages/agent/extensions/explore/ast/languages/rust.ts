@@ -1,9 +1,10 @@
 import type { Node, Tree } from "web-tree-sitter";
 import type { ExtractResult, GrammarAdapter, LanguageCapabilities } from "../adapter.ts";
 import { resolveRustFileDep } from "./rust-file-deps.ts";
-import type { Decl, ImportRef, Visibility } from "../ir.ts";
+import type { CallSite, Decl, ImportRef, Visibility } from "../ir.ts";
 import {
 	applyDoc,
+	callSite,
 	docSpanBefore,
 	endLine,
 	field,
@@ -11,6 +12,8 @@ import {
 	nameText,
 	qualify,
 	spanThroughPrevious,
+	startLine,
+	walkBodyNodes,
 	type DocSpan,
 } from "./tree.ts";
 
@@ -91,6 +94,105 @@ const SCOPED_TYPE_IDENTIFIER = "scoped_type_identifier";
 const LINE_COMMENT = "line_comment";
 const BLOCK_COMMENT = "block_comment";
 
+const CALL_EXPRESSION = "call_expression";
+const MACRO_INVOCATION = "macro_invocation";
+const STRUCT_EXPRESSION = "struct_expression";
+const IDENTIFIER = "identifier";
+const FIELD_IDENTIFIER = "field_identifier";
+const SCOPED_IDENTIFIER = "scoped_identifier";
+
+const NESTED_SCOPE = new Set([
+	FUNCTION_ITEM,
+	FUNCTION_SIGNATURE_ITEM,
+	STRUCT_ITEM,
+	ENUM_ITEM,
+	TRAIT_ITEM,
+	IMPL_ITEM,
+	MOD_ITEM,
+]);
+
+function bareCallee(node: Node): { name: string; receiver: string; leaf: Node } | undefined {
+	if (node.type === IDENTIFIER || node.type === FIELD_IDENTIFIER) {
+		return { name: node.text, receiver: "", leaf: node };
+	}
+	if (node.type === SCOPED_IDENTIFIER || node.type === "field_expression") {
+		const nameNode = field(node, "name") ?? field(node, "field");
+		const scope = field(node, "path") ?? field(node, "value");
+		if (nameNode === null) return undefined;
+		return { name: nameNode.text, receiver: scope === null ? "" : scope.text, leaf: nameNode };
+	}
+	return undefined;
+}
+
+function extractCalls(body: Node | null): CallSite[] {
+	if (body === null) return [];
+	const out: CallSite[] = [];
+	walkBodyNodes(
+		body,
+		(n) => NESTED_SCOPE.has(n.type),
+		(node) => {
+			if (node.type === CALL_EXPRESSION) {
+				const fn = field(node, "function");
+				if (fn === null) return;
+				const bare = bareCallee(fn);
+				if (bare === undefined) return;
+				const site = callSite(
+					bare.name,
+					startLine(bare.leaf),
+					bare.leaf.startIndex,
+					bare.leaf.endIndex,
+					"call",
+					bare.receiver,
+				);
+				if (site !== undefined) out.push(site);
+				return;
+			}
+			if (node.type === MACRO_INVOCATION) {
+				const mac = field(node, "macro") ?? node.namedChildren[0];
+				if (mac === undefined || mac === null) return;
+				const bare =
+					bareCallee(mac) ?? (mac.type === IDENTIFIER ? { name: mac.text, receiver: "", leaf: mac } : undefined);
+				if (bare === undefined) return;
+				const site = callSite(
+					bare.name,
+					startLine(bare.leaf),
+					bare.leaf.startIndex,
+					bare.leaf.endIndex,
+					"macro",
+					bare.receiver,
+				);
+				if (site !== undefined) out.push(site);
+				return;
+			}
+			if (node.type === STRUCT_EXPRESSION) {
+				const nameNode = field(node, "name");
+				if (nameNode === null) return;
+				const bare =
+					bareCallee(nameNode) ??
+					(nameNode.type === TYPE_IDENTIFIER ? { name: nameNode.text, receiver: "", leaf: nameNode } : undefined);
+				if (bare === undefined) return;
+				const site = callSite(
+					bare.name,
+					startLine(bare.leaf),
+					bare.leaf.startIndex,
+					bare.leaf.endIndex,
+					"construct",
+				);
+				if (site !== undefined) out.push(site);
+			}
+		},
+	);
+	return out;
+}
+
+function traitBase(node: Node): string[] {
+	// impl Trait for Type → trait is base of Type for implementation search of Trait
+	const trait = field(node, "trait");
+	if (trait === null) return [];
+	const name = rustTypeName(trait);
+	return name.length === 0 ? [] : [name];
+}
+
 const COMMENT_TYPES = [LINE_COMMENT, BLOCK_COMMENT] as const;
 const ATTR_TYPES = [ATTRIBUTE_ITEM] as const;
 
@@ -143,6 +245,7 @@ function withAttrSpan(
 ): Decl | undefined {
 	if (name.length === 0) return undefined;
 	const span = spanThroughPrevious(node, ATTR_TYPES);
+	const callable = kind === "function" || kind === "method" || kind === "constructor";
 	const decl = finishDecl(
 		{
 			kind,
@@ -155,6 +258,8 @@ function withAttrSpan(
 			visibility,
 			exported: rustExported(visibility),
 			children,
+			calls: callable ? extractCalls(body) : [],
+			bases: node.type === IMPL_ITEM ? traitBase(node) : [],
 		},
 		body,
 	);
@@ -181,6 +286,8 @@ function structFields(list: Node, owner: string): Decl[] {
 			visibility,
 			exported: rustExported(visibility),
 			children: [],
+			calls: [],
+			bases: [],
 		});
 	}
 	return out;
@@ -204,6 +311,8 @@ function enumVariants(list: Node, owner: string): Decl[] {
 			visibility: "public",
 			exported: true,
 			children: [],
+			calls: [],
+			bases: [],
 		});
 	}
 	return out;
@@ -289,7 +398,27 @@ function declsFromItem(
 			const body = field(node, "body");
 			if (body === null || body.type !== DECLARATION_LIST || target.length === 0) return [];
 			const methodOwner = owner.length === 0 ? target : qualify(owner, target);
-			return walkDeclList(body, owner, source, methodOwner, true);
+			const methods = walkDeclList(body, owner, source, methodOwner, true);
+			// Marker decl so `implementations Trait` finds this impl via bases (trait name).
+			const trait = rustTypeName(field(node, "trait"));
+			if (trait.length === 0) return methods;
+			const marker = finishDecl(
+				{
+					kind: "class",
+					name: target,
+					qualifiedName: methodOwner,
+					startLine: node.startPosition.row + 1,
+					endLine: endLine(node),
+					startOffset: node.startIndex,
+					endOffset: node.endIndex,
+					visibility: "public",
+					exported: true,
+					children: [],
+					bases: [trait],
+				},
+				null,
+			);
+			return [marker, ...methods];
 		}
 		case MOD_ITEM: {
 			const name = nameText(field(node, "name"));
@@ -330,6 +459,7 @@ function collectImports(root: Node, imports: ImportRef[]): void {
 				startLine: node.startPosition.row + 1,
 				startOffset: node.startIndex,
 				endOffset: node.endIndex,
+				bindings: [],
 			});
 			continue;
 		}
@@ -346,6 +476,7 @@ function collectImports(root: Node, imports: ImportRef[]): void {
 				startLine: node.startPosition.row + 1,
 				startOffset: node.startIndex,
 				endOffset: node.endIndex,
+				bindings: [],
 			});
 		}
 	}
