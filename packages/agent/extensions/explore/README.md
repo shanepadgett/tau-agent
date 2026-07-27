@@ -6,7 +6,7 @@ Pi keeps ordinary filesystem tools (`ls`, `find`, `grep`, `read`). Explore adds 
 
 ## Large `read` / autoread
 
-When `explore.read.enabled` is on (default), a full Pi `read` or autoread of a registered source file (including Markdown) above `explore.read.structureThresholdLines` (default 200) returns an **outline** — declarations or headings — not the full body. Use ranged `read` (`offset`/`limit`, capped by `explore.read.maxRangeLines`) or `show` for bodies and sections. Small files and unregistered paths stay ordinary Pi full text. Set `explore.read.enabled` to `false` to turn the overlay off.
+When `explore.read.enabled` is on (default), a full Pi `read` or autoread of a registered source file (including Markdown) above `explore.read.structureThresholdLines` (default 200) returns an **outline** — declarations or headings — not the full body. Use ranged `read` (`offset`/`limit`) or `show` for bodies and sections. Small files and unregistered paths stay ordinary Pi full text. Set `explore.read.enabled` to `false` to turn the overlay off.
 
 ## Tools
 

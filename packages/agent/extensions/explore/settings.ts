@@ -10,7 +10,6 @@ export default defineTauExtensionSettings({
 		read: {
 			enabled: true as boolean,
 			structureThresholdLines: 200 as number,
-			maxRangeLines: 200 as number,
 		},
 	},
 	schema: Type.Object(
@@ -45,13 +44,6 @@ export default defineTauExtensionSettings({
 								minimum: 1,
 								description:
 									"Registered source at or under this line count may be full-read. Above it, full read model-visible result is outline only.",
-							}),
-						),
-						maxRangeLines: Type.Optional(
-							Type.Integer({
-								default: 200,
-								minimum: 1,
-								description: "Maximum lines returned by one ranged read on registered source.",
 							}),
 						),
 					},

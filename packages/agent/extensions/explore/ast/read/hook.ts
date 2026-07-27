@@ -5,14 +5,7 @@ import { resolveExplorePath } from "../../traverse.ts";
 import type { ExploreEngine } from "../engine.ts";
 import { formatOutlineFile } from "../format/outline.ts";
 import { outlinePath } from "../queries/outline.ts";
-import {
-	countLines,
-	formatLargeReadOutline,
-	rangedReadOverLimitMessage,
-	readCallKind,
-	shouldOutlineFullRead,
-	type ExploreReadSettings,
-} from "./policy.ts";
+import { formatLargeReadOutline, readCallKind, shouldOutlineFullRead, type ExploreReadSettings } from "./policy.ts";
 
 type ReadOverlayResult = {
 	content: Array<{ type: "text"; text: string }>;
@@ -47,9 +40,7 @@ export function registerReadOutlineHook(pi: ExtensionAPI, engineFor: (cwd: strin
 		if (engine.registry.adapterForPath(absolutePath) === undefined) return;
 
 		const kind = readCallKind(event.input);
-		if (kind === "ranged") {
-			return enforceRangedLimit(event.input, event.content, readSettings.maxRangeLines);
-		}
+		if (kind === "ranged") return;
 
 		return substituteLargeFullRead({
 			engine,
@@ -96,30 +87,7 @@ async function substituteLargeFullRead(options: {
 	}
 }
 
-function enforceRangedLimit(
-	input: Record<string, unknown>,
-	content: ReadonlyArray<{ type: string; text?: string }>,
-	maxRangeLines: number,
-): ReadOverlayResult | undefined {
-	const limit = typeof input.limit === "number" && Number.isFinite(input.limit) ? input.limit : undefined;
-	const returnedLines = countLines(textFromContent(content));
-	const message = rangedReadOverLimitMessage({ limit, returnedLines, maxRangeLines });
-	if (message === undefined) return undefined;
-	return {
-		content: [{ type: "text", text: message }],
-		isError: true,
-	};
-}
-
 function readPathInput(input: Record<string, unknown>): string | undefined {
 	const path = input.path;
 	return typeof path === "string" && path.length > 0 ? path : undefined;
-}
-
-function textFromContent(content: ReadonlyArray<{ type: string; text?: string }>): string {
-	const parts: string[] = [];
-	for (const part of content) {
-		if (part.type === "text" && typeof part.text === "string") parts.push(part.text);
-	}
-	return parts.join("\n");
 }

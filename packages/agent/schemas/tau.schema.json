@@ -81,12 +81,6 @@
 									"default": 200,
 									"minimum": 1,
 									"description": "Registered source at or under this line count may be full-read. Above it, full read model-visible result is outline only."
-								},
-								"maxRangeLines": {
-									"type": "integer",
-									"default": 200,
-									"minimum": 1,
-									"description": "Maximum lines returned by one ranged read on registered source."
 								}
 							},
 							"additionalProperties": false
