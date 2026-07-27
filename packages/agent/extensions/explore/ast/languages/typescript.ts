@@ -300,6 +300,32 @@ function valueIsFunction(value: Node | null): boolean {
 	);
 }
 
+function compactInitializer(value: Node): Decl["signatureOmissions"] {
+	const omissions: NonNullable<Decl["signatureOmissions"]> = [];
+	for (const callable of value.descendantsOfType([
+		ARROW_FUNCTION,
+		FUNCTION_EXPRESSION,
+		FUNCTION_DECLARATION,
+		GENERATOR_FUNCTION_DECLARATION,
+	])) {
+		const body = field(callable, "body");
+		if (body === null) continue;
+		if (
+			omissions.some((omission) => body.startIndex >= omission.startOffset && body.endIndex <= omission.endOffset)
+		) {
+			continue;
+		}
+		omissions.push({
+			startOffset: body.startIndex,
+			endOffset: body.endIndex,
+			replacement: body.type === "statement_block" ? "{ … }" : "…",
+		});
+	}
+	if (omissions.length > 0) return omissions;
+	if (value.startPosition.row === value.endPosition.row) return undefined;
+	return [{ startOffset: value.startIndex, endOffset: value.endIndex, replacement: "…" }];
+}
+
 function walkStatementList(nodes: readonly Node[], owner: string, source: string, exportedDefault: boolean): Decl[] {
 	const decls: Decl[] = [];
 	for (const node of nodes) {
@@ -482,7 +508,10 @@ function declsFromExport(node: Node, owner: string, source: string): Decl[] {
 			},
 			body,
 		);
-		if (body === null) decl.signatureEndOffset = node.endIndex;
+		if (body === null) {
+			decl.signatureEndOffset = node.endIndex;
+			decl.signatureOmissions = compactInitializer(value);
+		}
 		return [applyDoc(decl, doc)];
 	}
 
@@ -523,7 +552,10 @@ function variableDecls(node: Node, owner: string, exported: boolean, doc: DocSpa
 			},
 			body,
 		);
-		if (body === null) decl.signatureEndOffset = spanNode.endIndex;
+		if (body === null) {
+			decl.signatureEndOffset = spanNode.endIndex;
+			if (value !== null) decl.signatureOmissions = compactInitializer(value);
+		}
 		out.push(i === 0 ? applyDoc(decl, doc) : decl);
 	}
 	return out;
@@ -583,6 +615,9 @@ function classMembers(body: Node, owner: string, source: string): Decl[] {
 				doc,
 				visibilityOf(node),
 			);
+			if (decl !== undefined && !isFn && value !== null) {
+				decl.signatureOmissions = compactInitializer(value);
+			}
 			if (decl !== undefined) out.push(decl);
 			continue;
 		}

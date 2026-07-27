@@ -83,6 +83,12 @@ export type Decl = {
 	endOffset: number;
 	/** Decl start → body open; signature = source.slice(startOffset, signatureEndOffset). */
 	signatureEndOffset: number;
+	/** Initializer/body spans replaced with compact markers when a signature cannot be one contiguous source slice. */
+	signatureOmissions?: Array<{
+		startOffset: number;
+		endOffset: number;
+		replacement: string;
+	}>;
 	/** Absent when no body. */
 	bodyStartOffset?: number;
 	bodyEndOffset?: number;
