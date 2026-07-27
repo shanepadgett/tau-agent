@@ -142,7 +142,7 @@ export function formatDashboardMarkdown(snapshots: readonly SubagentInvocationSn
 		lines.push(
 			`### ${tableCell(details.displayName, 80)}`,
 			"",
-			`${tableCell(details.agent, 80)} · ${tableCell(details.invocationId, 80)}`,
+			tableCell(details.agent, 80),
 			"",
 			quote(details.task) || "> _(empty)_",
 		);

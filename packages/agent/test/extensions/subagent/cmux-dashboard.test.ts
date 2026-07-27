@@ -140,8 +140,8 @@ describe("formatDashboardMarkdown", () => {
 		expect(md).toContain("../escaped");
 		expect(md).toContain("Pathfinder (../escaped)");
 		expect(md).not.toContain("thread-1");
-		expect(md).toContain("inv-1");
-		expect(md).toContain("inv-2");
+		expect(md).not.toContain("inv-1");
+		expect(md).not.toContain("inv-2");
 		expect(md).toContain("one");
 		expect(md).toContain("two");
 		expect(md).toContain("> one | two");
@@ -253,10 +253,12 @@ describe("createCmuxDashboard", () => {
 		await vi.waitFor(async () => {
 			const markdown = await readFile(path, "utf8");
 			expect(markdown).toContain("1 active · 1 done");
-			expect(markdown).toContain("inv-1");
 			expect(markdown).toContain("| Pathfinder (scout) | done | read | 4 |");
+			expect(markdown).toContain("fast task");
+			expect(markdown).toContain("slow task");
 			expect(markdown).not.toContain("fast answer");
-			expect(markdown).toContain("inv-2");
+			expect(markdown).not.toContain("inv-1");
+			expect(markdown).not.toContain("inv-2");
 		});
 		await dashboard.shutdown();
 	});
