@@ -90,10 +90,10 @@ export function projectWorkingMemory(
 	const catalog = buildMemoryCatalog(branch);
 	const refsByMessage = referenceCurrentMessages(messages, contextEntries, catalog);
 	if (state.latestAnchorToolCallId === undefined) {
-		return addReferenceCatalog(messages, refsByMessage.flat());
+		return addReferenceCatalog(messages, refsByMessage);
 	}
 	const anchorIndex = findAnchor(messages, state.latestAnchorToolCallId);
-	if (anchorIndex < 0) return addReferenceCatalog(messages, refsByMessage.flat());
+	if (anchorIndex < 0) return addReferenceCatalog(messages, refsByMessage);
 
 	const retained = state.retainedRefs
 		.flatMap((ref) => {
@@ -102,16 +102,16 @@ export function projectWorkingMemory(
 		})
 		.sort((left, right) => left.order - right.order || left.suborder - right.suborder);
 	const projected: ContextMessage[] = [];
-	const projectedRefs: MemoryUnit[] = [];
+	const projectedRefs: MemoryUnit[][] = [];
 	for (const unit of retained) {
 		projected.push(...unit.messages);
-		projectedRefs.push(unit);
+		projectedRefs.push(...unit.messages.map((_, index) => (index === unit.messages.length - 1 ? [unit] : [])));
 	}
 	for (let index = anchorIndex; index < messages.length; index += 1) {
 		const message = messages[index];
 		if (!message) continue;
 		projected.push(index === anchorIndex ? sanitizeAnchor(message, state.latestAnchorToolCallId) : message);
-		projectedRefs.push(...(refsByMessage[index] ?? []));
+		projectedRefs.push(refsByMessage[index] ?? []);
 	}
 	return addReferenceCatalog(projected, projectedRefs);
 }
@@ -125,36 +125,55 @@ function referenceCurrentMessages(
 		sessionEntryToContextMessages(entry).map((message) => ({ entry, message })),
 	);
 	if (generated.length !== messages.length) return messages.map(() => []);
+	const toolRefs = new Map<string, MemoryUnit[]>();
+	for (const unit of catalog.values()) {
+		const result = unit.messages.find((message) => message.role === "toolResult");
+		if (result?.role !== "toolResult") continue;
+		toolRefs.set(result.toolCallId, [...(toolRefs.get(result.toolCallId) ?? []), unit]);
+	}
 	return generated.map(({ entry, message }, index) => {
 		if (message.role === "assistant") {
-			return [...catalog.values()].filter(
-				(unit) =>
-					(unit.ref === `m:${entry.id}` || unit.ref.startsWith(`t:${entry.id}:`)) &&
-					messages[index]?.role === "assistant",
-			);
+			const unit = catalog.get(`m:${entry.id}`);
+			return unit && messages[index]?.role === "assistant" ? [unit] : [];
 		}
+		if (message.role === "toolResult") return toolRefs.get(message.toolCallId) ?? [];
 		const unit = catalog.get(`m:${entry.id}`);
 		return unit ? [unit] : [];
 	});
 }
 
-function addReferenceCatalog(messages: readonly ContextMessage[], units: readonly MemoryUnit[]): ContextMessage[] {
-	const unique = new Map(units.map((unit) => [unit.ref, unit]));
-	if (unique.size === 0) return [...messages];
-	const references = [...unique.values()]
-		.sort((left, right) => left.order - right.order || left.suborder - right.suborder)
-		.map((unit) => `${unit.ref} (${unit.label}): ${unit.preview}`)
-		.join("\n");
-	return [
+function addReferenceCatalog(
+	messages: readonly ContextMessage[],
+	unitsByMessage: readonly MemoryUnit[][],
+): ContextMessage[] {
+	const projected: ContextMessage[] = [
 		{
 			role: "custom",
 			customType: REFERENCE_CATALOG_TYPE,
-			content: `Working-memory references for this provider context. Use these exact refs in working_memory.keep; do not repeat this catalog in responses.\n${references}`,
+			content:
+				"Working-memory references follow their source messages. Use these exact refs in working_memory.keep; do not repeat them in responses.",
 			display: false,
 			timestamp: 0,
 		},
-		...messages,
 	];
+	for (let index = 0; index < messages.length; index += 1) {
+		const message = messages[index];
+		if (!message) continue;
+		projected.push(message);
+		const unique = new Map((unitsByMessage[index] ?? []).map((unit) => [unit.ref, unit]));
+		if (unique.size === 0) continue;
+		projected.push({
+			role: "custom",
+			customType: REFERENCE_CATALOG_TYPE,
+			content: [...unique.values()]
+				.sort((left, right) => left.order - right.order || left.suborder - right.suborder)
+				.map((unit) => `${unit.ref} (${unit.label}): ${unit.preview}`)
+				.join("\n"),
+			display: false,
+			timestamp: 0,
+		});
+	}
+	return projected;
 }
 
 function sanitizeAnchor(message: ContextMessage, id: string): ContextMessage {

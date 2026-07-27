@@ -60,8 +60,8 @@ describe("working-memory catalog and projection", () => {
 			prunedRowIds: new Set(),
 		};
 		const projected = projectWorkingMemory(messages, state, branch, branch);
-		expect(projected).toHaveLength(4);
-		expect(projected[0]).toMatchObject({
+		expect(projected).toHaveLength(5);
+		expect(projected[2]).toMatchObject({
 			role: "custom",
 			customType: "tau.working-memory.references",
 			content: expect.stringContaining("m:user (user): original constraint"),
@@ -69,10 +69,26 @@ describe("working-memory catalog and projection", () => {
 		});
 		expect(projected[1]).toEqual(oldUser);
 		expect(JSON.stringify(projected)).not.toContain("[wm ");
-		const projectedAnchor = projected[2];
+		const projectedAnchor = projected[3];
 		if (projectedAnchor?.role !== "assistant") throw new Error("expected assistant anchor");
 		const call = projectedAnchor.content.find((block) => block.type === "toolCall");
 		expect(call?.type === "toolCall" ? call.arguments : undefined).toEqual({ checkpoint: true });
+	});
+
+	it("keeps projected context append-only as new messages arrive", () => {
+		const userMessage = { role: "user" as const, content: "constraint", timestamp: 1 };
+		const assistantMessage = fauxAssistantMessage(fauxText("conclusion"));
+		const user = entry("user", userMessage);
+		const assistant = entry("assistant", assistantMessage);
+		const state: ActiveWorkingMemoryState = {
+			latestAnchorToolCallId: undefined,
+			retainedRefs: [],
+			prunedRowIds: new Set(),
+		};
+		const first = projectWorkingMemory([userMessage], state, [user], [user]);
+		const extendedBranch = [user, assistant];
+		const second = projectWorkingMemory([userMessage, assistantMessage], state, extendedBranch, extendedBranch);
+		expect(second.slice(0, first.length)).toEqual(first);
 	});
 
 	it("does not offer legacy autoread as selectable memory", () => {
