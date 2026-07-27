@@ -40,6 +40,6 @@ packages/agent/extensions/explore/ast/tools/context.ts
 
 After `/reload`, real `impact` / `context` tools per [`../LIVE-PROVE.md`](../LIVE-PROVE.md):
 
-- `impact` modes on symbols from `pi` or `excalidraw` (and optional monorepo).
-- `context` loose and tight budgets (signature downgrade / skip) on corpus symbols.
+- `impact` modes on symbols from `pi` or `excalidraw`, plus at least one real hit per other programming corpus language (file-import sections use task 08 graph).
+- `context` loose and tight budgets (signature downgrade / skip) on corpus symbols — TS plus at least two non-TS languages.
 - `budget < 1` errors.

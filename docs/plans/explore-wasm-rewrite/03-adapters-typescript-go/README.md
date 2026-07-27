@@ -33,7 +33,7 @@ Walk the tree with `tree.rootNode` / `namedChildren` in TS code; use `new Parser
 - Unwrap `export_statement` wrappers; set `exported`. Handle `export default` (named and anonymous — anonymous default gets name `default`).
 - Class members: `method_definition`, `public_field_definition`, accessors; visibility from modifiers, default `public`. `#private` names → `private`.
 - Imports: `import_statement` source strings into `FileIr.imports`.
-- Capabilities: `{ shape: true, search: true, fileDeps: true, callEdges: true, packageSurface: true }`.
+- Capabilities: `{ shape: true, search: true, fileDeps: true, callEdges: true, packageSurface: true }`. `resolveFileDep` lands in task 08 (hook required once graph tools ship).
 
 ## Go specifics
 
@@ -41,7 +41,7 @@ Walk the tree with `tree.rootNode` / `namedChildren` in TS code; use `new Parser
 - Kind mappings must stay inside the shared `DeclKind` vocabulary. TS `type_alias_declaration` → `interface`. Record judgment calls in a short comment in the adapter file.
 - `exported` = first rune uppercase; `visibility` = `public`/`private` accordingly.
 - Imports: `import_spec` paths.
-- Capabilities: `{ shape: true, search: true, fileDeps: false, callEdges: true, packageSurface: false }` — honest subsets are allowed by `explore-specs/cross/system.md`; do not fake package resolution.
+- Capabilities after task 03 extract: `{ shape: true, search: true, fileDeps: true, callEdges: true, packageSurface: false }`. Import strings land here; **`resolveFileDep` implementation is task 08** (must not stay a permanent capability gap). `packageSurface: false` is honest — Go has no package.json-style surface in v1.
 
 ## Done when
 

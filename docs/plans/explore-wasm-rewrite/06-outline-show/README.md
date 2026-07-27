@@ -47,6 +47,6 @@ Tool files are thin: typebox schema, param normalization (strip leading `@` per 
 
 After `/reload`, real `outline` / `show` tools per [`../LIVE-PROVE.md`](../LIVE-PROVE.md):
 
-- Recursive `outline` on corpus package scopes (TS + at least two other registered languages).
-- `show` a known corpus symbol all four views; ambiguity errors with candidates.
+- Recursive `outline` on corpus package scopes for **every** programming language with an adapter at prove time (TS/TSX plus whichever of Go and task-04 languages are registered — do not stop at “TS + two”).
+- `show` a known corpus symbol all four views (at least one non-TS); ambiguity errors with candidates.
 - Large recursive outline hits bound/overflow cleanly.

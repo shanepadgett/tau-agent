@@ -32,7 +32,7 @@ Use **narrow scopes** under these trees (one package/module directory). Do not s
 
 1. `/reload` after extension changes.
 2. Call the **registered tool name** from the agent harness (`outline`, `show`, `discover`, …) with absolute paths into the corpus (or cwd set such that those paths resolve).
-3. Cover **every language the task claims**. If the task is TS-only graph work, still hit `pi` or `excalidraw` plus at least one non-TS corpus path when the tool is language-agnostic and adapters exist.
+3. Cover **every language the task claims**. Per language coverage law (COLD-START): user-facing tools that can work on a corpus language must be proved on that language — not TS-only with a single non-TS capability-error poke. Genuine concept exceptions (e.g. Markdown file deps) are the only skip.
 4. Exercise the task’s **Done when** cases on corpus paths first; use this monorepo only as an extra TS convenience, not the sole proof.
 5. Record failures that are product bugs (fix them) vs corpus quirks (note once, move on).
 

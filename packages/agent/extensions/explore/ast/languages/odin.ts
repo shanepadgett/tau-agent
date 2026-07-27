@@ -1,12 +1,13 @@
 import type { Node, Tree } from "web-tree-sitter";
 import type { ExtractResult, GrammarAdapter, LanguageCapabilities } from "../adapter.ts";
+import { resolveOdinFileDep } from "./odin-file-deps.ts";
 import type { Decl, ImportRef, Visibility } from "../ir.ts";
 import { applyDoc, docSpanBefore, endLine, finishDecl, qualify, startLine, unquote, type DocSpan } from "./tree.ts";
 
 const CAPABILITIES: LanguageCapabilities = {
 	shape: true,
 	search: true,
-	fileDeps: false,
+	fileDeps: true,
 	callEdges: true,
 	packageSurface: false,
 };
@@ -347,5 +348,6 @@ export function odinAdapter(): GrammarAdapter {
 		capabilities: CAPABILITIES,
 		importNoiseIdentifiers: IMPORT_NOISE,
 		extract: extractOdin,
+		resolveFileDep: resolveOdinFileDep,
 	};
 }

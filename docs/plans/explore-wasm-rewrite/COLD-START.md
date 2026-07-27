@@ -14,15 +14,16 @@ Explore structural tools on in-process `web-tree-sitter` (WASM). Product law: `d
 ## Fixed architecture (do not reopen)
 
 1. In-process engine. No child process, no native worker, no protocol.
-2. **Language separation (bold product claim):** adding a language is **two required edits** only — (1) `ast/languages/<lang>.ts` (or a sibling under `languages/` for large hooks), (2) one `register` line in `ast/registry.ts`. Grammar languages also need a pin/artifact under `ast/grammars/` (toolchain, not tools). Optional capability hooks (`resolvePackageSurface`, later fileDeps/callEdges tables, `importNoiseIdentifiers`) live **on that adapter**. **Never** put language keywords, package layouts, re-export syntax, or `language ===` / extension switches in `tools/`, `queries/`, `format/`, `engine.ts`, or other shared base files.
-3. Parse → plain `FileIr` → `tree.delete()` immediately. Cache IR by `(path, contentHash)`. Never cache `Tree`.
-4. Signature = byte slice of real source. Never rebuild from strings / regex.
-5. Identity = `path` + `name` + optional `line`. No numeric locators.
-6. Formatters pure (IR/view → string). Tools thin (schema + wire + bounded emit).
-7. No Explore writes. No read-gate. No read-stats. No complete-file unchanged/diff cache.
-8. Register each tool when it works. Composition root: `packages/agent/extensions/explore/index.ts`.
-9. Model text via `packages/agent/shared/bounded-text-result.ts`. Overflow via `temporary-output-store.ts`. Do not copy `DEFAULT_MAX_*` into call sites.
-10. Repo rules: `AGENTS.md` (strict TS, no `any`, no `!`, top-level imports, extension settings path, no manual schema edit).
+2. **Language separation (bold product claim):** adding a language is **two required edits** only — (1) `ast/languages/<lang>.ts` (or a sibling under `languages/` for large hooks), (2) one `register` line in `ast/registry.ts`. Grammar languages also need a pin/artifact under `ast/grammars/` (toolchain, not tools). Capability hooks (`resolvePackageSurface`, `resolveFileDep`, callEdges tables, `importNoiseIdentifiers`) live **on that adapter**. **Never** put language keywords, package layouts, re-export syntax, or `language ===` / extension switches in `tools/`, `queries/`, `format/`, `engine.ts`, or other shared base files.
+3. **Language coverage law:** a task that lands user-facing tool behavior must work for **every registered corpus language that can support the concept**, with real adapter hooks — not TS-first plus capability errors for the rest. Capability-unavailable is only for languages where the concept does not apply (example: Markdown has no file-import graph). Each task’s Done when lists the LIVE-PROVE languages it claims; “adapters exist but we only proved TS” is incomplete.
+4. Parse → plain `FileIr` → `tree.delete()` immediately. Cache IR by `(path, contentHash)`. Never cache `Tree`.
+5. Signature = byte slice of real source. Never rebuild from strings / regex.
+6. Identity = `path` + `name` + optional `line`. No numeric locators.
+7. Formatters pure (IR/view → string). Tools thin (schema + wire + bounded emit).
+8. No Explore writes. No read-gate. No read-stats. No complete-file unchanged/diff cache.
+9. Register each tool when it works. Composition root: `packages/agent/extensions/explore/index.ts`.
+10. Model text via `packages/agent/shared/bounded-text-result.ts`. Overflow via `temporary-output-store.ts`. Do not copy `DEFAULT_MAX_*` into call sites.
+11. Repo rules: `AGENTS.md` (strict TS, no `any`, no `!`, top-level imports, extension settings path, no manual schema edit).
 
 ## Tests and validation
 
@@ -62,6 +63,7 @@ Explore structural tools on in-process `web-tree-sitter` (WASM). Product law: `d
 - Signature pretty-print by regex
 - Second parser or dual language stack
 - **Language soup in shared code** — TS/Go/Rust keywords, `package.json`, re-export regex, or extension lists inside tools/queries/format/engine
+- **TS-only product behavior** when other corpus languages can support the same tool via adapter hooks
 - Copy-paste four relationship pipelines
 - Unit test suite “to be safe”
 - Reading/editing `packages/agent/schemas/tau.schema.json` by hand

@@ -25,9 +25,9 @@ Remaining six adapters through the same interface from task 03. One file + one r
 | Swift | `function_declaration`, `class/struct/enum/protocol_declaration`, `extension` (nest members under extended type's `qualifiedName`), computed properties, initializers → `constructor`. Access levels: `open`/`public` → `public`, `internal` (default) → `internal`, `fileprivate`/`private` → `private`. |
 | Odin | `procedure` declarations (`name :: proc(...)`), struct/enum/union value declarations, constants. Package-level only; visibility `public` unless `@(private)` attribute. Grammar is younger — unknown node kinds skip extraction (`parseDegraded` untouched; missing extraction is not parser degradation). |
 
-## Capabilities (initial, honest)
+## Capabilities
 
-All six: `{ shape: true, search: true, fileDeps: false, callEdges: true, packageSurface: false }`. File-dep extraction beyond TS/TSX is future work behind the capability flag; tools already report capability gaps per `explore-specs/cross/system.md`.
+All six after extract work: `{ shape: true, search: true, fileDeps: true, callEdges: true, packageSurface: false }`. Import specifiers land in this task. **`resolveFileDep` bodies are task 08** — required for every programming language before graph tools register. `packageSurface: false` stays until a language grows a real package-surface resolver (optional capability). Do not leave permanent `fileDeps: false` on these adapters.
 
 ## Guardrails from the outline checkpoint review
 

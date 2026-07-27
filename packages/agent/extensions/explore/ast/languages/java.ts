@@ -1,5 +1,6 @@
 import type { Node, Tree } from "web-tree-sitter";
 import type { ExtractResult, GrammarAdapter, LanguageCapabilities } from "../adapter.ts";
+import { resolveJavaFileDep } from "./jvm-file-deps.ts";
 import type { Decl, ImportRef, Visibility } from "../ir.ts";
 import {
 	applyDoc,
@@ -16,7 +17,7 @@ import {
 const CAPABILITIES: LanguageCapabilities = {
 	shape: true,
 	search: true,
-	fileDeps: false,
+	fileDeps: true,
 	callEdges: true,
 	packageSurface: false,
 };
@@ -306,5 +307,6 @@ export function javaAdapter(): GrammarAdapter {
 		capabilities: CAPABILITIES,
 		importNoiseIdentifiers: IMPORT_NOISE,
 		extract: extractJava,
+		resolveFileDep: resolveJavaFileDep,
 	};
 }

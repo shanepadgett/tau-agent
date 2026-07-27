@@ -1,5 +1,6 @@
 import type { Node, Tree } from "web-tree-sitter";
 import type { ExtractResult, GrammarAdapter, LanguageCapabilities } from "../adapter.ts";
+import { resolveCsharpFileDep } from "./csharp-file-deps.ts";
 import type { Decl, ImportRef, Visibility } from "../ir.ts";
 import {
 	applyDoc,
@@ -16,7 +17,7 @@ import {
 const CAPABILITIES: LanguageCapabilities = {
 	shape: true,
 	search: true,
-	fileDeps: false,
+	fileDeps: true,
 	callEdges: true,
 	packageSurface: false,
 };
@@ -399,5 +400,6 @@ export function csharpAdapter(): GrammarAdapter {
 		capabilities: CAPABILITIES,
 		importNoiseIdentifiers: IMPORT_NOISE,
 		extract: extractCsharp,
+		resolveFileDep: resolveCsharpFileDep,
 	};
 }

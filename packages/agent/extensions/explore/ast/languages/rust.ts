@@ -1,5 +1,6 @@
 import type { Node, Tree } from "web-tree-sitter";
 import type { ExtractResult, GrammarAdapter, LanguageCapabilities } from "../adapter.ts";
+import { resolveRustFileDep } from "./rust-file-deps.ts";
 import type { Decl, ImportRef, Visibility } from "../ir.ts";
 import {
 	applyDoc,
@@ -16,7 +17,7 @@ import {
 const CAPABILITIES: LanguageCapabilities = {
 	shape: true,
 	search: true,
-	fileDeps: false,
+	fileDeps: true,
 	callEdges: true,
 	packageSurface: false,
 };
@@ -334,7 +335,18 @@ function collectImports(root: Node, imports: ImportRef[]): void {
 		}
 		if (node.type === MOD_ITEM) {
 			const body = field(node, "body");
-			if (body !== null) collectImports(body, imports);
+			if (body !== null) {
+				collectImports(body, imports);
+				continue;
+			}
+			const name = nameText(field(node, "name"));
+			if (name.length === 0) continue;
+			imports.push({
+				specifier: `mod ${name}`,
+				startLine: node.startPosition.row + 1,
+				startOffset: node.startIndex,
+				endOffset: node.endIndex,
+			});
 		}
 	}
 }
@@ -358,5 +370,6 @@ export function rustAdapter(): GrammarAdapter {
 		capabilities: CAPABILITIES,
 		importNoiseIdentifiers: IMPORT_NOISE,
 		extract: extractRust,
+		resolveFileDep: resolveRustFileDep,
 	};
 }

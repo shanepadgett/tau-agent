@@ -14,6 +14,7 @@ import {
 	unquote,
 	type DocSpan,
 } from "./tree.ts";
+import { resolveTypescriptFileDep } from "./typescript-file-deps.ts";
 import { resolveTypescriptPackageSurface } from "./typescript-package-surface.ts";
 
 const CAPABILITIES: LanguageCapabilities = {
@@ -513,6 +514,7 @@ function makeAdapter(id: "typescript" | "tsx", extensions: readonly string[]): G
 		importNoiseIdentifiers: IMPORT_NOISE,
 		extract: extractTypeScript,
 		// Same function identity for both adapters — registry dedupes resolvers.
+		resolveFileDep: resolveTypescriptFileDep,
 		resolvePackageSurface: resolveTypescriptPackageSurface,
 	};
 }
