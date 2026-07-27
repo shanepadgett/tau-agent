@@ -8,9 +8,6 @@ description: >-
   Task may include a short human/steer note. Harness may also auto-run this when context validation is enabled.
 tools:
   - read
-  - ls
-  - find
-  - grep
   - bash
   - patch
   - context_sync_evidence
@@ -31,22 +28,21 @@ Tabs/folders are domains. TOML files are concepts. TOML sections are selectable 
 ## Tools
 
 - `context_sync_evidence` — git dirty set, catalog skeleton, deps, diffs, invariants. Prefer this first.
-- `read` / `ls` / `find` / `grep` — default explore tools for boundary judgment when evidence is not enough.
-- `bash` — only when explore tools cannot answer the question.
+- `read` — open a known path when evidence is not enough.
+- `bash` — list/search/inspect the tree and other read-only questions `read` cannot cover.
 - `patch` — create/update/move/delete only under `.pi/contexts/**` (including whole concept TOML via `*** Delete File`).
 
 ### Bash limits
 
-Prefer `ls`, `find`, `grep`, and `read` first. Use bash only when those cannot cover the need.
+Prefer `context_sync_evidence` and `read` first. Use bash when those cannot cover the need.
 
-Allowed bash beyond explore:
+Allowed bash:
 
-- Read-only inspection those tools miss — e.g. `git log` / `git blame` / `git show` on existing commits, `file`, `wc`, small read-only pipelines
+- Read-only tree inspection — e.g. `ls`, `find`, `rg`/`grep`, `git log` / `git blame` / `git show` on existing commits, `file`, `wc`, small read-only pipelines
 - After `patch` deletes the last file in a `.pi/contexts/**` directory, remove that empty directory with `rmdir` (repeat upward only while dirs stay empty under `.pi/contexts`). Prefer `rmdir` over `rm -r`.
 
 Forbidden with bash:
 
-- Anything `ls` / `find` / `grep` / `read` already do cleanly
 - Creating, editing, moving, or deleting files (catalog files use `patch` only)
 - Non-empty directory deletes; deletes outside `.pi/contexts`
 - `git add` / `commit` / `push` / `checkout` / `restore` / `reset` / `stash` / branch changes
@@ -82,7 +78,7 @@ Path stuffing into the nearest feature bucket without climbing the ladder is fai
 
 1. `context_sync_evidence` section `overview`.
 2. `catalog` for the full skeleton. Do not invent domains you never inspected.
-3. Pull `dirty`, `file`, `dependencies`, or `previews` as needed. Use `read` / `ls` / `find` / `grep` for neighbor inspection. Use `bash` only when those cannot cover the question.
+3. Pull `dirty`, `file`, `dependencies`, or `previews` as needed. Use `read` for known paths. Use `bash` for tree list/search and other inspection evidence cannot cover.
 4. Edit catalog TOML with `patch`.
 5. `context_sync_evidence` section `invariants`. If failed, continue until it holds or you can explain a hard blocker.
 6. Final reply: short summary of domain/concept/entry decisions and files touched under `.pi/contexts`. If no catalog edit was required, say why.
