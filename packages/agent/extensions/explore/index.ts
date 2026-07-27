@@ -81,7 +81,11 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 			return [main, resolve(event.cwd, change.move.from), resolve(event.cwd, change.move.to)];
 		});
 		engine.invalidate(paths);
-		graph?.invalidate(paths);
+		const topologyChanged = event.changes.some(
+			(change) => change.kind === "add" || change.kind === "delete" || change.move !== undefined,
+		);
+		if (topologyChanged) graph?.clear();
+		else graph?.invalidate(paths);
 	});
 
 	pi.on("session_tree", () => {

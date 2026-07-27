@@ -27,6 +27,7 @@ const declarationKinds = [
 	"constructor",
 	"enum",
 	"interface",
+	"type",
 	"typeAlias",
 	"function",
 	"variable",

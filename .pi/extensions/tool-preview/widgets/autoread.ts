@@ -8,35 +8,33 @@ interface AutoreadLine {
 	state: "reading" | "read" | "pruned";
 }
 
+const samplePath = "packages/agent/extensions/explore/ast/engine.ts";
+
 export function createAutoreadPreviewWidget(_tui: TUI, _cwd: string, theme: Theme): Container {
 	const container = new Container();
 	container.addChild(new Text(theme.fg("text", theme.bold("Autoread Row Preview")), 0, 0));
 	container.addChild(new Spacer(1));
-	addAgentPreview(container, theme);
-	container.addChild(new Text(theme.bold("Reading"), 0, 0));
-	container.addChild(new AutoreadLineComponent(theme, { path: "src/extensions/explore/read.ts", state: "reading" }));
-	container.addChild(new Spacer(1));
-	container.addChild(new Text(theme.bold("Read"), 0, 0));
-	container.addChild(new AutoreadLineComponent(theme, { path: "src/extensions/explore/read.ts", state: "read" }));
-	container.addChild(new Spacer(1));
-	container.addChild(new Text(theme.bold("Pruned"), 0, 0));
-	container.addChild(new AutoreadLineComponent(theme, { path: "src/extensions/explore/read.ts", state: "pruned" }));
-	return container;
-}
-
-function addAgentPreview(container: Container, theme: Theme): void {
 	addMessageBox(
 		container,
 		theme,
 		"Agent Payload",
 		[
-			"src/extensions/explore/read.ts",
-			'1: import { createReadToolDefinition } from "@earendil-works/pi-coding-agent";',
-			'2: import type { ToolRowStateStore } from "../../shared/tool-row-state.ts";',
-			"3:",
-			"4: export function createExploreReadTool(rowState: ToolRowStateStore): ReadDefinition {",
+			samplePath,
+			"18-22: export type FileSource = {",
+			"24-28: export type AstSearchBinding = {",
+			"30-37: export type AstSearchHit = {",
+			"39-60: export type ExploreEngine = {",
+			"212-470: export function createExploreEngine(options: ExploreEngineOptions): ExploreEngine",
 		].join("\n"),
 	);
+	for (const state of ["reading", "read", "pruned"] as const) {
+		container.addChild(
+			new Text(theme.bold(state === "read" ? "Read" : `${state[0]?.toUpperCase()}${state.slice(1)}`), 0, 0),
+		);
+		container.addChild(new AutoreadLineComponent(theme, { path: samplePath, state }));
+		if (state !== "pruned") container.addChild(new Spacer(1));
+	}
+	return container;
 }
 
 class AutoreadLineComponent {

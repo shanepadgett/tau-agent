@@ -29,39 +29,39 @@ const patchPreviewParams = Type.Object({ input: Type.String() });
 
 const mixedPatchInput = [
 	"*** Begin Patch",
-	"*** Add File: src/extensions/explore/index.ts",
+	"*** Add File: docs/tool-preview-example.md",
 	"+export const exploreExtension = {};",
-	"*** Replace File: src/extensions/explore/README.md",
+	"*** Replace File: packages/agent/extensions/explore/README.md",
 	"+# Explore",
 	"+",
 	"+Explore repository files.",
-	"*** Update File: src/extensions/search/index.ts",
+	"*** Update File: packages/agent/extensions/tau-help/index.ts",
 	" export const searchExtension = defineExtension({",
 	'-\tname: "search",',
 	'+\tname: "explore",',
 	" });",
-	"*** Delete File: src/extensions/search/forget.ts",
-	"*** Update File: src/extensions/search/read.ts",
-	"*** Move to: src/extensions/explore/read.ts",
+	"*** Delete File: docs/obsolete-guide.md",
+	"*** Update File: docs/draft-guide.md",
+	"*** Move to: docs/published-guide.md",
 	'import { createReadToolDefinition } from "@earendil-works/pi-coding-agent";',
 	"*** End Patch",
 ].join("\n");
 
 const partialFailureInput = [
 	"*** Begin Patch",
-	"*** Add File: src/extensions/explore/settings.ts",
+	"*** Add File: docs/example-settings.md",
 	"+export const EXPLORE_LIMIT = 100;",
-	"*** Update File: src/extensions/search/index.ts",
+	"*** Update File: packages/agent/extensions/tau-help/index.ts",
 	"@@ old registration block",
 	'-\tname: "search",',
 	'+\tname: "explore",',
-	"*** Delete File: src/extensions/search/obsolete.ts",
+	"*** Delete File: docs/obsolete-example.md",
 	"*** End Patch",
 ].join("\n");
 
 const failedInput = [
 	"*** Begin Patch",
-	"*** Update File: src/extensions/explore/missing.ts",
+	"*** Update File: docs/missing-example.md",
 	" export const missing = true;",
 	"*** End Patch",
 ].join("\n");
@@ -73,7 +73,7 @@ const runningSummary: ApplyPatchSummary = {
 		{
 			sectionIndex: 1,
 			kind: "add",
-			path: "src/extensions/explore/index.ts",
+			path: "docs/tool-preview-example.md",
 			linesAdded: 1,
 			linesRemoved: 0,
 			resultingFingerprint: "sha256:preview-add",
@@ -81,7 +81,7 @@ const runningSummary: ApplyPatchSummary = {
 		{
 			sectionIndex: 2,
 			kind: "replace",
-			path: "src/extensions/explore/README.md",
+			path: "packages/agent/extensions/explore/README.md",
 			linesAdded: 3,
 			linesRemoved: 7,
 			resultingFingerprint: "sha256:preview-replace",
@@ -97,7 +97,7 @@ const completedSummary: ApplyPatchSummary = {
 		{
 			sectionIndex: 1,
 			kind: "add",
-			path: "src/extensions/explore/index.ts",
+			path: "docs/tool-preview-example.md",
 			linesAdded: 1,
 			linesRemoved: 0,
 			resultingFingerprint: "sha256:preview-add",
@@ -105,7 +105,7 @@ const completedSummary: ApplyPatchSummary = {
 		{
 			sectionIndex: 2,
 			kind: "replace",
-			path: "src/extensions/explore/README.md",
+			path: "packages/agent/extensions/explore/README.md",
 			linesAdded: 3,
 			linesRemoved: 7,
 			resultingFingerprint: "sha256:preview-replace",
@@ -113,7 +113,7 @@ const completedSummary: ApplyPatchSummary = {
 		{
 			sectionIndex: 3,
 			kind: "update",
-			path: "src/extensions/search/index.ts",
+			path: "packages/agent/extensions/tau-help/index.ts",
 			linesAdded: 1,
 			linesRemoved: 1,
 			resultingFingerprint: "sha256:preview-update",
@@ -121,7 +121,7 @@ const completedSummary: ApplyPatchSummary = {
 		{
 			sectionIndex: 4,
 			kind: "delete",
-			path: "src/extensions/search/forget.ts",
+			path: "docs/obsolete-guide.md",
 			linesAdded: 0,
 			linesRemoved: 42,
 			resultingFingerprint: null,
@@ -129,8 +129,8 @@ const completedSummary: ApplyPatchSummary = {
 		{
 			sectionIndex: 5,
 			kind: "update",
-			path: "src/extensions/explore/read.ts",
-			move: { from: "src/extensions/search/read.ts", to: "src/extensions/explore/read.ts" },
+			path: "docs/published-guide.md",
+			move: { from: "docs/draft-guide.md", to: "docs/published-guide.md" },
 			linesAdded: 0,
 			linesRemoved: 0,
 			resultingFingerprint: "sha256:preview-move",
@@ -146,7 +146,7 @@ const partialFailureSummary: ApplyPatchSummary = {
 		{
 			sectionIndex: 1,
 			kind: "add",
-			path: "src/extensions/explore/settings.ts",
+			path: "docs/example-settings.md",
 			linesAdded: 1,
 			linesRemoved: 0,
 			resultingFingerprint: "sha256:preview-settings",
@@ -154,7 +154,7 @@ const partialFailureSummary: ApplyPatchSummary = {
 		{
 			sectionIndex: 3,
 			kind: "delete",
-			path: "src/extensions/search/obsolete.ts",
+			path: "docs/obsolete-example.md",
 			linesAdded: 0,
 			linesRemoved: 31,
 			resultingFingerprint: null,
@@ -164,7 +164,7 @@ const partialFailureSummary: ApplyPatchSummary = {
 		{
 			phase: "apply",
 			sectionIndex: 2,
-			path: "src/extensions/search/index.ts",
+			path: "packages/agent/extensions/tau-help/index.ts",
 			kind: "update",
 			chunkIndex: 1,
 			totalChunks: 1,
@@ -182,9 +182,9 @@ const failedSummary: ApplyPatchSummary = {
 		{
 			phase: "apply",
 			sectionIndex: 1,
-			path: "src/extensions/explore/missing.ts",
+			path: "docs/missing-example.md",
 			kind: "update",
-			message: "Path does not exist: src/extensions/explore/missing.ts",
+			message: "Path does not exist: docs/missing-example.md",
 		},
 	],
 };

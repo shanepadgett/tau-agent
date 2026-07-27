@@ -221,44 +221,41 @@ export function createExploreEngine(options: ExploreEngineOptions): ExploreEngin
 	let searchInitPromise: Promise<void> | undefined;
 	let parser: Parser | undefined;
 	let shutDown = false;
-	let generation = 0;
 
-	const assertLive = (gen: number): void => {
-		if (shutDown || generation !== gen) {
+	const assertLive = (): void => {
+		if (shutDown) {
 			throw new Error("Explore engine has been shut down");
 		}
 	};
 
 	const ensureReady = async (): Promise<Parser> => {
-		assertLive(generation);
+		assertLive();
 		if (parser !== undefined) return parser;
-		const gen = generation;
 		if (initPromise === undefined) {
 			initPromise = Parser.init({ locateFile: () => runtimeWasmPath() }).then(() => {
-				if (shutDown || generation !== gen) return;
+				if (shutDown) return;
 				parser = new Parser();
 			});
 		}
 		await initPromise;
-		assertLive(gen);
+		assertLive();
 		if (parser === undefined) throw new Error("Explore engine failed to initialize parser");
 		return parser;
 	};
 
 	const ensureSearchReady = async (): Promise<void> => {
-		assertLive(generation);
+		assertLive();
 		// IR path init first so locateFile pins web-tree-sitter.wasm for the process.
 		await ensureReady();
-		const gen = generation;
 		if (searchInitPromise === undefined) {
 			searchInitPromise = initializeTreeSitter();
 		}
 		await searchInitPromise;
-		assertLive(gen);
+		assertLive();
 	};
 
 	const ensureSearchLanguage = async (languageId: string): Promise<void> => {
-		assertLive(generation);
+		assertLive();
 		if (searchLangReady.has(languageId)) return;
 		const adapter = registry.adapterForId(languageId);
 		if (adapter === undefined) {
@@ -267,31 +264,29 @@ export function createExploreEngine(options: ExploreEngineOptions): ExploreEngin
 		if (adapter.mode !== "grammar" || !adapter.capabilities.search) {
 			throw new Error(`Language does not support structural search: ${languageId}`);
 		}
-		const gen = generation;
 		await ensureSearchReady();
-		assertLive(gen);
+		assertLive();
 		await registerDynamicLanguage({
 			[languageId]: {
 				libraryPath: grammarWasmPath(pinById(languageId)),
 				expandoChar: "µ",
 			},
 		});
-		assertLive(gen);
+		assertLive();
 		searchLangReady.add(languageId);
 	};
 
 	const loadLanguage = async (languageId: string): Promise<Language> => {
-		assertLive(generation);
+		assertLive();
 		const cached = languages.get(languageId);
 		if (cached !== undefined) return cached;
 
-		const gen = generation;
 		let pending = languageLoads.get(languageId);
 		if (pending === undefined) {
 			pending = Language.load(grammarWasmPath(pinById(languageId))).then(
 				(language) => {
 					languageLoads.delete(languageId);
-					if (!shutDown && generation === gen) {
+					if (!shutDown) {
 						languages.set(languageId, language);
 					}
 					return language;
@@ -305,7 +300,7 @@ export function createExploreEngine(options: ExploreEngineOptions): ExploreEngin
 		}
 
 		const language = await pending;
-		assertLive(gen);
+		assertLive();
 		return language;
 	};
 
@@ -329,10 +324,9 @@ export function createExploreEngine(options: ExploreEngineOptions): ExploreEngin
 			};
 		}
 
-		const gen = generation;
 		const activeParser = await ensureReady();
 		const language = await loadLanguage(adapter.id);
-		assertLive(gen);
+		assertLive();
 		activeParser.setLanguage(language);
 		activeParser.reset();
 		const tree = activeParser.parse(source);
@@ -356,8 +350,7 @@ export function createExploreEngine(options: ExploreEngineOptions): ExploreEngin
 	};
 
 	const loadSource = async (path: string): Promise<FileSource> => {
-		const gen = generation;
-		assertLive(gen);
+		assertLive();
 		const absolutePath = resolveExplorePath(cwd, path);
 		let bytes: Buffer;
 		try {
@@ -365,7 +358,7 @@ export function createExploreEngine(options: ExploreEngineOptions): ExploreEngin
 		} catch (error) {
 			throw pathResolutionError(error, path);
 		}
-		assertLive(gen);
+		assertLive();
 		const hash = contentHashOf(bytes);
 		const source = bytes.toString("utf8");
 		const cached = irCache.get(absolutePath);
@@ -373,7 +366,7 @@ export function createExploreEngine(options: ExploreEngineOptions): ExploreEngin
 			return { ir: cached.ir, source };
 		}
 		const ir = await buildIr(absolutePath, source, hash);
-		assertLive(gen);
+		assertLive();
 		irCache.set(absolutePath, { contentHash: hash, ir });
 		return { ir, source };
 	};
@@ -392,8 +385,7 @@ export function createExploreEngine(options: ExploreEngineOptions): ExploreEngin
 		},
 
 		async searchInSource(languageId: string, source: string, pattern: string): Promise<AstSearchHit[]> {
-			const gen = generation;
-			assertLive(gen);
+			assertLive();
 			const adapter = registry.adapterForId(languageId);
 			if (adapter === undefined) {
 				throw new Error(`Unregistered language: ${languageId}`);
@@ -402,7 +394,7 @@ export function createExploreEngine(options: ExploreEngineOptions): ExploreEngin
 				throw new Error(`Language does not support structural search: ${languageId}`);
 			}
 			await ensureSearchLanguage(languageId);
-			assertLive(gen);
+			assertLive();
 
 			let root: SgRoot;
 			try {
@@ -465,7 +457,6 @@ export function createExploreEngine(options: ExploreEngineOptions): ExploreEngin
 		shutdown(): void {
 			if (shutDown) return;
 			shutDown = true;
-			generation += 1;
 			irCache.clear();
 			languages.clear();
 			languageLoads.clear();

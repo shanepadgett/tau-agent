@@ -20,10 +20,8 @@ export type LanguageAdvertisement = {
 export type AdapterRegistry = {
 	register(adapter: LanguageAdapter): void;
 	adapterForPath(path: string): LanguageAdapter | undefined;
-	adapterForExtension(extension: string): LanguageAdapter | undefined;
 	adapterForId(languageId: string): LanguageAdapter | undefined;
 	registeredLanguages(): LanguageAdvertisement[];
-	capabilitiesFor(languageId: string): LanguageCapabilities | undefined;
 	/** Deduped package-surface resolvers from adapters that declare the capability. */
 	packageSurfaceResolvers(): readonly PackageSurfaceResolver[];
 };
@@ -80,10 +78,6 @@ function createRegistry(seed: readonly LanguageAdapter[] = []): AdapterRegistry 
 		adapterForPath(path: string): LanguageAdapter | undefined {
 			return byExtension.get(extname(path).toLowerCase());
 		},
-		adapterForExtension(extension: string): LanguageAdapter | undefined {
-			const key = extension.startsWith(".") ? extension.toLowerCase() : `.${extension.toLowerCase()}`;
-			return byExtension.get(key);
-		},
 		adapterForId(languageId: string): LanguageAdapter | undefined {
 			return byId.get(languageId);
 		},
@@ -93,9 +87,6 @@ function createRegistry(seed: readonly LanguageAdapter[] = []): AdapterRegistry 
 				extensions: adapter.extensions,
 				capabilities: adapter.capabilities,
 			}));
-		},
-		capabilitiesFor(languageId: string): LanguageCapabilities | undefined {
-			return byId.get(languageId)?.capabilities;
 		},
 		packageSurfaceResolvers(): readonly PackageSurfaceResolver[] {
 			const out: PackageSurfaceResolver[] = [];

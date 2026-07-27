@@ -1,11 +1,11 @@
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, TUI } from "@earendil-works/pi-tui";
 import { matchesKey } from "@earendil-works/pi-tui";
-import { createApiDiscoverPreviewWidget } from "./widgets/api-discover.ts";
 import { createAstSearchPreviewWidget } from "./widgets/ast-search.ts";
 import { createAutoreadPreviewWidget } from "./widgets/autoread.ts";
 import { createContextPreviewOverlay } from "./widgets/context.ts";
 import { createContextPruningPreviewWidget } from "./widgets/context-pruning.ts";
+import { createDiscoverPreviewWidget } from "./widgets/discover.ts";
 import { createFindPreviewWidget } from "./widgets/find.ts";
 import { createGrepPreviewWidget } from "./widgets/grep.ts";
 import { framePreviewWidget } from "./widgets/layout.ts";
@@ -32,12 +32,12 @@ interface PreviewStory {
 }
 
 const STORIES: readonly PreviewStory[] = [
-	{ label: "api_discover — row states", createWidget: createApiDiscoverPreviewWidget },
 	{ label: "ast_search — row states", createWidget: createAstSearchPreviewWidget },
 	{ label: "autoread — line states", createWidget: createAutoreadPreviewWidget },
 	{ label: "callees — row states", createWidget: createCalleesPreviewWidget },
 	{ label: "callers — row states", createWidget: createCallersPreviewWidget },
 	{ label: "context-pruning — markers and prune rows", createWidget: createContextPruningPreviewWidget },
+	{ label: "discover — row states", createWidget: createDiscoverPreviewWidget },
 	{ label: "find — row states", createWidget: createFindPreviewWidget },
 	{ label: "grep — row states", createWidget: createGrepPreviewWidget },
 	{ label: "implementations — row states", createWidget: createImplementationsPreviewWidget },

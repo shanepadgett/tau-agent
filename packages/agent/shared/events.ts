@@ -15,7 +15,7 @@ export type TauAgentEvents = {
 		disposition: "notify" | "discard";
 	};
 	"tau:file-mutation.applied": {
-		source: "patch" | "locatorEdit";
+		source: "patch";
 		toolCallId: string;
 		cwd: string;
 		status: "completed" | "partial" | "failed";

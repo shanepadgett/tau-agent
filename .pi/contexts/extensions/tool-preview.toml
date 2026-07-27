@@ -1,0 +1,97 @@
+name = "Tool Preview"
+description = "Developer-only visual stories for Tau and Pi tool rows"
+
+[all]
+description = "Tool-preview command, shared preview renderers, and every retained story"
+files = [
+  ".pi/extensions/tool-preview/README.md",
+  ".pi/extensions/tool-preview/index.ts",
+  ".pi/extensions/tool-preview/widgets/ast-search.ts",
+  ".pi/extensions/tool-preview/widgets/ast-tool-preview.ts",
+  ".pi/extensions/tool-preview/widgets/autoread.ts",
+  ".pi/extensions/tool-preview/widgets/context-pruning.ts",
+  ".pi/extensions/tool-preview/widgets/context.ts",
+  ".pi/extensions/tool-preview/widgets/discover.ts",
+  ".pi/extensions/tool-preview/widgets/find.ts",
+  ".pi/extensions/tool-preview/widgets/grep.ts",
+  ".pi/extensions/tool-preview/widgets/layout.ts",
+  ".pi/extensions/tool-preview/widgets/ls.ts",
+  ".pi/extensions/tool-preview/widgets/outline.ts",
+  ".pi/extensions/tool-preview/widgets/patch.ts",
+  ".pi/extensions/tool-preview/widgets/publish.ts",
+  ".pi/extensions/tool-preview/widgets/read.ts",
+  ".pi/extensions/tool-preview/widgets/relationships.ts",
+  ".pi/extensions/tool-preview/widgets/tabs-list.ts",
+  ".pi/extensions/tool-preview/widgets/tool-panel.ts",
+  ".pi/extensions/tool-preview/widgets/tool-preview.ts",
+  ".pi/extensions/tool-preview/widgets/turn-budget.ts",
+]
+anchors = [
+  "packages/agent/docs/tui.md",
+  "packages/agent/shared/tool-row-state.ts",
+]
+
+[runtime]
+description = "Preview command, layout, and generic tool-row story composition"
+files = [
+  ".pi/extensions/tool-preview/index.ts",
+  ".pi/extensions/tool-preview/widgets/layout.ts",
+  ".pi/extensions/tool-preview/widgets/tool-preview.ts",
+]
+anchors = [
+  "packages/agent/docs/tui.md",
+  "packages/agent/shared/tool-row-state.ts",
+]
+
+[explore]
+description = "Explore structural tool, relationship, read-overlay, and autoread stories"
+files = [
+  ".pi/extensions/tool-preview/widgets/ast-search.ts",
+  ".pi/extensions/tool-preview/widgets/ast-tool-preview.ts",
+  ".pi/extensions/tool-preview/widgets/autoread.ts",
+  ".pi/extensions/tool-preview/widgets/discover.ts",
+  ".pi/extensions/tool-preview/widgets/outline.ts",
+  ".pi/extensions/tool-preview/widgets/read.ts",
+  ".pi/extensions/tool-preview/widgets/relationships.ts",
+]
+anchors = [
+  "packages/agent/extensions/explore/ast/tools/render.ts",
+  "packages/agent/extensions/explore/index.ts",
+]
+
+[filesystem]
+description = "Retained Pi filesystem and read tool stories"
+files = [
+  ".pi/extensions/tool-preview/widgets/find.ts",
+  ".pi/extensions/tool-preview/widgets/grep.ts",
+  ".pi/extensions/tool-preview/widgets/ls.ts",
+  ".pi/extensions/tool-preview/widgets/read.ts",
+]
+anchors = [
+  "packages/agent/docs/tui.md",
+]
+
+[tui]
+description = "Shared panel, list, marker, publish, context, and pruning component stories"
+files = [
+  ".pi/extensions/tool-preview/widgets/context-pruning.ts",
+  ".pi/extensions/tool-preview/widgets/context.ts",
+  ".pi/extensions/tool-preview/widgets/publish.ts",
+  ".pi/extensions/tool-preview/widgets/tabs-list.ts",
+  ".pi/extensions/tool-preview/widgets/tool-panel.ts",
+  ".pi/extensions/tool-preview/widgets/turn-budget.ts",
+]
+anchors = [
+  "packages/agent/docs/tui.md",
+]
+
+[patch]
+description = "Patch streaming, success, partial failure, and error stories"
+files = [
+  ".pi/extensions/tool-preview/widgets/patch.ts",
+]
+anchors = [
+  "packages/agent/extensions/patch/executor.ts",
+  "packages/agent/extensions/patch/render.ts",
+  "packages/agent/extensions/patch/summary.ts",
+]

@@ -10,6 +10,7 @@ export type DeclKind =
 	| "constructor"
 	| "enum"
 	| "interface"
+	| "type"
 	| "typeAlias"
 	| "function"
 	| "variable"
@@ -28,6 +29,7 @@ export function isTypeLike(kind: DeclKind): boolean {
 		kind === "interface" ||
 		kind === "struct" ||
 		kind === "enum" ||
+		kind === "type" ||
 		kind === "typeAlias" ||
 		kind === "object" ||
 		kind === "namespace" ||

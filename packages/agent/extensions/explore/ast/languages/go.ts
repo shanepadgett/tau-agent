@@ -198,8 +198,7 @@ function braceOpen(node: Node): Node | undefined {
 function typeSpecKind(typeNode: Node): Decl["kind"] {
 	if (typeNode.type === STRUCT_TYPE) return "struct";
 	if (typeNode.type === INTERFACE_TYPE) return "interface";
-	// Defined type over another type (not `type X = Y`) — closest shared kind is struct.
-	return "struct";
+	return "type";
 }
 
 function leafMember(

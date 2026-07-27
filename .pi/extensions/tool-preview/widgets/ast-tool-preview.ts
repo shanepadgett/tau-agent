@@ -1,15 +1,13 @@
-import { defineTool, formatSize, keyHint, type Theme, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
-import { Container, Text, type TUI } from "@earendil-works/pi-tui";
+import { defineTool, type Theme, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
+import { Container, type TUI } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { formatToolRowTitle, type ToolRowStateStore } from "../../../../packages/agent/shared/tool-row-state.ts";
+import {
+	ExploreCallComponent,
+	renderExploreResult,
+	type ExploreToolDetails,
+} from "../../../../packages/agent/extensions/explore/ast/tools/render.ts";
+import type { ToolRowStateStore } from "../../../../packages/agent/shared/tool-row-state.ts";
 import { addMessageBox, addPageTitle, addSampleTitle, addSection } from "./layout.ts";
-
-interface AstToolPreviewDetails {
-	declarationCount: number;
-	returnedBytes: number;
-	avoidedBytes: number;
-	resultNoun: "declaration" | "fresh locator";
-}
 
 export interface AstToolPreviewSpec {
 	name: string;
@@ -21,8 +19,7 @@ export interface AstToolPreviewSpec {
 	agentResult?: string;
 	declarationCount: number;
 	returnedBytes: number;
-	avoidedBytes: number;
-	resultNoun?: "declaration" | "fresh locator";
+	truncated?: boolean;
 	isError?: boolean;
 }
 
@@ -77,8 +74,7 @@ function createAstToolRow(
 			details: {
 				declarationCount: spec.declarationCount,
 				returnedBytes: spec.returnedBytes,
-				avoidedBytes: spec.avoidedBytes,
-				resultNoun: spec.resultNoun ?? "declaration",
+				truncated: spec.truncated ?? false,
 			},
 			isError: spec.isError ?? false,
 		},
@@ -91,7 +87,7 @@ function createAstToolRow(
 function createAstPreviewDefinition(spec: AstToolPreviewSpec, warning: boolean) {
 	const rowState = previewRowState(warning);
 	const parameters = Type.Object({});
-	return defineTool<typeof parameters, AstToolPreviewDetails>({
+	return defineTool<typeof parameters, ExploreToolDetails>({
 		name: spec.name,
 		label: spec.name,
 		description: "Preview AST tool row",
@@ -102,46 +98,24 @@ function createAstPreviewDefinition(spec: AstToolPreviewSpec, warning: boolean) 
 				details: {
 					declarationCount: 0,
 					returnedBytes: 0,
-					avoidedBytes: 0,
-					resultNoun: "declaration",
+					truncated: false,
 				},
 			};
 		},
 		renderCall(_args, theme, context) {
 			rowState.watch(context.toolCallId, context.invalidate);
-			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			const title = formatToolRowTitle(rowState, context.toolCallId, spec.name, theme);
-			const options = spec.options ? ` ${theme.fg("muted", spec.options)}` : "";
-			text.setText(`${title}${theme.fg("toolOutput", " → ")}${theme.fg("accent", spec.target)}${options}`);
-			return text;
+			const targets = [spec.target];
+			const options = spec.options ? [spec.options] : [];
+			const component =
+				(context.lastComponent as ExploreCallComponent | undefined) ??
+				new ExploreCallComponent(rowState, context.toolCallId, spec.name, targets, options, theme);
+			component.targetVariants = targets;
+			component.optionVariants = options;
+			component.theme = theme;
+			return component;
 		},
 		renderResult(result, options, theme, context) {
-			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			const details = result.details;
-			if (!options.expanded && !context.isError && details) {
-				const noun = details.declarationCount === 1 ? details.resultNoun : `${details.resultNoun}s`;
-				const byteSummary = `, ${formatSize(details.returnedBytes)} returned, ${formatSize(details.avoidedBytes)} avoided`;
-				text.setText(
-					theme.fg("muted", `${details.declarationCount} ${noun}${byteSummary} (`) +
-						keyHint("app.tools.expand", "to expand") +
-						theme.fg("muted", ")"),
-				);
-				return text;
-			}
-
-			const output = result.content
-				.filter((item): item is { type: "text"; text: string } => item.type === "text")
-				.map((item) => item.text)
-				.join("\n");
-			text.setText(
-				output
-					? output
-							.split("\n")
-							.map((line) => theme.fg("toolOutput", line))
-							.join("\n")
-					: "",
-			);
-			return text;
+			return renderExploreResult(result, options.expanded, theme, context);
 		},
 	});
 }
