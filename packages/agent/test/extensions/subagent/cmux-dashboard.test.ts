@@ -126,7 +126,8 @@ describe("formatDashboardMarkdown", () => {
 		]);
 		expect(md).toContain("# Subagents");
 		expect(md).toContain("2 active · 0 done");
-		expect(md).toContain("| Agent | State | Last tool | Calls | Time |");
+		expect(md).toContain("| Agent | State | Last tool | Calls | Cost | Time |");
+		expect(md).toContain("$0.0000");
 		expect(md).not.toContain("| Agent | State | Request |");
 		expect(md).toContain("../escaped");
 		expect(md).toContain("Pathfinder (../escaped)");
