@@ -220,10 +220,9 @@ describe("cold subagent request integration", () => {
 			const priorResult = toolResults.find((message) => message.toolCallId === "cold-prior-read");
 			const currentResult = toolResults.find((message) => message.toolCallId === "cold-current-read");
 			if (!priorResult || !currentResult) throw new Error("cold read results missing");
-			expect(textOfToolResult(priorResult)).toBe(CURRENT_PRIOR_FILE_SENTINEL);
-			expect(textOfToolResult(currentResult)).toBe("unchanged, 1 lines");
-			expect(priorResult.details).toMatchObject({ readCache: { mode: "baseline" } });
-			expect(currentResult.details).toMatchObject({ readCache: { mode: "unchanged" } });
+			// Pi built-in read: full body. Explore complete-file unchanged/diff cache is stripped.
+			expect(textOfToolResult(priorResult)).toContain(CURRENT_PRIOR_FILE_SENTINEL);
+			expect(textOfToolResult(currentResult)).toContain(CURRENT_CALL_AUTOREAD_SENTINEL);
 		} finally {
 			await runtime.shutdown();
 			await rm(cwd, { recursive: true, force: true });
