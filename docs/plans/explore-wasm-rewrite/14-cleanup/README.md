@@ -24,6 +24,22 @@ The old system was archived/deleted on 2026-07-26 (see `docs/plans/explore-archi
 - `mise run check:ts` green; Fallow reports no dead files.
 - `npm pack --dry-run` on `packages/agent` shows grammar `.wasm` files and no native binaries.
 
+## Carried items from the outline checkpoint review
+
+- Delete any registry/engine surface still without callers (`registry.adapterForExtension`, `registry.capabilitiesFor`, `registry.registeredLanguages`, `engine.irForFile` — Fallow cannot see unused object members; check by grep).
+- Simplify the engine `generation`/`assertLive` ceremony if `generation` still only changes in `shutdown()` — one `shutDown` boolean plus post-`await` checks is enough.
+- Go adapter: defined types over non-struct types (`type UserID int`) currently outline as `struct` (`typeSpecKind` fallback). Pick a truthful kind deliberately (extend `DeclKind` or use `typeAlias`).
+
+## Deferred test backlog (user decision: functionality first, tests at the very end)
+
+One testing pass after the rewrite is functionally complete. Coverage that pass owes:
+
+- adapter extraction per language: spans, doc attachment, export/default handling, visibility, degraded-parse recovery (fixture files + assertions on extracted `Decl` forests),
+- markdown scanner: fences, heading nesting, section end lines,
+- `identity.ts`: ambiguity, line filter, notFound,
+- outline/show queries + formatting: name filtering, recursive footer, show views, `contextLines`, import matching,
+- `traverse.ts`: budgets, ignore rules, hidden/noise filtering.
+
 ## Aftercare
 
 Ask the user whether to delete the archive and plan artifacts: `docs/plans/explore-archive/`, `docs/plans/explore-wasm-rewrite/`, `docs/plans/wasm-tree-sitter-extension.md`, `docs/plans/ast-explore-architecture-rewrite.md`, `docs/plans/explore-review-rok.md` (specs in `docs/plans/explore-specs/` stay — they are living acceptance criteria unless the user moves them into `packages/agent/docs/`).

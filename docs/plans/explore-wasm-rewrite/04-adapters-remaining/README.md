@@ -27,6 +27,11 @@ Remaining six adapters through the same interface from task 03. One file + one r
 
 All six: `{ shape: true, search: true, fileDeps: false, callEdges: true, packageSurface: false }`. File-dep extraction beyond TS/TSX is future work behind the capability flag; tools already report capability gaps per `explore-specs/cross/system.md`.
 
+## Guardrails from the outline checkpoint review
+
+- Offsets: emit `node.startIndex`/`node.endIndex` directly (plan README decision 12). Never convert to bytes.
+- Do not grow `NOISE_IDENTIFIERS` in `ast/queries/show.ts` with new-language keywords. That set is TS/Go leakage already; if import matching needs stop-words for a new language, stop and raise moving them onto the adapter instead.
+
 ## Done when
 
 Live outline (or engine IR dump) on at least one real file per language available in-repo or a tiny hand fixture. Kotlin/Swift should hit external-scanner syntax once if fixtures exist. `check:ts` green.

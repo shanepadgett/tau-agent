@@ -6,6 +6,8 @@ Fresh window: read [`../COLD-START.md`](../COLD-START.md), this file, `explore-s
 
 Depends on: 06.
 
+Note: outline/show each hand-roll shrinking TUI title variants (`outlineOptionVariants`, `showTargetVariants`). A third copy is not acceptable — extract one shared shrinking-variants helper into `ast/tools/render.ts` as part of this task.
+
 ## Goal
 
 Repo/package/subtree declaration discovery replacing `api_discover`. Register when it works.

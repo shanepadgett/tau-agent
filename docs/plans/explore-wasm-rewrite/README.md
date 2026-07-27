@@ -19,15 +19,16 @@ Each task README is written to stand alone for implementation **given** COLD-STA
 
 1. **Engine is in-process TypeScript.** `web-tree-sitter` runtime + pinned grammar `.wasm` artifacts. No child process, no `worker_threads`, no protocol, no codec, no protocol version. The specs' word "worker" maps to this in-process engine object; it "advertises" languages by exposing the adapter registry.
 2. **Cooperative yielding, not threads.** Directory operations `await` a macrotask between file units and check `AbortSignal` per unit. Escalate to `worker_threads` only if measured latency demands it — that is a separate future decision, not part of this plan.
-3. **One language stack.** Adapters, IR, formatting, and tools all live in TypeScript under `packages/agent/extensions/explore/ast/`. Signatures are byte slices of real source, never reconstructed from strings.
-4. **Canonical IR, extracted eagerly.** Parse → extract plain-JS `FileIr` → `tree.delete()` immediately. Never cache `Tree` objects (WASM heap, not GC'd). Cache IR keyed by `(path, contentHash)`.
-5. **Identity is `path` + `name` (+ `line`).** No numeric locators anywhere (`explore-specs/cross/identity.md`).
-6. **No Explore write tools.** Edits are harness `patch`/`edit`/`write` (`stripped.md`).
-7. **No Explore filesystem tools.** `ls` / `find` / `grep` / `read` stay Pi built-ins. Density wrappers are future work only if live use proves pain — not this rewrite.
-8. **Large-read policy is a hook, not a read tool.** On Pi `tool_result` for full `read` of registered non-Markdown source over threshold: replace result content with outline + one nudge. Success, not block. Ranged/small/Markdown/unsupported pass through. No complete-file unchanged/diff cache. No transcript replay.
-9. **Grammar artifacts are pinned; prebuilt beats rebuilt.** Six grammars plus the runtime resolve from npm packages (`@vscode/tree-sitter-wasm`, `web-tree-sitter`); kotlin/swift/odin are committed artifacts maintained by `packages/agent/scripts/build-grammars.ts` (see task 01). Never built on a developer machine at runtime.
-10. **Markdown is a hand-written heading scanner**, not a tree-sitter grammar (external-scanner incompatibility with `web-tree-sitter`).
-11. **Platform limitation disappears.** WASM runs wherever Node runs; the darwin-arm64 restriction in older drafts is obsolete. Structural tools work on all hosts.
+3. **One language stack.** Adapters, IR, formatting, and tools all live in TypeScript under `packages/agent/extensions/explore/ast/`. Signatures are slices of real source, never reconstructed from strings.
+4. **IR offsets are UTF-16 code units into the decoded source string.** Adapters emit `node.startIndex`/`node.endIndex` as-is; consumers slice with `source.slice(...)`. No UTF-8 conversion, no `Buffer` outside engine content hashing. `FileSource.source` is the decoded string every offset indexes into.
+5. **Canonical IR, extracted eagerly.** Parse → extract plain-JS `FileIr` → `tree.delete()` immediately. Never cache `Tree` objects (WASM heap, not GC'd). Cache IR keyed by `(path, contentHash)`.
+6. **Identity is `path` + `name` (+ `line`).** No numeric locators anywhere (`explore-specs/cross/identity.md`).
+7. **No Explore write tools.** Edits are harness `patch`/`edit`/`write` (`stripped.md`).
+8. **No Explore filesystem tools.** `ls` / `find` / `grep` / `read` stay Pi built-ins. Density wrappers are future work only if live use proves pain — not this rewrite.
+9. **Large-read policy is a hook, not a read tool.** On Pi `tool_result` for full `read` of registered non-Markdown source over threshold: replace result content with outline + one nudge. Success, not block. Ranged/small/Markdown/unsupported pass through. No complete-file unchanged/diff cache. No transcript replay.
+10. **Grammar artifacts are pinned; prebuilt beats rebuilt.** Six grammars plus the runtime resolve from npm packages (`@vscode/tree-sitter-wasm`, `web-tree-sitter`); kotlin/swift/odin are committed artifacts maintained by `packages/agent/scripts/build-grammars.ts` (see task 01). Never built on a developer machine at runtime.
+11. **Markdown is a hand-written heading scanner**, not a tree-sitter grammar (external-scanner incompatibility with `web-tree-sitter`).
+12. **Platform limitation disappears.** WASM runs wherever Node runs; the darwin-arm64 restriction in older drafts is obsolete. Structural tools work on all hosts.
 
 ## Keep-green / live-prove strategy
 
