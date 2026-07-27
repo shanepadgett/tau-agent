@@ -33,18 +33,18 @@ export type Decl = {
 	startLine: number;
 	/** 1-indexed, inclusive. */
 	endLine: number;
-	/** UTF-8 byte offset, inclusive. */
-	startByte: number;
-	/** UTF-8 byte offset, exclusive (tree-sitter endIndex convention). */
-	endByte: number;
-	/** Decl start → body open; signature = source UTF-8 slice [startByte, signatureEndByte). */
-	signatureEndByte: number;
+	/** UTF-16 code-unit offset into the decoded source string, inclusive (tree-sitter startIndex convention). */
+	startOffset: number;
+	/** UTF-16 code-unit offset into the decoded source string, exclusive (tree-sitter endIndex convention). */
+	endOffset: number;
+	/** Decl start → body open; signature = source.slice(startOffset, signatureEndOffset). */
+	signatureEndOffset: number;
 	/** Absent when no body. */
-	bodyStartByte?: number;
-	bodyEndByte?: number;
+	bodyStartOffset?: number;
+	bodyEndOffset?: number;
 	/** Attached doc comment span. */
-	docStartByte?: number;
-	docEndByte?: number;
+	docStartOffset?: number;
+	docEndOffset?: number;
 	visibility: Visibility;
 	exported: boolean;
 	children: Decl[];
@@ -53,10 +53,10 @@ export type Decl = {
 export type ImportRef = {
 	specifier: string;
 	startLine: number;
-	/** UTF-8 byte offset of the full import statement (inclusive). */
-	startByte: number;
-	/** UTF-8 byte offset of the full import statement (exclusive). */
-	endByte: number;
+	/** UTF-16 offset of the full import statement (inclusive). */
+	startOffset: number;
+	/** UTF-16 offset of the full import statement (exclusive). */
+	endOffset: number;
 };
 
 export type FileIr = {

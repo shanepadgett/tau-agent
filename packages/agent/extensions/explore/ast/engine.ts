@@ -4,15 +4,14 @@ import { resolve } from "node:path";
 import { Language, Parser } from "web-tree-sitter";
 import type { AdapterRegistry } from "./registry.ts";
 import { createDefaultRegistry } from "./registry.ts";
-import type { ExtractResult } from "./adapter.ts";
-import type { Decl, FileIr } from "./ir.ts";
+import type { FileIr } from "./ir.ts";
 import { grammarWasmPath, loadGrammarManifest, runtimeWasmPath, type GrammarPin } from "./grammars/manifest.ts";
 import { formatPathForDisplay, pathResolutionError, resolveExplorePath } from "../traverse.ts";
 
 export type FileSource = {
 	ir: FileIr;
-	/** UTF-8 file bytes used to build/hash this IR. */
-	bytes: Buffer;
+	/** Decoded source text this IR's offsets index into (UTF-16 code units). */
+	source: string;
 };
 
 export type ExploreEngine = {
@@ -21,7 +20,7 @@ export type ExploreEngine = {
 	readonly registry: AdapterRegistry;
 	/** Resolve path, read bytes, return cached or freshly extracted FileIr. */
 	irForFile(path: string): Promise<FileIr>;
-	/** One read: IR (cached when hash matches) plus the UTF-8 bytes for slicing. */
+	/** One read: IR (cached when hash matches) plus the decoded source for slicing. */
 	sourceForFile(path: string): Promise<FileSource>;
 	invalidate(paths: readonly string[]): void;
 	clear(): void;
@@ -69,76 +68,9 @@ function pinById(id: string): GrammarPin {
 }
 
 /**
- * web-tree-sitter indexes JS strings in UTF-16 code units, not UTF-8 bytes.
- * FileIr stores UTF-8 byte offsets into file bytes — convert once at the grammar boundary.
- * Source adapters (Markdown) already emit UTF-8 and must not pass through this.
- */
-function makeJsToUtf8Mapper(source: string): (jsOffset: number) => number {
-	const map = new Uint32Array(source.length + 1);
-	let byte = 0;
-	let i = 0;
-	while (i < source.length) {
-		map[i] = byte;
-		const code = source.charCodeAt(i);
-		if (code < 0x80) {
-			byte += 1;
-			i += 1;
-		} else if (code < 0x800) {
-			byte += 2;
-			i += 1;
-		} else if (code >= 0xd800 && code <= 0xdbff && i + 1 < source.length) {
-			const low = source.charCodeAt(i + 1);
-			if (low >= 0xdc00 && low <= 0xdfff) {
-				map[i + 1] = byte;
-				byte += 4;
-				i += 2;
-				continue;
-			}
-			byte += 3;
-			i += 1;
-		} else {
-			byte += 3;
-			i += 1;
-		}
-	}
-	map[source.length] = byte;
-	return (jsOffset: number): number => {
-		if (jsOffset <= 0) return 0;
-		if (jsOffset >= source.length) return byte;
-		return map[jsOffset] ?? byte;
-	};
-}
-
-function remapDeclToUtf8(decl: Decl, toUtf8: (jsOffset: number) => number): Decl {
-	const next: Decl = {
-		...decl,
-		startByte: toUtf8(decl.startByte),
-		endByte: toUtf8(decl.endByte),
-		signatureEndByte: toUtf8(decl.signatureEndByte),
-		children: decl.children.map((child) => remapDeclToUtf8(child, toUtf8)),
-	};
-	if (decl.bodyStartByte !== undefined) next.bodyStartByte = toUtf8(decl.bodyStartByte);
-	if (decl.bodyEndByte !== undefined) next.bodyEndByte = toUtf8(decl.bodyEndByte);
-	if (decl.docStartByte !== undefined) next.docStartByte = toUtf8(decl.docStartByte);
-	if (decl.docEndByte !== undefined) next.docEndByte = toUtf8(decl.docEndByte);
-	return next;
-}
-
-function remapExtractToUtf8(extracted: ExtractResult, source: string): ExtractResult {
-	const toUtf8 = makeJsToUtf8Mapper(source);
-	return {
-		decls: extracted.decls.map((decl) => remapDeclToUtf8(decl, toUtf8)),
-		imports: extracted.imports.map((item) => ({
-			...item,
-			startByte: toUtf8(item.startByte),
-			endByte: toUtf8(item.endByte),
-		})),
-	};
-}
-
-/**
  * In-process web-tree-sitter host.
  * Parse → extract plain FileIr → tree.delete() immediately. Cache IR only.
+ * All IR offsets are UTF-16 code units into the decoded source string.
  * Only this module resolves wasm paths via the grammar manifest.
  */
 export function createExploreEngine(options: ExploreEngineOptions): ExploreEngine {
@@ -204,12 +136,11 @@ export function createExploreEngine(options: ExploreEngineOptions): ExploreEngin
 		return language;
 	};
 
-	const buildIr = async (absolutePath: string, bytes: Buffer, hash: string): Promise<FileIr> => {
+	const buildIr = async (absolutePath: string, source: string, hash: string): Promise<FileIr> => {
 		const adapter = registry.adapterForPath(absolutePath);
 		if (adapter === undefined) {
 			throw new Error(`Unsupported language for path: ${formatPathForDisplay(absolutePath, cwd)}`);
 		}
-		const source = bytes.toString("utf8");
 		const lineCount = lineCountOf(source);
 
 		if (adapter.mode === "source") {
@@ -236,7 +167,7 @@ export function createExploreEngine(options: ExploreEngineOptions): ExploreEngin
 			throw new Error(`Parse failed for ${formatPathForDisplay(absolutePath, cwd)}`);
 		}
 		try {
-			const extracted = remapExtractToUtf8(adapter.extract(tree, source), source);
+			const extracted = adapter.extract(tree, source);
 			return {
 				path: absolutePath,
 				contentHash: hash,
@@ -263,14 +194,15 @@ export function createExploreEngine(options: ExploreEngineOptions): ExploreEngin
 		}
 		assertLive(gen);
 		const hash = contentHashOf(bytes);
+		const source = bytes.toString("utf8");
 		const cached = irCache.get(absolutePath);
 		if (cached !== undefined && cached.contentHash === hash) {
-			return { ir: cached.ir, bytes };
+			return { ir: cached.ir, source };
 		}
-		const ir = await buildIr(absolutePath, bytes, hash);
+		const ir = await buildIr(absolutePath, source, hash);
 		assertLive(gen);
 		irCache.set(absolutePath, { contentHash: hash, ir });
-		return { ir, bytes };
+		return { ir, source };
 	};
 
 	return {

@@ -3,7 +3,7 @@ import type { ExploreEngine } from "../engine.ts";
 import type { Decl, DeclKind, FileIr } from "../ir.ts";
 import { filterDeclForest, walkDecls } from "../query.ts";
 import { scanSources, type ScanOutcome } from "../scan.ts";
-import { docsText, signatureText, type SourceBytes } from "../slice.ts";
+import { docsText, signatureText } from "../slice.ts";
 import { formatPathForDisplay, pathResolutionError, resolveExplorePath, walkPaths } from "../../traverse.ts";
 
 export type OutlineOptions = {
@@ -64,7 +64,7 @@ function prepareDecls(ir: FileIr, options: OutlineOptions): Decl[] {
 	return decls;
 }
 
-function outlineFromIr(ir: FileIr, bytes: SourceBytes, options: OutlineOptions): OutlineFileView {
+function outlineFromIr(ir: FileIr, source: string, options: OutlineOptions): OutlineFileView {
 	const decls = prepareDecls(ir, options);
 	const rows: OutlineRow[] = [];
 	walkDecls(decls, (decl, depth) => {
@@ -75,8 +75,8 @@ function outlineFromIr(ir: FileIr, bytes: SourceBytes, options: OutlineOptions):
 			kind: decl.kind,
 			name: decl.name,
 			qualifiedName: decl.qualifiedName,
-			signature: signatureText(decl, bytes),
-			docs: options.includeDocs ? docsText(decl, bytes) : undefined,
+			signature: signatureText(decl, source),
+			docs: options.includeDocs ? docsText(decl, source) : undefined,
 		});
 	});
 	return {
@@ -98,7 +98,7 @@ async function outlineAbsoluteFile(
 	options: OutlineOptions,
 ): Promise<OutlineFileView> {
 	const source = await engine.sourceForFile(absolutePath);
-	return outlineFromIr(source.ir, source.bytes, options);
+	return outlineFromIr(source.ir, source.source, options);
 }
 
 /** Ignore-aware one-level file list. Intentional shallow walk — maxDepth limit is not a failure. */
@@ -191,7 +191,7 @@ export async function* outlineRecursive(
 	let step = await scan.next();
 	while (!step.done) {
 		signal.throwIfAborted();
-		const view = outlineFromIr(step.value.ir, step.value.bytes, options);
+		const view = outlineFromIr(step.value.ir, step.value.source, options);
 		if (keepMultiFileView(view)) yield view;
 		step = await scan.next();
 	}

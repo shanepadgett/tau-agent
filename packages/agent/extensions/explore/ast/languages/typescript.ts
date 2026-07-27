@@ -201,11 +201,11 @@ function declsFromExport(node: Node, owner: string, source: string): Decl[] {
 		if (decls[0] !== undefined) decls[0] = applyDoc(decls[0], doc);
 		// Re-span so line/byte range covers the `export` keyword.
 		for (const decl of decls) {
-			decl.startByte = node.startIndex;
-			decl.endByte = node.endIndex;
+			decl.startOffset = node.startIndex;
+			decl.endOffset = node.endIndex;
 			decl.startLine = startLine(node);
 			decl.endLine = endLine(node);
-			if (decl.bodyStartByte === undefined) decl.signatureEndByte = node.endIndex;
+			if (decl.bodyStartOffset === undefined) decl.signatureEndOffset = node.endIndex;
 		}
 		return decls;
 	}
@@ -242,15 +242,15 @@ function declsFromExport(node: Node, owner: string, source: string): Decl[] {
 				qualifiedName: qualify(owner, name),
 				startLine: startLine(node),
 				endLine: endLine(node),
-				startByte: node.startIndex,
-				endByte: node.endIndex,
+				startOffset: node.startIndex,
+				endOffset: node.endIndex,
 				visibility: "public",
 				exported: true,
 				children,
 			},
 			body,
 		);
-		if (body === null) decl.signatureEndByte = node.endIndex;
+		if (body === null) decl.signatureEndOffset = node.endIndex;
 		return [applyDoc(decl, doc)];
 	}
 
@@ -283,14 +283,14 @@ function variableDecls(node: Node, owner: string, exported: boolean, doc: DocSpa
 				qualifiedName: qualify(owner, name),
 				startLine: startLine(spanNode),
 				endLine: endLine(spanNode),
-				startByte: spanNode.startIndex,
-				endByte: spanNode.endIndex,
+				startOffset: spanNode.startIndex,
+				endOffset: spanNode.endIndex,
 				visibility: "public",
 				exported,
 			},
 			body,
 		);
-		if (body === null) decl.signatureEndByte = spanNode.endIndex;
+		if (body === null) decl.signatureEndOffset = spanNode.endIndex;
 		out.push(i === 0 ? applyDoc(decl, doc) : decl);
 	}
 	return out;
@@ -313,14 +313,14 @@ function memberDecl(
 			qualifiedName: qualify(owner, name),
 			startLine: startLine(node),
 			endLine: endLine(node),
-			startByte: node.startIndex,
-			endByte: node.endIndex,
+			startOffset: node.startIndex,
+			endOffset: node.endIndex,
 			visibility,
 			exported: false,
 		},
 		body,
 	);
-	if (body === null) decl.signatureEndByte = node.endIndex;
+	if (body === null) decl.signatureEndOffset = node.endIndex;
 	return applyDoc(decl, doc);
 }
 
@@ -404,8 +404,8 @@ function collectImportsFrom(node: Node, imports: ImportRef[]): void {
 				imports.push({
 					specifier: unquote(source.text),
 					startLine: startLine(child),
-					startByte: child.startIndex,
-					endByte: child.endIndex,
+					startOffset: child.startIndex,
+					endOffset: child.endIndex,
 				});
 			}
 			continue;

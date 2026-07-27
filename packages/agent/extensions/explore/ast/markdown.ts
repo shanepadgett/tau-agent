@@ -8,12 +8,12 @@ type LineInfo = {
 	/** 1-indexed. */
 	line: number;
 	text: string;
-	/** UTF-8 offset of first byte of this line. */
-	startByte: number;
-	/** UTF-8 offset of first byte after line content (before newline, or EOF). */
-	endByte: number;
-	/** UTF-8 offset of first byte of the following line (or EOF). */
-	nextByte: number;
+	/** Offset of the first code unit of this line. */
+	startOffset: number;
+	/** Offset just past the line content (before newline, or EOF). */
+	endOffset: number;
+	/** Offset of the first code unit of the following line (or EOF). */
+	nextOffset: number;
 };
 
 type OpenHeading = {
@@ -21,62 +21,51 @@ type OpenHeading = {
 	depth: number;
 };
 
-function utf8Len(value: string): number {
-	return Buffer.byteLength(value, "utf8");
-}
-
 function splitLines(source: string): LineInfo[] {
 	if (source.length === 0) {
-		return [{ line: 1, text: "", startByte: 0, endByte: 0, nextByte: 0 }];
+		return [{ line: 1, text: "", startOffset: 0, endOffset: 0, nextOffset: 0 }];
 	}
 
 	const lines: LineInfo[] = [];
 	let line = 1;
-	let byte = 0;
 	let i = 0;
 
 	while (i < source.length) {
 		const start = i;
-		const startByte = byte;
 		while (i < source.length) {
 			const ch = source.charCodeAt(i);
 			if (ch === 10 || ch === 13) break;
 			i += 1;
 		}
-		const text = source.slice(start, i);
-		const endByte = startByte + utf8Len(text);
+		const end = i;
 		let next = i;
-		let nextByte = endByte;
 		if (next < source.length && source.charCodeAt(next) === 13) {
 			next += 1;
-			nextByte += 1;
 		}
 		if (next < source.length && source.charCodeAt(next) === 10) {
 			next += 1;
-			nextByte += 1;
 		}
-		lines.push({ line, text, startByte, endByte, nextByte });
+		lines.push({ line, text: source.slice(start, end), startOffset: start, endOffset: end, nextOffset: next });
 		line += 1;
-		byte = nextByte;
 		i = next;
 	}
 
 	return lines;
 }
 
-function closeOpen(stack: OpenHeading[], depth: number, endLine: number, endByte: number): void {
+function closeOpen(stack: OpenHeading[], depth: number, endLine: number, endOffset: number): void {
 	while (stack.length > 0) {
 		const top = stack[stack.length - 1];
 		if (top === undefined || top.depth < depth) break;
 		stack.pop();
 		const decl = top.decl;
 		decl.endLine = endLine;
-		decl.endByte = endByte;
-		if (decl.bodyStartByte !== undefined) {
-			decl.bodyEndByte = endByte;
-			if (decl.bodyStartByte >= endByte) {
-				delete decl.bodyStartByte;
-				delete decl.bodyEndByte;
+		decl.endOffset = endOffset;
+		if (decl.bodyStartOffset !== undefined) {
+			decl.bodyEndOffset = endOffset;
+			if (decl.bodyStartOffset >= endOffset) {
+				delete decl.bodyStartOffset;
+				delete decl.bodyEndOffset;
 			}
 		}
 	}
@@ -120,7 +109,7 @@ export function extractMarkdown(source: string): ExtractResult {
 
 		const prev = info.line > 1 ? lines[info.line - 2] : undefined;
 		const closeEndLine = prev === undefined ? info.line : prev.line;
-		closeOpen(stack, depth, closeEndLine, info.startByte);
+		closeOpen(stack, depth, closeEndLine, info.startOffset);
 
 		const parent = stack[stack.length - 1];
 		const qualifiedName = parent === undefined ? name : `${parent.decl.qualifiedName}.${name}`;
@@ -130,11 +119,11 @@ export function extractMarkdown(source: string): ExtractResult {
 			qualifiedName,
 			startLine: info.line,
 			endLine: info.line,
-			startByte: info.startByte,
-			endByte: info.endByte,
-			signatureEndByte: info.endByte,
-			bodyStartByte: info.nextByte,
-			bodyEndByte: info.nextByte,
+			startOffset: info.startOffset,
+			endOffset: info.endOffset,
+			signatureEndOffset: info.endOffset,
+			bodyStartOffset: info.nextOffset,
+			bodyEndOffset: info.nextOffset,
 			visibility: "public",
 			exported: true,
 			children: [],
@@ -147,8 +136,8 @@ export function extractMarkdown(source: string): ExtractResult {
 
 	const last = lines[lines.length - 1];
 	const eofLine = last === undefined ? 1 : last.line;
-	const eofByte = last === undefined ? 0 : last.nextByte;
-	closeOpen(stack, 1, eofLine, eofByte);
+	const eofOffset = last === undefined ? 0 : last.nextOffset;
+	closeOpen(stack, 1, eofLine, eofOffset);
 
 	return { decls: roots, imports: [] };
 }

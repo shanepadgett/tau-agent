@@ -2,8 +2,8 @@ import type { Node } from "web-tree-sitter";
 import type { Decl } from "../ir.ts";
 
 export type DocSpan = {
-	docStartByte: number;
-	docEndByte: number;
+	docStartOffset: number;
+	docEndOffset: number;
 };
 
 export function startLine(node: Node): number {
@@ -37,26 +37,26 @@ export function docSpanBefore(node: Node, source: string, skipTypes: readonly st
 	if (cursor === null || cursor.type !== "comment") return undefined;
 	if (newlineCount(source, cursor.endIndex, node.startIndex) > 2) return undefined;
 
-	const docEndByte = cursor.endIndex;
-	let docStartByte = cursor.startIndex;
+	const docEndOffset = cursor.endIndex;
+	let docStartOffset = cursor.startIndex;
 	let gapRightStart = cursor.startIndex;
 
 	cursor = cursor.previousSibling;
 	while (cursor !== null && cursor.type === "comment") {
 		if (newlineCount(source, cursor.endIndex, gapRightStart) > 2) break;
-		docStartByte = cursor.startIndex;
+		docStartOffset = cursor.startIndex;
 		gapRightStart = cursor.startIndex;
 		cursor = cursor.previousSibling;
 	}
-	return { docStartByte, docEndByte };
+	return { docStartOffset, docEndOffset };
 }
 
 export function applyDoc(decl: Decl, doc: DocSpan | undefined): Decl {
 	if (doc === undefined) return decl;
 	return {
 		...decl,
-		docStartByte: doc.docStartByte,
-		docEndByte: doc.docEndByte,
+		docStartOffset: doc.docStartOffset,
+		docEndOffset: doc.docEndOffset,
 	};
 }
 
@@ -81,22 +81,22 @@ export function qualify(owner: string, name: string): string {
 	return owner.length === 0 ? name : `${owner}.${name}`;
 }
 
-export type DeclDraft = Omit<Decl, "signatureEndByte" | "children"> &
-	Partial<Pick<Decl, "signatureEndByte" | "bodyStartByte" | "bodyEndByte" | "children">>;
+export type DeclDraft = Omit<Decl, "signatureEndOffset" | "children"> &
+	Partial<Pick<Decl, "signatureEndOffset" | "bodyStartOffset" | "bodyEndOffset" | "children">>;
 
 export function finishDecl(partial: DeclDraft, body: Node | null): Decl {
 	if (body === null) {
 		return {
 			...partial,
-			signatureEndByte: partial.signatureEndByte ?? partial.endByte,
+			signatureEndOffset: partial.signatureEndOffset ?? partial.endOffset,
 			children: partial.children ?? [],
 		};
 	}
 	return {
 		...partial,
-		signatureEndByte: body.startIndex,
-		bodyStartByte: body.startIndex,
-		bodyEndByte: body.endIndex,
+		signatureEndOffset: body.startIndex,
+		bodyStartOffset: body.startIndex,
+		bodyEndOffset: body.endIndex,
 		children: partial.children ?? [],
 	};
 }
@@ -122,8 +122,8 @@ export function declFromNode(
 				qualifiedName: qualify(owner, name),
 				startLine: startLine(node),
 				endLine: endLine(node),
-				startByte: node.startIndex,
-				endByte: node.endIndex,
+				startOffset: node.startIndex,
+				endOffset: node.endIndex,
 				visibility,
 				exported,
 				children,

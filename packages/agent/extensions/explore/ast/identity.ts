@@ -2,7 +2,7 @@ import type { ExploreEngine } from "./engine.ts";
 import type { Decl, DeclKind, FileIr } from "./ir.ts";
 import { findTargets } from "./query.ts";
 import { scanSources } from "./scan.ts";
-import { signatureText, type SourceBytes } from "./slice.ts";
+import { signatureText } from "./slice.ts";
 
 /** Symbol target — path and line optional; name required (may be dotted). */
 export type Target = {
@@ -23,7 +23,7 @@ export type Candidate = {
 };
 
 export type Resolution =
-	| { kind: "resolved"; decl: Decl; path: string; ir: FileIr; bytes: SourceBytes }
+	| { kind: "resolved"; decl: Decl; path: string; ir: FileIr; source: string }
 	| { kind: "candidates"; candidates: Candidate[] }
 	| { kind: "notFound" };
 
@@ -34,7 +34,7 @@ type Match = {
 	decl: Decl;
 	path: string;
 	ir: FileIr;
-	bytes: SourceBytes;
+	source: string;
 };
 
 function pathPresent(path: string | undefined): path is string {
@@ -49,13 +49,13 @@ function toCandidate(match: Match): Candidate {
 		kind: match.decl.kind,
 		startLine: match.decl.startLine,
 		endLine: match.decl.endLine,
-		signature: signatureText(match.decl, match.bytes),
+		signature: signatureText(match.decl, match.source),
 	};
 }
 
-function pushMatches(matches: Match[], ir: FileIr, bytes: SourceBytes, name: string, line: number | undefined): void {
+function pushMatches(matches: Match[], ir: FileIr, source: string, name: string, line: number | undefined): void {
 	for (const decl of findTargets(ir.decls, name, line)) {
-		matches.push({ decl, path: ir.path, ir, bytes });
+		matches.push({ decl, path: ir.path, ir, source });
 		if (matches.length >= MAX_CANDIDATES) return;
 	}
 }
@@ -83,7 +83,7 @@ export async function resolveTarget(
 	if (pathPresent(target.path)) {
 		const source = await engine.sourceForFile(target.path);
 		signal.throwIfAborted();
-		pushMatches(matches, source.ir, source.bytes, target.name, target.line);
+		pushMatches(matches, source.ir, source.source, target.name, target.line);
 	} else {
 		const scan = scanSources({
 			engine,
@@ -93,7 +93,7 @@ export async function resolveTarget(
 		});
 		for await (const source of scan) {
 			signal.throwIfAborted();
-			pushMatches(matches, source.ir, source.bytes, target.name, target.line);
+			pushMatches(matches, source.ir, source.source, target.name, target.line);
 			if (matches.length >= MAX_CANDIDATES) break;
 		}
 		signal.throwIfAborted();
@@ -108,7 +108,7 @@ export async function resolveTarget(
 			decl: only.decl,
 			path: only.path,
 			ir: only.ir,
-			bytes: only.bytes,
+			source: only.source,
 		};
 	}
 

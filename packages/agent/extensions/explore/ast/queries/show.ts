@@ -2,7 +2,7 @@ import type { ExploreEngine } from "../engine.ts";
 import type { Candidate, Target } from "../identity.ts";
 import { resolveTarget } from "../identity.ts";
 import type { Decl, FileIr, ImportRef } from "../ir.ts";
-import { declarationText, signatureText, signatureWithDocsText, type SourceBytes, utf8Slice } from "../slice.ts";
+import { declarationText, signatureText, signatureWithDocsText } from "../slice.ts";
 import { formatPathForDisplay, stripLeadingAt } from "../../traverse.ts";
 
 export type ShowView = "signature" | "signatureWithDocs" | "declaration" | "declarationWithImports";
@@ -153,14 +153,14 @@ function identifiersIn(text: string): Set<string> {
 }
 
 /** Exact import statement text from adapter byte span. Dedupe shared Go block spans. */
-function importStatementsFor(declText: string, imports: readonly ImportRef[], bytes: SourceBytes): string[] {
+function importStatementsFor(declText: string, imports: readonly ImportRef[], source: string): string[] {
 	const declIds = identifiersIn(declText);
 	const seenSpans = new Set<string>();
 	const out: string[] = [];
 	for (const importRef of imports) {
-		const spanKey = `${importRef.startByte}:${importRef.endByte}`;
+		const spanKey = `${importRef.startOffset}:${importRef.endOffset}`;
 		if (seenSpans.has(spanKey)) continue;
-		const statement = utf8Slice(bytes, importRef.startByte, importRef.endByte).replace(/\s+$/u, "");
+		const statement = source.slice(importRef.startOffset, importRef.endOffset).replace(/\s+$/u, "");
 		if (statement.length === 0) continue;
 		const hit = [...identifiersIn(statement)].some((id) => declIds.has(id));
 		if (!hit) continue;
@@ -170,23 +170,23 @@ function importStatementsFor(declText: string, imports: readonly ImportRef[], by
 	return out;
 }
 
-function lineByteRanges(bytes: SourceBytes): { start: number; end: number }[] {
+function lineRanges(source: string): { start: number; end: number }[] {
 	const ranges: { start: number; end: number }[] = [];
 	let start = 0;
-	for (let i = 0; i < bytes.length; i += 1) {
-		if (bytes[i] === 10) {
+	for (let i = 0; i < source.length; i += 1) {
+		if (source.charCodeAt(i) === 10) {
 			ranges.push({ start, end: i });
 			start = i + 1;
 		}
 	}
-	if (start < bytes.length || bytes.length === 0) {
-		ranges.push({ start, end: bytes.length });
+	if (start < source.length || source.length === 0) {
+		ranges.push({ start, end: source.length });
 	}
 	return ranges;
 }
 
-function sliceLines(bytes: SourceBytes, startLine: number, endLine: number): string {
-	const ranges = lineByteRanges(bytes);
+function sliceLines(source: string, startLine: number, endLine: number): string {
+	const ranges = lineRanges(source);
 	if (ranges.length === 0) return "";
 	const lo = Math.max(1, startLine);
 	const hi = Math.min(ranges.length, endLine);
@@ -194,14 +194,14 @@ function sliceLines(bytes: SourceBytes, startLine: number, endLine: number): str
 	const start = ranges[lo - 1];
 	const end = ranges[hi - 1];
 	if (start === undefined || end === undefined) return "";
-	return utf8Slice(bytes, start.start, end.end);
+	return source.slice(start.start, end.end);
 }
 
 function buildBlock(
 	decl: Decl,
 	path: string,
 	ir: FileIr,
-	bytes: SourceBytes,
+	source: string,
 	view: ShowView,
 	contextLines: number,
 ): ShowBlock {
@@ -212,15 +212,15 @@ function buildBlock(
 
 	switch (view) {
 		case "signature": {
-			text = signatureText(decl, bytes);
+			text = signatureText(decl, source);
 			break;
 		}
 		case "signatureWithDocs": {
-			if (decl.docStartByte === undefined || decl.docEndByte === undefined) {
+			if (decl.docStartOffset === undefined || decl.docEndOffset === undefined) {
 				warnings.push("no attached documentation");
-				text = signatureText(decl, bytes);
+				text = signatureText(decl, source);
 			} else {
-				text = signatureWithDocsText(decl, bytes);
+				text = signatureWithDocsText(decl, source);
 			}
 			break;
 		}
@@ -228,15 +228,15 @@ function buildBlock(
 			if (contextLines > 0) {
 				startLine = Math.max(1, decl.startLine - contextLines);
 				endLine = Math.min(Math.max(ir.lineCount, decl.endLine), decl.endLine + contextLines);
-				text = sliceLines(bytes, startLine, endLine);
+				text = sliceLines(source, startLine, endLine);
 			} else {
-				text = declarationText(decl, bytes);
+				text = declarationText(decl, source);
 			}
 			break;
 		}
 		case "declarationWithImports": {
-			const declText = declarationText(decl, bytes);
-			const importBlocks = importStatementsFor(declText, ir.imports, bytes);
+			const declText = declarationText(decl, source);
+			const importBlocks = importStatementsFor(declText, ir.imports, source);
 			text = importBlocks.length > 0 ? `${importBlocks.join("\n")}\n\n${declText}` : declText;
 			break;
 		}
@@ -309,7 +309,7 @@ export async function showTargets(
 			throw new Error(formatCandidateError(label, resolution.candidates, engine.cwd));
 		}
 
-		const block = buildBlock(resolution.decl, resolution.path, resolution.ir, resolution.bytes, view, context);
+		const block = buildBlock(resolution.decl, resolution.path, resolution.ir, resolution.source, view, context);
 		if (docsWarningEmitted) {
 			block.warnings = block.warnings.filter((warning) => warning !== "no attached documentation");
 		} else if (block.warnings.includes("no attached documentation")) {

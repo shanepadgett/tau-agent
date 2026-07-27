@@ -1,39 +1,31 @@
 import type { Decl } from "./ir.ts";
 
-/** UTF-8 file bytes. Prefer the buffer used to hash/parse the file. */
-export type SourceBytes = Uint8Array;
+// All offsets are UTF-16 code units into the decoded source string (ir.ts).
 
-export function utf8Slice(bytes: SourceBytes, start: number, end: number): string {
-	const lo = Math.max(0, start);
-	const hi = Math.min(bytes.length, end);
-	if (hi <= lo) return "";
-	return Buffer.from(bytes.subarray(lo, hi)).toString("utf8");
-}
-
-/** Decl signature: [startByte, signatureEndByte) — no docs, no body. */
-export function signatureText(decl: Decl, bytes: SourceBytes): string {
-	return utf8Slice(bytes, decl.startByte, decl.signatureEndByte);
+/** Decl signature: [startOffset, signatureEndOffset) — no docs, no body. */
+export function signatureText(decl: Decl, source: string): string {
+	return source.slice(decl.startOffset, decl.signatureEndOffset);
 }
 
 /** Attached doc comment text, or undefined when none. */
-export function docsText(decl: Decl, bytes: SourceBytes): string | undefined {
-	if (decl.docStartByte === undefined || decl.docEndByte === undefined) return undefined;
-	const text = utf8Slice(bytes, decl.docStartByte, decl.docEndByte);
+export function docsText(decl: Decl, source: string): string | undefined {
+	if (decl.docStartOffset === undefined || decl.docEndOffset === undefined) return undefined;
+	const text = source.slice(decl.docStartOffset, decl.docEndOffset);
 	return text.length === 0 ? undefined : text;
 }
 
-/** Full declaration span [startByte, endByte) — no leading docs. */
-export function declarationText(decl: Decl, bytes: SourceBytes): string {
-	return utf8Slice(bytes, decl.startByte, decl.endByte);
+/** Full declaration span [startOffset, endOffset) — no leading docs. */
+export function declarationText(decl: Decl, source: string): string {
+	return source.slice(decl.startOffset, decl.endOffset);
 }
 
 /**
  * Docs (if any) + signature, joined as in source when docs sit immediately above.
- * When docs exist, uses [docStartByte, signatureEndByte); else signature only.
+ * When docs exist, uses [docStartOffset, signatureEndOffset); else signature only.
  */
-export function signatureWithDocsText(decl: Decl, bytes: SourceBytes): string {
-	if (decl.docStartByte === undefined || decl.docEndByte === undefined) {
-		return signatureText(decl, bytes);
+export function signatureWithDocsText(decl: Decl, source: string): string {
+	if (decl.docStartOffset === undefined || decl.docEndOffset === undefined) {
+		return signatureText(decl, source);
 	}
-	return utf8Slice(bytes, decl.docStartByte, decl.signatureEndByte);
+	return source.slice(decl.docStartOffset, decl.signatureEndOffset);
 }
