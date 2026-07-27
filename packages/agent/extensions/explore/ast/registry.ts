@@ -1,6 +1,12 @@
 import { extname } from "node:path";
 import type { LanguageAdapter, LanguageCapabilities } from "./adapter.ts";
+import { csharpAdapter } from "./languages/csharp.ts";
 import { goAdapter } from "./languages/go.ts";
+import { javaAdapter } from "./languages/java.ts";
+import { kotlinAdapter } from "./languages/kotlin.ts";
+import { odinAdapter } from "./languages/odin.ts";
+import { rustAdapter } from "./languages/rust.ts";
+import { swiftAdapter } from "./languages/swift.ts";
 import { tsxAdapter, typescriptAdapter } from "./languages/typescript.ts";
 import { extractMarkdown } from "./markdown.ts";
 
@@ -86,7 +92,18 @@ function createRegistry(seed: readonly LanguageAdapter[] = []): AdapterRegistry 
 	};
 }
 
-/** Session registry: Markdown + grammar adapters landed so far. */
+/** Session registry: Markdown + grammar adapters. */
 export function createDefaultRegistry(): AdapterRegistry {
-	return createRegistry([markdownAdapter(), typescriptAdapter(), tsxAdapter(), goAdapter()]);
+	return createRegistry([
+		markdownAdapter(),
+		typescriptAdapter(),
+		tsxAdapter(),
+		goAdapter(),
+		rustAdapter(),
+		csharpAdapter(),
+		javaAdapter(),
+		kotlinAdapter(),
+		swiftAdapter(),
+		odinAdapter(),
+	]);
 }

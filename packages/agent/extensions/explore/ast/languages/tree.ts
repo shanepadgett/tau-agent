@@ -25,16 +25,27 @@ function newlineCount(source: string, from: number, to: number): number {
 	return count;
 }
 
+function isCommentType(type: string, commentTypes: readonly string[]): boolean {
+	return commentTypes.includes(type);
+}
+
 /**
  * Contiguous leading comment siblings; ≤1 blank line between comments and before decl.
- * `skipTypes` walks back through those sibling types first (e.g. TS decorators).
+ * `skipTypes` walks back through those sibling types first (e.g. TS decorators, Rust attributes).
+ * `commentTypes` defaults to tree-sitter `comment`; grammars that split line/block must pass their own.
  */
-export function docSpanBefore(node: Node, source: string, skipTypes: readonly string[] = []): DocSpan | undefined {
+export function docSpanBefore(
+	node: Node,
+	source: string,
+	skipTypes: readonly string[] = [],
+	// Most grammars use `comment`; rust/java/kotlin pass their own line/block kinds.
+	commentTypes: readonly string[] = ["comment"],
+): DocSpan | undefined {
 	let cursor = node.previousSibling;
 	while (cursor !== null && skipTypes.includes(cursor.type)) {
 		cursor = cursor.previousSibling;
 	}
-	if (cursor === null || cursor.type !== "comment") return undefined;
+	if (cursor === null || !isCommentType(cursor.type, commentTypes)) return undefined;
 	if (newlineCount(source, cursor.endIndex, node.startIndex) > 2) return undefined;
 
 	const docEndOffset = cursor.endIndex;
@@ -42,13 +53,56 @@ export function docSpanBefore(node: Node, source: string, skipTypes: readonly st
 	let gapRightStart = cursor.startIndex;
 
 	cursor = cursor.previousSibling;
-	while (cursor !== null && cursor.type === "comment") {
+	while (cursor !== null && isCommentType(cursor.type, commentTypes)) {
 		if (newlineCount(source, cursor.endIndex, gapRightStart) > 2) break;
 		docStartOffset = cursor.startIndex;
 		gapRightStart = cursor.startIndex;
 		cursor = cursor.previousSibling;
 	}
 	return { docStartOffset, docEndOffset };
+}
+
+/**
+ * Trailing comment children of a preceding container (Kotlin package_header / import_list quirk).
+ * Same blank-line rule as sibling docs.
+ */
+export function docSpanTrailingChild(
+	container: Node,
+	before: Node,
+	source: string,
+	commentTypes: readonly string[],
+): DocSpan | undefined {
+	const named = container.namedChildren;
+	if (named.length === 0) return undefined;
+	const lastIndex = named.length - 1;
+	const lastComment = named[lastIndex];
+	if (lastComment === undefined || !isCommentType(lastComment.type, commentTypes)) return undefined;
+	if (newlineCount(source, lastComment.endIndex, before.startIndex) > 2) return undefined;
+
+	let firstIndex = lastIndex;
+	while (firstIndex - 1 >= 0) {
+		const prev = named[firstIndex - 1];
+		const current = named[firstIndex];
+		if (prev === undefined || current === undefined || !isCommentType(prev.type, commentTypes)) break;
+		if (newlineCount(source, prev.endIndex, current.startIndex) > 2) break;
+		firstIndex -= 1;
+	}
+	const first = named[firstIndex];
+	if (first === undefined) return undefined;
+	return { docStartOffset: first.startIndex, docEndOffset: lastComment.endIndex };
+}
+
+/** Expand decl start left through contiguous previous siblings of the given types (e.g. Rust attributes). */
+export function spanThroughPrevious(node: Node, types: readonly string[]): { startOffset: number; startLine: number } {
+	let startOffset = node.startIndex;
+	let line = startLine(node);
+	let cursor = node.previousSibling;
+	while (cursor !== null && types.includes(cursor.type)) {
+		startOffset = cursor.startIndex;
+		line = startLine(cursor);
+		cursor = cursor.previousSibling;
+	}
+	return { startOffset, startLine: line };
 }
 
 export function applyDoc(decl: Decl, doc: DocSpan | undefined): Decl {
