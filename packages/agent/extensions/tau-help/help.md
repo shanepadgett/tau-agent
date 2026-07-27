@@ -34,9 +34,9 @@ Adds `/commit` for semantic commit grouping, review, and committing selected rep
 
 Adds `/context` to select reusable repository work scopes from `.pi/contexts`, and `/context-sync` or `/context-sync <nudge>` for human-driven catalog sync (optional nudge). Escape cancels a running manual sync. When `sync.automation` is on, the coding agent can also run the `context-sync` subagent after meaningful uncommitted work. Sync catalogs durable code and long-lived documentation; recurring scratch, planning, interview, and rough-idea paths belong in `validation.ignoreGlobs`. `sync.enabled` is the master switch for command, automation, and validation auto-run. Entry `files` are autoread; entry `anchors` are unloaded navigation paths. Context validation is off by default; when on (and sync enabled), Tau auto-runs context-sync on failure. Folder names are tabs, TOML files are concepts, and TOML sections are selectable entries.
 
-## context-pruning
+## working-memory
 
-Gives the agent `context_prune` for creating a hard context checkpoint after broad exploration converges. Everything before the checkpoint leaves future model input unless the agent retains an exact tool exchange or carries a file forward as a fresh snapshot. File snapshot failures are reported without blocking the checkpoint. Deferred files remain as a small conditional note. Context markers use an ordered instruction ladder that escalates from informational guidance to pruning before further tool work. Run `/prune` with no arguments to request a checkpoint manually. Session history remains unchanged, and checkpoints, markers, and pruned-row state follow the active branch.
+Gives agent `working_memory` for selective hard checkpoints. Model-only references identify useful conversation evidence and complete tool exchanges. Requested source files return as structural outlines, while deferred files remain cheap conditional reminders. Everything else before checkpoint leaves future model input without changing saved session. Advisory reminders begin at 40k active-context tokens. Run `/prune` to request reassessment manually.
 
 ## explore
 

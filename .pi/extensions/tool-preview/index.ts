@@ -4,7 +4,6 @@ import { matchesKey } from "@earendil-works/pi-tui";
 import { createAstSearchPreviewWidget } from "./widgets/ast-search.ts";
 import { createAutoreadPreviewWidget } from "./widgets/autoread.ts";
 import { createContextPreviewOverlay } from "./widgets/context.ts";
-import { createContextPruningPreviewWidget } from "./widgets/context-pruning.ts";
 import { createDiscoverPreviewWidget } from "./widgets/discover.ts";
 import { createFindPreviewWidget } from "./widgets/find.ts";
 import { createGrepPreviewWidget } from "./widgets/grep.ts";
@@ -36,7 +35,6 @@ const STORIES: readonly PreviewStory[] = [
 	{ label: "autoread — line states", createWidget: createAutoreadPreviewWidget },
 	{ label: "callees — row states", createWidget: createCalleesPreviewWidget },
 	{ label: "callers — row states", createWidget: createCallersPreviewWidget },
-	{ label: "context-pruning — markers and prune rows", createWidget: createContextPruningPreviewWidget },
 	{ label: "discover — row states", createWidget: createDiscoverPreviewWidget },
 	{ label: "find — row states", createWidget: createFindPreviewWidget },
 	{ label: "grep — row states", createWidget: createGrepPreviewWidget },

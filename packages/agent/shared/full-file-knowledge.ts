@@ -16,7 +16,6 @@ export interface ReadCacheMetaV1 {
 }
 
 const COMPLETE_FILE_SCOPE = "full";
-export const MAX_COMPLETE_FILE_SNAPSHOT_BYTES = 1024 * 1024;
 
 export function createCompleteFileMeta(options: {
 	pathKey: string;

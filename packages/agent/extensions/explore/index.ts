@@ -21,6 +21,7 @@ import {
 import { createReverseDepsTool } from "./ast/tools/reverse-deps.ts";
 import { createShowTool } from "./ast/tools/show.ts";
 import { registerExploreGuidance } from "./guidance.ts";
+import { registerExploreOutlineInjection } from "./outline-injection.ts";
 import { registerExploreAutoread } from "./read/autoread.ts";
 
 export default function exploreExtension(pi: ExtensionAPI): void {
@@ -61,6 +62,7 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 	pi.registerTool(createContextTool(rowState, temporaryOutput, engineFor, graphFor));
 	registerReadOutlineHook(pi, engineFor);
 	registerExploreAutoread(pi, rowState, engineFor);
+	registerExploreOutlineInjection(pi, rowState, temporaryOutput, engineFor);
 	registerExploreGuidance(pi, engineFor);
 
 	pi.on("session_start", async (_event, ctx) => {

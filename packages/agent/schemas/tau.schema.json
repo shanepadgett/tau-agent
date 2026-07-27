@@ -53,39 +53,6 @@
 					},
 					"additionalProperties": false
 				},
-				"contextPruning": {
-					"type": "object",
-					"properties": {
-						"enabled": {
-							"type": "boolean",
-							"default": true,
-							"description": "Enable context pruning."
-						},
-						"nudgeEveryTokens": {
-							"type": "integer",
-							"default": 30000,
-							"minimum": 1,
-							"description": "Active-context token interval between automatic pruning hints."
-						},
-						"nudgeInstructions": {
-							"type": "array",
-							"items": {
-								"type": "string",
-								"minLength": 1,
-								"maxLength": 2000
-							},
-							"default": [
-								"No prune is required yet unless broad exploration has converged or substantial evidence is already irrelevant. Continue coherent work.",
-								"Move toward a pruning point now. Finish the current coherent step, then prune before starting another broad exploration. Managed context is materially increasing model cost.",
-								"Prune now before further tool work. Continuing with stale managed context is wasting money."
-							],
-							"minItems": 1,
-							"maxItems": 5,
-							"description": "Ordered automatic pruning instructions. Later reminders repeat the final instruction, and the final tier requires an anchor before further tool work."
-						}
-					},
-					"additionalProperties": false
-				},
 				"explore": {
 					"type": "object",
 					"properties": {
@@ -312,6 +279,39 @@
 							"default": 10,
 							"minimum": 1,
 							"description": "Turns added when the soft cap is reached."
+						}
+					},
+					"additionalProperties": false
+				},
+				"workingMemory": {
+					"type": "object",
+					"properties": {
+						"enabled": {
+							"type": "boolean",
+							"default": true,
+							"description": "Enable working-memory checkpoints."
+						},
+						"nudgeEveryTokens": {
+							"type": "integer",
+							"default": 40000,
+							"minimum": 1,
+							"description": "Active-context token interval between advisory working-memory reminders."
+						},
+						"nudgeInstructions": {
+							"type": "array",
+							"items": {
+								"type": "string",
+								"minLength": 1,
+								"maxLength": 2000
+							},
+							"default": [
+								"Reassess working memory. Continue coherent exploration when its evidence remains useful; otherwise prune known dead ends, obsolete outputs, and other context with no expected value.",
+								"Context is materially larger. Prune stale or bulky irrelevant evidence when safe, but keep active working evidence that would otherwise need to be reread.",
+								"Strongly reassess before more broad work. Remove accumulated waste and carry useful information at cheapest sufficient fidelity without scrubbing the active working set."
+							],
+							"minItems": 1,
+							"maxItems": 5,
+							"description": "Ordered advisory working-memory instructions. Later reminders repeat final instruction."
 						}
 					},
 					"additionalProperties": false

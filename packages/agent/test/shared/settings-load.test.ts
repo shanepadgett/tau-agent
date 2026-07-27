@@ -18,8 +18,8 @@ vi.mock("../../shared/settings/paths.ts", () => ({
 	TAU_SCHEMA_URL: "https://example.com/tau.schema.json",
 }));
 
-const contextPruningLikeSettings = defineTauExtensionSettings({
-	key: "contextPruningLike",
+const flatSettings = defineTauExtensionSettings({
+	key: "flat",
 	defaults: {
 		enabled: true as boolean,
 		nudgeEveryPercent: 20 as number,
@@ -69,13 +69,13 @@ describe("loadTauExtensionSettings", () => {
 	it("uses each documented default for invalid properties while preserving valid siblings", async () => {
 		mocks.readJsonStatus
 			.mockResolvedValueOnce(
-				settingsStatus("/global/settings.json", "contextPruningLike", {
+				settingsStatus("/global/settings.json", "flat", {
 					nudgeEveryPercent: 40,
 					pressurePercent: 60,
 				}),
 			)
 			.mockResolvedValueOnce(
-				settingsStatus("/project/.pi/tau/settings.json", "contextPruningLike", {
+				settingsStatus("/project/.pi/tau/settings.json", "flat", {
 					enabled: false,
 					nudgeEveryPercent: 0,
 					pressurePercent: 70,
@@ -84,7 +84,7 @@ describe("loadTauExtensionSettings", () => {
 				}),
 			);
 
-		await expect(loadTauExtensionSettings(ctx, contextPruningLikeSettings)).resolves.toEqual({
+		await expect(loadTauExtensionSettings(ctx, flatSettings)).resolves.toEqual({
 			enabled: false,
 			nudgeEveryPercent: 20,
 			pressurePercent: 70,
