@@ -22,6 +22,24 @@ export type DeclKind =
 	| "typeParameter"
 	| "heading";
 
+export function isTypeLike(kind: DeclKind): boolean {
+	return (
+		kind === "class" ||
+		kind === "interface" ||
+		kind === "struct" ||
+		kind === "enum" ||
+		kind === "typeAlias" ||
+		kind === "object" ||
+		kind === "namespace" ||
+		kind === "module" ||
+		kind === "package"
+	);
+}
+
+export function isCallableLike(kind: DeclKind): boolean {
+	return kind === "function" || kind === "method" || kind === "constructor" || kind === "operator";
+}
+
 export type Visibility = "public" | "private" | "protected" | "internal";
 
 /** Syntactic call/construct site inside a callable body (adapter-owned extraction). */

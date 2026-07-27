@@ -17,6 +17,21 @@ export function externalId(id: string): FileDepResolution {
 	return { kind: "external", id };
 }
 
+/**
+ * Prefer a short internal path list. Large fan-out becomes an external id so
+ * namespace/package imports stay agent-usable instead of dumping whole trees.
+ */
+export function boundedInternalPaths(
+	paths: readonly string[],
+	externalFallback: string,
+	maxFiles = 12,
+): FileDepResolution {
+	const unique = [...new Set(paths.map((path) => resolve(path)))].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+	if (unique.length === 0) return { kind: "unresolved" };
+	if (unique.length > maxFiles) return externalId(externalFallback);
+	return { kind: "internal", paths: unique };
+}
+
 export async function firstExistingFile(host: FileDepHost, candidates: readonly string[]): Promise<string | undefined> {
 	for (const candidate of candidates) {
 		if (await host.isFile(candidate)) return resolve(candidate);

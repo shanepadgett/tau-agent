@@ -15,7 +15,10 @@ function stripImportNoise(specifier: string): { path: string; wildcard: boolean 
 	let s = specifier.trim().replace(/;$/u, "");
 	s = s.replace(/^static\s+/u, "");
 	const wildcard = s.endsWith(".*");
-	if (wildcard) s = s.slice(0, -2);
+	if (wildcard) {
+		// Keep full package path — do not peel segments (all-lowercase packages).
+		return { path: s.slice(0, -2).trim(), wildcard: true };
+	}
 	// Static/member imports: pkg.Type.member or pkg.Type.Companion.member → peel trailing
 	// non-type segments (lowercase start, or Companion/INSTANCE).
 	const parts = s.split(".").filter((part) => part.length > 0);
@@ -34,7 +37,7 @@ function stripImportNoise(specifier: string): { path: string; wildcard: boolean 
 		}
 		break;
 	}
-	return { path: parts.join("."), wildcard };
+	return { path: parts.join("."), wildcard: false };
 }
 
 function isExternalPackage(path: string, prefixes: readonly string[]): boolean {
@@ -64,48 +67,25 @@ function inferredSourceRoot(fromPath: string, packageSegments: readonly string[]
 	return parts.slice(0, parts.length - packageSegments.length).join(sep) || sep;
 }
 
-async function filesInPackageDir(
-	host: Parameters<FileDepResolver>[2],
-	dir: string,
-	extensions: readonly string[],
-): Promise<string[]> {
-	const names = await host.readDir(dir);
-	const out: string[] = [];
-	for (const name of names) {
-		const lower = name.toLowerCase();
-		if (!extensions.some((ext) => lower.endsWith(ext))) continue;
-		const full = join(dir, name);
-		if ((await host.isFile(full)) && host.ownsPath(full) && isWithin(host.scopeRoot, full)) out.push(full);
-	}
-	return out;
-}
-
-async function resolveAgainstRoot(
+/** Resolve a type import (`pkg.Type`) to 0–1 files under a source root. No package dumps. */
+async function resolveTypeAgainstRoot(
 	host: Parameters<FileDepResolver>[2],
 	sourceRoot: string,
 	segments: readonly string[],
-	wildcard: boolean,
 	extensions: readonly string[],
-): Promise<string[]> {
+): Promise<string | undefined> {
 	if (!isWithin(host.scopeRoot, sourceRoot) && resolve(sourceRoot) !== resolve(host.scopeRoot)) {
-		// allow source roots under scope only
-		if (!isWithin(host.scopeRoot, sourceRoot)) return [];
+		return undefined;
 	}
-	if (wildcard || segments.length === 0) {
-		const dir = segments.length === 0 ? sourceRoot : join(sourceRoot, ...segments);
-		return filesInPackageDir(host, dir, extensions);
-	}
-	// type name = last segment
+	if (segments.length === 0) return undefined;
 	const typeName = segments[segments.length - 1];
 	const pkg = segments.slice(0, -1);
-	if (typeName === undefined) return [];
+	if (typeName === undefined) return undefined;
 	const dir = pkg.length === 0 ? sourceRoot : join(sourceRoot, ...pkg);
 	const candidates = extensions.map((ext) => join(dir, `${typeName}${ext}`));
 	const file = await firstExistingFile(host, candidates);
-	if (file !== undefined && isWithin(host.scopeRoot, file)) return [file];
-	// package-only import style without .* — try as package dir
-	const asPkg = join(sourceRoot, ...segments);
-	return filesInPackageDir(host, asPkg, extensions);
+	if (file !== undefined && isWithin(host.scopeRoot, file)) return file;
+	return undefined;
 }
 
 function sourceRootsFor(
@@ -181,9 +161,17 @@ function createJvmFileDepResolver(options: JvmFileDepOptions): FileDepResolver {
 		if (path.length === 0) return { kind: "unresolved" };
 		if (isExternalPackage(path, options.externalPrefixes)) return externalId(path);
 
+		// Wildcards / bare packages are package ids — never dump every file in the dir.
+		if (wildcard) return externalId(path);
+
 		const segments = segmentsOf(path);
-		// Top-level function/property import (okio.buffer): peeled to package-only.
-		// Avoid fanning out every file in the package.
+		const packageOnly =
+			segments.length > 0 &&
+			segments.every((seg) => {
+				const c = seg.charAt(0);
+				return c === c.toLowerCase() && c !== c.toUpperCase();
+			});
+		// Top-level function/property import (okio.buffer) peels to package-only segments.
 		const rawParts = raw
 			.replace(/\.\*$/u, "")
 			.split(".")
@@ -194,21 +182,15 @@ function createJvmFileDepResolver(options: JvmFileDepOptions): FileDepResolver {
 			lastRaw !== "Companion" &&
 			lastRaw.charAt(0) === lastRaw.charAt(0).toLowerCase() &&
 			lastRaw.charAt(0) !== lastRaw.charAt(0).toUpperCase();
-		const packageOnly =
-			segments.length > 0 &&
-			segments.every((seg) => {
-				const c = seg.charAt(0);
-				return c === c.toLowerCase() && c !== c.toUpperCase();
-			});
-		if (!wildcard && memberLike && packageOnly) {
-			return externalId(raw.replace(/\.\*$/u, ""));
+		if (packageOnly) {
+			return externalId(memberLike ? raw.replace(/\.\*$/u, "") : path);
 		}
 
 		const roots = sourceRootsFor(host, fromPath, segments, options.sourceRootSuffixes);
 		for (const root of roots) {
 			signal.throwIfAborted();
-			const files = await resolveAgainstRoot(host, root, segments, wildcard, options.extensions);
-			if (files.length > 0) return internalPaths(files);
+			const file = await resolveTypeAgainstRoot(host, root, segments, options.extensions);
+			if (file !== undefined) return internalPaths([file]);
 		}
 		return externalId(path);
 	};

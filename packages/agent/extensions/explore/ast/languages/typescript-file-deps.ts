@@ -1,8 +1,27 @@
-import { dirname, extname, join, resolve } from "node:path";
-import type { FileDepResolver } from "../adapter.ts";
-import { externalId, firstExistingFile, internalPaths, packageNameFromBareSpecifier } from "./file-dep-util.ts";
+import { readFile } from "node:fs/promises";
+import { dirname, extname, join, relative, resolve, sep } from "node:path";
+import type { FileDepHost, FileDepResolver } from "../adapter.ts";
+import {
+	externalId,
+	findAncestorFile,
+	firstExistingFile,
+	internalPaths,
+	isWithin,
+	packageNameFromBareSpecifier,
+} from "./file-dep-util.ts";
 
 const TS_SOURCE_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".mtsx"] as const;
+
+type TsPathMapping = {
+	pattern: string;
+	/** Directory paths are resolved against (configDir + baseUrl of defining tsconfig). */
+	baseDir: string;
+	targets: string[];
+};
+
+type TsPathsConfig = {
+	mappings: TsPathMapping[];
+};
 
 function pushTsStems(out: string[], stem: string): void {
 	for (const sourceExt of TS_SOURCE_EXTENSIONS) out.push(`${stem}${sourceExt}`);
@@ -29,14 +48,8 @@ function sourceCandidatesFromSeed(seed: string): string[] {
 	return out;
 }
 
-async function resolveRelative(
-	host: Parameters<FileDepResolver>[2],
-	baseDir: string,
-	target: string,
-): Promise<string | undefined> {
-	const absolute = resolve(baseDir, target);
-	const candidates = sourceCandidatesFromSeed(absolute);
-	// Prefer source over ambient .d.ts / emitted js.
+async function resolveExistingSource(host: FileDepHost, seed: string): Promise<string | undefined> {
+	const candidates = sourceCandidatesFromSeed(seed);
 	const preferred = candidates.filter((path) => {
 		if (path.endsWith(".d.ts")) return false;
 		const ext = extname(path);
@@ -45,6 +58,185 @@ async function resolveRelative(
 	const hit = await firstExistingFile(host, preferred);
 	if (hit !== undefined) return hit;
 	return firstExistingFile(host, candidates);
+}
+
+async function resolveRelative(host: FileDepHost, baseDir: string, target: string): Promise<string | undefined> {
+	return resolveExistingSource(host, resolve(baseDir, target));
+}
+
+/**
+ * Enough JSONC for tsconfig: // line comments + trailing commas.
+ * Does not strip block comments with a regex — that eats path strings like `"./*"`.
+ */
+function parseJsonc(text: string): unknown {
+	const lines = text.split("\n").map((line) => {
+		let inString = false;
+		let escape = false;
+		for (let i = 0; i < line.length; i += 1) {
+			const ch = line.charAt(i);
+			if (escape) {
+				escape = false;
+				continue;
+			}
+			if (inString && ch === "\\") {
+				escape = true;
+				continue;
+			}
+			if (ch === '"') {
+				inString = !inString;
+				continue;
+			}
+			if (!inString && ch === "/" && line.charAt(i + 1) === "/") {
+				return line.slice(0, i);
+			}
+		}
+		return line;
+	});
+	const noTrail = lines.join("\n").replace(/,(\s*[}\]])/gu, "$1");
+	return JSON.parse(noTrail) as unknown;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+	if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+	return value as Record<string, unknown>;
+}
+
+function readPathsObject(value: unknown): Record<string, string[]> {
+	const obj = asRecord(value);
+	if (obj === undefined) return {};
+	const out: Record<string, string[]> = {};
+	for (const [pattern, targets] of Object.entries(obj)) {
+		if (!Array.isArray(targets)) continue;
+		const list = targets.filter((t): t is string => typeof t === "string" && t.length > 0);
+		if (list.length > 0) out[pattern] = list;
+	}
+	return out;
+}
+
+/**
+ * Match `spec` against a TS paths pattern. Returns the `*` capture, or `""` for
+ * exact patterns, or undefined on no match.
+ */
+function matchPathPattern(pattern: string, spec: string): string | undefined {
+	const star = pattern.indexOf("*");
+	if (star === -1) return pattern === spec ? "" : undefined;
+	const prefix = pattern.slice(0, star);
+	const suffix = pattern.slice(star + 1);
+	if (!spec.startsWith(prefix) || !spec.endsWith(suffix)) return undefined;
+	if (spec.length < prefix.length + suffix.length) return undefined;
+	return spec.slice(prefix.length, spec.length - suffix.length);
+}
+
+function applyStar(target: string, capture: string): string {
+	const star = target.indexOf("*");
+	if (star === -1) return target;
+	return `${target.slice(0, star)}${capture}${target.slice(star + 1)}`;
+}
+
+async function loadTsconfigFile(path: string): Promise<Record<string, unknown> | undefined> {
+	let text: string;
+	try {
+		text = await readFile(path, "utf8");
+	} catch {
+		return undefined;
+	}
+	try {
+		return asRecord(parseJsonc(text));
+	} catch {
+		return undefined;
+	}
+}
+
+function resolveExtendsPath(fromConfig: string, extendsSpec: string): string {
+	const parentDir = dirname(fromConfig);
+	if (extendsSpec.endsWith(".json")) return resolve(parentDir, extendsSpec);
+	return resolve(parentDir, `${extendsSpec}.json`);
+}
+
+/**
+ * Nearest tsconfig/jsconfig paths + extends merge. Targets resolve against the
+ * defining config's directory + baseUrl (TypeScript rules).
+ */
+async function loadTsPathsConfig(
+	host: FileDepHost,
+	fromPath: string,
+	signal: AbortSignal,
+): Promise<TsPathsConfig | undefined> {
+	const startDir = dirname(fromPath);
+	const tsconfig =
+		(await findAncestorFile(host, startDir, host.scopeRoot, "tsconfig.json")) ??
+		(await findAncestorFile(host, startDir, host.scopeRoot, "jsconfig.json"));
+	if (tsconfig === undefined) return undefined;
+
+	const memoKey = `ts-paths:${tsconfig}`;
+	const cached = host.memo.get(memoKey);
+	if (cached !== undefined) return cached as TsPathsConfig;
+
+	// Root → leaf so leaf overrides.
+	const chain: string[] = [];
+	let current: string | undefined = tsconfig;
+	const seen = new Set<string>();
+	while (current !== undefined && !seen.has(current)) {
+		signal.throwIfAborted();
+		seen.add(current);
+		chain.push(current);
+		const json = await loadTsconfigFile(current);
+		if (json === undefined) break;
+		const ext = json.extends;
+		if (typeof ext !== "string" || ext.length === 0) break;
+		const parent = resolveExtendsPath(current, ext);
+		if (!isWithin(host.scopeRoot, parent) && resolve(parent) !== resolve(host.scopeRoot)) break;
+		current = parent;
+	}
+
+	const byPattern = new Map<string, TsPathMapping>();
+	for (const configPath of [...chain].reverse()) {
+		signal.throwIfAborted();
+		const json = await loadTsconfigFile(configPath);
+		if (json === undefined) continue;
+		const compiler = asRecord(json.compilerOptions);
+		if (compiler === undefined) continue;
+		const configDir = dirname(configPath);
+		const baseUrl = typeof compiler.baseUrl === "string" && compiler.baseUrl.length > 0 ? compiler.baseUrl : ".";
+		const baseDir = resolve(configDir, baseUrl);
+		const paths = readPathsObject(compiler.paths);
+		for (const [pattern, targets] of Object.entries(paths)) {
+			byPattern.set(pattern, { pattern, baseDir, targets });
+		}
+	}
+
+	const mappings = [...byPattern.values()].sort(
+		(a, b) => b.pattern.length - a.pattern.length || (a.pattern < b.pattern ? -1 : 1),
+	);
+	const config: TsPathsConfig = { mappings };
+	host.memo.set(memoKey, config);
+	return config;
+}
+
+async function resolveViaPaths(
+	host: FileDepHost,
+	fromPath: string,
+	specifier: string,
+	signal: AbortSignal,
+): Promise<string | undefined> {
+	const config = await loadTsPathsConfig(host, fromPath, signal);
+	if (config === undefined || config.mappings.length === 0) return undefined;
+
+	for (const mapping of config.mappings) {
+		signal.throwIfAborted();
+		const capture = matchPathPattern(mapping.pattern, specifier);
+		if (capture === undefined) continue;
+		for (const target of mapping.targets) {
+			const mapped = applyStar(target, capture);
+			// Guard obvious escapes outside scope after mapping.
+			const seed = resolve(mapping.baseDir, mapped);
+			const scopeRel = relative(resolve(host.scopeRoot), seed);
+			if (scopeRel.startsWith(`..${sep}`) || scopeRel === "..") continue;
+			const file = await resolveExistingSource(host, seed);
+			if (file !== undefined) return file;
+		}
+	}
+	return undefined;
 }
 
 export const resolveTypescriptFileDep: FileDepResolver = async (fromPath, specifier, host, signal) => {
@@ -59,5 +251,9 @@ export const resolveTypescriptFileDep: FileDepResolver = async (fromPath, specif
 		if (file === undefined) return { kind: "unresolved" };
 		return internalPaths([file]);
 	}
+
+	const aliased = await resolveViaPaths(host, fromPath, trimmed, signal);
+	if (aliased !== undefined) return internalPaths([aliased]);
+
 	return externalId(packageNameFromBareSpecifier(trimmed));
 };

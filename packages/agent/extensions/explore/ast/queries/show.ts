@@ -113,6 +113,19 @@ function sliceLines(source: string, startLine: number, endLine: number): string 
 	return source.slice(start.start, end.end);
 }
 
+/** Exact source slice for one resolved decl. Shared by show and context. */
+export function extractShowView(
+	decl: Decl,
+	path: string,
+	ir: FileIr,
+	source: string,
+	view: ShowView,
+	importNoise: ReadonlySet<string> = NO_IMPORT_NOISE,
+	contextLines = 0,
+): ShowBlock {
+	return buildBlock(decl, path, ir, source, view, contextLines, importNoise);
+}
+
 function buildBlock(
 	decl: Decl,
 	path: string,

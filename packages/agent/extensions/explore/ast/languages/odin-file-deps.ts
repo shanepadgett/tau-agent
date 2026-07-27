@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from "node:path";
 import type { FileDepHost, FileDepResolver } from "../adapter.ts";
-import { externalId, firstExistingFile, internalPaths, isWithin } from "./file-dep-util.ts";
+import { boundedInternalPaths, externalId, firstExistingFile, internalPaths, isWithin } from "./file-dep-util.ts";
 
 /** `collection:pkg/path` — Odin collection import. */
 const COLLECTION_SPEC = /^([A-Za-z_][A-Za-z0-9_]*):(.+)$/u;
@@ -131,7 +131,8 @@ async function resolveCollectionImport(
 		const dir = join(root, ...segments);
 		if (!isWithin(host.scopeRoot, dir) && dir !== resolve(host.scopeRoot)) continue;
 		const files = await listOdinPackageFiles(host, dir);
-		if (files.length > 0) return internalPaths(files);
+		// Fat packages (e.g. base:runtime) stay package-id edges, not 40+ file dumps.
+		if (files.length > 0) return boundedInternalPaths(files, id);
 	}
 	return externalId(id);
 }
@@ -147,7 +148,7 @@ async function resolveRelativeImport(
 	if (file !== undefined && isWithin(host.scopeRoot, file)) return internalPaths([file]);
 
 	const files = (await listOdinPackageFiles(host, absolute)).filter((path) => isWithin(host.scopeRoot, path));
-	if (files.length > 0) return internalPaths(files);
+	if (files.length > 0) return boundedInternalPaths(files, trimmed);
 	return { kind: "unresolved" };
 }
 

@@ -54,7 +54,7 @@ function formatResolved(
 	return lines.join("\n");
 }
 
-function formatCandidateList(candidates: readonly Candidate[], cwd: string): string {
+export function formatCandidateList(candidates: readonly Candidate[], cwd: string): string {
 	const lines = ["Ambiguous target — disambiguate with targetPath or line:", ""];
 	for (const c of candidates) {
 		const path = formatPathForDisplay(c.path, cwd);

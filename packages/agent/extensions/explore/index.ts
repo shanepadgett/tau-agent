@@ -5,8 +5,10 @@ import { createTemporaryOutputStore } from "../../shared/temporary-output-store.
 import { createToolRowStateStore } from "../../shared/tool-row-state.ts";
 import { createExploreEngine, type ExploreEngine } from "./ast/engine.ts";
 import { createFileGraph, type ExploreFileGraph } from "./ast/graph/file-graph.ts";
+import { createContextTool } from "./ast/tools/context.ts";
 import { createDepsTool } from "./ast/tools/deps.ts";
 import { createDiscoverTool } from "./ast/tools/discover.ts";
+import { createImpactTool } from "./ast/tools/impact.ts";
 import { createOutlineTool } from "./ast/tools/outline.ts";
 import {
 	createCalleesTool,
@@ -50,6 +52,8 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 	pi.registerTool(createCalleesTool(rowState, engineFor, graphFor));
 	pi.registerTool(createReferencesTool(rowState, engineFor, graphFor));
 	pi.registerTool(createImplementationsTool(rowState, engineFor, graphFor));
+	pi.registerTool(createImpactTool(rowState, temporaryOutput, engineFor, graphFor));
+	pi.registerTool(createContextTool(rowState, temporaryOutput, engineFor, graphFor));
 
 	pi.on("session_start", async (_event, ctx) => {
 		await temporaryOutput.shutdown();

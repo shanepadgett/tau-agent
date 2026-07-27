@@ -4,7 +4,15 @@ import { formatPathForDisplay, pathResolutionError, resolveExplorePath } from ".
 import type { ExploreEngine } from "../engine.ts";
 import type { Candidate, Resolution } from "../identity.ts";
 import { resolveTarget } from "../identity.ts";
-import type { CallSite, Decl, DeclKind, FileIr, ImportRef } from "../ir.ts";
+import {
+	isCallableLike,
+	isTypeLike,
+	type CallSite,
+	type Decl,
+	type DeclKind,
+	type FileIr,
+	type ImportRef,
+} from "../ir.ts";
 import { walkDecls } from "../query.ts";
 import { scanSources } from "../scan.ts";
 import { signatureText } from "../slice.ts";
@@ -80,24 +88,6 @@ type EdgeHit = {
 };
 
 const MAX_COMPETITORS = 10;
-
-function isTypeLike(kind: DeclKind): boolean {
-	return (
-		kind === "class" ||
-		kind === "interface" ||
-		kind === "struct" ||
-		kind === "enum" ||
-		kind === "typeAlias" ||
-		kind === "object" ||
-		kind === "namespace" ||
-		kind === "module" ||
-		kind === "package"
-	);
-}
-
-function isCallableLike(kind: DeclKind): boolean {
-	return kind === "function" || kind === "method" || kind === "constructor" || kind === "operator";
-}
 
 function ownerName(qualifiedName: string): string {
 	const dot = qualifiedName.lastIndexOf(".");
