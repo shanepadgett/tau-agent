@@ -6,10 +6,12 @@
 
 ## `read`
 
+- `enabled` (boolean, default `true`)  
+  Master switch for Explore’s structural read overlay and large-source autoread outline path ([read-policy.md](read-policy.md), [autoread.md](../session/autoread.md)). When `false`, Pi `read` and autoread use ordinary full/ranged bodies — no outline substitution, no Explore `maxRangeLines` enforcement.
 - `structureThresholdLines` (number, default `200`)  
-  Supported source files at or under this line count may be full-read via Pi `read`. Above it, a full read’s model-visible result is outline only ([read-policy.md](read-policy.md)).
+  Supported source files at or under this line count may be full-read via Pi `read`. Above it, a full read’s model-visible result is outline only ([read-policy.md](read-policy.md)). Ignored when `enabled` is `false`.
 - `maxRangeLines` (number, default `200`)  
-  Maximum lines returned by one ranged `read` on supported source (enforced by Explore overlay if Pi does not).
+  Maximum lines returned by one ranged `read` on supported source (enforced by Explore overlay if Pi does not). Ignored when `enabled` is `false`.
 
 ## `context`
 

@@ -38,7 +38,7 @@ Old code, settings, docs, prompts, TUI, worker APIs, and tests that exist only t
 | Stripped | Old role | Replacement |
 | --- | --- | --- |
 | Read-gate / structural-attempt registry | Block `read` until outline/symbol/search/relationship attempt on fingerprint | [read-policy.md](cross/read-policy.md): large full Pi `read` → outline via result hook; ranges always allowed (capped) |
-| `readGate.includeGlobs` / `readGate.excludeGlobs` | Which paths are gated | Deleted settings. Markdown hard-ungated; registered source uses threshold policy |
+| `readGate.includeGlobs` / `readGate.excludeGlobs` | Which paths are gated | Deleted settings. All registered source (incl. Markdown) uses threshold outline policy |
 | Attempt kinds (`directOutline`, `symbol`, `apiCandidate`, `structuralMatch`, `relationshipLocation`, `relationshipScope`) | Unlock tokens for gate | None |
 | `fatalFallback` gate unlock | Allow read after fatal outline failure | None |
 | `postPatchDiff` gate exception | Allow complete read after mutation without new attempt | None; policy is threshold-based on current bytes |

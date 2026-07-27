@@ -28,9 +28,9 @@ Pi’s `read` surface (canonical):
 ## Behavior — structural overlay
 
 - See [read-policy.md](../cross/read-policy.md).
-- Large supported full read → outline substitution (success; model-visible content replaced).
-- Ranged supported read → at most `maxRangeLines` lines.
-- Markdown always allowed full read.
+- Large registered full read (incl. Markdown) → outline substitution (success; model-visible content replaced). Markdown outline is headings/section ranges.
+- Ranged registered read → at most `maxRangeLines` lines.
+- Small registered files (incl. small Markdown) still full-read under threshold.
 
 ## Agent output
 

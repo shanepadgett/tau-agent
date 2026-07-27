@@ -16,10 +16,15 @@
 
 ## Applies to
 
-- Paths whose language is **engine-registered** for structural shape and whose extension is not Markdown.
-- Markdown is always full-read allowed (structural `outline` / `show` still available when asked).
+- Paths whose language is **engine-registered** for structural shape — including Markdown (heading outline).
 - Unregistered languages, binary, and images follow ordinary Pi `read` behavior (no outline substitution).
-- New registered languages automatically fall under the same threshold/range rules — no per-language read policy.
+- New registered languages automatically fall under the same threshold/range rules — no per-language read policy. No Markdown special-case pass-through.
+
+## Enable switch
+
+- `explore.read.enabled` default **true** ([settings.md](settings.md)).
+- When `false`, Explore runs **no** structural overlay: full and ranged Pi `read` results stand as Pi produced them; autoread does not outline-substitute large supported source.
+- When `true`, the threshold and range rules below apply.
 
 ## Thresholds
 
@@ -32,9 +37,9 @@ Line count is the file’s current newline-based line count.
 
 | File | Model-visible result |
 | --- | --- |
-| Supported source, line count ≤ threshold | Full file text from Pi `read` (subject to Pi/shared output bounds) |
-| Supported source, line count > threshold | **Outline only** for that file ([outline.md](../shape/outline.md) shape). No method/function bodies. One-line instruction to use ranged `read` or [show.md](../shape/show.md) for bodies ([output-density.md](output-density.md)) |
-| Markdown / unsupported / non-text | Normal Pi read path |
+| Registered source (incl. Markdown), line count ≤ threshold | Full file text from Pi `read` (subject to Pi/shared output bounds) |
+| Registered source (incl. Markdown), line count > threshold | **Outline only** for that file ([outline.md](../shape/outline.md) shape). Code: no method/function bodies. Markdown: headings/section ranges only. One-line instruction to use ranged `read` or [show.md](../shape/show.md) for bodies/sections ([output-density.md](output-density.md)) |
+| Unregistered / non-text | Normal Pi read path |
 
 Outline-on-full-read is a successful result, not an error. Full file bytes from that call must **not** remain in model-visible content after the overlay runs.
 

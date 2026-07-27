@@ -100,6 +100,29 @@
 								}
 							},
 							"additionalProperties": false
+						},
+						"read": {
+							"type": "object",
+							"properties": {
+								"enabled": {
+									"type": "boolean",
+									"default": true,
+									"description": "Master switch for Explore structural read overlay and large-source autoread outline path. When false, Pi read and autoread keep ordinary full bodies."
+								},
+								"structureThresholdLines": {
+									"type": "integer",
+									"default": 200,
+									"minimum": 1,
+									"description": "Registered source at or under this line count may be full-read. Above it, full read model-visible result is outline only."
+								},
+								"maxRangeLines": {
+									"type": "integer",
+									"default": 200,
+									"minimum": 1,
+									"description": "Maximum lines returned by one ranged read on registered source."
+								}
+							},
+							"additionalProperties": false
 						}
 					},
 					"additionalProperties": false

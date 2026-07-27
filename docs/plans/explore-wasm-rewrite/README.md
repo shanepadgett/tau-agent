@@ -26,7 +26,7 @@ Each task README is written to stand alone for implementation **given** COLD-STA
 6. **Identity is `path` + `name` (+ `line`).** No numeric locators anywhere (`explore-specs/cross/identity.md`).
 7. **No Explore write tools.** Edits are harness `patch`/`edit`/`write` (`stripped.md`).
 8. **No Explore filesystem tools.** `ls` / `find` / `grep` / `read` stay Pi built-ins. Density wrappers are future work only if live use proves pain — not this rewrite.
-9. **Large-read policy is a hook, not a read tool.** On Pi `tool_result` for full `read` of registered non-Markdown source over threshold: replace result content with outline + one nudge. Success, not block. Ranged/small/Markdown/unsupported pass through. No complete-file unchanged/diff cache. No transcript replay.
+9. **Large-read policy is a hook, not a read tool.** On Pi `tool_result` for full `read` of any registered source (incl. Markdown) over threshold: replace result content with outline + one nudge. Success, not block. Ranged/small/unregistered pass through. Markdown large reads → heading outline. No complete-file unchanged/diff cache. No transcript replay.
 10. **Grammar artifacts are pinned; prebuilt beats rebuilt.** Six grammars plus the runtime resolve from npm packages (`@vscode/tree-sitter-wasm`, `web-tree-sitter`); kotlin/swift/odin are committed artifacts maintained by `packages/agent/scripts/build-grammars.ts` (see task 01). Never built on a developer machine at runtime.
 11. **Markdown is a hand-written heading scanner**, not a tree-sitter grammar (external-scanner incompatibility with `web-tree-sitter`).
 12. **Platform limitation disappears.** WASM runs wherever Node runs; the darwin-arm64 restriction in older drafts is obsolete. Structural tools work on all hosts.

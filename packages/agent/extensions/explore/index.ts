@@ -5,6 +5,7 @@ import { createTemporaryOutputStore } from "../../shared/temporary-output-store.
 import { createToolRowStateStore } from "../../shared/tool-row-state.ts";
 import { createExploreEngine, type ExploreEngine } from "./ast/engine.ts";
 import { createFileGraph, type ExploreFileGraph } from "./ast/graph/file-graph.ts";
+import { registerReadOutlineHook } from "./ast/read/hook.ts";
 import { createAstSearchTool } from "./ast/tools/ast-search.ts";
 import { createContextTool } from "./ast/tools/context.ts";
 import { createDepsTool } from "./ast/tools/deps.ts";
@@ -19,6 +20,7 @@ import {
 } from "./ast/tools/relationships.ts";
 import { createReverseDepsTool } from "./ast/tools/reverse-deps.ts";
 import { createShowTool } from "./ast/tools/show.ts";
+import { registerExploreAutoread } from "./read/autoread.ts";
 
 export default function exploreExtension(pi: ExtensionAPI): void {
 	const rowState = createToolRowStateStore(pi, "explore.tool-row-state");
@@ -56,6 +58,8 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 	pi.registerTool(createImplementationsTool(rowState, engineFor, graphFor));
 	pi.registerTool(createImpactTool(rowState, temporaryOutput, engineFor, graphFor));
 	pi.registerTool(createContextTool(rowState, temporaryOutput, engineFor, graphFor));
+	registerReadOutlineHook(pi, engineFor);
+	registerExploreAutoread(pi, rowState, engineFor);
 
 	pi.on("session_start", async (_event, ctx) => {
 		await temporaryOutput.shutdown();

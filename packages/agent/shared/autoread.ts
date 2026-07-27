@@ -29,6 +29,17 @@ export interface PreparedAutoreadMessage {
 	details: AutoreadDetails & { status: "read"; readCache: ReadCacheMetaV1 };
 }
 
+export type PrepareAutoreadMessage = (options: {
+	rowId: string;
+	path: string;
+	cwd: string;
+	source: string;
+	batchId: string;
+	signal: AbortSignal | undefined;
+	isLifecycleCurrent: () => boolean;
+	maximumBytes?: number;
+}) => Promise<PreparedAutoreadMessage>;
+
 export async function prepareAutoreadMessage(options: {
 	rowId: string;
 	path: string;
@@ -75,7 +86,11 @@ export async function prepareAutoreadMessage(options: {
 	};
 }
 
-export function registerAutoread(pi: ExtensionAPI, rowState: ToolRowStateStore): void {
+export function registerAutoread(
+	pi: ExtensionAPI,
+	rowState: ToolRowStateStore,
+	prepare: PrepareAutoreadMessage = prepareAutoreadMessage,
+): void {
 	let lifecycleGeneration = 0;
 	pi.on("session_start", () => {
 		lifecycleGeneration += 1;
@@ -104,7 +119,7 @@ export function registerAutoread(pi: ExtensionAPI, rowState: ToolRowStateStore):
 					batchId: event.batchId,
 				} satisfies Omit<AutoreadDetails, "status" | "error">;
 				try {
-					const message = await prepareAutoreadMessage({
+					const message = await prepare({
 						...details,
 						signal: undefined,
 						isLifecycleCurrent: () => generation === lifecycleGeneration,

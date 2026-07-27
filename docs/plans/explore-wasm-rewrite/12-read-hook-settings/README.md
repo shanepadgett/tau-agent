@@ -21,9 +21,11 @@ packages/agent/extensions/explore/read/autoread.ts    large supported → outlin
 packages/agent/extensions/explore/settings.ts         read thresholds + context budget only
 ```
 
-Outline text comes from the existing pipeline: `outlinePath` in `ast/queries/outline.ts` + the file formatter in `ast/format/outline.ts`. Do not write a second outline renderer for the hook. Registered-language detection: `engine.registry.adapterForPath` (Markdown is registered but must pass through — check the adapter id, not just "has adapter"). Wire hook + autoread registration in `index.ts` next to the existing tool registrations, using `engineFor`.
+Outline text comes from the existing pipeline: `outlinePath` in `ast/queries/outline.ts` + the file formatter in `ast/format/outline.ts`. Do not write a second outline renderer for the hook. Registered-language detection: `engine.registry.adapterForPath` — **including Markdown** (heading outline). Any path with an adapter is eligible; unregistered / image / binary only no-op. Wire hook + autoread registration in `index.ts` next to the existing tool registrations, using `engineFor`.
 
 ## Settings
+
+`explore.read.enabled` (boolean, default `true`) — master switch for the structural read overlay **and** large-source autoread outline path. When `false`, Pi `read` and autoread behave as ordinary full/ranged Pi paths (no outline substitution, no `maxRangeLines` enforcement from Explore).
 
 `explore.read.structureThresholdLines` (200), `explore.read.maxRangeLines` (200). `explore.context.defaultBudgetTokens` (8000) **already exists** in `packages/agent/extensions/explore/settings.ts` (task 10 DONE) — **extend that file only**, do not recreate, move, or reset the context key. No `readGate`. No read-stats keys. Follow `packages/agent/shared/settings/define.ts`. **Do not touch `packages/agent/schemas/tau.schema.json`** — schema sync regenerates it; do not read the schema in the same tool batch that writes settings.
 
@@ -35,10 +37,11 @@ Leave Pi's built-in `read` registered. Explore never `registerTool("read")`.
 
 On successful `read` of a path:
 
-1. Resolve path; if not registered structural source, or Markdown, or image/binary → no-op.
+0. If `explore.read.enabled` is `false` → no-op (entire overlay off).
+1. Resolve path; if not registered structural source (no adapter), or image/binary → no-op. Markdown **is** registered and **is** overlaid.
 2. If the call is a **ranged** read (`offset` and/or `limit` set in a way that is not "whole file") → no-op on body substitution. Optionally enforce `maxRangeLines` by truncating/replacing with an error result telling the caller to shrink (prefer hard error over silent over-long slice).
-3. If **full** read and file line count **>** `structureThresholdLines` → replace `event.content` with outline text for that file (task 06 shape) plus one instruction line ("large file: use ranged read or show for bodies"). `isError: false`. **Full file bytes must not remain in model-visible content.**
-4. Full read at/under threshold → no-op (Pi body stands).
+3. If **full** read and file line count **>** `structureThresholdLines` → replace `event.content` with outline text for that file (task 06 shape; Markdown → headings/section ranges) plus one instruction line ("large file: use ranged read or show for bodies"). `isError: false`. **Full file bytes must not remain in model-visible content.**
+4. Full read at/under threshold → no-op (Pi body stands), including small Markdown.
 
 Do **not** use `tool_call` `{ block: true }` for this policy. Block is the old gate. Substitution is a successful result reshape.
 
@@ -62,9 +65,10 @@ Autoread registration moves into Explore's `index.ts`; remove the interim contex
 
 Policy:
 
-- Supported source ≤ threshold → full text inject (no Explore body-cache bookkeeping beyond what shared already needs for "file was shown").
-- Supported source > threshold → **outline only**; no full body inject.
-- Markdown / unsupported → full within size limits.
+- `explore.read.enabled` is `false` → ordinary full inject within size limits (no outline path).
+- Registered source (incl. Markdown) ≤ threshold → full text inject (no Explore body-cache bookkeeping beyond what shared already needs for "file was shown").
+- Registered source (incl. Markdown) > threshold → **outline only** (Markdown → headings); no full body inject.
+- Unregistered text → full within size limits.
 - Stale lifecycle mid-flight → do not commit knowledge.
 - Failures → status details, not invented content.
 
@@ -74,8 +78,10 @@ No dependency on complete-file unchanged/diff machinery.
 
 Live after `/reload` (real Pi `read`, not a fake). Prefer large files from [`../LIVE-PROVE.md`](../LIVE-PROVE.md) corpus (`pi`, `excalidraw`, plus one non-TS corpus file) and this monorepo:
 
-- Full Pi `read` of a >200-line supported source file → outline in the tool result / context, not the body.
-- Ranged Pi `read` of the same file → real slice.
-- Full read of a small file or `.md` → normal Pi body.
-- Autoread of a large supported path injects outline only.
+- Full Pi `read` of a >200-line registered source file → outline in the tool result / context, not the body.
+- Full Pi `read` of a >200-line Markdown file → heading outline only, not the body; ranged `read` / `show` still fetch sections.
+- Ranged Pi `read` of the same files → real slice.
+- Full read of a small registered file (incl. small `.md`) → normal Pi body.
+- Autoread of a large registered path (incl. large `.md`) injects outline only.
+- With `explore.read.enabled: false`, large full Pi `read` and large autoread keep ordinary full bodies (no outline substitution).
 - Settings load; no `readGate` in schema after sync.

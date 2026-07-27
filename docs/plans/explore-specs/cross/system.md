@@ -66,7 +66,9 @@ This list is the **current baseline**, not the ceiling. Tool specs refer to “r
 
 ### Markdown
 
-- Markdown stays structurally outline/`show`-able and **ungated** for full `read` ([read-policy.md](read-policy.md)).
+- Markdown is a registered structural language (hand-written heading scanner).
+- Outline/`show` expose headings and section ranges.
+- Large full `read` / autoread follow the same threshold outline overlay as other registered languages ([read-policy.md](read-policy.md)) — headings only above threshold; small files and ranged reads stay full section text.
 
 ## Platform / engine availability
 
