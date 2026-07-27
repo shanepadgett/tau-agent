@@ -1,0 +1,8 @@
+name = "System Prompt Viewer"
+description = "Local inspection of effective system prompts and active tool schemas"
+
+[feature]
+description = "Snapshot command, context filtering, schema formatting, footer state, and product guidance"
+read = []
+outline = [".pi/extensions/system-prompt-viewer/index.ts"]
+references = [".pi/extensions/system-prompt-viewer/README.md"]

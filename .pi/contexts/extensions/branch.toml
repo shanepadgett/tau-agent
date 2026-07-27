@@ -1,39 +1,14 @@
 name = "Branch"
-description = "Complete and bounded context for the branch extension"
+description = "Recent Git branch selection and typed branch creation"
 
-[all]
-description = "Every extension file, direct shared dependency, test, and user-facing help"
-files = [
-  "packages/agent/extensions/branch/README.md",
-  "packages/agent/extensions/branch/index.ts",
-  "packages/agent/extensions/branch/panel.ts",
-]
-anchors = [
-  "packages/agent/shared/git.ts",
-  "packages/agent/shared/text.ts",
-  "packages/agent/test/extensions/branch/index.test.ts",
-  "packages/agent/test/extensions/branch/panel.test.ts",
-]
 [runtime]
-description = "Extension runtime and direct shared dependencies"
-files = [
-  "packages/agent/extensions/branch/index.ts",
-  "packages/agent/extensions/branch/panel.ts",
-]
-anchors = [ "packages/agent/shared/git.ts", "packages/agent/shared/text.ts" ]
+description = "Branch command registration, Git branch discovery, switching, and creation"
+read = []
+outline = ["packages/agent/extensions/branch/index.ts"]
+references = ["packages/agent/extensions/branch/README.md", "packages/agent/test/extensions/branch/index.test.ts"]
+
 [ui]
-description = "Interactive UI and its extension integration"
-files = [
-  "packages/agent/extensions/branch/index.ts",
-  "packages/agent/extensions/branch/panel.ts",
-]
-anchors = [ "packages/agent/shared/git.ts", "packages/agent/shared/text.ts" ]
-[tests]
-description = "Extension implementation and automated tests"
-files = [
-  "packages/agent/extensions/branch/index.ts",
-  "packages/agent/extensions/branch/panel.ts",
-  "packages/agent/test/extensions/branch/index.test.ts",
-  "packages/agent/test/extensions/branch/panel.test.ts",
-]
-anchors = [ "packages/agent/shared/git.ts", "packages/agent/shared/text.ts" ]
+description = "Interactive recent-branch picker"
+read = []
+outline = ["packages/agent/extensions/branch/panel.ts"]
+references = ["packages/agent/test/extensions/branch/panel.test.ts"]

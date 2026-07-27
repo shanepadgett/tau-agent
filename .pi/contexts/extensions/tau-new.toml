@@ -1,0 +1,8 @@
+name = "Tau New"
+description = "Scaffolding flow for Tau extensions, prompts, themes, and skills"
+
+[feature]
+description = "Kind and placement selection, collision checks, naming rules, and scaffold prompt generation"
+read = []
+outline = [".pi/extensions/tau-new/index.ts"]
+references = []

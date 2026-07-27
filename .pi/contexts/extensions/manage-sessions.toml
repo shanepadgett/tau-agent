@@ -1,27 +1,14 @@
 name = "Manage Sessions"
-description = "Complete and bounded context for the manage-sessions extension"
+description = "Interactive Pi session archive, restore, and bulk deletion flows"
 
-[all]
-description = "Every extension file, direct shared dependency, test, and user-facing help"
-files = [
-  "packages/agent/extensions/manage-sessions/README.md",
-  "packages/agent/extensions/manage-sessions/index.ts",
-  "packages/agent/extensions/manage-sessions/manager-ui.ts",
-  "packages/agent/extensions/manage-sessions/sessions.ts",
-]
-anchors = [ "packages/agent/shared/text.ts" ]
 [runtime]
-description = "Extension runtime and direct shared dependencies"
-files = [
-  "packages/agent/extensions/manage-sessions/index.ts",
-  "packages/agent/extensions/manage-sessions/manager-ui.ts",
-  "packages/agent/extensions/manage-sessions/sessions.ts",
-]
-anchors = [ "packages/agent/shared/text.ts" ]
+description = "Session discovery, archive, restore, deletion, and command registration"
+read = []
+outline = ["packages/agent/extensions/manage-sessions/index.ts", "packages/agent/extensions/manage-sessions/sessions.ts"]
+references = ["packages/agent/extensions/manage-sessions/README.md"]
+
 [ui]
-description = "Interactive UI and its extension integration"
-files = [
-  "packages/agent/extensions/manage-sessions/index.ts",
-  "packages/agent/extensions/manage-sessions/manager-ui.ts",
-]
-anchors = [ "packages/agent/shared/text.ts" ]
+description = "Interactive session manager"
+read = []
+outline = ["packages/agent/extensions/manage-sessions/manager-ui.ts"]
+references = []

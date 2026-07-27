@@ -1,23 +1,14 @@
 name = "Turn Budget"
-description = "Complete and bounded context for the turn-budget extension"
+description = "Soft non-blocking turn-budget hints for better tool batching"
 
-[all]
-description = "Every extension file, direct shared dependency, test, and user-facing help"
-files = [
-  "packages/agent/extensions/turn-budget/README.md",
-  "packages/agent/extensions/turn-budget/index.ts",
-  "packages/agent/extensions/turn-budget/settings.ts",
-]
-anchors = [ "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts" ]
 [runtime]
-description = "Extension runtime and direct shared dependencies"
-files = [
-  "packages/agent/extensions/turn-budget/index.ts",
-]
-anchors = [ "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts" ]
+description = "Turn counting, soft-cap hints, and extension lifecycle"
+read = []
+outline = ["packages/agent/extensions/turn-budget/index.ts"]
+references = ["packages/agent/extensions/turn-budget/README.md"]
+
 [settings]
-description = "Extension settings and shared settings infrastructure"
-files = [
-  "packages/agent/extensions/turn-budget/settings.ts",
-]
-anchors = [ "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts" ]
+description = "Initial budget and extension-step settings"
+read = []
+outline = ["packages/agent/extensions/turn-budget/settings.ts"]
+references = []

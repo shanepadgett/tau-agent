@@ -1,27 +1,14 @@
 name = "Stash"
-description = "Complete and bounded context for the stash extension"
+description = "Prompt draft parking, browsing, and editor restoration"
 
-[all]
-description = "Every extension file, direct shared dependency, test, and user-facing help"
-files = [
-  "packages/agent/extensions/stash/README.md",
-  "packages/agent/extensions/stash/browser.ts",
-  "packages/agent/extensions/stash/index.ts",
-  "packages/agent/extensions/stash/store.ts",
-]
-anchors = [ "packages/agent/shared/jsonl-store.ts", "packages/agent/shared/text.ts" ]
 [runtime]
-description = "Extension runtime and direct shared dependencies"
-files = [
-  "packages/agent/extensions/stash/browser.ts",
-  "packages/agent/extensions/stash/index.ts",
-  "packages/agent/extensions/stash/store.ts",
-]
-anchors = [ "packages/agent/shared/jsonl-store.ts", "packages/agent/shared/text.ts" ]
+description = "Stash commands and durable prompt storage"
+read = []
+outline = ["packages/agent/extensions/stash/index.ts", "packages/agent/extensions/stash/store.ts"]
+references = ["packages/agent/extensions/stash/README.md"]
+
 [ui]
-description = "Interactive UI and its extension integration"
-files = [
-  "packages/agent/extensions/stash/browser.ts",
-  "packages/agent/extensions/stash/index.ts",
-]
-anchors = [ "packages/agent/shared/jsonl-store.ts", "packages/agent/shared/text.ts" ]
+description = "Interactive stash browser and editor restoration"
+read = []
+outline = ["packages/agent/extensions/stash/browser.ts"]
+references = []

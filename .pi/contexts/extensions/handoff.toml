@@ -1,27 +1,8 @@
 name = "Handoff"
-description = "Fresh-session handoff generation and focused file preloading"
+description = "Fresh linked-session creation from a focused generated handoff prompt"
 
-[all]
-description = "Complete handoff command, request model, autoread integration, and user-facing help"
-files = [
-  "packages/agent/extensions/handoff/README.md",
-  "packages/agent/extensions/handoff/index.ts",
-  "packages/agent/extensions/handoff/model.ts",
-]
-anchors = [
-  "packages/agent/shared/autoread.ts",
-  "packages/agent/shared/model-fallback/index.ts",
-  "packages/agent/shared/text.ts",
-]
-
-[runtime]
-description = "Handoff command execution, draft validation, linked session setup, and file preloading"
-files = [
-  "packages/agent/extensions/handoff/index.ts",
-  "packages/agent/extensions/handoff/model.ts",
-]
-anchors = [
-  "packages/agent/shared/autoread.ts",
-  "packages/agent/shared/model-fallback/index.ts",
-  "packages/agent/shared/text.ts",
-]
+[feature]
+description = "Session handoff generation, context transfer, and command flow"
+read = []
+outline = ["packages/agent/extensions/handoff/index.ts", "packages/agent/extensions/handoff/model.ts"]
+references = ["packages/agent/extensions/handoff/README.md", "packages/agent/test/extensions/handoff/model.test.ts"]

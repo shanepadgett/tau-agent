@@ -83,7 +83,7 @@ These are outline injections, not autoreads. Human transcript may render each in
 
 Context-pruning change stops requesting, preparing, retaining, or tracking autoread entries. Autoread can remain temporarily for features that still depend on it, without being part of new checkpoint contract.
 
-Removing autoread from rest of Tau and redesigning reusable project context are deferred to [Autoread Removal and Context Redesign](autoread-removal-context-redesign.md).
+Reusable project context now uses branch-local ephemeral read/outline/reference projections. Removing autoread from remaining Tau consumers stays deferred to [Autoread Removal and Context Redesign](autoread-removal-context-redesign.md).
 
 ### Pruning nudges remain advisory
 

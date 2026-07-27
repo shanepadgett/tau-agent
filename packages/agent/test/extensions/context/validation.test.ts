@@ -20,7 +20,7 @@ describe("context validation", () => {
 		await writeFile(join(root, "src", "uncovered.ts"), "export {};\n");
 		await writeFile(
 			join(root, ".pi", "contexts", "code", "source.toml"),
-			'name = "Source"\ndescription = "Source files"\n\n[all]\ndescription = "Covered source"\nfiles = ["src/covered.ts"]\nanchors = ["src/anchored.ts"]\n',
+			'name = "Source"\ndescription = "Source files"\n\n[all]\ndescription = "Covered source"\nread = []\noutline = ["src/covered.ts"]\nreferences = ["src/anchored.ts"]\n',
 		);
 		const git = {
 			run: async () =>
@@ -31,13 +31,13 @@ describe("context validation", () => {
 		expect(formatContextValidationFailure(result)).toContain("/context-sync");
 	});
 
-	it("reports missing anchors as stale membership", async () => {
+	it("reports missing references as stale membership", async () => {
 		const root = await mkdtemp(join(tmpdir(), "tau-context-validation-"));
 		roots.push(root);
 		await mkdir(join(root, ".pi", "contexts", "code"), { recursive: true });
 		await writeFile(
 			join(root, ".pi", "contexts", "code", "source.toml"),
-			'name = "Source"\n\n[all]\ndescription = "Source files"\nfiles = []\nanchors = ["src/missing.ts"]\n',
+			'name = "Source"\n\n[all]\ndescription = "Source files"\nread = []\noutline = []\nreferences = ["src/missing.ts"]\n',
 		);
 		const git = { run: async () => "" } as unknown as GitRunner;
 		const result = await validateContextCatalog(git, root, []);

@@ -1,12 +1,8 @@
 name = "Release and CI"
 description = "Trusted npm publishing and release procedure"
 
-[all]
-description = "Publishing workflow, package metadata, and contributor release instructions"
-files = [
-  ".github/workflows/publish.yml",
-  "docs/CONTRIBUTING.md",
-  "package.json",
-  "packages/agent/package.json",
-  "packages/tui/package.json",
-]
+[release]
+description = "Trusted npm publishing workflow"
+read = [".github/workflows/publish.yml"]
+outline = []
+references = []

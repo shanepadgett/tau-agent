@@ -1,243 +1,38 @@
 name = "Explore"
 description = "Structural source inspection through in-process tree-sitter WASM"
 
-[all]
-description = "Complete Explore extension, adapters, tools, read overlay, previews, and product documentation"
-files = [
-  "packages/agent/extensions/explore/README.md",
-  "packages/agent/extensions/explore/ast/adapter.ts",
-  "packages/agent/extensions/explore/ast/engine.ts",
-  "packages/agent/extensions/explore/ast/format/ast-search.ts",
-  "packages/agent/extensions/explore/ast/format/composite.ts",
-  "packages/agent/extensions/explore/ast/format/context.ts",
-  "packages/agent/extensions/explore/ast/format/deps.ts",
-  "packages/agent/extensions/explore/ast/format/discover.ts",
-  "packages/agent/extensions/explore/ast/format/impact.ts",
-  "packages/agent/extensions/explore/ast/format/outline.ts",
-  "packages/agent/extensions/explore/ast/format/relationships.ts",
-  "packages/agent/extensions/explore/ast/format/show.ts",
-  "packages/agent/extensions/explore/ast/grammars/manifest.json",
-  "packages/agent/extensions/explore/ast/grammars/manifest.ts",
-  "packages/agent/extensions/explore/ast/graph/file-graph.ts",
-  "packages/agent/extensions/explore/ast/graph/relationships.ts",
-  "packages/agent/extensions/explore/ast/identity.ts",
-  "packages/agent/extensions/explore/ast/ir.ts",
-  "packages/agent/extensions/explore/ast/languages/csharp-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/csharp.ts",
-  "packages/agent/extensions/explore/ast/languages/file-dep-util.ts",
-  "packages/agent/extensions/explore/ast/languages/fixtures/sample.cs",
-  "packages/agent/extensions/explore/ast/languages/fixtures/sample.java",
-  "packages/agent/extensions/explore/ast/languages/fixtures/sample.kt",
-  "packages/agent/extensions/explore/ast/languages/fixtures/sample.odin",
-  "packages/agent/extensions/explore/ast/languages/fixtures/sample.rs",
-  "packages/agent/extensions/explore/ast/languages/fixtures/sample.swift",
-  "packages/agent/extensions/explore/ast/languages/go-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/go.ts",
-  "packages/agent/extensions/explore/ast/languages/java.ts",
-  "packages/agent/extensions/explore/ast/languages/jvm-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/kotlin.ts",
-  "packages/agent/extensions/explore/ast/languages/odin-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/odin.ts",
-  "packages/agent/extensions/explore/ast/languages/rust-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/rust.ts",
-  "packages/agent/extensions/explore/ast/languages/swift-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/swift.ts",
-  "packages/agent/extensions/explore/ast/languages/tree.ts",
-  "packages/agent/extensions/explore/ast/languages/typescript-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/typescript-package-surface.ts",
-  "packages/agent/extensions/explore/ast/languages/typescript.ts",
-  "packages/agent/extensions/explore/ast/markdown.ts",
-  "packages/agent/extensions/explore/ast/package-surface.ts",
-  "packages/agent/extensions/explore/ast/queries/ast-search.ts",
-  "packages/agent/extensions/explore/ast/queries/composite-target.ts",
-  "packages/agent/extensions/explore/ast/queries/context.ts",
-  "packages/agent/extensions/explore/ast/queries/discover.ts",
-  "packages/agent/extensions/explore/ast/queries/impact.ts",
-  "packages/agent/extensions/explore/ast/queries/outline.ts",
-  "packages/agent/extensions/explore/ast/queries/show.ts",
-  "packages/agent/extensions/explore/ast/query.ts",
-  "packages/agent/extensions/explore/ast/read/hook.ts",
-  "packages/agent/extensions/explore/ast/read/policy.ts",
-  "packages/agent/extensions/explore/ast/registry.ts",
-  "packages/agent/extensions/explore/ast/scan.ts",
-  "packages/agent/extensions/explore/ast/slice.ts",
-  "packages/agent/extensions/explore/ast/tools/ast-search.ts",
-  "packages/agent/extensions/explore/ast/tools/context.ts",
-  "packages/agent/extensions/explore/ast/tools/deps.ts",
-  "packages/agent/extensions/explore/ast/tools/discover.ts",
-  "packages/agent/extensions/explore/ast/tools/impact.ts",
-  "packages/agent/extensions/explore/ast/tools/outline.ts",
-  "packages/agent/extensions/explore/ast/tools/relationships.ts",
-  "packages/agent/extensions/explore/ast/tools/render.ts",
-  "packages/agent/extensions/explore/ast/tools/reverse-deps.ts",
-  "packages/agent/extensions/explore/ast/tools/show.ts",
-  "packages/agent/extensions/explore/guidance.ts",
-  "packages/agent/extensions/explore/index.ts",
-  "packages/agent/extensions/explore/read/autoread.ts",
-  "packages/agent/extensions/explore/settings.ts",
-  "packages/agent/extensions/explore/traverse.ts",
-  ".pi/extensions/tool-preview/widgets/ast-search.ts",
-  ".pi/extensions/tool-preview/widgets/ast-tool-preview.ts",
-  ".pi/extensions/tool-preview/widgets/autoread.ts",
-  ".pi/extensions/tool-preview/widgets/discover.ts",
-  ".pi/extensions/tool-preview/widgets/outline.ts",
-  ".pi/extensions/tool-preview/widgets/read.ts",
-  ".pi/extensions/tool-preview/widgets/relationships.ts",
-]
-anchors = [
-  "packages/agent/extensions/explore/ast/grammars/kotlin.wasm",
-  "packages/agent/extensions/explore/ast/grammars/odin.wasm",
-  "packages/agent/extensions/explore/ast/grammars/swift.wasm",
-  "packages/agent/shared/autoread.ts",
-  "packages/agent/shared/bounded-text-result.ts",
-  "packages/agent/shared/events.ts",
-  "packages/agent/shared/temporary-output-store.ts",
-  "packages/agent/shared/tool-row-state.ts",
-  "packages/agent/test/extensions/explore/grammars.test.ts",
-]
-
 [runtime]
 description = "Composition, engine lifecycle, source identity, scanning, settings, and guidance"
-files = [
-  "packages/agent/extensions/explore/README.md",
-  "packages/agent/extensions/explore/ast/adapter.ts",
-  "packages/agent/extensions/explore/ast/engine.ts",
-  "packages/agent/extensions/explore/ast/identity.ts",
-  "packages/agent/extensions/explore/ast/ir.ts",
-  "packages/agent/extensions/explore/ast/markdown.ts",
-  "packages/agent/extensions/explore/ast/query.ts",
-  "packages/agent/extensions/explore/ast/registry.ts",
-  "packages/agent/extensions/explore/ast/scan.ts",
-  "packages/agent/extensions/explore/ast/slice.ts",
-  "packages/agent/extensions/explore/guidance.ts",
-  "packages/agent/extensions/explore/index.ts",
-  "packages/agent/extensions/explore/settings.ts",
-  "packages/agent/extensions/explore/traverse.ts",
-]
-anchors = [
-  "packages/agent/shared/autoread.ts",
-  "packages/agent/shared/bounded-text-result.ts",
-  "packages/agent/shared/events.ts",
-  "packages/agent/shared/temporary-output-store.ts",
-  "packages/agent/shared/tool-row-state.ts",
-]
+read = []
+outline = ["packages/agent/extensions/explore/ast/engine.ts", "packages/agent/extensions/explore/ast/registry.ts", "packages/agent/extensions/explore/index.ts"]
+references = ["packages/agent/extensions/explore/README.md", "packages/agent/extensions/explore/ast/adapter.ts", "packages/agent/extensions/explore/ast/identity.ts", "packages/agent/extensions/explore/ast/ir.ts", "packages/agent/extensions/explore/ast/markdown.ts", "packages/agent/extensions/explore/ast/query.ts", "packages/agent/extensions/explore/ast/scan.ts", "packages/agent/extensions/explore/ast/slice.ts", "packages/agent/extensions/explore/guidance.ts", "packages/agent/extensions/explore/settings.ts", "packages/agent/extensions/explore/traverse.ts"]
 
 [languages]
 description = "Registered language adapters, dependency hooks, grammar pins, artifacts, and extraction fixtures"
-files = [
-  "packages/agent/extensions/explore/ast/grammars/manifest.json",
-  "packages/agent/extensions/explore/ast/grammars/manifest.ts",
-  "packages/agent/extensions/explore/ast/languages/csharp-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/csharp.ts",
-  "packages/agent/extensions/explore/ast/languages/file-dep-util.ts",
-  "packages/agent/extensions/explore/ast/languages/fixtures/sample.cs",
-  "packages/agent/extensions/explore/ast/languages/fixtures/sample.java",
-  "packages/agent/extensions/explore/ast/languages/fixtures/sample.kt",
-  "packages/agent/extensions/explore/ast/languages/fixtures/sample.odin",
-  "packages/agent/extensions/explore/ast/languages/fixtures/sample.rs",
-  "packages/agent/extensions/explore/ast/languages/fixtures/sample.swift",
-  "packages/agent/extensions/explore/ast/languages/go-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/go.ts",
-  "packages/agent/extensions/explore/ast/languages/java.ts",
-  "packages/agent/extensions/explore/ast/languages/jvm-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/kotlin.ts",
-  "packages/agent/extensions/explore/ast/languages/odin-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/odin.ts",
-  "packages/agent/extensions/explore/ast/languages/rust-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/rust.ts",
-  "packages/agent/extensions/explore/ast/languages/swift-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/swift.ts",
-  "packages/agent/extensions/explore/ast/languages/tree.ts",
-  "packages/agent/extensions/explore/ast/languages/typescript-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/typescript-package-surface.ts",
-  "packages/agent/extensions/explore/ast/languages/typescript.ts",
-]
-anchors = [
-  "packages/agent/extensions/explore/ast/grammars/kotlin.wasm",
-  "packages/agent/extensions/explore/ast/grammars/odin.wasm",
-  "packages/agent/extensions/explore/ast/grammars/swift.wasm",
-  "packages/agent/test/extensions/explore/grammars.test.ts",
-]
+read = []
+outline = ["packages/agent/extensions/explore/ast/languages/file-dep-util.ts", "packages/agent/extensions/explore/ast/languages/tree.ts", "packages/agent/extensions/explore/ast/languages/typescript.ts"]
+references = ["packages/agent/extensions/explore/ast/languages/csharp-file-deps.ts", "packages/agent/extensions/explore/ast/languages/csharp.ts", "packages/agent/extensions/explore/ast/languages/fixtures/sample.cs", "packages/agent/extensions/explore/ast/languages/fixtures/sample.java", "packages/agent/extensions/explore/ast/languages/fixtures/sample.kt", "packages/agent/extensions/explore/ast/languages/fixtures/sample.odin", "packages/agent/extensions/explore/ast/languages/fixtures/sample.rs", "packages/agent/extensions/explore/ast/languages/fixtures/sample.swift", "packages/agent/extensions/explore/ast/languages/go-file-deps.ts", "packages/agent/extensions/explore/ast/languages/go.ts", "packages/agent/extensions/explore/ast/languages/java.ts", "packages/agent/extensions/explore/ast/languages/jvm-file-deps.ts", "packages/agent/extensions/explore/ast/languages/kotlin.ts", "packages/agent/extensions/explore/ast/languages/odin-file-deps.ts", "packages/agent/extensions/explore/ast/languages/odin.ts", "packages/agent/extensions/explore/ast/languages/rust-file-deps.ts", "packages/agent/extensions/explore/ast/languages/rust.ts", "packages/agent/extensions/explore/ast/languages/swift-file-deps.ts", "packages/agent/extensions/explore/ast/languages/swift.ts", "packages/agent/extensions/explore/ast/languages/typescript-file-deps.ts", "packages/agent/extensions/explore/ast/languages/typescript-package-surface.ts", "packages/agent/test/extensions/explore/grammars.test.ts"]
 
 [graph]
 description = "File dependency resolution, package surfaces, reverse indexes, and declaration relationships"
-files = [
-  "packages/agent/extensions/explore/ast/graph/file-graph.ts",
-  "packages/agent/extensions/explore/ast/graph/relationships.ts",
-  "packages/agent/extensions/explore/ast/languages/csharp-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/file-dep-util.ts",
-  "packages/agent/extensions/explore/ast/languages/go-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/jvm-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/odin-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/rust-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/swift-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/typescript-file-deps.ts",
-  "packages/agent/extensions/explore/ast/languages/typescript-package-surface.ts",
-  "packages/agent/extensions/explore/ast/package-surface.ts",
-]
-anchors = [
-  "packages/agent/extensions/explore/ast/engine.ts",
-  "packages/agent/extensions/explore/ast/adapter.ts",
-]
+read = []
+outline = ["packages/agent/extensions/explore/ast/graph/file-graph.ts", "packages/agent/extensions/explore/ast/graph/relationships.ts", "packages/agent/extensions/explore/ast/package-surface.ts"]
+references = []
 
 [tools]
 description = "Twelve structural tool definitions, queries, formatters, bounded output, and preview stories"
-files = [
-  "packages/agent/extensions/explore/ast/format/ast-search.ts",
-  "packages/agent/extensions/explore/ast/format/composite.ts",
-  "packages/agent/extensions/explore/ast/format/context.ts",
-  "packages/agent/extensions/explore/ast/format/deps.ts",
-  "packages/agent/extensions/explore/ast/format/discover.ts",
-  "packages/agent/extensions/explore/ast/format/impact.ts",
-  "packages/agent/extensions/explore/ast/format/outline.ts",
-  "packages/agent/extensions/explore/ast/format/relationships.ts",
-  "packages/agent/extensions/explore/ast/format/show.ts",
-  "packages/agent/extensions/explore/ast/queries/ast-search.ts",
-  "packages/agent/extensions/explore/ast/queries/composite-target.ts",
-  "packages/agent/extensions/explore/ast/queries/context.ts",
-  "packages/agent/extensions/explore/ast/queries/discover.ts",
-  "packages/agent/extensions/explore/ast/queries/impact.ts",
-  "packages/agent/extensions/explore/ast/queries/outline.ts",
-  "packages/agent/extensions/explore/ast/queries/show.ts",
-  "packages/agent/extensions/explore/ast/tools/ast-search.ts",
-  "packages/agent/extensions/explore/ast/tools/context.ts",
-  "packages/agent/extensions/explore/ast/tools/deps.ts",
-  "packages/agent/extensions/explore/ast/tools/discover.ts",
-  "packages/agent/extensions/explore/ast/tools/impact.ts",
-  "packages/agent/extensions/explore/ast/tools/outline.ts",
-  "packages/agent/extensions/explore/ast/tools/relationships.ts",
-  "packages/agent/extensions/explore/ast/tools/render.ts",
-  "packages/agent/extensions/explore/ast/tools/reverse-deps.ts",
-  "packages/agent/extensions/explore/ast/tools/show.ts",
-  ".pi/extensions/tool-preview/widgets/ast-search.ts",
-  ".pi/extensions/tool-preview/widgets/ast-tool-preview.ts",
-  ".pi/extensions/tool-preview/widgets/discover.ts",
-  ".pi/extensions/tool-preview/widgets/outline.ts",
-  ".pi/extensions/tool-preview/widgets/relationships.ts",
-]
-anchors = [
-  "packages/agent/extensions/explore/ast/engine.ts",
-  "packages/agent/extensions/explore/ast/graph/file-graph.ts",
-  "packages/agent/shared/bounded-text-result.ts",
-  "packages/agent/shared/temporary-output-store.ts",
-  "packages/agent/shared/tool-row-state.ts",
-]
+read = []
+outline = ["packages/agent/extensions/explore/ast/tools/outline.ts", "packages/agent/extensions/explore/ast/tools/render.ts", "packages/agent/extensions/explore/ast/tools/show.ts"]
+references = ["packages/agent/extensions/explore/ast/format/ast-search.ts", "packages/agent/extensions/explore/ast/format/composite.ts", "packages/agent/extensions/explore/ast/format/context.ts", "packages/agent/extensions/explore/ast/format/deps.ts", "packages/agent/extensions/explore/ast/format/discover.ts", "packages/agent/extensions/explore/ast/format/impact.ts", "packages/agent/extensions/explore/ast/format/outline.ts", "packages/agent/extensions/explore/ast/format/relationships.ts", "packages/agent/extensions/explore/ast/format/show.ts", "packages/agent/extensions/explore/ast/queries/ast-search.ts", "packages/agent/extensions/explore/ast/queries/composite-target.ts", "packages/agent/extensions/explore/ast/queries/context.ts", "packages/agent/extensions/explore/ast/queries/discover.ts", "packages/agent/extensions/explore/ast/queries/impact.ts", "packages/agent/extensions/explore/ast/queries/outline.ts", "packages/agent/extensions/explore/ast/queries/show.ts", "packages/agent/extensions/explore/ast/tools/ast-search.ts", "packages/agent/extensions/explore/ast/tools/context.ts", "packages/agent/extensions/explore/ast/tools/deps.ts", "packages/agent/extensions/explore/ast/tools/discover.ts", "packages/agent/extensions/explore/ast/tools/impact.ts", "packages/agent/extensions/explore/ast/tools/relationships.ts", "packages/agent/extensions/explore/ast/tools/reverse-deps.ts"]
 
 [read]
 description = "Pi read outline overlay, autoread integration, settings, guidance, and previews"
-files = [
-  "packages/agent/extensions/explore/README.md",
-  "packages/agent/extensions/explore/ast/read/hook.ts",
-  "packages/agent/extensions/explore/ast/read/policy.ts",
-  "packages/agent/extensions/explore/guidance.ts",
-  "packages/agent/extensions/explore/index.ts",
-  "packages/agent/extensions/explore/read/autoread.ts",
-  "packages/agent/extensions/explore/settings.ts",
-  ".pi/extensions/tool-preview/widgets/autoread.ts",
-  ".pi/extensions/tool-preview/widgets/read.ts",
-]
-anchors = [
-  "packages/agent/shared/autoread.ts",
-  "packages/agent/shared/events.ts",
-  "packages/agent/shared/tool-row-state.ts",
-]
+read = []
+outline = ["packages/agent/extensions/explore/ast/read/hook.ts", "packages/agent/extensions/explore/outline-injection.ts"]
+references = ["packages/agent/extensions/explore/ast/read/policy.ts", "packages/agent/extensions/explore/read/autoread.ts", "packages/agent/test/extensions/explore/outline.test.ts"]
+
+[grammars]
+description = "Grammar manifests, build scripts, CI rebuild verification, artifacts, and fixtures"
+read = []
+outline = ["packages/agent/extensions/explore/ast/grammars/manifest.ts", "packages/agent/scripts/build-grammars.ts"]
+references = [".github/workflows/grammars.yml", "packages/agent/extensions/explore/ast/grammars/kotlin.wasm", "packages/agent/extensions/explore/ast/grammars/manifest.json", "packages/agent/extensions/explore/ast/grammars/odin.wasm", "packages/agent/extensions/explore/ast/grammars/swift.wasm", "packages/agent/scripts/build-grammars-container.sh"]

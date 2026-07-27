@@ -1,39 +1,38 @@
 name = "Shared utilities"
-description = "Reusable repository, text, range, description, bounded-output, file-reading, and durable storage primitives"
-
-[all]
-description = "Every general-purpose shared utility"
-files = [
-  "packages/agent/shared/description.ts",
-  "packages/agent/shared/autoread.ts",
-  "packages/agent/shared/bounded-text-result.ts",
-  "packages/agent/shared/full-file-knowledge.ts",
-  "packages/agent/shared/git.ts",
-  "packages/agent/shared/jsonl-store.ts",
-  "packages/agent/shared/ranges.ts",
-  "packages/agent/shared/temporary-output-store.ts",
-  "packages/agent/shared/text.ts",
-]
+description = "Reusable bounded-output, file-context, repository, prompt, text, range, and durable storage primitives"
 
 [bounded-output]
 description = "Bounded model-visible text results and session-scoped temporary output"
-files = [
-  "packages/agent/shared/bounded-text-result.ts",
-  "packages/agent/shared/temporary-output-store.ts",
-  "packages/agent/test/shared/bounded-text-result.test.ts",
-]
+read = []
+outline = ["packages/agent/shared/bounded-text-result.ts", "packages/agent/shared/temporary-output-store.ts"]
+references = ["packages/agent/test/shared/bounded-text-result.test.ts"]
 
-[repository-and-text]
-description = "Git operations, descriptions, text formatting, and line ranges"
-files = [
-  "packages/agent/shared/description.ts",
-  "packages/agent/shared/git.ts",
-  "packages/agent/shared/ranges.ts",
-  "packages/agent/shared/text.ts",
-]
+[file-context]
+description = "Complete-file knowledge, legacy autoread transport, and shared structural-outline requests"
+read = []
+outline = ["packages/agent/shared/full-file-knowledge.ts", "packages/agent/shared/outline-injection.ts"]
+references = ["packages/agent/shared/autoread.ts"]
+
+[repository]
+description = "Git operations and path glob matching"
+read = []
+outline = ["packages/agent/shared/git.ts", "packages/agent/shared/glob.ts"]
+references = []
+
+[description-prompts]
+description = "Shared manual, idea, and stash description prompting"
+read = []
+outline = ["packages/agent/shared/description.ts"]
+references = []
+
+[text-and-ranges]
+description = "Error text normalization, bounded string truncation, and line-range merging"
+read = []
+outline = ["packages/agent/shared/ranges.ts", "packages/agent/shared/text.ts"]
+references = []
 
 [jsonl-storage]
 description = "Project-scoped JSONL parsing, append, sorting, and atomic rewrites"
-files = [
-  "packages/agent/shared/jsonl-store.ts",
-]
+read = []
+outline = ["packages/agent/shared/jsonl-store.ts"]
+references = []

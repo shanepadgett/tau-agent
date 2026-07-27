@@ -3,25 +3,36 @@ description = "Reusable planning and implementation prompt commands"
 
 [planning]
 description = "Feature and implementation planning workflows"
-files = [
-  "packages/agent/prompts/plan-feature.md",
-  "packages/agent/prompts/plan-implementation.md",
-]
+read = ["packages/agent/prompts/plan-feature.md", "packages/agent/prompts/plan-implementation.md"]
+outline = []
+references = []
+
+[design-exploration]
+description = "Iterative benchmark report design exploration workflow"
+read = [".pi/prompts/report-design-exploration.md"]
+outline = []
+references = []
 
 [implementation]
 description = "Approved implementation workflow"
-files = [
-  "packages/agent/prompts/implement.md",
-]
+read = ["packages/agent/prompts/implement.md"]
+outline = []
+references = []
 
 [style]
 description = "Response style transformation workflow"
-files = [
-  "packages/agent/prompts/cavemanify.md",
-]
+read = ["packages/agent/prompts/cavemanify.md"]
+outline = []
+references = []
 
 [interview]
 description = "Requirements clarification workflow"
-files = [
-  "packages/agent/prompts/interview.md",
-]
+read = ["packages/agent/prompts/interview.md"]
+outline = []
+references = []
+
+[dependencies]
+description = "Dependency updates and Pi alignment workflows"
+read = [".pi/prompts/maintain-pi-alignment.md", ".pi/prompts/update-deps.md"]
+outline = []
+references = []

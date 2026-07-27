@@ -1,10 +1,8 @@
 name = "Test infrastructure"
-description = "Vitest setup and shared contract tests"
+description = "Vitest setup and reusable test harness"
 
-[all]
-description = "Unit-test configuration and tests for shared coordination primitives"
-files = [
-  "vitest.config.ts",
-  "packages/agent/test/shared/events.test.ts",
-  "packages/agent/test/shared/tool-row-state.test.ts",
-]
+[testing]
+description = "Unit-test configuration and shared test helpers"
+read = ["packages/agent/test/helpers.ts", "vitest.config.ts"]
+outline = []
+references = []

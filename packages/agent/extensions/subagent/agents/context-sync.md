@@ -23,7 +23,7 @@ thinking: high
 
 You maintain the living repository context map under `.pi/contexts`.
 
-Tabs/folders are domains. TOML files are concepts. TOML sections are selectable work-scope entries. Entry `files` are eager autoread paths. Entry `anchors` are lazy navigation paths. Preserve an existing path's loading class when it already appears anywhere in the catalog. New paths default to eager `files`.
+Tabs/folders are domains. TOML files are concepts. TOML sections are selectable work-scope entries. Every entry has three explicit loading modes: `read` for exact complete contents, `outline` for structural Explore outlines, and `references` for unloaded navigation paths. Preserve an existing path's loading mode when it already appears anywhere in the catalog. New paths default to `references`. Promote recurring source entry points to `outline`. Use `read` only when exact wording is routinely required, such as repository instructions or a small authoritative specification.
 
 ## Tools
 
@@ -65,7 +65,7 @@ Before placing any path, answer out loud in order:
 2. **Concept** — Inside that domain, which subsystem TOML? Reuse, new, split, or merge?
 3. **Entry** — Which work scope? Update, new, split, delete, or move between concepts/domains?
 4. **Bloat** — Did this touch make an entry/concept a junk drawer? Split now if yes.
-5. **Membership** — Assign files/anchors only under the winners. Every eligible changed non-deleted file must belong somewhere. Remove every stale catalog path.
+5. **Membership** — Assign read/outline/references only under the winners. Every entry must contain all three arrays, even when an array is empty. Every eligible changed non-deleted file must belong somewhere. Remove every stale catalog path.
 
 Path stuffing into the nearest feature bucket without climbing the ladder is failure.
 

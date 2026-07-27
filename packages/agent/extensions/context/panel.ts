@@ -21,6 +21,7 @@ export class ContextPanel implements Component {
 		tui: TUI,
 		theme: Theme,
 		entries: readonly ContextEntry[],
+		activeEntryIds: readonly string[],
 		done: (result: ContextEntry[] | undefined) => void,
 	) {
 		const firstEntry = entries[0];
@@ -67,6 +68,8 @@ export class ContextPanel implements Component {
 			border: "box",
 		};
 		this.panel = new ToolPanel(theme, this.config);
+		for (const [tab, list] of this.lists)
+			list.setSelectedIds(activeEntryIds.filter((id) => id.startsWith(`${tab}/`)));
 	}
 
 	handleInput(data: string): void {
@@ -141,10 +144,7 @@ export class ContextPanel implements Component {
 					...(range ? [truncateToWidth(range, width, "…")] : []),
 					...visible.map(({ kind, path }) =>
 						truncateToWidth(
-							this.theme.fg(
-								kind === "read" ? "muted" : "dim",
-								`${kind === "read" ? "read" : "anchor"} • ${path}`,
-							),
+							this.theme.fg(kind === "reference" ? "dim" : "muted", `${kind} • ${path}`),
 							width,
 							"…",
 						),
@@ -154,10 +154,11 @@ export class ContextPanel implements Component {
 			invalidate: () => this.tabs.invalidate(),
 		};
 	}
-	private currentPaths(): Array<{ kind: "read" | "anchor"; path: string }> {
+	private currentPaths(): Array<{ kind: "read" | "outline" | "reference"; path: string }> {
 		return [
-			...this.current.files.map((path) => ({ kind: "read" as const, path })),
-			...this.current.anchors.map((path) => ({ kind: "anchor" as const, path })),
+			...this.current.read.map((path) => ({ kind: "read" as const, path })),
+			...this.current.outline.map((path) => ({ kind: "outline" as const, path })),
+			...this.current.references.map((path) => ({ kind: "reference" as const, path })),
 		];
 	}
 	private pathPageSize(tabLines = this.tabs.render(this.tui.terminal.columns).length): number {
@@ -167,7 +168,7 @@ export class ContextPanel implements Component {
 		return this.currentPaths().length > pageSize ? Math.max(1, pageSize - 1) : pageSize;
 	}
 	private secondary(): string {
-		return `${[...this.selected.values()].reduce((sum, items) => sum + items.length, 0)} selected · ${this.current.files.length} read · ${this.current.anchors.length} anchors`;
+		return `${[...this.selected.values()].reduce((sum, items) => sum + items.length, 0)} selected · ${this.current.read.length} read · ${this.current.outline.length} outline · ${this.current.references.length} references`;
 	}
 	private hints() {
 		const list = this.activeList();
@@ -177,7 +178,7 @@ export class ContextPanel implements Component {
 					...this.tabs.getKeyHints(),
 					...(this.currentPaths().length > this.pathPageSize() ? [rawHint("option+↑/↓", "scroll paths")] : []),
 					rawHint("ctrl+c", "clear all"),
-					bindingHint("tui.select.confirm", "inject"),
+					bindingHint("tui.select.confirm", "activate"),
 					bindingHint("tui.select.cancel", "cancel"),
 				];
 	}

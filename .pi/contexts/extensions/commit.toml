@@ -1,34 +1,14 @@
 name = "Commit"
-description = "Complete and bounded context for the commit extension"
+description = "Semantic commit planning, interactive review, and repository mutation"
 
-[all]
-description = "Every extension file, direct shared dependency, test, and user-facing help"
-files = [
-  "packages/agent/extensions/commit/README.md",
-  "packages/agent/extensions/commit/commit-plan.ts",
-  "packages/agent/extensions/commit/git-change-set.ts",
-  "packages/agent/extensions/commit/index.ts",
-  "packages/agent/extensions/commit/review-ui.ts",
-]
-anchors = [
-  "packages/agent/shared/agent-blocked.ts",
-  "packages/agent/shared/git.ts",
-  "packages/agent/shared/model-fallback/index.ts",
-  "packages/agent/shared/text.ts",
-]
 [runtime]
-description = "Extension runtime and direct shared dependencies"
-files = [
-  "packages/agent/extensions/commit/commit-plan.ts",
-  "packages/agent/extensions/commit/git-change-set.ts",
-  "packages/agent/extensions/commit/index.ts",
-  "packages/agent/extensions/commit/review-ui.ts",
-]
-anchors = [ "packages/agent/shared/agent-blocked.ts", "packages/agent/shared/git.ts", "packages/agent/shared/model-fallback/index.ts", "packages/agent/shared/text.ts" ]
+description = "Commit command, semantic grouping, Git change sets, fallback planning, and repository operations"
+read = []
+outline = ["packages/agent/extensions/commit/commit-plan.ts", "packages/agent/extensions/commit/git-change-set.ts", "packages/agent/extensions/commit/index.ts"]
+references = ["packages/agent/extensions/commit/README.md"]
+
 [ui]
-description = "Interactive UI and its extension integration"
-files = [
-  "packages/agent/extensions/commit/index.ts",
-  "packages/agent/extensions/commit/review-ui.ts",
-]
-anchors = [ "packages/agent/shared/agent-blocked.ts", "packages/agent/shared/git.ts", "packages/agent/shared/model-fallback/index.ts", "packages/agent/shared/text.ts" ]
+description = "Interactive commit-plan review and group selection"
+read = []
+outline = ["packages/agent/extensions/commit/review-ui.ts"]
+references = []

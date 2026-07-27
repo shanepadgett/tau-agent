@@ -6,7 +6,7 @@ import { ContextPanel, ContextSyncStatusPanel } from "../../../extensions/contex
 
 beforeAll(() => initTheme());
 
-function entry(files: string[], anchors: string[]): ContextEntry {
+function entry(read: string[], outline: string[], references: string[]): ContextEntry {
 	return {
 		id: "code/source/all",
 		tab: "code",
@@ -15,8 +15,9 @@ function entry(files: string[], anchors: string[]): ContextEntry {
 		conceptDescription: "Source files",
 		name: "all",
 		description: "All source files",
-		files,
-		anchors,
+		read,
+		outline,
+		references,
 		path: ".pi/contexts/code/source.toml",
 	};
 }
@@ -31,25 +32,26 @@ function panel(value: ContextEntry): ContextPanel {
 		terminal: { columns: 100, rows: 40 },
 		requestRender: vi.fn(),
 	} as unknown as TUI;
-	return new ContextPanel(tui, theme, [value], () => {});
+	return new ContextPanel(tui, theme, [value], [], () => {});
 }
 
 describe("context panel", () => {
-	it("labels eager and anchor paths", () => {
-		const output = panel(entry(["src/runtime.ts"], ["src/fetch.ts"]))
+	it("labels each loading mode", () => {
+		const output = panel(entry(["AGENTS.md"], ["src/runtime.ts"], ["src/fetch.ts"]))
 			.render(100)
 			.join("\n");
-		expect(output).toContain("0 selected · 1 read · 1 anchors");
-		expect(output).toContain("read • src/runtime.ts");
-		expect(output).toContain("anchor • src/fetch.ts");
+		expect(output).toContain("0 selected · 1 read · 1 outline · 1 references");
+		expect(output).toContain("read • AGENTS.md");
+		expect(output).toContain("outline • src/runtime.ts");
+		expect(output).toContain("reference • src/fetch.ts");
 	});
 
-	it("renders an anchor-only entry", () => {
-		const output = panel(entry([], ["src/fetch.ts"]))
+	it("renders a reference-only entry", () => {
+		const output = panel(entry([], [], ["src/fetch.ts"]))
 			.render(100)
 			.join("\n");
-		expect(output).toContain("0 selected · 0 read · 1 anchors");
-		expect(output).toContain("anchor • src/fetch.ts");
+		expect(output).toContain("0 selected · 0 read · 0 outline · 1 references");
+		expect(output).toContain("reference • src/fetch.ts");
 	});
 
 	it("renders bounded context-sync progress", () => {

@@ -1,26 +1,8 @@
 name = "Image Gen"
-description = "Built-in image-gen adapter over the reusable image-generation API"
+description = "Built-in image generation and editing adapter over Tau provider transport"
 
-[all]
-description = "Adapter registration, user-facing help, and integration coverage"
-files = [
-  "packages/agent/extensions/image-gen/README.md",
-  "packages/agent/extensions/image-gen/index.ts",
-]
-anchors = [
-  "packages/agent/docs/extending-tau-agent.md",
-  "packages/agent/test/extensions/image-gen/client.test.ts",
-  "packages/agent/test/extensions/image-gen/index.test.ts",
-]
 [runtime]
 description = "Tool registration and adapter execution flow"
-files = [
-  "packages/agent/extensions/image-gen/index.ts",
-]
-[tests]
-description = "Adapter implementation and automated integration tests"
-files = [
-  "packages/agent/extensions/image-gen/index.ts",
-  "packages/agent/test/extensions/image-gen/client.test.ts",
-  "packages/agent/test/extensions/image-gen/index.test.ts",
-]
+read = []
+outline = ["packages/agent/extensions/image-gen/index.ts"]
+references = ["packages/agent/extensions/image-gen/README.md", "packages/agent/test/extensions/image-gen/index.test.ts"]

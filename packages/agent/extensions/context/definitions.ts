@@ -12,8 +12,9 @@ export interface ContextEntry {
 	conceptDescription: string;
 	name: string;
 	description: string;
-	files: string[];
-	anchors: string[];
+	read: string[];
+	outline: string[];
+	references: string[];
 	path: string;
 }
 
@@ -37,7 +38,7 @@ const CONTEXT_IGNORED_FILENAMES = new Set([
 	"uv.lock",
 	"yarn.lock",
 ]);
-const CONTEXT_ENTRY_FIELDS = new Set(["description", "files", "anchors"]);
+const CONTEXT_ENTRY_FIELDS = new Set(["description", "read", "outline", "references"]);
 
 export function isContextEligiblePath(path: string, ignoreGlobs: readonly string[] = []): boolean {
 	return (
@@ -99,8 +100,8 @@ function sortedUnique(values: readonly string[]): string[] {
 	return [...new Set(values)].sort((a, b) => a.localeCompare(b));
 }
 
-export function contextEntryPaths(entry: Pick<ContextEntry, "files" | "anchors">): string[] {
-	return sortedUnique([...entry.files, ...entry.anchors]);
+export function contextEntryPaths(entry: Pick<ContextEntry, "read" | "outline" | "references">): string[] {
+	return sortedUnique([...entry.read, ...entry.outline, ...entry.references]);
 }
 
 export async function loadContextEntries(root: string): Promise<ContextEntry[]> {
@@ -128,22 +129,29 @@ export async function loadContextEntries(root: string): Promise<ContextEntry[]> 
 				const record = value as Record<string, unknown>;
 				const unknownField = Object.keys(record).find((field) => !CONTEXT_ENTRY_FIELDS.has(field));
 				if (unknownField) throw new Error(`Invalid context entry field: ${path} [${name}] ${unknownField}`);
-				const anchors = record.anchors ?? [];
 				if (
 					typeof record.description !== "string" ||
 					!record.description.trim() ||
-					!Array.isArray(record.files) ||
-					record.files.some((item) => typeof item !== "string") ||
-					!Array.isArray(anchors) ||
-					anchors.some((item) => typeof item !== "string") ||
-					(record.files.length === 0 && anchors.length === 0)
+					!Array.isArray(record.read) ||
+					record.read.some((item) => typeof item !== "string") ||
+					!Array.isArray(record.outline) ||
+					record.outline.some((item) => typeof item !== "string") ||
+					!Array.isArray(record.references) ||
+					record.references.some((item) => typeof item !== "string") ||
+					(record.read.length === 0 && record.outline.length === 0 && record.references.length === 0)
 				)
 					throw new Error(`Invalid context entry: ${path} [${name}]`);
 				const entry = validSlug(name, "Context entry");
-				const entryFiles = sortedUnique((record.files as string[]).map((item) => normalizeProjectPath(root, item)));
-				const entryAnchors = sortedUnique((anchors as string[]).map((item) => normalizeProjectPath(root, item)));
-				const overlap = entryFiles.find((item) => entryAnchors.includes(item));
-				if (overlap) throw new Error(`Context path cannot be both file and anchor: ${path} [${name}] ${overlap}`);
+				const entryRead = sortedUnique((record.read as string[]).map((item) => normalizeProjectPath(root, item)));
+				const entryOutline = sortedUnique(
+					(record.outline as string[]).map((item) => normalizeProjectPath(root, item)),
+				);
+				const entryReferences = sortedUnique(
+					(record.references as string[]).map((item) => normalizeProjectPath(root, item)),
+				);
+				const classified = [...entryRead, ...entryOutline, ...entryReferences];
+				const overlap = classified.find((item, index) => classified.indexOf(item) !== index);
+				if (overlap) throw new Error(`Context path has multiple loading modes: ${path} [${name}] ${overlap}`);
 				result.push({
 					id: `${tab}/${concept}/${entry}`,
 					tab,
@@ -152,8 +160,9 @@ export async function loadContextEntries(root: string): Promise<ContextEntry[]> 
 					conceptDescription,
 					name: entry,
 					description: record.description.trim(),
-					files: entryFiles,
-					anchors: entryAnchors,
+					read: entryRead,
+					outline: entryOutline,
+					references: entryReferences,
 					path,
 				});
 			}

@@ -1,4 +1,5 @@
 import { sessionEntryToContextMessages, type ContextEvent, type SessionEntry } from "@earendil-works/pi-coding-agent";
+import { isContextProjectionMessage, isLegacyContextMessage } from "../../shared/context-messages.ts";
 import type { ActiveWorkingMemoryState } from "./state.ts";
 
 type ContextMessage = ContextEvent["messages"][number];
@@ -67,6 +68,14 @@ export function buildMemoryCatalog(branch: readonly SessionEntry[]): Map<string,
 		}
 		if (message.role === "toolResult") continue;
 		if (message.role === "custom" && EXCLUDED_CUSTOM_TYPES.has(message.customType)) continue;
+		if (
+			message.role === "custom" &&
+			message.customType === "tau.injected-context" &&
+			message.details &&
+			typeof message.details === "object" &&
+			(message.details as Record<string, unknown>).source === "context"
+		)
+			continue;
 		const ref = `m:${entry.id}`;
 		catalog.set(ref, {
 			ref,
@@ -121,20 +130,29 @@ function referenceCurrentMessages(
 	entries: readonly SessionEntry[],
 	catalog: ReadonlyMap<string, MemoryUnit>,
 ): MemoryUnit[][] {
-	const generated = entries.flatMap((entry) =>
-		sessionEntryToContextMessages(entry).map((message) => ({ entry, message })),
+	const generated = entries
+		.flatMap((entry) => sessionEntryToContextMessages(entry).map((message) => ({ entry, message })))
+		.filter(({ message }) => !isLegacyContextMessage(message));
+	const sessionMessages = messages.filter(
+		(message) => !isContextProjectionMessage(message) && !isLegacyContextMessage(message),
 	);
-	if (generated.length !== messages.length) return messages.map(() => []);
+	if (generated.length !== sessionMessages.length) return messages.map(() => []);
 	const toolRefs = new Map<string, MemoryUnit[]>();
 	for (const unit of catalog.values()) {
 		const result = unit.messages.find((message) => message.role === "toolResult");
 		if (result?.role !== "toolResult") continue;
 		toolRefs.set(result.toolCallId, [...(toolRefs.get(result.toolCallId) ?? []), unit]);
 	}
-	return generated.map(({ entry, message }, index) => {
+	let generatedIndex = 0;
+	return messages.map((currentMessage) => {
+		if (isContextProjectionMessage(currentMessage) || isLegacyContextMessage(currentMessage)) return [];
+		const current = generated[generatedIndex];
+		generatedIndex += 1;
+		if (!current) return [];
+		const { entry, message } = current;
 		if (message.role === "assistant") {
 			const unit = catalog.get(`m:${entry.id}`);
-			return unit && messages[index]?.role === "assistant" ? [unit] : [];
+			return unit && currentMessage.role === "assistant" ? [unit] : [];
 		}
 		if (message.role === "toolResult") return toolRefs.get(message.toolCallId) ?? [];
 		const unit = catalog.get(`m:${entry.id}`);

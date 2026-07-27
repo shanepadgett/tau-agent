@@ -1,14 +1,8 @@
 name = "Clear Screen"
-description = "Complete and bounded context for the clear-screen extension"
+description = "Terminal viewport and scrollback clearing across process lifecycle events"
 
-[all]
-description = "Every extension file, direct shared dependency, test, and user-facing help"
-files = [
-  "packages/agent/extensions/clear-screen/README.md",
-  "packages/agent/extensions/clear-screen/index.ts",
-]
-[runtime]
-description = "Extension runtime and direct shared dependencies"
-files = [
-  "packages/agent/extensions/clear-screen/index.ts",
-]
+[feature]
+description = "Terminal clearing command and renderer behavior"
+read = []
+outline = ["packages/agent/extensions/clear-screen/index.ts"]
+references = ["packages/agent/extensions/clear-screen/README.md"]

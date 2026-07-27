@@ -3,6 +3,6 @@ description = "User-facing prose guidance"
 
 [skill]
 description = "Writing and editing instructions"
-files = [
-  "packages/agent/skills/writing-preferences/SKILL.md",
-]
+read = ["packages/agent/skills/writing-preferences/SKILL.md"]
+outline = []
+references = []

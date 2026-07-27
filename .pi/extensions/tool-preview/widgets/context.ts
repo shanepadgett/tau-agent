@@ -12,12 +12,13 @@ const ENTRIES: readonly ContextEntry[] = [
 		conceptDescription: "Repository context",
 		name: "selection",
 		description: "Context selection and injection",
-		files: [
+		read: [],
+		outline: [
 			"packages/agent/extensions/context/index.ts",
 			"packages/agent/extensions/context/panel.ts",
 			"packages/agent/extensions/context/definitions.ts",
 		],
-		anchors: [],
+		references: [],
 		path: ".pi/contexts/extensions/context.toml",
 	},
 	{
@@ -28,8 +29,9 @@ const ENTRIES: readonly ContextEntry[] = [
 		conceptDescription: "Repository context",
 		name: "sync",
 		description: "Git-based context synchronization",
-		files: ["packages/agent/extensions/context/sync.ts", "packages/agent/extensions/context/definitions.ts"],
-		anchors: [],
+		read: [],
+		outline: ["packages/agent/extensions/context/sync.ts", "packages/agent/extensions/context/definitions.ts"],
+		references: [],
 		path: ".pi/contexts/extensions/context.toml",
 	},
 	{
@@ -40,8 +42,9 @@ const ENTRIES: readonly ContextEntry[] = [
 		conceptDescription: "Tau documentation",
 		name: "external-integration",
 		description: "External integration events",
-		files: ["packages/agent/docs/extending-tau-agent.md", "packages/agent/shared/events.ts"],
-		anchors: [],
+		read: [],
+		outline: ["packages/agent/docs/extending-tau-agent.md", "packages/agent/shared/events.ts"],
+		references: [],
 		path: ".pi/contexts/docs/tau.toml",
 	},
 ];
@@ -51,5 +54,5 @@ export function createContextPreviewOverlay(
 	theme: Theme,
 	done: (result: readonly ContextEntry[] | undefined) => void,
 ): Component {
-	return new ContextPanel(tui, theme, ENTRIES, done);
+	return new ContextPanel(tui, theme, ENTRIES, [], done);
 }

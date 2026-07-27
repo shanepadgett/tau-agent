@@ -1,27 +1,14 @@
 name = "Ideas"
-description = "Complete and bounded context for the ideas extension"
+description = "Durable capture and browsing of rough repository ideas"
 
-[all]
-description = "Every extension file, direct shared dependency, test, and user-facing help"
-files = [
-  "packages/agent/extensions/ideas/README.md",
-  "packages/agent/extensions/ideas/browser.ts",
-  "packages/agent/extensions/ideas/index.ts",
-  "packages/agent/extensions/ideas/store.ts",
-]
-anchors = [ "packages/agent/shared/jsonl-store.ts", "packages/agent/shared/text.ts" ]
 [runtime]
-description = "Extension runtime and direct shared dependencies"
-files = [
-  "packages/agent/extensions/ideas/browser.ts",
-  "packages/agent/extensions/ideas/index.ts",
-  "packages/agent/extensions/ideas/store.ts",
-]
-anchors = [ "packages/agent/shared/jsonl-store.ts", "packages/agent/shared/text.ts" ]
+description = "Idea command registration and durable JSONL storage"
+read = []
+outline = ["packages/agent/extensions/ideas/index.ts", "packages/agent/extensions/ideas/store.ts"]
+references = ["packages/agent/extensions/ideas/README.md"]
+
 [ui]
-description = "Interactive UI and its extension integration"
-files = [
-  "packages/agent/extensions/ideas/browser.ts",
-  "packages/agent/extensions/ideas/index.ts",
-]
-anchors = [ "packages/agent/shared/jsonl-store.ts", "packages/agent/shared/text.ts" ]
+description = "Interactive idea browser"
+read = []
+outline = ["packages/agent/extensions/ideas/browser.ts"]
+references = []

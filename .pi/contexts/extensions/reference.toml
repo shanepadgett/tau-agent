@@ -1,40 +1,20 @@
 name = "Reference"
-description = "Complete and bounded context for the reference extension"
+description = "Selection and registration of local comparison repositories"
 
-[all]
-description = "Every extension file, direct shared dependency, test, and user-facing help"
-files = [
-  "packages/agent/extensions/reference/README.md",
-  "packages/agent/extensions/reference/index.ts",
-  "packages/agent/extensions/reference/panel.ts",
-  "packages/agent/extensions/reference/settings.ts",
-]
-anchors = [
-  "packages/agent/shared/git.ts",
-  "packages/agent/shared/settings/define.ts",
-  "packages/agent/shared/settings/load.ts",
-  "packages/agent/shared/text.ts",
-]
 [runtime]
-description = "Extension runtime and direct shared dependencies"
-files = [
-  "packages/agent/extensions/reference/index.ts",
-  "packages/agent/extensions/reference/panel.ts",
-]
-anchors = [ "packages/agent/shared/git.ts", "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts", "packages/agent/shared/text.ts" ]
+description = "Reference repository discovery and command registration"
+read = []
+outline = ["packages/agent/extensions/reference/index.ts"]
+references = ["packages/agent/extensions/reference/README.md"]
+
 [ui]
-description = "Interactive UI and its extension integration"
-files = [
-  "packages/agent/extensions/reference/index.ts",
-  "packages/agent/extensions/reference/panel.ts",
-  "packages/agent/shared/git.ts",
-  "packages/agent/shared/settings/define.ts",
-  "packages/agent/shared/settings/load.ts",
-  "packages/agent/shared/text.ts",
-]
+description = "Interactive reference picker"
+read = []
+outline = ["packages/agent/extensions/reference/panel.ts"]
+references = []
+
 [settings]
-description = "Extension settings and shared settings infrastructure"
-files = [
-  "packages/agent/extensions/reference/settings.ts",
-]
-anchors = [ "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts" ]
+description = "Configured reference repositories and paths"
+read = []
+outline = ["packages/agent/extensions/reference/settings.ts"]
+references = []

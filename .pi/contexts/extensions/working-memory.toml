@@ -1,0 +1,26 @@
+name = "Working Memory"
+description = "Selective branch-local context checkpoints and advisory pruning reminders"
+
+[runtime]
+description = "Extension lifecycle, branch replay, context projection, reminders, and checkpoint orchestration"
+read = []
+outline = ["packages/agent/extensions/working-memory/index.ts", "packages/agent/extensions/working-memory/memory.ts", "packages/agent/extensions/working-memory/state.ts"]
+references = ["packages/agent/test/extensions/working-memory/memory.test.ts", "packages/agent/test/extensions/working-memory/state.test.ts"]
+
+[checkpoint]
+description = "Checkpoint input contract, exact retention, outline carry-forward, deferred files, and bounded result"
+read = []
+outline = ["packages/agent/extensions/working-memory/checkpoint.ts"]
+references = ["packages/agent/test/extensions/working-memory/checkpoint.test.ts"]
+
+[presentation]
+description = "Tool rows, nudge rendering, and product guidance"
+read = []
+outline = ["packages/agent/extensions/working-memory/render.ts"]
+references = ["packages/agent/extensions/working-memory/README.md"]
+
+[settings]
+description = "Configuration contract and focused tests"
+read = []
+outline = ["packages/agent/extensions/working-memory/settings.ts"]
+references = ["packages/agent/test/extensions/working-memory/settings.test.ts"]

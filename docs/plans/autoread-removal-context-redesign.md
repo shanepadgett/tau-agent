@@ -1,8 +1,8 @@
 # Autoread Removal and Context Redesign
 
-Status: Deferred
+Status: Context redesign implemented; remaining autoread consumers deferred
 
-This document reserves future work. It does not define implementation yet.
+Reusable Context now uses explicit `read`, `outline`, and `references` modes with branch-local selection state and an ephemeral per-call projection. Remaining work here concerns other autoread consumers and eventual removal of the shared autoread product.
 
 ## Direction
 
@@ -12,17 +12,15 @@ Redesign reusable project context around Explore outputs and lazy navigation. Se
 
 ## Desired outcomes
 
-### `/context` stops loading complete files
+### `/context` uses explicit loading modes
 
-Selecting reusable repository context should inject focused orientation, not authoritative complete-file snapshots.
+Selecting reusable repository context rebuilds focused orientation before each model call without appending snapshots to conversation history.
 
-Likely products include:
+Implemented products:
 
-- File or package outlines
-- Lazy paths with relevance notes
-- Focused declaration or relationship context where catalog can name it precisely
-
-Exact mix remains undecided.
+- Exact complete reads for explicit `read` paths
+- Explore file outlines for `outline` paths
+- Unloaded navigation paths for `references`
 
 ### Autoread disappears from user and agent language
 
@@ -46,12 +44,6 @@ Context pruning does not wait for this work. It disconnects from autoread first 
 Lack of structural support should not silently fall back to complete-file injection. Agent should receive path and relevance, then choose bounded read appropriate to task.
 
 ## Open questions
-
-### What replaces context catalog `files` and `anchors`?
-
-- Keep two loading classes with new meanings?
-- Replace them with explicit products such as `outlines`, `symbols`, and `paths`?
-- Can catalog stay simple while Explore chooses best orientation product?
 
 ### Which Explore products can be persisted safely?
 
@@ -78,11 +70,7 @@ Lack of structural support should not silently fall back to complete-file inject
 - Are only ranged reads allowed for supported source?
 - How should unsupported text and small configuration files behave?
 
-## Not decided
+## Remaining decisions
 
-- New context catalog schema
-- Migration of existing `.pi/contexts` files
-- Explore injection payloads
-- Human renderer design
 - Handoff and subagent replacement contracts
 - Removal sequence for shared autoread code

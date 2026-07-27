@@ -1,29 +1,26 @@
 name = "Documentation"
-description = "Product, package, contributor, vocabulary, and TUI guidance"
-
-[all]
-description = "Primary repository and package documentation"
-files = [
-  "README.md",
-  "packages/agent/README.md",
-  "packages/tui/README.md",
-  "docs/CONTRIBUTING.md",
-  "docs/VOCABULARY.md",
-  "packages/agent/docs/tui.md",
-]
+description = "Product, package, contributor, terminology, and architecture guidance"
 
 [product-and-packages]
-description = "Installation, usage, and package boundaries"
-files = [
-  "README.md",
-  "packages/agent/README.md",
-  "packages/tui/README.md",
-]
+description = "Root and package-level product positioning, installation, and usage guidance"
+read = []
+outline = ["README.md", "packages/agent/README.md"]
+references = []
 
 [contributing]
-description = "Contribution, release, terminology, and TUI implementation guidance"
-files = [
-  "docs/CONTRIBUTING.md",
-  "docs/VOCABULARY.md",
-  "packages/agent/docs/tui.md",
-]
+description = "Contributor setup, grammar artifact maintenance, and publishing guidance"
+read = []
+outline = ["docs/CONTRIBUTING.md"]
+references = []
+
+[vocabulary]
+description = "Exact shared terminology for runtime flow, tools, context, and TUI concepts"
+read = ["docs/VOCABULARY.md"]
+outline = []
+references = []
+
+[go-extension-design]
+description = "Proposed Go extension runtimes, APIs, TUI integration, trust model, and rollout"
+read = []
+outline = ["tau-go-extension-system-notes.md"]
+references = []

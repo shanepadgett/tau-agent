@@ -1,16 +1,8 @@
 name = "Attention"
-description = "Complete and bounded context for the attention extension"
+description = "Terminal notifications for ready, compacted, branched, and blocked agent states"
 
-[all]
-description = "Every extension file, direct shared dependency, test, and user-facing help"
-files = [
-  "packages/agent/extensions/attention/README.md",
-  "packages/agent/extensions/attention/index.ts",
-]
-anchors = [ "packages/agent/shared/events.ts" ]
-[runtime]
-description = "Extension runtime and direct shared dependencies"
-files = [
-  "packages/agent/extensions/attention/index.ts",
-]
-anchors = [ "packages/agent/shared/events.ts" ]
+[feature]
+description = "Attention prompts and notifications for blocked or idle agent states"
+read = []
+outline = ["packages/agent/extensions/attention/index.ts"]
+references = ["packages/agent/extensions/attention/README.md"]

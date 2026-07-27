@@ -48,7 +48,7 @@ describe("context definitions", () => {
 		await mkdir(join(root, ".pi", "contexts", "gameplay"), { recursive: true });
 		await writeFile(
 			join(root, ".pi", "contexts", "gameplay", "player.toml"),
-			'name = "Player"\ndescription = "Player systems"\n\n[movement]\ndescription = "Player movement"\nfiles = ["src/player.ts"]\nanchors = ["src/math.ts"]\n',
+			'name = "Player"\ndescription = "Player systems"\n\n[movement]\ndescription = "Player movement"\nread = []\noutline = ["src/player.ts"]\nreferences = ["src/math.ts"]\n',
 		);
 
 		expect(await loadContextEntries(root)).toMatchObject([
@@ -58,28 +58,29 @@ describe("context definitions", () => {
 				concept: "player",
 				conceptName: "Player",
 				name: "movement",
-				files: ["src/player.ts"],
-				anchors: ["src/math.ts"],
+				read: [],
+				outline: ["src/player.ts"],
+				references: ["src/math.ts"],
 			},
 		]);
 	});
 
-	it("allows anchor-only entries and rejects overlapping path classes", async () => {
+	it("allows reference-only entries and rejects overlapping loading modes", async () => {
 		const root = await project();
 		const directory = join(root, ".pi", "contexts", "code");
 		await mkdir(directory, { recursive: true });
 		const path = join(directory, "source.toml");
 		await writeFile(
 			path,
-			'name = "Source"\n\n[guide]\ndescription = "Source guide"\nfiles = []\nanchors = ["src/player.ts"]\n',
+			'name = "Source"\n\n[guide]\ndescription = "Source guide"\nread = []\noutline = []\nreferences = ["src/player.ts"]\n',
 		);
-		expect(await loadContextEntries(root)).toMatchObject([{ files: [], anchors: ["src/player.ts"] }]);
+		expect(await loadContextEntries(root)).toMatchObject([{ read: [], outline: [], references: ["src/player.ts"] }]);
 
 		await writeFile(
 			path,
-			'name = "Source"\n\n[guide]\ndescription = "Source guide"\nfiles = ["src/player.ts"]\nanchors = ["src/player.ts"]\n',
+			'name = "Source"\n\n[guide]\ndescription = "Source guide"\nread = ["src/player.ts"]\noutline = ["src/player.ts"]\nreferences = []\n',
 		);
-		await expect(loadContextEntries(root)).rejects.toThrow("both file and anchor");
+		await expect(loadContextEntries(root)).rejects.toThrow("multiple loading modes");
 	});
 
 	it("rejects unknown entry fields", async () => {
@@ -88,7 +89,7 @@ describe("context definitions", () => {
 		await mkdir(directory, { recursive: true });
 		await writeFile(
 			join(directory, "source.toml"),
-			'name = "Source"\n\n[guide]\ndescription = "Source guide"\nfiles = ["src/player.ts"]\nanchor = ["src/player.ts"]\n',
+			'name = "Source"\n\n[guide]\ndescription = "Source guide"\nread = []\noutline = []\nreferences = ["src/player.ts"]\nanchor = ["src/player.ts"]\n',
 		);
 		await expect(loadContextEntries(root)).rejects.toThrow("Invalid context entry field");
 	});

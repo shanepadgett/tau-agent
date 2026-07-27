@@ -61,7 +61,7 @@ describe("context sync", () => {
 		await mkdir(join(root, ".pi", "contexts", "gameplay"), { recursive: true });
 		await writeFile(
 			join(root, ".pi", "contexts", "gameplay", "player.toml"),
-			'name = "Player"\n\n[all]\ndescription = "Player code"\nfiles = ["src/player.ts"]\n',
+			'name = "Player"\n\n[all]\ndescription = "Player code"\nread = []\noutline = ["src/player.ts"]\nreferences = []\n',
 		);
 		const evidence = await collectSyncEvidence(
 			gitWithStatus("1 .M N... 100644 100644 100644 deadbeef deadbeef src/player.ts"),

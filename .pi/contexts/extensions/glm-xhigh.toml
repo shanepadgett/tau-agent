@@ -1,0 +1,8 @@
+name = "GLM xhigh"
+description = "Local thinking-level enforcement for supported GLM models"
+
+[feature]
+description = "Model matching, xhigh enforcement, retry suppression, and user guidance"
+read = []
+outline = [".pi/extensions/glm-xhigh/index.ts"]
+references = [".pi/extensions/glm-xhigh/README.md"]

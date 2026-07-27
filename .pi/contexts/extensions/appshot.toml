@@ -1,32 +1,8 @@
 name = "Appshot"
-description = "Complete and bounded context for the appshot extension"
+description = "macOS application window discovery, capture, and activation"
 
-[all]
-description = "Every extension file, direct shared dependency, test, and user-facing help"
-files = [
-  "packages/agent/extensions/appshot/README.md",
-  "packages/agent/extensions/appshot/capture.swift",
-  "packages/agent/extensions/appshot/index.ts",
-  "packages/agent/extensions/appshot/native-helper.ts",
-]
-anchors = [
-  "packages/agent/shared/tool-row-state.ts",
-  "packages/agent/test/extensions/appshot/index.test.ts",
-]
 [runtime]
-description = "Extension runtime and direct shared dependencies"
-files = [
-  "packages/agent/extensions/appshot/capture.swift",
-  "packages/agent/extensions/appshot/index.ts",
-  "packages/agent/extensions/appshot/native-helper.ts",
-]
-anchors = [ "packages/agent/shared/tool-row-state.ts" ]
-[tests]
-description = "Extension implementation and automated tests"
-files = [
-  "packages/agent/extensions/appshot/capture.swift",
-  "packages/agent/extensions/appshot/index.ts",
-  "packages/agent/extensions/appshot/native-helper.ts",
-  "packages/agent/test/extensions/appshot/index.test.ts",
-]
-anchors = [ "packages/agent/shared/tool-row-state.ts" ]
+description = "Swift helper execution, native helper preparation, tool registration, capture, and activation"
+read = []
+outline = ["packages/agent/extensions/appshot/capture.swift", "packages/agent/extensions/appshot/index.ts", "packages/agent/extensions/appshot/native-helper.ts"]
+references = ["packages/agent/extensions/appshot/README.md", "packages/agent/test/extensions/appshot/index.test.ts"]

@@ -1,13 +1,8 @@
 name = "Auto Name"
-description = "Complete and bounded context for the auto-name extension"
+description = "Background session naming from the first user prompt"
 
-[all]
-description = "Every extension file, direct shared dependency, test, and user-facing help"
-files = [ "packages/agent/extensions/auto-name/README.md", "packages/agent/extensions/auto-name/index.ts" ]
-anchors = [ "packages/agent/shared/injected-context.ts", "packages/agent/shared/model-fallback/index.ts", "packages/agent/shared/text.ts" ]
-[runtime]
-description = "Extension runtime and direct shared dependencies"
-files = [
-  "packages/agent/extensions/auto-name/index.ts",
-]
-anchors = [ "packages/agent/shared/injected-context.ts", "packages/agent/shared/model-fallback/index.ts", "packages/agent/shared/text.ts" ]
+[feature]
+description = "Automatic session naming from conversation context"
+read = []
+outline = ["packages/agent/extensions/auto-name/index.ts"]
+references = ["packages/agent/extensions/auto-name/README.md"]

@@ -1,17 +1,14 @@
 name = "Cache Diagnostics"
-description = "Provider prompt-cache fingerprints and usage diagnostics"
-
-[all]
-description = "Complete and bounded context for the cache-diagnostics extension"
-files = [ ".pi/prompts/cache-investigate.md", "packages/agent/extensions/cache-diagnostics/README.md", "packages/agent/extensions/cache-diagnostics/index.ts", "packages/agent/test/extensions/cache-diagnostics/index.test.ts" ]
-anchors = [ "packages/agent/extensions/tau-help/help.md" ]
+description = "Privacy-preserving provider request fingerprints for prompt-cache investigations"
 
 [runtime]
-description = "Extension runtime for recording provider cache diagnostics"
-files = [ "packages/agent/extensions/cache-diagnostics/index.ts", "packages/agent/test/extensions/cache-diagnostics/index.test.ts" ]
-anchors = [ "packages/agent/extensions/tau-help/help.md" ]
+description = "Provider request fingerprint capture, report storage, and debug command"
+read = []
+outline = ["packages/agent/extensions/cache-diagnostics/index.ts"]
+references = ["packages/agent/test/extensions/cache-diagnostics/index.test.ts"]
 
 [investigation]
-description = "Local prompt for finding, confirming, and investigating generated cache debug reports"
-files = [ ".pi/prompts/cache-investigate.md" ]
-anchors = [ "packages/agent/extensions/cache-diagnostics/README.md" ]
+description = "Exact investigation prompt and user-facing privacy contract"
+read = [".pi/prompts/cache-investigate.md"]
+outline = []
+references = ["packages/agent/extensions/cache-diagnostics/README.md"]

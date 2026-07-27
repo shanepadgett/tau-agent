@@ -1,35 +1,14 @@
 name = "Footer"
-description = "Complete and bounded context for the footer extension"
+description = "Compact two-line Tau footer, usage accounting, and contributed status items"
 
-[all]
-description = "Every extension file, direct shared dependency, test, and user-facing help"
-files = [
-  "packages/agent/extensions/footer/README.md",
-  "packages/agent/extensions/footer/index.ts",
-  "packages/agent/extensions/footer/settings.ts",
-  "packages/agent/test/extensions/footer/index.test.ts",
-]
-anchors = [
-  "packages/agent/shared/events.ts",
-  "packages/agent/shared/settings/define.ts",
-  "packages/agent/shared/settings/load.ts",
-]
 [runtime]
-description = "Extension runtime and direct shared dependencies"
-files = [
-  "packages/agent/extensions/footer/index.ts",
-]
-anchors = [ "packages/agent/shared/events.ts", "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts" ]
-[settings]
-description = "Extension settings and shared settings infrastructure"
-files = [
-  "packages/agent/extensions/footer/settings.ts",
-]
-anchors = [ "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts" ]
+description = "Footer lifecycle, usage accounting, event contributions, and rendering"
+read = []
+outline = ["packages/agent/extensions/footer/index.ts"]
+references = ["packages/agent/extensions/footer/README.md", "packages/agent/test/extensions/footer/index.test.ts"]
 
-[tests]
-description = "Footer usage accounting implementation and focused tests"
-files = [
-  "packages/agent/extensions/footer/index.ts",
-  "packages/agent/test/extensions/footer/index.test.ts",
-]
+[settings]
+description = "Footer visibility and display settings"
+read = []
+outline = ["packages/agent/extensions/footer/settings.ts"]
+references = []

@@ -91,6 +91,59 @@ describe("working-memory catalog and projection", () => {
 		expect(second.slice(0, first.length)).toEqual(first);
 	});
 
+	it("keeps memory references when Context appends an ambient projection first", () => {
+		const userMessage = { role: "user" as const, content: "constraint", timestamp: 1 };
+		const user = entry("user", userMessage);
+		const ambient: ContextEvent["messages"][number] = {
+			role: "custom",
+			customType: "tau.context.projection",
+			content: "current project context",
+			display: false,
+			timestamp: 2,
+		};
+		const projected = projectWorkingMemory(
+			[userMessage, ambient],
+			{ latestAnchorToolCallId: undefined, retainedRefs: [], prunedRowIds: new Set() },
+			[user],
+			[user],
+		);
+		expect(projected).toContainEqual(
+			expect.objectContaining({
+				role: "custom",
+				customType: "tau.working-memory.references",
+				content: expect.stringContaining("m:user"),
+			}),
+		);
+	});
+
+	it("keeps memory references when Context removes a legacy injection first", () => {
+		const userMessage = { role: "user" as const, content: "constraint", timestamp: 1 };
+		const user = entry("user", userMessage);
+		const legacy: SessionEntry = {
+			type: "custom_message",
+			id: "legacy-context",
+			parentId: user.id,
+			timestamp: "2026-01-01",
+			customType: "tau.injected-context",
+			content: "old project context",
+			display: false,
+			details: { source: "context" },
+		};
+		const projected = projectWorkingMemory(
+			[userMessage],
+			{ latestAnchorToolCallId: undefined, retainedRefs: [], prunedRowIds: new Set() },
+			[user, legacy],
+			[user, legacy],
+		);
+		expect(projected).toContainEqual(
+			expect.objectContaining({
+				role: "custom",
+				customType: "tau.working-memory.references",
+				content: expect.stringContaining("m:user"),
+			}),
+		);
+	});
+
 	it("does not offer legacy autoread as selectable memory", () => {
 		const autoread: SessionEntry = {
 			type: "custom_message",

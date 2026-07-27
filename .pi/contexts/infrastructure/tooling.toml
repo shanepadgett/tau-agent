@@ -1,40 +1,22 @@
 name = "Repository tooling"
 description = "Workspace manifests and automated repository checks"
 
-[all]
-description = "Build, package, formatting, linting, type checking, tests, and dead-code configuration"
-files = [
-  "package.json",
-  "packages/agent/package.json",
-  "packages/tui/package.json",
-  ".gitignore",
-  "mise.toml",
-  "tsconfig.json",
-  "vitest.config.ts",
-  ".fallowrc.jsonc",
-  ".oxlintrc.jsonc",
-  ".oxfmtrc.jsonc",
-  ".markdownlint-cli2.jsonc",
-  ".npmrc",
-]
-
 [checks]
 description = "Mise task graph and formatter, linter, type, test, and dead-code policies"
-files = [
+read = [
+  ".fallowrc.jsonc",
+  ".markdownlint-cli2.jsonc",
+  ".oxfmtrc.jsonc",
+  ".oxlintrc.jsonc",
+  ".pi/extensions/.fallow-scope.ts",
   "mise.toml",
   "tsconfig.json",
-  "vitest.config.ts",
-  ".fallowrc.jsonc",
-  ".oxlintrc.jsonc",
-  ".oxfmtrc.jsonc",
-  ".markdownlint-cli2.jsonc",
 ]
+outline = []
+references = [".gitignore"]
 
 [workspace]
 description = "Root and package manifests plus npm behavior"
-files = [
-  "package.json",
-  "packages/agent/package.json",
-  "packages/tui/package.json",
-  ".npmrc",
-]
+read = [".npmrc", ".pi/git/.gitignore", ".pi/npm/.gitignore", "package.json", "packages/agent/package.json"]
+outline = []
+references = []

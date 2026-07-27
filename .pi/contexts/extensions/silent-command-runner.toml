@@ -1,30 +1,14 @@
 name = "Silent Command Runner"
-description = "Complete and bounded context for the silent-command-runner extension"
+description = "File-triggered validation commands with quiet success and agent-visible failure"
 
-[all]
-description = "Every extension file, direct shared dependency, test, and user-facing help"
-files = [
-  "packages/agent/extensions/silent-command-runner/README.md",
-  "packages/agent/extensions/silent-command-runner/index.ts",
-  "packages/agent/extensions/silent-command-runner/settings.ts",
-  "packages/agent/test/extensions/silent-command-runner/index.test.ts",
-]
-anchors = [
-	"packages/agent/shared/events.ts",
-  "packages/agent/shared/glob.ts",
-  "packages/agent/shared/settings/define.ts",
-  "packages/agent/shared/settings/load.ts",
-  "packages/agent/shared/settings/paths.ts",
-]
 [runtime]
-description = "Extension runtime and direct shared dependencies"
-files = [
-  "packages/agent/extensions/silent-command-runner/index.ts",
-]
-anchors = [ "packages/agent/shared/events.ts", "packages/agent/shared/glob.ts", "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts", "packages/agent/shared/settings/paths.ts" ]
+description = "Change matching, command execution, failure injection, and focused tests"
+read = []
+outline = ["packages/agent/extensions/silent-command-runner/index.ts"]
+references = ["packages/agent/extensions/silent-command-runner/README.md", "packages/agent/test/extensions/silent-command-runner/index.test.ts"]
+
 [settings]
-description = "Extension settings and shared settings infrastructure"
-files = [
-  "packages/agent/extensions/silent-command-runner/settings.ts",
-]
-anchors = [ "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/load.ts", "packages/agent/shared/settings/paths.ts" ]
+description = "Command definitions, path matching, and trigger settings"
+read = []
+outline = ["packages/agent/extensions/silent-command-runner/settings.ts"]
+references = []

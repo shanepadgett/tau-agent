@@ -1,15 +1,14 @@
 name = "Model fallback"
 description = "Shared model selection, validation, retries, and cooldowns"
 
-[all]
-description = "Complete model fallback engine, settings, types, settings loader, and automated tests"
-files = [ "packages/agent/shared/model-fallback/index.ts", "packages/agent/shared/model-fallback/settings.ts", "packages/agent/shared/model-fallback/types.ts", "packages/agent/shared/settings/load.ts" ]
-anchors = [ "packages/agent/test/shared/model-fallback.test.ts" ]
-
 [engine]
-description = "Candidate selection, retries, validation correction, and cooldown handling"
-files = [ "packages/agent/shared/model-fallback/index.ts", "packages/agent/shared/model-fallback/types.ts" ]
+description = "Candidate selection, retries, validation correction, cooldown handling, and focused tests"
+read = []
+outline = ["packages/agent/shared/model-fallback/index.ts"]
+references = ["packages/agent/shared/model-fallback/types.ts", "packages/agent/test/shared/model-fallback.test.ts"]
 
 [settings]
-description = "Fallback configuration and shared settings loading"
-files = [ "packages/agent/shared/model-fallback/settings.ts", "packages/agent/shared/settings/load.ts" ]
+description = "Fallback candidate configuration"
+read = []
+outline = ["packages/agent/shared/model-fallback/settings.ts"]
+references = []

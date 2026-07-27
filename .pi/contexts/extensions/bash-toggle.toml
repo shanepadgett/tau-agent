@@ -1,0 +1,8 @@
+name = "Bash Toggle"
+description = "Local session control for agent bash access"
+
+[feature]
+description = "Bash toggle command, persisted state, footer status, and fallback tool activation"
+read = []
+outline = [".pi/extensions/bash-toggle/index.ts"]
+references = [".pi/extensions/bash-toggle/README.md"]

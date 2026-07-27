@@ -1,6 +1,6 @@
 # Context management
 
-Tau uses `.pi/contexts` as a reusable map of the repository. A selected context gives an agent the primary files for a work scope and points it toward related files without loading everything.
+Tau uses `.pi/contexts` as a reusable map of the repository. A selected context supplies a small bootstrap projection for a work scope and points toward related files without loading everything.
 
 ## Structure
 
@@ -23,13 +23,15 @@ description = "Checkout calculation and order submission"
 
 [orchestration]
 description = "Building and submitting a checkout order"
-files = ["src/checkout/order.ts", "src/checkout/service.ts"]
-anchors = ["test/checkout/service.test.ts", "src/payments/client.ts"]
+read = []
+outline = ["src/checkout/order.ts", "src/checkout/service.ts"]
+references = ["test/checkout/service.test.ts", "src/payments/client.ts"]
 
 [discounts]
 description = "Applying coupons and account discounts"
-files = ["src/checkout/discounts.ts"]
-anchors = ["test/checkout/discounts.test.ts"]
+read = []
+outline = ["src/checkout/discounts.ts"]
+references = ["test/checkout/discounts.test.ts"]
 ```
 
 Saved as `.pi/contexts/commerce/checkout.toml`, these entries have the IDs `commerce/checkout/orchestration` and `commerce/checkout/discounts`.
@@ -48,12 +50,15 @@ Keep entries focused. Names such as `misc`, `shared`, and `other` hide missing b
 
 Catalog durable code, configuration, tests, standards, and long-lived documentation. Leave scratch files, working plans, interviews, generated output, and rough ideas out of the catalog.
 
-## Choose files and anchors
+## Choose loading modes
 
-- `files` are eagerly read when the entry is selected. Include primary files that are usually required for that scope.
-- `anchors` are shown to the agent as unloaded navigation paths. Use them for related tests, callers, shared dependencies, or documentation that is useful only for some tasks.
+- `read` supplies exact complete file contents. Reserve it for instructions, small authoritative specifications, and other files whose exact wording is routinely needed.
+- `outline` supplies current structural outlines through Explore. Use it for recurring source entry points.
+- `references` supplies unloaded navigation paths. This should be the default for durable code, tests, callers, shared dependencies, and secondary documentation.
 
-Keep the eager set small enough to read on every selection. Keep each path's loading class consistent across the catalog. If selected entries classify the same path differently, eager loading wins.
+Every entry declares all three arrays, including empty arrays. Keep `read` and `outline` small because Tau rebuilds them before model calls. Keep each path's loading mode consistent across the catalog. When selected entries disagree, precedence is `read`, then `outline`, then `references`.
+
+`/context` persists selected entry IDs as branch-local session state. It does not append file contents to conversation history. Before each model call Tau resolves those IDs against the current catalog, reads current `read` files, refreshes changed outlines, and adds one ephemeral projection. Reopening `/context` replaces the active selection. Clear all selections and confirm to remove the projection.
 
 ## Maintain the map
 
