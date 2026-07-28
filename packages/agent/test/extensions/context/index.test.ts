@@ -175,6 +175,11 @@ describe("context extension", () => {
 			{
 				messages: [
 					{
+						role: "user",
+						content: [{ type: "text", text: "current request" }],
+						timestamp: 1,
+					},
+					{
 						role: "custom",
 						customType: "tau.autoread",
 						content: "old",
@@ -192,10 +197,11 @@ describe("context extension", () => {
 			},
 		)) as { messages: Array<{ customType?: string; content?: string }> };
 
-		expect(result.messages).toHaveLength(1);
+		expect(result.messages).toHaveLength(2);
 		expect(result.messages[0]?.customType).toBe(CONTEXT_PROJECTION_TYPE);
 		expect(result.messages[0]?.content).toContain("export const current = true;");
 		expect(result.messages[0]?.content).toContain("- src/fetch.ts");
+		expect(result.messages[1]).toMatchObject({ role: "user" });
 		expect(state.entries).toHaveLength(1);
 	});
 

@@ -63,13 +63,16 @@ afterEach(async () => {
 });
 
 describe("cache diagnostics extension", () => {
-	it("writes a bounded report containing a stable-prefix cache miss", async () => {
+	it("writes a bounded report containing a locally caused cache miss", async () => {
 		const test = await harness();
 		const payload = {
 			model: "claude-test",
 			system: "private prompt",
 			tools: [{ name: "read", description: "Read files" }],
-			messages: [{ role: "user", content: "private request" }],
+			messages: [
+				{ role: "user", content: "private request" },
+				{ role: "user", content: "ephemeral context" },
+			],
 		};
 		await test.run("before_agent_start", {
 			type: "before_agent_start",
@@ -84,7 +87,10 @@ describe("cache diagnostics extension", () => {
 		await test.run("turn_start", { type: "turn_start", turnIndex: 1, timestamp: 2 });
 		await test.run("before_provider_request", {
 			type: "before_provider_request",
-			payload: { ...payload, messages: [...payload.messages, { role: "user", content: "next" }] },
+			payload: {
+				...payload,
+				messages: [payload.messages[0], { role: "user", content: "next" }, payload.messages[1]],
+			},
 		});
 		await test.run("after_provider_response", {
 			type: "after_provider_response",
@@ -107,7 +113,7 @@ describe("cache diagnostics extension", () => {
 		expect(report.cwd).toBe("/work/project");
 		expect(report.summary.cacheMissesObserved).toBe(1);
 		expect(report.requests.at(-1)).toMatchObject({
-			previousExactPrefix: true,
+			previousExactPrefix: false,
 			changes: { firstChangedItem: 1 },
 		});
 		expect(report.results.at(-1)).toMatchObject({ cacheMiss: true, missedTokens: 5_000 });

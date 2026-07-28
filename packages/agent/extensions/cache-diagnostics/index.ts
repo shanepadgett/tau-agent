@@ -415,10 +415,9 @@ export default function cacheDiagnosticsExtension(pi: ExtensionAPI): void {
 			event.message.stopReason !== "error" &&
 			event.message.stopReason !== "aborted" &&
 			(attempt.responseStatus === undefined || (attempt.responseStatus >= 200 && attempt.responseStatus < 300));
-		const missedTokens =
-			baselinePromoted && attempt.request.previousExactPrefix
-				? Math.max(0, Math.min(attempt.request.previousPromptTokens, promptTokens) - usage.cacheRead)
-				: 0;
+		const missedTokens = baselinePromoted
+			? Math.max(0, Math.min(attempt.request.previousPromptTokens, promptTokens) - usage.cacheRead)
+			: 0;
 		const cacheMiss = baselinePromoted && cacheActivitySeen && missedTokens > CACHE_NOISE_FLOOR;
 		const result: ResultRecord = {
 			kind: "result",
