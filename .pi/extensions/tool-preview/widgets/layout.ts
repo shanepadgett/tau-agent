@@ -57,6 +57,6 @@ export function addMessageBox(container: Container, theme: Theme, title: string,
 	container.addChild(new Spacer(1));
 }
 
-export function addSectionHeading(container: Container, theme: Theme, title: string): void {
+function addSectionHeading(container: Container, theme: Theme, title: string): void {
 	container.addChild(new Text(theme.bold(title), 0, 0));
 }

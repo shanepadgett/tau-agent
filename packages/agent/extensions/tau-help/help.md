@@ -118,10 +118,6 @@ Adds `/tau`, `/tau init [--global|--project]`, and `/tau doctor` for Tau setup a
 
 Progressively exposes specialist tools through `load_tools`. Tau normally loads the fixed `web`, `image`, and `appshot` groups itself when needed; supported providers can preserve more prompt-cache reuse.
 
-## turn-budget
-
-Tracks and limits agent turns to keep work bounded.
-
 ## web
 
 Gives the agent compact `websearch`, `webfetch`, and `codesearch` tools for web and implementation research.

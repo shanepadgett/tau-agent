@@ -21,7 +21,6 @@ import {
 } from "./widgets/relationships.ts";
 import { createTabsListPreviewWidget } from "./widgets/tabs-list.ts";
 import { createToolPanelPreviewWidget } from "./widgets/tool-panel.ts";
-import { createTurnBudgetPreviewWidget } from "./widgets/turn-budget.ts";
 
 const COMMAND = "tool-preview";
 
@@ -47,7 +46,6 @@ const STORIES: readonly PreviewStory[] = [
 	{ label: "references — row states", createWidget: createReferencesPreviewWidget },
 	{ label: "tabs-list — Tabs and SelectableList", createWidget: createTabsListPreviewWidget },
 	{ label: "tool-panel — shell states", createWidget: createToolPanelPreviewWidget },
-	{ label: "turn-budget — marker states", createWidget: createTurnBudgetPreviewWidget },
 ];
 
 export default function toolPreview(pi: ExtensionAPI): void {

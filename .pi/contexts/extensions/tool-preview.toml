@@ -20,10 +20,10 @@ outline = [".pi/extensions/tool-preview/widgets/find.ts", ".pi/extensions/tool-p
 references = []
 
 [tui]
-description = "Shared panel, list, marker, publish, context, and turn-budget component stories"
+description = "Shared panel, list, marker, publish, and context component stories"
 read = []
 outline = [".pi/extensions/tool-preview/widgets/context.ts", ".pi/extensions/tool-preview/widgets/publish.ts", ".pi/extensions/tool-preview/widgets/tabs-list.ts"]
-references = [".pi/extensions/tool-preview/widgets/tool-panel.ts", ".pi/extensions/tool-preview/widgets/turn-budget.ts"]
+references = [".pi/extensions/tool-preview/widgets/tool-panel.ts"]
 
 [patch]
 description = "Patch streaming, success, partial failure, and error stories"
