@@ -4,8 +4,8 @@ description = "Semantic commit planning, interactive review, and repository muta
 [runtime]
 description = "Commit command, semantic grouping, Git change sets, fallback planning, and repository operations"
 read = []
-outline = ["packages/agent/extensions/commit/commit-plan.ts", "packages/agent/extensions/commit/git-change-set.ts", "packages/agent/extensions/commit/index.ts"]
-references = ["packages/agent/extensions/commit/README.md"]
+outline = ["packages/agent/extensions/commit/commit-effort.ts", "packages/agent/extensions/commit/commit-plan.ts", "packages/agent/extensions/commit/git-change-set.ts", "packages/agent/extensions/commit/index.ts"]
+references = ["packages/agent/extensions/commit/README.md", "packages/agent/test/extensions/commit/commit-effort.test.ts"]
 
 [ui]
 description = "Interactive commit-plan review and group selection"

@@ -1,15 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { type ThinkingLevel, type Tool, Type } from "@earendil-works/pi-ai";
+import { type Tool, Type } from "@earendil-works/pi-ai";
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { generateToolValidated, generateValidated, resolveCandidates } from "../../shared/model-fallback/index.ts";
+import { resolveEffortCandidates } from "../../shared/model-effort.ts";
+import { generateToolValidated, generateValidated } from "../../shared/model-fallback/index.ts";
 import { truncAt } from "../../shared/text.ts";
+import { commitEffort } from "./commit-effort.ts";
 import type { CommitEvidence, DirtyFile } from "./git-change-set.ts";
 
 const MAX_PLAN_EVIDENCE_CHARS = 48_000;
 const CONVENTIONAL_COMMIT_TYPES = ["feat", "fix", "docs", "refactor", "test", "chore", "perf", "ci", "build", "revert"];
-const COMMIT_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
-	{ provider: "openai-codex", model: "gpt-5.6-terra", reasoning: "low" },
-];
 const COMMIT_PLAN_TOOL = {
 	name: "create_commit_plan",
 	description: "Submit the commit plan for the dirty repository files.",
@@ -55,7 +54,7 @@ export async function generatePlan(
 	const prompt = buildPlanPrompt(evidence, previousPlan, regenerationNote);
 	return generateToolValidated(
 		ctx,
-		await resolveCandidates(ctx, COMMIT_MODELS, true),
+		await resolveEffortCandidates(ctx, commitEffort(evidence.files), true),
 		prompt,
 		COMMIT_PLAN_TOOL,
 		(input) => commitGroupsFromToolInput(input, evidence.files),
@@ -85,7 +84,7 @@ export async function regenerateMessage(
 	const prompt = buildMessagePrompt(evidence, selected, previousPlan, selectedGroupId, regenerationNote);
 	return generateValidated(
 		ctx,
-		await resolveCandidates(ctx, COMMIT_MODELS, true),
+		await resolveEffortCandidates(ctx, commitEffort(selected), true),
 		prompt,
 		requireCommitMessage,
 		undefined,

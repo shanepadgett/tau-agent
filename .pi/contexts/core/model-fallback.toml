@@ -1,5 +1,5 @@
 name = "Model fallback"
-description = "Shared model selection, validation, retries, and cooldowns"
+description = "Shared model selection, effort tiers, validation, retries, and cooldowns"
 
 [engine]
 description = "Candidate selection, retries, validation correction, cooldown handling, and focused tests"
@@ -11,4 +11,16 @@ references = ["packages/agent/shared/model-fallback/types.ts", "packages/agent/t
 description = "Fallback candidate configuration"
 read = []
 outline = ["packages/agent/shared/model-fallback/settings.ts"]
+references = []
+
+[effort]
+description = "Shared workload-effort tiers resolved to ordered model and thinking-level candidates"
+read = []
+outline = ["packages/agent/shared/model-effort.ts"]
+references = []
+
+[agent-runtime-standard]
+description = "Authoritative extension policy for model selection, effort tiers, thinking levels, and fallback"
+read = ["docs/standards/agent-runtime.md"]
+outline = []
 references = []

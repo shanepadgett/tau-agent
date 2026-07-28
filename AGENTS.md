@@ -4,6 +4,7 @@
 
 - Extension tool changes need user `/reload` before testing.
 - Keep active work files under `docs/plans/`. Tracked dir. Use `packages/agent/docs/` only for Tau Agent user docs.
+- Read `docs/standards/agent-runtime.md` before adding or changing extension model selection, thinking levels, or fallback policy.
 
 ## Scope and Behavior
 

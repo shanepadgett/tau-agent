@@ -26,6 +26,7 @@ export interface DirtyFile {
 	kind: "modified" | "added" | "deleted" | "renamed" | "untracked";
 	untracked: boolean;
 	evidence: string;
+	changeSize: number | "binary";
 	renamedFrom?: string;
 }
 
@@ -115,9 +116,11 @@ async function collectFileEvidence(
 	for (let index = 0; index < files.length; index += EVIDENCE_CONCURRENCY) {
 		withEvidence.push(
 			...(await Promise.all(
-				files
-					.slice(index, index + EVIDENCE_CONCURRENCY)
-					.map(async (file) => ({ ...file, evidence: await loadEvidenceForFile(git, root, file, hasHead) })),
+				files.slice(index, index + EVIDENCE_CONCURRENCY).map(async (file) => ({
+					...file,
+					evidence: await loadEvidenceForFile(git, root, file, hasHead),
+					changeSize: await loadChangeSize(git, root, file, hasHead),
+				})),
 			)),
 		);
 	}
@@ -155,7 +158,7 @@ function parsePorcelainV2Z(raw: string): DirtyFile[] {
 
 	return parsed
 		.sort((left, right) => left.path.localeCompare(right.path))
-		.map((file, index) => ({ ...file, id: index + 1, kind: changeKind(file), evidence: "" }));
+		.map((file, index) => ({ ...file, id: index + 1, kind: changeKind(file), evidence: "", changeSize: 0 }));
 }
 
 function statusText(fields: readonly string[]): string {
@@ -174,6 +177,35 @@ async function loadEvidenceForFile(git: GitRunner, root: string, file: DirtyFile
 		optional: true,
 	});
 	return truncAt(diff || "metadata-only change", MAX_FILE_EVIDENCE_CHARS);
+}
+
+async function loadChangeSize(
+	git: GitRunner,
+	root: string,
+	file: DirtyFile,
+	hasHead: boolean,
+): Promise<number | "binary"> {
+	if (file.renamedFrom && !/[MAD]/.test(file.status)) return 0;
+	const paths = file.renamedFrom ? [file.renamedFrom, file.path] : [file.path];
+	const output = file.untracked
+		? await git.run(["diff", "--no-index", "--numstat", "--", "/dev/null", file.path], { cwd: root, optional: true })
+		: hasHead
+			? await git.run(["diff", "--numstat", "HEAD", "--", ...paths], { cwd: root, optional: true })
+			: [
+					await git.run(["diff", "--cached", "--numstat", "--", ...paths], { cwd: root, optional: true }),
+					await git.run(["diff", "--numstat", "--", ...paths], { cwd: root, optional: true }),
+				].join("\n");
+
+	let total = 0;
+	for (const line of output.split("\n")) {
+		if (!line) continue;
+		const [added, deleted] = line.split("\t");
+		if (added === "-" || deleted === "-") return "binary";
+		const additions = Number(added);
+		const deletions = Number(deleted);
+		if (Number.isFinite(additions) && Number.isFinite(deletions)) total += additions + deletions;
+	}
+	return total;
 }
 
 async function diffFromIndexAndWorktree(git: GitRunner, root: string, paths: readonly string[]): Promise<string> {
