@@ -174,14 +174,32 @@ export default function workingMemoryExtension(pi: ExtensionAPI): void {
 		syncBranch(ctx);
 	});
 
-	pi.on("before_agent_start", (event, ctx) => {
+	pi.on("before_agent_start", (_event, ctx) => {
 		if (!enabled) return undefined;
 		const usage = ctx.getContextUsage();
 		if (!usage || usage.tokens === null || !Number.isFinite(usage.tokens)) return undefined;
-		const reminder = Math.floor(Math.max(0, usage.tokens) / interval);
+		const tokens = Math.max(0, Math.floor(usage.tokens));
+		const reminder = Math.floor(tokens / interval);
 		if (reminder < 1) return undefined;
 		const instruction = instructions[Math.min(reminder, instructions.length) - 1] ?? instructions[0];
-		return { systemPrompt: `${event.systemPrompt}\n\n${automaticInstruction(instruction)}` };
+		return {
+			message: {
+				customType: NUDGE_TYPE,
+				content: automaticInstruction(instruction),
+				display: false,
+				details: {
+					v: 1,
+					kind: "automatic",
+					tokens,
+					boundaryTokens: reminder * interval,
+					reminder,
+					tier: Math.min(reminder, instructions.length),
+					tierCount: instructions.length,
+					anchorToolCallId:
+						replayWorkingMemoryState(ctx.sessionManager.getBranch(), true).latestAnchorToolCallId ?? null,
+				},
+			},
+		};
 	});
 
 	pi.on("turn_end", (event, ctx) => {
