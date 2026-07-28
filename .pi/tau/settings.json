@@ -7,6 +7,7 @@
 		"context": {
 			"validation": {
 				"ignoreGlobs": [
+					".pi/tau/*.jsonl",
 					"docs/plans/**",
 					"packages/agent/native-bin/**"
 				]
