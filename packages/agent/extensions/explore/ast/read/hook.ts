@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ReadToolDetails } from "@earendil-works/pi-coding-agent";
 import { loadTauExtensionSettings } from "../../../../shared/settings/load.ts";
 import exploreSettings from "../../settings.ts";
 import { resolveExplorePath } from "../../traverse.ts";
@@ -9,6 +9,7 @@ import { formatLargeReadOutline, readCallKind, shouldOutlineFullRead, type Explo
 
 type ReadOverlayResult = {
 	content: Array<{ type: "text"; text: string }>;
+	details: ReadToolDetails;
 	isError: boolean;
 };
 
@@ -80,6 +81,7 @@ async function substituteLargeFullRead(options: {
 			result.file.rows.length === 0 ? "No declarations" : formatOutlineFile(result.file, options.engine.cwd, false);
 		return {
 			content: [{ type: "text", text: formatLargeReadOutline(outlineText) }],
+			details: {},
 			isError: false,
 		};
 	} catch {
