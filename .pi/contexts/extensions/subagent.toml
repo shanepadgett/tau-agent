@@ -5,10 +5,10 @@ description = "Delegation to isolated child Tau sessions"
 description = "Built-in, user, and project agent definition discovery"
 read = []
 outline = ["packages/agent/extensions/subagent/agents.ts"]
-references = ["packages/agent/extensions/subagent/agents/context-sync.md", "packages/agent/extensions/subagent/agents/dormant/generalist.md", "packages/agent/extensions/subagent/agents/review.md", "packages/agent/extensions/subagent/agents/scout.md", "packages/agent/extensions/subagent/agents/web-research.md"]
+references = ["packages/agent/extensions/subagent/agents/context-sync.md", "packages/agent/extensions/subagent/agents/dormant/generalist.md", "packages/agent/extensions/subagent/agents/scout.md", "packages/agent/extensions/subagent/agents/web-research.md"]
 
 [execution]
-description = "Child session execution, retained-thread resume, replacement resource ownership, limits, and results"
+description = "Child session execution through the shared isolated-session lifecycle, retained-thread resume, replacement resource ownership, limits, and results"
 read = []
 outline = ["packages/agent/extensions/subagent/index.ts", "packages/agent/extensions/subagent/run.ts", "packages/agent/extensions/subagent/runtime.ts"]
 references = ["packages/agent/extensions/subagent/resume.ts", "packages/agent/extensions/subagent/session-resource.ts", "packages/agent/test/extensions/subagent/index.test.ts", "packages/agent/test/extensions/subagent/resume-integration.test.ts", "packages/agent/test/extensions/subagent/resume.test.ts", "packages/agent/test/extensions/subagent/run.test.ts", "packages/agent/test/extensions/subagent/runtime.test.ts"]

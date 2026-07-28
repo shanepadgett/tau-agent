@@ -7,6 +7,12 @@ read = []
 outline = ["packages/agent/shared/bounded-text-result.ts", "packages/agent/shared/temporary-output-store.ts"]
 references = ["packages/agent/test/shared/bounded-text-result.test.ts"]
 
+[isolated-session]
+description = "Shared isolated child-session model resolution, runtime setup, tool binding, and disposal"
+read = []
+outline = ["packages/agent/shared/isolated-session.ts"]
+references = []
+
 [file-context]
 description = "Complete-file knowledge, legacy autoread transport, and shared structural-outline requests"
 read = []

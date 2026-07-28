@@ -74,6 +74,10 @@ Adds `/publish` to create a tagged release, trigger trusted npm publishing in Gi
 
 Adds `/qna` for when the agent has asked you several questions in chat and you want a friendly UI for answering them on your own terms. It is only active when you manually run the command.
 
+## review
+
+Adds `/review` for explicit isolated review of current Git changes. Choose `simplify`, `architecture`, or `correctness`, or run a mode directly. Results stay outside agent context until you send them from result view, and can be exported under `.pi/tau/reviews/`. `/review show` reopens latest result on current session branch.
+
 ## reference
 
 Adds `/reference` to manage separate repositories kept outside the current project for inspiration or comparison. Add one with `/reference new <git-url>`, update it, switch its referenced branch, or open it in an editor. Select references and explain why they matter; Tau then puts their paths and that reason into the editor for the agent. References stay outside the project so the agent does not wander into unrelated code unless you explicitly point it there.
@@ -104,7 +108,7 @@ Adds `Alt+S` to stash the current prompt draft and `/pop` to browse stashed draf
 
 ## subagent
 
-Gives Tau a subagent delegation tool for isolated, focused work. Run `/agents` to enable or disable individual agents for the current session, or set `extensions.subagent.disabled` in Tau settings for a persistent choice. The built-in `review` agent is an expensive, architecture-first escalation reserved for substantial cross-cutting implementation and refactor work, not routine or minor changes; `scout` is substantial multi-hop local code lookup that would chew parent context; facts only, not small digs; `web-research` handles external research. Known files can be autoread as line-numbered snapshots into a fresh or retained child turn. Tau can continue a retained child thread when follow-up work depends on its prior reads and reasoning. You can also create your own subagents in the supported subagent directories. Ask Tau how to do it and have it consult the extension’s own documentation; the built-in agents show the pattern. Each subagent can register its own model, tools, and pool of display names. Reused pool names get numeric suffixes. In interactive cmux sessions, Tau opens one temporary Markdown dashboard for live subagent progress; it does not change how children run and closes shortly after the active cohort finishes.
+Gives Tau a subagent delegation tool for isolated, focused work. Run `/agents` to enable or disable individual agents for the current session, or set `extensions.subagent.disabled` in Tau settings for a persistent choice. `scout` is substantial multi-hop local code lookup that would chew parent context; facts only, not small digs; `web-research` handles external research. Known files can be autoread as line-numbered snapshots into a fresh or retained child turn. Tau can continue a retained child thread when follow-up work depends on its prior reads and reasoning. You can also create your own subagents in supported subagent directories. Ask Tau how to do it and have it consult extension documentation; built-in agents show pattern. Each subagent can register its own model, tools, and pool of display names. Reused pool names get numeric suffixes. In interactive cmux sessions, Tau opens one temporary Markdown dashboard for live subagent progress; it does not change how children run and closes shortly after active cohort finishes.
 
 ## tau-help
 

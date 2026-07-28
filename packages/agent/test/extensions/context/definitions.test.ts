@@ -27,6 +27,7 @@ describe("context definitions", () => {
 		expect(isContextEligiblePath(".working/implementation-plan.md")).toBe(false);
 		expect(isContextEligiblePath(".pi/contexts/core/settings.toml")).toBe(false);
 		expect(isContextEligiblePath(".pi/tau/ideas.jsonl")).toBe(false);
+		expect(isContextEligiblePath(".pi/tau/reviews/2026-07-28-architecture.md")).toBe(false);
 		expect(isContextEligiblePath("LICENSE")).toBe(false);
 		expect(isContextEligiblePath("package-lock.json")).toBe(false);
 		expect(isContextEligiblePath("packages/example/pnpm-lock.yaml")).toBe(false);

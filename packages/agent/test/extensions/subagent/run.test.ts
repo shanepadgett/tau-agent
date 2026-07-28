@@ -99,7 +99,6 @@ function threadOf(session: AgentSession): SubagentThread {
 		displayName: "Pathfinder",
 		sessionInputs: {} as SubagentThread["sessionInputs"],
 		resource: {
-			inputs: {} as SubagentThread["sessionInputs"],
 			session,
 			async dispose() {},
 		},

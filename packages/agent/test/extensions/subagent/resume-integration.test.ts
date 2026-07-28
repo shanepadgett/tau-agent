@@ -123,7 +123,7 @@ describe("cold subagent request integration", () => {
 			definition,
 			ctx,
 			parentModel: `${model.provider}/${model.id}`,
-			parentThinking: "medium",
+			parentThinking: "medium" as const,
 			resolveFreshDefinition: async () => ({ ok: true as const, definition }),
 		};
 		try {

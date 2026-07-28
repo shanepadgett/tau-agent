@@ -2,12 +2,12 @@ import type { AgentSession, ExtensionAPI, ExtensionContext } from "@earendil-wor
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentDefinition } from "../../../extensions/subagent/agents.ts";
 import { FifoGate, type SubagentDetails, type SubagentThread } from "../../../extensions/subagent/run.ts";
-import type { SubagentSessionResource } from "../../../extensions/subagent/session-resource.ts";
+import type { IsolatedSessionResource } from "../../../shared/isolated-session.ts";
 
 const createSubagentThread = vi.fn();
 const disposeSubagentThread = vi.fn<(thread: SubagentThread) => Promise<void>>(async () => undefined);
 const runSubagentTurn = vi.fn();
-const createSubagentSessionResource = vi.fn();
+const createIsolatedSessionResource = vi.fn();
 
 vi.mock("../../../extensions/subagent/run.ts", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../../extensions/subagent/run.ts")>();
@@ -21,12 +21,12 @@ vi.mock("../../../extensions/subagent/run.ts", async (importOriginal) => {
 	};
 });
 
-vi.mock("../../../extensions/subagent/session-resource.ts", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("../../../extensions/subagent/session-resource.ts")>();
+vi.mock("../../../shared/isolated-session.ts", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../../../shared/isolated-session.ts")>();
 	return {
 		...actual,
-		createSubagentSessionResource: ((...args: unknown[]) =>
-			createSubagentSessionResource(...(args as []))) as typeof actual.createSubagentSessionResource,
+		createIsolatedSessionResource: ((...args: unknown[]) =>
+			createIsolatedSessionResource(...(args as []))) as typeof actual.createIsolatedSessionResource,
 	};
 });
 
@@ -63,9 +63,8 @@ function fakeSession(): AgentSession {
 	} as unknown as AgentSession;
 }
 
-function fakeResource(session = fakeSession()): SubagentSessionResource {
+function fakeResource(session = fakeSession()): IsolatedSessionResource {
 	return {
-		inputs: {} as SubagentThread["sessionInputs"],
 		session,
 		async dispose() {},
 	};
@@ -152,7 +151,7 @@ function execArgs(task: string, continuing = false, threadKey?: string) {
 		threadKey,
 		ctx: ctx(),
 		parentModel: "provider/model",
-		parentThinking: "medium",
+		parentThinking: "medium" as const,
 		resolveFreshDefinition: async () => ({ ok: true as const, definition }),
 	};
 }
@@ -194,8 +193,8 @@ describe("SubagentRuntime", () => {
 		disposeSubagentThread.mockReset();
 		disposeSubagentThread.mockResolvedValue(undefined);
 		runSubagentTurn.mockReset();
-		createSubagentSessionResource.mockReset();
-		createSubagentSessionResource.mockImplementation(async () => fakeResource());
+		createIsolatedSessionResource.mockReset();
+		createIsolatedSessionResource.mockImplementation(async () => fakeResource());
 	});
 
 	afterEach(() => {
@@ -614,15 +613,15 @@ describe("SubagentRuntime", () => {
 		const original = retained.resource;
 		retained.lastAssistantMessageAt = now;
 		now += 299_999;
-		createSubagentSessionResource.mockClear();
-		let used: SubagentSessionResource | undefined;
+		createIsolatedSessionResource.mockClear();
+		let used: IsolatedSessionResource | undefined;
 		runSubagentTurn.mockImplementationOnce(async (options: { thread: SubagentThread }) => {
 			used = options.thread.resource;
 			return completedTurn(options.thread.id, "hot");
 		});
 		await runtime.execute(execArgs("follow-up", true, threadId));
 		expect(used).toBe(original);
-		expect(createSubagentSessionResource).not.toHaveBeenCalled();
+		expect(createIsolatedSessionResource).not.toHaveBeenCalled();
 		await runtime.shutdown();
 	});
 
@@ -639,7 +638,7 @@ describe("SubagentRuntime", () => {
 		const retained = runtime.listThreads("/project")[0];
 		if (!retained) throw new Error("retained thread missing");
 		const events: string[] = [];
-		let resourceAtOldDisposal: SubagentSessionResource | undefined;
+		let resourceAtOldDisposal: IsolatedSessionResource | undefined;
 		const oldDispose = vi.fn(async () => undefined);
 		retained.resource = {
 			...retained.resource,
@@ -652,7 +651,7 @@ describe("SubagentRuntime", () => {
 		retained.lastAssistantMessageAt = now;
 		now += 300_000;
 		const replacement = fakeResource();
-		createSubagentSessionResource.mockImplementationOnce(async () => {
+		createIsolatedSessionResource.mockImplementationOnce(async () => {
 			events.push("replacement-created");
 			return replacement;
 		});
@@ -672,7 +671,7 @@ describe("SubagentRuntime", () => {
 			},
 		);
 		await runtime.execute({ ...execArgs("use the finding", true, threadId), files: ["src/current.ts"] });
-		expect(createSubagentSessionResource).toHaveBeenCalledWith(retained.sessionInputs, expect.any(AbortSignal));
+		expect(createIsolatedSessionResource).toHaveBeenCalledWith(retained.sessionInputs, expect.any(AbortSignal));
 		expect(oldDispose).toHaveBeenCalledOnce();
 		expect(resourceAtOldDisposal).toBe(replacement);
 		expect(turnOptions?.thread.resource).toBe(replacement);
@@ -703,10 +702,10 @@ describe("SubagentRuntime", () => {
 		now += 300_000;
 		const provisionalDispose = vi.fn(async () => undefined);
 		const provisional = { ...fakeResource(), dispose: provisionalDispose };
-		let finishConstruction: ((resource: SubagentSessionResource) => void) | undefined;
-		createSubagentSessionResource.mockImplementationOnce(
+		let finishConstruction: ((resource: IsolatedSessionResource) => void) | undefined;
+		createIsolatedSessionResource.mockImplementationOnce(
 			async () =>
-				new Promise<SubagentSessionResource>((resolve) => {
+				new Promise<IsolatedSessionResource>((resolve) => {
 					finishConstruction = resolve;
 				}),
 		);
@@ -742,7 +741,7 @@ describe("SubagentRuntime", () => {
 		now += 300_000;
 		const replacementDispose = vi.fn(async () => undefined);
 		const replacement = { ...fakeResource(), dispose: replacementDispose };
-		createSubagentSessionResource.mockResolvedValueOnce(replacement);
+		createIsolatedSessionResource.mockResolvedValueOnce(replacement);
 		disposeSubagentThread.mockImplementation(async (thread: SubagentThread) => thread.resource.dispose());
 
 		const result = await runtime.execute(execArgs("cold", true, threadId));
@@ -768,7 +767,7 @@ describe("SubagentRuntime", () => {
 		retained.resource = { ...retained.resource, dispose: oldDispose };
 		retained.lastAssistantMessageAt = now;
 		now += 300_000;
-		createSubagentSessionResource.mockRejectedValueOnce(new Error("replacement startup failed"));
+		createIsolatedSessionResource.mockRejectedValueOnce(new Error("replacement startup failed"));
 		disposeSubagentThread.mockImplementation(async (thread: SubagentThread) => thread.resource.dispose());
 
 		const result = await runtime.execute(execArgs("cold", true, threadId));
@@ -794,7 +793,7 @@ describe("SubagentRuntime", () => {
 		retained.lastAssistantMessageAt = now;
 		now += 300_000;
 		const replacementDispose = vi.fn(async () => undefined);
-		createSubagentSessionResource.mockResolvedValueOnce({ ...fakeResource(), dispose: replacementDispose });
+		createIsolatedSessionResource.mockResolvedValueOnce({ ...fakeResource(), dispose: replacementDispose });
 		disposeSubagentThread.mockImplementation(async (thread: SubagentThread) => thread.resource.dispose());
 		runSubagentTurn.mockResolvedValueOnce({
 			content: "cold prompt failed",

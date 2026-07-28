@@ -46,6 +46,8 @@ export function isContextEligiblePath(path: string, ignoreGlobs: readonly string
 		!CONTEXT_IGNORED_FILENAMES.has(basename(path)) &&
 		!ignoreGlobs.some((glob) => matchGlob(glob, path)) &&
 		path !== ".pi/tau/ideas.jsonl" &&
+		path !== ".pi/tau/reviews" &&
+		!path.startsWith(".pi/tau/reviews/") &&
 		path !== ".working" &&
 		!path.startsWith(".working/") &&
 		path !== ".pi/contexts" &&

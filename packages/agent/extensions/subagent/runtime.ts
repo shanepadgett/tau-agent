@@ -1,5 +1,6 @@
 import type { Usage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { createIsolatedSessionResource, type IsolatedSessionResource } from "../../shared/isolated-session.ts";
 import type { AgentDefinition } from "./agents.ts";
 import { buildColdResumePrompt, retainSubagentTurn } from "./resume.ts";
 import {
@@ -15,7 +16,6 @@ import {
 	type SubagentPhase,
 	type SubagentThread,
 } from "./run.ts";
-import { createSubagentSessionResource, type SubagentSessionResource } from "./session-resource.ts";
 
 const MAX_RETAINED_THREADS = 16;
 const GLOBAL_CONCURRENCY = 4;
@@ -216,7 +216,7 @@ export class SubagentRuntime {
 		definition?: AgentDefinition;
 		ctx: ExtensionContext;
 		parentModel: string;
-		parentThinking: string;
+		parentThinking: NonNullable<ExtensionContext["thinkingLevel"]>;
 		signal?: AbortSignal;
 		onUpdate?: (details: SubagentDetails) => void | Promise<void>;
 		resolveFreshDefinition: () => Promise<
@@ -286,7 +286,7 @@ export class SubagentRuntime {
 			threadKey?: string;
 			ctx: ExtensionContext;
 			parentModel: string;
-			parentThinking: string;
+			parentThinking: NonNullable<ExtensionContext["thinkingLevel"]>;
 			definition?: AgentDefinition;
 			signal?: AbortSignal;
 			onUpdate?: (details: SubagentDetails) => void | Promise<void>;
@@ -316,7 +316,7 @@ export class SubagentRuntime {
 		let releaseGlobal: (() => void) | undefined;
 		let reservedThread: TrackedThread | undefined;
 		let provisionalThread: TrackedThread | undefined;
-		let provisionalResource: SubagentSessionResource | undefined;
+		let provisionalResource: IsolatedSessionResource | undefined;
 		let reservationToken: symbol | undefined;
 		let admitAdvanced = false;
 		let phase: SubagentPhase = "queue";
@@ -513,7 +513,7 @@ export class SubagentRuntime {
 				phase = "startup";
 				fanOut({ ...active.snapshot, status: "starting", phase: "startup", agent, threadId: thread.id }, true);
 				const oldResource = thread.resource;
-				provisionalResource = await createSubagentSessionResource(thread.sessionInputs, combined);
+				provisionalResource = await createIsolatedSessionResource(thread.sessionInputs, combined);
 				if (!this.isLive(generation, combined) || thread.disposed || this.threads.get(thread.id) !== thread) {
 					await provisionalResource.dispose();
 					provisionalResource = undefined;

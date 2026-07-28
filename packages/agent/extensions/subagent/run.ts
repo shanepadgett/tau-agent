@@ -13,14 +13,10 @@ import {
 	type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { createCompleteFileMeta } from "../../shared/full-file-knowledge.ts";
+import { createIsolatedSessionResource, type IsolatedSessionResource } from "../../shared/isolated-session.ts";
 import type { AgentDefinition } from "./agents.ts";
 import { emptySubagentResumeState, type RetainedTurnOutcome, type SubagentResumeState } from "./resume.ts";
-import {
-	createSubagentSessionResource,
-	resolveSubagentSessionInputs,
-	type SubagentSessionInputs,
-	type SubagentSessionResource,
-} from "./session-resource.ts";
+import { resolveSubagentSessionInputs, type SubagentSessionInputs } from "./session-resource.ts";
 
 const PREVIEW_LIMIT = 600;
 const VALUE_LIMIT = 180;
@@ -86,7 +82,7 @@ export interface SubagentThread {
 	displayName: string;
 	definition: AgentDefinition;
 	sessionInputs: SubagentSessionInputs;
-	resource: SubagentSessionResource;
+	resource: IsolatedSessionResource;
 	cwd: string;
 	model: string;
 	thinkingLevel: string;
@@ -200,7 +196,7 @@ export async function createSubagentThread(options: {
 	extensionPaths: readonly string[];
 	initialTask: string;
 	ctx: ExtensionContext;
-	thinkingLevel: string;
+	thinkingLevel: NonNullable<ExtensionContext["thinkingLevel"]>;
 	signal: AbortSignal;
 	onWarning?: (warning: string) => void;
 }): Promise<SubagentThread> {
@@ -223,7 +219,7 @@ export async function createSubagentThread(options: {
 		signal,
 		...(onWarning === undefined ? {} : { onWarning }),
 	});
-	const resource = await createSubagentSessionResource(sessionInputs, signal);
+	const resource = await createIsolatedSessionResource(sessionInputs, signal);
 	try {
 		return {
 			id,

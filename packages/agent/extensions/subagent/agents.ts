@@ -138,7 +138,6 @@ async function loadScope(
 		if (!required) return new Map();
 		const reason = error instanceof Error ? error.message : "directory unavailable";
 		return new Map([
-			["review", [{ path: directory, name: "review", reason: `packaged agents unavailable: ${reason}` }]],
 			[
 				"web-research",
 				[{ path: directory, name: "web-research", reason: `packaged agents unavailable: ${reason}` }],

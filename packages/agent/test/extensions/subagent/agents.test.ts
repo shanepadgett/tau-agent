@@ -20,7 +20,7 @@ async function project(): Promise<{ root: string; cwd: string; agents: string }>
 }
 
 describe("subagent discovery", () => {
-	it("loads built-ins and uses the nearest trusted project override", async () => {
+	it("loads built-ins and a trusted project review agent", async () => {
 		const paths = await project();
 		await writeFile(
 			join(paths.agents, "review.md"),
@@ -37,8 +37,7 @@ describe("subagent discovery", () => {
 		expect(trusted.agents.has("web-research")).toBe(true);
 
 		const untrusted = await discoverAgents(paths.cwd, false);
-		expect(untrusted.agents.get("review")?.description).not.toBe("Project review");
-		expect(untrusted.agents.get("review")?.model).toBe("openai-codex/gpt-5.6-sol");
+		expect(untrusted.agents.has("review")).toBe(false);
 		expect(untrusted.agents.has("generalist")).toBe(false);
 		expect(untrusted.agents.has("scout")).toBe(true);
 	});

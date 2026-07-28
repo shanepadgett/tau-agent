@@ -55,7 +55,7 @@ describe("subagent extension", () => {
 			await mkdir(join(root, ".pi", "tau"), { recursive: true });
 			await writeFile(
 				join(root, ".pi", "tau", "settings.json"),
-				JSON.stringify({ extensions: { subagent: { disabled: ["review"] } } }),
+				JSON.stringify({ extensions: { subagent: { disabled: ["web-research"] } } }),
 			);
 			const handlers = new Map<string, Array<(event: unknown, ctx: unknown) => unknown | Promise<unknown>>>();
 			let executeTool:
@@ -100,16 +100,22 @@ describe("subagent extension", () => {
 				result = await handler({ systemPrompt: "base" }, ctx);
 			}
 			const prompt = (result as { systemPrompt?: string } | undefined)?.systemPrompt;
-			expect(prompt).toContain("- web-research:");
+			expect(prompt).not.toContain("- web-research:");
 			expect(prompt).not.toContain("- review:");
 			expect(prompt).not.toContain("- scout:");
 			if (!executeTool) throw new Error("subagent tool was not registered");
-			const failed = await executeTool("call-1", { agent: "review", task: "Review this" }, undefined, undefined, {
-				...ctx,
-				mode: "print",
-				hasUI: false,
-			});
-			expect(failed.content[0]?.text).toContain("Agent review is disabled in Tau settings.");
+			const failed = await executeTool(
+				"call-1",
+				{ agent: "web-research", task: "Research this" },
+				undefined,
+				undefined,
+				{
+					...ctx,
+					mode: "print",
+					hasUI: false,
+				},
+			);
+			expect(failed.content[0]?.text).toContain("Agent web-research is disabled in Tau settings.");
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}

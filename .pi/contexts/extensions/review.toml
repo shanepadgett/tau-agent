@@ -1,0 +1,14 @@
+name = "Review"
+description = "Explicit isolated review of current Git changes"
+
+[runtime]
+description = "Review command, focused modes, shared isolated model session, TypeBox-derived results, and session persistence"
+read = []
+outline = ["packages/agent/extensions/review/index.ts", "packages/agent/extensions/review/model.ts", "packages/agent/extensions/review/session.ts"]
+references = ["packages/agent/extensions/review/README.md", "packages/agent/test/extensions/review/model.test.ts"]
+
+[ui]
+description = "Progress and result panels for isolated reviews"
+read = []
+outline = ["packages/agent/extensions/review/panel.ts"]
+references = []
