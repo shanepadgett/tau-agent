@@ -1,7 +1,17 @@
-import { fauxAssistantMessage, fauxText, fauxToolCall, type ToolResultMessage } from "@earendil-works/pi-ai";
+import {
+	fauxAssistantMessage,
+	fauxText,
+	fauxThinking,
+	fauxToolCall,
+	type ToolResultMessage,
+} from "@earendil-works/pi-ai";
 import type { ContextEvent, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
-import { buildMemoryCatalog, projectWorkingMemory } from "../../../extensions/working-memory/memory.ts";
+import {
+	buildMemoryCatalog,
+	collectPrunedRowIds,
+	projectWorkingMemory,
+} from "../../../extensions/working-memory/memory.ts";
 import type { ActiveWorkingMemoryState } from "../../../extensions/working-memory/state.ts";
 
 function result(id: string, name: string): ToolResultMessage {
@@ -20,20 +30,43 @@ function entry(id: string, message: ContextEvent["messages"][number]): SessionEn
 }
 
 describe("working-memory catalog and projection", () => {
-	it("selects assistant prose and individual complete tool exchanges", () => {
+	it("selects only user messages and visible assistant text", () => {
 		const assistant = fauxAssistantMessage([
+			fauxThinking("private reasoning"),
 			fauxText("useful conclusion"),
 			fauxToolCall("read", { path: "a.ts" }, { id: "read-a" }),
 			fauxToolCall("grep", { pattern: "x" }, { id: "grep-x" }),
 		]);
+		const thinking = fauxAssistantMessage(fauxThinking("thinking only"));
 		const branch = [
+			entry("user", { role: "user", content: "important instruction", timestamp: 1 }),
 			entry("assistant", assistant),
 			entry("read-result", result("read-a", "read")),
 			entry("grep-result", result("grep-x", "grep")),
+			entry("thinking", thinking),
 		];
 		const catalog = buildMemoryCatalog(branch);
-		expect([...catalog.keys()]).toEqual(["m:assistant", "t:assistant:1", "t:assistant:2"]);
-		expect(catalog.get("t:assistant:1")?.messages).toHaveLength(2);
+		expect([...catalog.keys()]).toEqual(["m:user", "m:assistant"]);
+		expect(JSON.stringify(catalog.get("m:assistant")?.messages)).toContain("useful conclusion");
+		expect(JSON.stringify(catalog.get("m:assistant")?.messages)).not.toContain("private reasoning");
+		expect(JSON.stringify(catalog.get("m:assistant")?.messages)).not.toContain("read-a");
+	});
+
+	it("tracks pruned tool and outline rows without making them selectable", () => {
+		const call = entry("call", fauxAssistantMessage(fauxToolCall("read", { path: "a.ts" }, { id: "read-a" })));
+		const outline: SessionEntry = {
+			type: "custom_message",
+			id: "outline",
+			parentId: call.id,
+			timestamp: "2026-01-01",
+			customType: "tau.explore.outline",
+			content: "a.ts\nL1: export const a = 1",
+			display: true,
+			details: { rowId: "outline-row" },
+		};
+		const branch = [call, entry("result", result("read-a", "read")), outline];
+		expect(buildMemoryCatalog(branch).size).toBe(0);
+		expect(collectPrunedRowIds(branch, branch.length)).toEqual(["read-a", "outline-row"]);
 	});
 
 	it("hard-checkpoints context, sanitizes continuation arguments, and hides retained refs", () => {

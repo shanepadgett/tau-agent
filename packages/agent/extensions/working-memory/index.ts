@@ -22,7 +22,7 @@ import { replayWorkingMemoryState, WORKING_MEMORY_TOOL, type WorkingMemoryCheckp
 const NUDGE_TYPE = "tau.working-memory.nudge";
 const BASELINE_TYPE = "tau.working-memory.nudge-baseline";
 const TOOL_DESCRIPTION =
-	"Create a selective hard checkpoint for future model context. Keep valuable referenced evidence and complete tool exchanges, carry file structure as outlines, defer conditionally relevant files without reading them, and provide one compact continuation note. Never checkpoint useful evidence merely to reread it.";
+	"Create a selective hard checkpoint for future model context. Keep valuable user and visible assistant messages, carry file structure as outlines, defer conditionally relevant files without reading them, and distill exploration findings into one compact continuation note.";
 
 interface NudgeState {
 	anchorToolCallId: string | undefined;
@@ -98,9 +98,9 @@ export default function workingMemoryExtension(pi: ExtensionAPI): void {
 					promptSnippet: "Reassess and selectively checkpoint active working memory",
 					promptGuidelines: [
 						"Use working_memory when stale evidence has accumulated or a memory reminder asks for reassessment; continue coherent exploration when current evidence remains useful.",
-						"A hidden working-memory reference catalog provides keep refs. Message refs preserve conversational evidence; tool refs preserve one complete call/result exchange.",
-						"Keep active or expensive evidence, outline files when structure suffices, defer paths whose relevance is conditional, and discard evidence with no expected value.",
-						"Everything before working_memory leaves future model context unless selected in keep. Put durable decisions, constraints, unresolved matters, and next action in continuation without duplicating retained evidence.",
+						"A hidden working-memory reference catalog provides keep refs only for user messages and visible assistant text. Tool calls, tool results, hidden reasoning, and framework messages cannot be retained.",
+						"Outline files that remain in the repository working set, defer paths whose relevance is conditional, and discard exploration history after extracting its useful conclusions.",
+						"Everything before working_memory leaves future model context unless selected in keep. Put findings from tools, durable decisions, constraints, unresolved matters, and next action in continuation without duplicating retained messages.",
 					],
 					parameters: workingMemoryParameters,
 					executionMode: "sequential",

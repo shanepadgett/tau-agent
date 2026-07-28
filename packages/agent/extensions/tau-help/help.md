@@ -36,7 +36,7 @@ Adds `/context` to set branch-local reusable repository work scopes from `.pi/co
 
 ## working-memory
 
-Gives agent `working_memory` for selective hard checkpoints. Model-only references identify useful conversation evidence and complete tool exchanges. Requested source files return as structural outlines, while deferred files remain cheap conditional reminders. Everything else before checkpoint leaves future model input without changing saved session. Advisory reminders begin at 40k active-context tokens. Run `/prune` to request reassessment manually.
+Gives agent `working_memory` for selective hard checkpoints. Model-only references identify useful user messages and visible assistant text. Requested source files return as structural outlines, deferred files remain cheap conditional reminders, and a continuation note carries conclusions extracted from exploration. Tool history and full file reads leave future model input without changing saved session. Advisory reminders begin at 40k active-context tokens. Run `/prune` to request reassessment manually.
 
 ## explore
 

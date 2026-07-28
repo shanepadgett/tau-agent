@@ -3,7 +3,7 @@ import { type ExtensionAPI, type ExtensionContext, type SessionEntry } from "@ea
 import { type Static, Type } from "typebox";
 import { truncateBoundedHead } from "../../shared/bounded-text-result.ts";
 import { requestOutlineInjections, type PreparedOutlineInjection } from "../../shared/outline-injection.ts";
-import { buildMemoryCatalog } from "./memory.ts";
+import { buildMemoryCatalog, collectPrunedRowIds } from "./memory.ts";
 import { WORKING_MEMORY_TOOL, type DeferredFile, type WorkingMemoryCheckpointDetailsV1 } from "./state.ts";
 
 const PATH = Type.String({ minLength: 1, maxLength: 500, pattern: "\\S" });
@@ -58,7 +58,7 @@ export async function executeWorkingMemory(options: ExecuteWorkingMemoryOptions)
 			const unit = catalog.get(ref);
 			return unit ? [unit] : [];
 		})
-		.sort((left, right) => left.order - right.order || left.suborder - right.suborder);
+		.sort((left, right) => left.order - right.order);
 	const retainedRefs = retained.map((unit) => unit.ref);
 	const warnings = requestedRefs
 		.filter((ref) => !catalog.has(ref))
@@ -89,9 +89,8 @@ export async function executeWorkingMemory(options: ExecuteWorkingMemoryOptions)
 	}
 
 	const anchorIndex = findAnchorEntry(branch, options.toolCallId);
-	const retainedSet = new Set(retainedRefs);
 	const preAnchorUnits = [...catalog.values()].filter((unit) => unit.order < anchorIndex);
-	const prunedRowIds = [...new Set(preAnchorUnits.flatMap((unit) => (retainedSet.has(unit.ref) ? [] : unit.rowIds)))];
+	const prunedRowIds = collectPrunedRowIds(branch, anchorIndex);
 	const details: WorkingMemoryCheckpointDetailsV1 = {
 		v: 1,
 		anchorToolCallId: options.toolCallId,

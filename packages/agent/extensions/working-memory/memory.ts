@@ -9,23 +9,13 @@ export interface MemoryUnit {
 	label: string;
 	preview: string;
 	order: number;
-	suborder: number;
 	messages: ContextMessage[];
-	rowIds: string[];
 }
 
-const EXCLUDED_CUSTOM_TYPES = new Set(["tau.autoread", "tau.runtime-context", "tau.working-memory.nudge"]);
 const REFERENCE_CATALOG_TYPE = "tau.working-memory.references";
 
 export function buildMemoryCatalog(branch: readonly SessionEntry[]): Map<string, MemoryUnit> {
 	const catalog = new Map<string, MemoryUnit>();
-	const results = new Map<string, ContextMessage>();
-	for (const entry of branch) {
-		for (const message of sessionEntryToContextMessages(entry)) {
-			if (message.role === "toolResult") results.set(message.toolCallId, message);
-		}
-	}
-
 	for (let order = 0; order < branch.length; order += 1) {
 		const entry = branch[order];
 		if (!entry) continue;
@@ -35,59 +25,54 @@ export function buildMemoryCatalog(branch: readonly SessionEntry[]): Map<string,
 			const calls = message.content.filter((block) => block.type === "toolCall");
 			const frameworkCall = calls.some((call) => call.name === "working_memory");
 			if (frameworkCall) continue;
-			const prose = message.content.filter((block) => block.type !== "toolCall");
-			if (prose.length > 0) {
+			const text = message.content.filter((block) => block.type === "text");
+			if (text.length > 0) {
 				const ref = `m:${entry.id}`;
 				catalog.set(ref, {
 					ref,
 					label: "assistant",
-					preview: previewAssistant(prose),
+					preview: previewAssistant(text),
 					order,
-					suborder: 0,
-					messages: [{ ...message, content: prose }],
-					rowIds: [],
-				});
-			}
-			for (let index = 0; index < calls.length; index += 1) {
-				const call = calls[index];
-				if (!call) continue;
-				const result = results.get(call.id);
-				if (result?.role !== "toolResult" || result.toolName !== call.name) continue;
-				const ref = `t:${entry.id}:${index + 1}`;
-				catalog.set(ref, {
-					ref,
-					label: `tool ${call.name}`,
-					preview: previewTool(call.arguments),
-					order,
-					suborder: index + 1,
-					messages: [{ ...message, content: [call] }, result],
-					rowIds: [call.id],
+					messages: [{ ...message, content: text }],
 				});
 			}
 			continue;
 		}
-		if (message.role === "toolResult") continue;
-		if (message.role === "custom" && EXCLUDED_CUSTOM_TYPES.has(message.customType)) continue;
-		if (
-			message.role === "custom" &&
-			message.customType === "tau.injected-context" &&
-			message.details &&
-			typeof message.details === "object" &&
-			(message.details as Record<string, unknown>).source === "context"
-		)
-			continue;
+		if (message.role !== "user") continue;
 		const ref = `m:${entry.id}`;
 		catalog.set(ref, {
 			ref,
-			label: message.role === "custom" ? message.customType : message.role,
-			preview: previewMessage(message),
+			label: "user",
+			preview: previewUser(message),
 			order,
-			suborder: 0,
 			messages: [message],
-			rowIds: outlineRowIds(message),
 		});
 	}
 	return catalog;
+}
+
+export function collectPrunedRowIds(branch: readonly SessionEntry[], before: number): string[] {
+	const rowIds = new Set<string>();
+	for (let index = 0; index < before; index += 1) {
+		const entry = branch[index];
+		if (!entry) continue;
+		for (const message of sessionEntryToContextMessages(entry)) {
+			if (message.role === "assistant") {
+				for (const block of message.content) {
+					if (block.type === "toolCall" && block.name !== "working_memory") rowIds.add(block.id);
+				}
+			}
+			if (
+				message.role === "custom" &&
+				message.customType === "tau.explore.outline" &&
+				isRecord(message.details) &&
+				typeof message.details.rowId === "string"
+			) {
+				rowIds.add(message.details.rowId);
+			}
+		}
+	}
+	return [...rowIds];
 }
 
 export function projectWorkingMemory(
@@ -109,7 +94,7 @@ export function projectWorkingMemory(
 			const unit = catalog.get(ref);
 			return unit ? [unit] : [];
 		})
-		.sort((left, right) => left.order - right.order || left.suborder - right.suborder);
+		.sort((left, right) => left.order - right.order);
 	const projected: ContextMessage[] = [];
 	const projectedRefs: MemoryUnit[][] = [];
 	for (const unit of retained) {
@@ -137,12 +122,6 @@ function referenceCurrentMessages(
 		(message) => !isContextProjectionMessage(message) && !isLegacyContextMessage(message),
 	);
 	if (generated.length !== sessionMessages.length) return messages.map(() => []);
-	const toolRefs = new Map<string, MemoryUnit[]>();
-	for (const unit of catalog.values()) {
-		const result = unit.messages.find((message) => message.role === "toolResult");
-		if (result?.role !== "toolResult") continue;
-		toolRefs.set(result.toolCallId, [...(toolRefs.get(result.toolCallId) ?? []), unit]);
-	}
 	let generatedIndex = 0;
 	return messages.map((currentMessage) => {
 		if (isContextProjectionMessage(currentMessage) || isLegacyContextMessage(currentMessage)) return [];
@@ -150,13 +129,9 @@ function referenceCurrentMessages(
 		generatedIndex += 1;
 		if (!current) return [];
 		const { entry, message } = current;
-		if (message.role === "assistant") {
-			const unit = catalog.get(`m:${entry.id}`);
-			return unit && currentMessage.role === "assistant" ? [unit] : [];
-		}
-		if (message.role === "toolResult") return toolRefs.get(message.toolCallId) ?? [];
+		if (message.role !== "user" && message.role !== "assistant") return [];
 		const unit = catalog.get(`m:${entry.id}`);
-		return unit ? [unit] : [];
+		return unit && currentMessage.role === message.role ? [unit] : [];
 	});
 }
 
@@ -184,7 +159,7 @@ function addReferenceCatalog(
 			role: "custom",
 			customType: REFERENCE_CATALOG_TYPE,
 			content: [...unique.values()]
-				.sort((left, right) => left.order - right.order || left.suborder - right.suborder)
+				.sort((left, right) => left.order - right.order)
 				.map((unit) => `${unit.ref} (${unit.label}): ${unit.preview}`)
 				.join("\n"),
 			display: false,
@@ -224,36 +199,14 @@ function findAnchor(messages: readonly ContextMessage[], id: string): number {
 function previewAssistant(blocks: ReadonlyArray<{ type: string }>): string {
 	for (const block of blocks) {
 		if (block.type === "text" && "text" in block && typeof block.text === "string") return compact(block.text);
-		if (block.type === "thinking" && "thinking" in block && typeof block.thinking === "string") {
-			return compact(block.thinking);
-		}
 	}
 	return "";
 }
 
-function previewTool(args: Record<string, unknown>): string {
-	return compact(JSON.stringify(args));
-}
-
-function previewMessage(message: ContextMessage): string {
-	if (message.role === "user" || message.role === "custom") {
-		if (typeof message.content === "string") return compact(message.content);
-		const text = message.content.find((part) => part.type === "text");
-		return text?.type === "text" ? compact(text.text) : "";
-	}
-	if (message.role === "bashExecution") return compact(`${message.command}: ${message.output}`);
-	if (message.role === "assistant") return previewAssistant(message.content);
-	if (message.role === "toolResult") {
-		const text = message.content.find((part) => part.type === "text");
-		return text?.type === "text" ? compact(text.text) : "";
-	}
-	return compact(message.summary);
-}
-
-function outlineRowIds(message: ContextMessage): string[] {
-	if (message.role !== "custom" || message.customType !== "tau.explore.outline") return [];
-	if (!isRecord(message.details) || typeof message.details.rowId !== "string") return [];
-	return [message.details.rowId];
+function previewUser(message: Extract<ContextMessage, { role: "user" }>): string {
+	if (typeof message.content === "string") return compact(message.content);
+	const text = message.content.find((part) => part.type === "text");
+	return text?.type === "text" ? compact(text.text) : "";
 }
 
 function compact(value: string): string {
