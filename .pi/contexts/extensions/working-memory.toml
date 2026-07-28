@@ -8,7 +8,7 @@ outline = ["packages/agent/extensions/working-memory/index.ts", "packages/agent/
 references = ["packages/agent/test/extensions/working-memory/memory.test.ts", "packages/agent/test/extensions/working-memory/state.test.ts"]
 
 [checkpoint]
-description = "Checkpoint input contract, user and visible-assistant retention, continuation findings, outline carry-forward, deferred files, and bounded result"
+description = "Checkpoint input contract, user and visible-assistant retention, continuation findings, full-source read and structural-outline carry-forward, deferred files, and bounded result"
 read = []
 outline = ["packages/agent/extensions/working-memory/checkpoint.ts"]
 references = ["packages/agent/test/extensions/working-memory/checkpoint.test.ts"]
@@ -17,7 +17,7 @@ references = ["packages/agent/test/extensions/working-memory/checkpoint.test.ts"
 description = "Separate tool and outline row pruning bookkeeping, nudge rendering, and product guidance"
 read = []
 outline = ["packages/agent/extensions/working-memory/render.ts"]
-references = ["packages/agent/extensions/working-memory/README.md"]
+references = ["packages/agent/extensions/working-memory/README.md", "packages/agent/test/extensions/working-memory/render.test.ts"]
 
 [settings]
 description = "Configuration contract and focused tests"

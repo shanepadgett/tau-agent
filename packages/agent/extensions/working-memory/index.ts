@@ -17,12 +17,12 @@ import {
 	type WorkingMemoryNudgeDetails,
 } from "./render.ts";
 import workingMemorySettings from "./settings.ts";
-import { replayWorkingMemoryState, WORKING_MEMORY_TOOL, type WorkingMemoryCheckpointDetailsV1 } from "./state.ts";
+import { replayWorkingMemoryState, WORKING_MEMORY_TOOL, type WorkingMemoryCheckpointDetailsV2 } from "./state.ts";
 
 const NUDGE_TYPE = "tau.working-memory.nudge";
 const BASELINE_TYPE = "tau.working-memory.nudge-baseline";
 const TOOL_DESCRIPTION =
-	"Create a selective hard checkpoint for future model context. Keep valuable user and visible assistant messages, carry file structure as outlines, defer conditionally relevant files without reading them, and distill exploration findings into one compact continuation note.";
+	"Create a selective hard checkpoint for future model context. Keep valuable user and visible assistant messages, auto-read full source or carry file structure as needed, defer conditionally relevant files, and distill exploration findings into one compact continuation note.";
 
 interface NudgeState {
 	anchorToolCallId: string | undefined;
@@ -91,7 +91,7 @@ export default function workingMemoryExtension(pi: ExtensionAPI): void {
 		instructions = settings.nudgeInstructions;
 		if (enabled && !toolRegistered) {
 			pi.registerTool(
-				defineTool<typeof workingMemoryParameters, WorkingMemoryCheckpointDetailsV1>({
+				defineTool<typeof workingMemoryParameters, WorkingMemoryCheckpointDetailsV2>({
 					name: WORKING_MEMORY_TOOL,
 					label: WORKING_MEMORY_TOOL,
 					description: TOOL_DESCRIPTION,
@@ -99,8 +99,9 @@ export default function workingMemoryExtension(pi: ExtensionAPI): void {
 					promptGuidelines: [
 						"Use working_memory when stale evidence has accumulated or a memory reminder asks for reassessment; continue coherent exploration when current evidence remains useful.",
 						"A hidden working-memory reference catalog provides keep refs only for user messages and visible assistant text. Tool calls, tool results, hidden reasoning, and framework messages cannot be retained.",
-						"Outline files that remain in the repository working set, defer paths whose relevance is conditional, and discard exploration history after extracting its useful conclusions.",
-						"Everything before working_memory leaves future model context unless selected in keep. Put findings from tools, durable decisions, constraints, unresolved matters, and next action in continuation without duplicating retained messages.",
+						"Choose one file tier: readFiles auto-reads source into the next turn when its body is needed; outlineFiles carries symbols and locations for later scoped inspection; deferFiles records inactive conditional paths. Do not read a file merely to decide whether to outline it.",
+						"Choose readFiles instead of outlineFiles when next work will require the complete file. Do not list a path in more than one file tier.",
+						"Use continuation as a working note for resuming mid-task. Carry durable decisions, concrete findings, live reasoning, unresolved questions, remaining work, and next action in as much detail as needed to continue without rereading discarded results. Do not make it a user-facing status update or narrate the checkpoint.",
 					],
 					parameters: workingMemoryParameters,
 					executionMode: "sequential",
@@ -123,6 +124,7 @@ export default function workingMemoryExtension(pi: ExtensionAPI): void {
 							rowId: context.toolCallId,
 							invalidate: context.invalidate,
 							lastComponent: context.lastComponent,
+							executionStarted: context.executionStarted,
 						});
 					},
 					renderResult(result, options, theme, context) {

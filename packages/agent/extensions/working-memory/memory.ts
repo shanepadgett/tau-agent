@@ -64,7 +64,7 @@ export function collectPrunedRowIds(branch: readonly SessionEntry[], before: num
 			}
 			if (
 				message.role === "custom" &&
-				message.customType === "tau.explore.outline" &&
+				(message.customType === "tau.explore.outline" || message.customType === "tau.autoread") &&
 				isRecord(message.details) &&
 				typeof message.details.rowId === "string"
 			) {

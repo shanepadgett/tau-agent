@@ -64,9 +64,19 @@ describe("working-memory catalog and projection", () => {
 			display: true,
 			details: { rowId: "outline-row" },
 		};
-		const branch = [call, entry("result", result("read-a", "read")), outline];
+		const autoread: SessionEntry = {
+			type: "custom_message",
+			id: "autoread",
+			parentId: outline.id,
+			timestamp: "2026-01-01",
+			customType: "tau.autoread",
+			content: "b.ts\nexport const b = 1",
+			display: true,
+			details: { rowId: "autoread-row" },
+		};
+		const branch = [call, entry("result", result("read-a", "read")), outline, autoread];
 		expect(buildMemoryCatalog(branch).size).toBe(0);
-		expect(collectPrunedRowIds(branch, branch.length)).toEqual(["read-a", "outline-row"]);
+		expect(collectPrunedRowIds(branch, branch.length)).toEqual(["read-a", "outline-row", "autoread-row"]);
 	});
 
 	it("hard-checkpoints context, sanitizes continuation arguments, and hides retained refs", () => {
@@ -75,7 +85,7 @@ describe("working-memory catalog and projection", () => {
 		const anchor = fauxAssistantMessage(
 			fauxToolCall(
 				"working_memory",
-				{ continuation: "duplicate", keep: ["m:user"], outlineFiles: [], deferFiles: [] },
+				{ continuation: "duplicate", keep: ["m:user"], readFiles: [], outlineFiles: [], deferFiles: [] },
 				{ id: "anchor" },
 			),
 		);

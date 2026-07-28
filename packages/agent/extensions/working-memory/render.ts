@@ -99,15 +99,21 @@ export function renderWorkingMemoryCall(
 		rowId: string;
 		invalidate: () => void;
 		lastComponent: unknown;
+		executionStarted: boolean;
 	},
 ): Text {
 	context.rowState.watch(context.rowId, context.invalidate);
 	const component = context.lastComponent instanceof Text ? context.lastComponent : new Text("", 0, 0);
+	if (context.executionStarted) {
+		component.setText("");
+		return component;
+	}
 	const kept = Array.isArray(args.keep) ? args.keep.length : 0;
+	const read = Array.isArray(args.readFiles) ? args.readFiles.length : 0;
 	const outlined = Array.isArray(args.outlineFiles) ? args.outlineFiles.length : 0;
 	const deferred = Array.isArray(args.deferFiles) ? args.deferFiles.length : 0;
 	component.setText(
-		`${formatToolRowTitle(context.rowState, context.rowId, "working_memory", theme)} ${theme.fg("muted", `${kept} kept · ${outlined} outline · ${deferred} deferred`)}`,
+		`${formatToolRowTitle(context.rowState, context.rowId, "working_memory", theme)} ${theme.fg("muted", `${kept} kept · ${read} read · ${outlined} outline · ${deferred} deferred`)}`,
 	);
 	return component;
 }
@@ -128,12 +134,13 @@ export function renderWorkingMemoryResult(
 	}
 	let text = theme.fg(
 		details.warnings.length === 0 ? "success" : "warning",
-		`Checkpoint · kept ${details.retainedRefs.length} · outlined ${details.outlinedFiles.length} · deferred ${details.deferredFiles.length} · removed ${details.removedUnits}${details.warnings.length === 0 ? "" : ` · warnings ${details.warnings.length}`}`,
+		`Checkpoint · kept ${details.retainedRefs.length} · read ${details.readFiles.length} · outlined ${details.outlinedFiles.length} · deferred ${details.deferredFiles.length} · pruned ${details.removedUnits}${details.warnings.length === 0 ? "" : ` · warnings ${details.warnings.length}`}`,
 	);
 	if (expanded) {
 		const lines = [
 			bounded(firstText(result), 1_500),
 			...details.retainedLabels.map((item) => `${item.ref} ${item.label}: ${item.preview}`),
+			...details.readFiles.map((path) => `read: ${path}`),
 			...details.outlinedFiles.map((file) => `outlined: ${file.path}`),
 			...details.deferredFiles.map((file) => `deferred: ${file.path} — ${file.reason}; when ${file.relevantWhen}`),
 			...details.warnings.map((warning) => `warning: ${warning}`),

@@ -4,16 +4,17 @@ import { describe, expect, it } from "vitest";
 import {
 	parseWorkingMemoryDetails,
 	replayWorkingMemoryState,
-	type WorkingMemoryCheckpointDetailsV1,
+	type WorkingMemoryCheckpointDetailsV2,
 } from "../../../extensions/working-memory/state.ts";
 
-function details(anchorToolCallId: string): WorkingMemoryCheckpointDetailsV1 {
+function details(anchorToolCallId: string): WorkingMemoryCheckpointDetailsV2 {
 	return {
-		v: 1,
+		v: 2,
 		anchorToolCallId,
 		retainedRefs: ["m:user"],
 		retainedLabels: [{ ref: "m:user", label: "user", preview: "constraint" }],
 		prunedRowIds: ["old-tool"],
+		readFiles: ["active.ts"],
 		outlinedFiles: [],
 		deferredFiles: [],
 		removedUnits: 4,

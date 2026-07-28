@@ -14,12 +14,13 @@ export interface RetainedLabel {
 	preview: string;
 }
 
-export interface WorkingMemoryCheckpointDetailsV1 {
-	v: 1;
+export interface WorkingMemoryCheckpointDetailsV2 {
+	v: 2;
 	anchorToolCallId: string;
 	retainedRefs: string[];
 	retainedLabels: RetainedLabel[];
 	prunedRowIds: string[];
+	readFiles: string[];
 	outlinedFiles: Array<{ path: string; rowId: string }>;
 	deferredFiles: DeferredFile[];
 	removedUnits: number;
@@ -32,14 +33,15 @@ export interface ActiveWorkingMemoryState {
 	prunedRowIds: ReadonlySet<string>;
 }
 
-export function parseWorkingMemoryDetails(value: unknown): WorkingMemoryCheckpointDetailsV1 | undefined {
-	if (!isRecord(value) || value.v !== 1 || !nonempty(value.anchorToolCallId)) return undefined;
+export function parseWorkingMemoryDetails(value: unknown): WorkingMemoryCheckpointDetailsV2 | undefined {
+	if (!isRecord(value) || value.v !== 2 || !nonempty(value.anchorToolCallId)) return undefined;
 	const keys = [
 		"v",
 		"anchorToolCallId",
 		"retainedRefs",
 		"retainedLabels",
 		"prunedRowIds",
+		"readFiles",
 		"outlinedFiles",
 		"deferredFiles",
 		"removedUnits",
@@ -48,6 +50,7 @@ export function parseWorkingMemoryDetails(value: unknown): WorkingMemoryCheckpoi
 	if (Object.keys(value).length !== keys.length || !keys.every((key) => Object.hasOwn(value, key))) return undefined;
 	const retainedRefs = uniqueStrings(value.retainedRefs);
 	const prunedRowIds = uniqueStrings(value.prunedRowIds);
+	const readFiles = uniqueStrings(value.readFiles);
 	const warnings = strings(value.warnings);
 	const retainedLabels = parseRetainedLabels(value.retainedLabels);
 	const outlinedFiles = parseOutlinedFiles(value.outlinedFiles);
@@ -55,6 +58,7 @@ export function parseWorkingMemoryDetails(value: unknown): WorkingMemoryCheckpoi
 	if (
 		!retainedRefs ||
 		!prunedRowIds ||
+		!readFiles ||
 		!warnings ||
 		!retainedLabels ||
 		retainedLabels.length !== retainedRefs.length ||
@@ -67,11 +71,12 @@ export function parseWorkingMemoryDetails(value: unknown): WorkingMemoryCheckpoi
 		return undefined;
 	}
 	return {
-		v: 1,
+		v: 2,
 		anchorToolCallId: value.anchorToolCallId,
 		retainedRefs,
 		retainedLabels,
 		prunedRowIds,
+		readFiles,
 		outlinedFiles,
 		deferredFiles,
 		removedUnits: value.removedUnits as number,
