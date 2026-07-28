@@ -124,6 +124,33 @@ describe("working-memory catalog and projection", () => {
 		expect(second.slice(0, first.length)).toEqual(first);
 	});
 
+	it("keeps reference messages outside assistant tool-call batches", () => {
+		const assistantMessage = fauxAssistantMessage([
+			fauxText("useful conclusion"),
+			fauxToolCall("read", { path: "a.ts" }, { id: "read-a" }),
+			fauxToolCall("read", { path: "b.ts" }, { id: "read-b" }),
+		]);
+		const firstResult = result("read-a", "read");
+		const secondResult = result("read-b", "read");
+		const branch = [
+			entry("assistant", assistantMessage),
+			entry("first-result", firstResult),
+			entry("second-result", secondResult),
+		];
+		const projected = projectWorkingMemory(
+			[assistantMessage, firstResult, secondResult],
+			{ latestAnchorToolCallId: undefined, retainedRefs: [], prunedRowIds: new Set() },
+			branch,
+			branch,
+		);
+		expect(projected.slice(1, 4)).toEqual([assistantMessage, firstResult, secondResult]);
+		expect(projected[4]).toMatchObject({
+			role: "custom",
+			customType: "tau.working-memory.references",
+			content: expect.stringContaining("m:assistant"),
+		});
+	});
+
 	it("keeps memory references when Context appends an ambient projection first", () => {
 		const userMessage = { role: "user" as const, content: "constraint", timestamp: 1 };
 		const user = entry("user", userMessage);

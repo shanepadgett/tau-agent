@@ -149,11 +149,27 @@ function addReferenceCatalog(
 			timestamp: 0,
 		},
 	];
+	let deferredAssistantUnits: MemoryUnit[] = [];
+	let pendingToolCallIds = new Set<string>();
 	for (let index = 0; index < messages.length; index += 1) {
 		const message = messages[index];
 		if (!message) continue;
 		projected.push(message);
 		const unique = new Map((unitsByMessage[index] ?? []).map((unit) => [unit.ref, unit]));
+		if (message.role === "assistant") {
+			pendingToolCallIds = new Set(
+				message.content.filter((block) => block.type === "toolCall").map((block) => block.id),
+			);
+			if (pendingToolCallIds.size > 0) {
+				deferredAssistantUnits = [...unique.values()];
+				continue;
+			}
+		}
+		if (message.role === "toolResult" && pendingToolCallIds.delete(message.toolCallId)) {
+			if (pendingToolCallIds.size > 0) continue;
+			for (const unit of deferredAssistantUnits) unique.set(unit.ref, unit);
+			deferredAssistantUnits = [];
+		}
 		if (unique.size === 0) continue;
 		projected.push({
 			role: "custom",
