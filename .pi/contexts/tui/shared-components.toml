@@ -23,7 +23,7 @@ references = ["packages/tui/src/filter-row.ts", "packages/tui/src/list-render.ts
 description = "Theme adaptation, markers, text formatting, and record-selection composition"
 read = []
 outline = ["packages/tui/src/editor-theme.ts", "packages/tui/src/marker.ts", "packages/tui/src/text-record-select-panel.ts"]
-references = ["packages/tui/src/text.ts"]
+references = ["packages/tui/src/text.ts", "packages/agent/test/tui/text-record-select-panel.test.ts"]
 
 [authoring-guidance]
 description = "Required component selection, composition, key-hint, rendering, and widget rules"

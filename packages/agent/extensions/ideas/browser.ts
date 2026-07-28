@@ -6,17 +6,15 @@ import {
 	type TextRecordSelectPanelConfig,
 	type TextRecordSelectResult,
 } from "@shanepadgett/tau-tui";
+import { errorText } from "../../shared/text.ts";
 import { deleteIdea, type Idea, ideasFilePath, loadIdeas, updateIdea } from "./store.ts";
 
-const CONFIG: Omit<TextRecordSelectPanelConfig, "path"> = {
+const CONFIG: Omit<TextRecordSelectPanelConfig<Idea>, "path" | "destructiveAction"> = {
 	title: "Ideas",
 	emptyMessage: "No ideas yet. Use /ideas <text> to log one.",
 	primaryLabel: "insert",
 	expandActiveItem: true,
-	actions: [
-		{ id: "edit", key: Key.ctrl("e"), hint: rawHint("ctrl+e", "edit") },
-		{ id: "delete", key: Key.ctrl("d"), hint: rawHint("ctrl+d", "delete") },
-	],
+	actions: [{ id: "edit", key: Key.ctrl("e"), hint: rawHint("ctrl+e", "edit") }],
 };
 
 export async function browseIdeas(ctx: ExtensionCommandContext): Promise<Idea | undefined> {
@@ -33,15 +31,6 @@ export async function browseIdeas(ctx: ExtensionCommandContext): Promise<Idea | 
 
 		if (result.kind === "cancel") return undefined;
 		if (result.kind === "primary") return result.item;
-
-		if (result.actionId === "delete") {
-			const ok = await ctx.ui.confirm("Delete idea?", result.item.text);
-			if (ok) {
-				await deleteIdea(ctx.cwd, result.item.id);
-				ctx.ui.notify("Idea deleted.", "info");
-			}
-			continue;
-		}
 
 		// edit: native multiline editor, prefilled with the current text.
 		const edited = await ctx.ui.editor("Edit idea", result.item.text);
@@ -60,7 +49,29 @@ async function show(
 	ideas: readonly Idea[],
 	path: string,
 ): Promise<TextRecordSelectResult<Idea>> {
-	return ctx.ui.custom<TextRecordSelectResult<Idea>>((_tui, theme, _keybindings, done) =>
-		createTextRecordSelectPanel(theme, ideas, { ...CONFIG, path }, done),
+	return ctx.ui.custom<TextRecordSelectResult<Idea>>((tui, theme, _keybindings, done) =>
+		createTextRecordSelectPanel(
+			tui,
+			theme,
+			ideas,
+			{
+				...CONFIG,
+				path,
+				destructiveAction: {
+					id: "delete",
+					key: Key.ctrl("d"),
+					hint: rawHint("ctrl+d", "delete"),
+					confirmLabel: () => "Delete idea?",
+					runningLabel: "Deleting idea…",
+					onConfirm: async (item) => {
+						const next = await deleteIdea(ctx.cwd, item.id);
+						ctx.ui.notify("Idea deleted.", "info");
+						return next;
+					},
+					onError: (error) => ctx.ui.notify(`Idea delete failed: ${errorText(error)}`, "error"),
+				},
+			},
+			done,
+		),
 	);
 }

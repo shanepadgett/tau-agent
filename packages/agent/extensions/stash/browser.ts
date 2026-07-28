@@ -6,13 +6,14 @@ import {
 	type TextRecordSelectPanelConfig,
 	type TextRecordSelectResult,
 } from "@shanepadgett/tau-tui";
+import { errorText } from "../../shared/text.ts";
 import { loadStashes, removeStash, type Stash, stashFilePath } from "./store.ts";
 
-const CONFIG: Omit<TextRecordSelectPanelConfig, "path"> = {
+const CONFIG: Omit<TextRecordSelectPanelConfig<Stash>, "path" | "destructiveAction"> = {
 	title: "Stash",
 	emptyMessage: "No stashed prompts. Use the stash shortcut while typing to stash.",
 	primaryLabel: "pop",
-	actions: [{ id: "discard", key: Key.ctrl("d"), hint: rawHint("ctrl+d", "discard") }],
+	actions: [],
 	expandActiveItem: false,
 };
 
@@ -24,20 +25,9 @@ export async function browseStash(ctx: ExtensionCommandContext): Promise<Stash |
 
 	const path = await stashFilePath(ctx.cwd);
 
-	while (true) {
-		const stashes = await loadStashes(ctx.cwd);
-		const result = await show(ctx, stashes, path);
-
-		if (result.kind === "cancel") return undefined;
-		if (result.kind === "primary") return result.item;
-
-		// discard: drop the stashed prompt without restoring it.
-		const ok = await ctx.ui.confirm("Discard stashed prompt?", result.item.text);
-		if (ok) {
-			await removeStash(ctx.cwd, result.item.id);
-			ctx.ui.notify("Stash discarded.", "info");
-		}
-	}
+	const stashes = await loadStashes(ctx.cwd);
+	const result = await show(ctx, stashes, path);
+	return result.kind === "primary" ? result.item : undefined;
 }
 
 async function show(
@@ -45,7 +35,29 @@ async function show(
 	stashes: readonly Stash[],
 	path: string,
 ): Promise<TextRecordSelectResult<Stash>> {
-	return ctx.ui.custom<TextRecordSelectResult<Stash>>((_tui, theme, _keybindings, done) =>
-		createTextRecordSelectPanel(theme, stashes, { ...CONFIG, path }, done),
+	return ctx.ui.custom<TextRecordSelectResult<Stash>>((tui, theme, _keybindings, done) =>
+		createTextRecordSelectPanel(
+			tui,
+			theme,
+			stashes,
+			{
+				...CONFIG,
+				path,
+				destructiveAction: {
+					id: "discard",
+					key: Key.ctrl("d"),
+					hint: rawHint("ctrl+d", "discard"),
+					confirmLabel: () => "Discard stashed prompt?",
+					runningLabel: "Discarding stashed prompt…",
+					onConfirm: async (item) => {
+						const next = await removeStash(ctx.cwd, item.id);
+						ctx.ui.notify("Stash discarded.", "info");
+						return next;
+					},
+					onError: (error) => ctx.ui.notify(`Stash discard failed: ${errorText(error)}`, "error"),
+				},
+			},
+			done,
+		),
 	);
 }
