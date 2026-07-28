@@ -13,6 +13,12 @@ read = []
 outline = ["packages/agent/extensions/subagent/index.ts", "packages/agent/extensions/subagent/run.ts", "packages/agent/extensions/subagent/runtime.ts"]
 references = ["packages/agent/extensions/subagent/resume.ts", "packages/agent/extensions/subagent/session-resource.ts", "packages/agent/test/extensions/subagent/index.test.ts", "packages/agent/test/extensions/subagent/resume-integration.test.ts", "packages/agent/test/extensions/subagent/resume.test.ts", "packages/agent/test/extensions/subagent/run.test.ts", "packages/agent/test/extensions/subagent/runtime.test.ts"]
 
+[ui]
+description = "Interactive /agents panel for session-local subagent toggles"
+read = []
+outline = ["packages/agent/extensions/subagent/panel.ts"]
+references = ["packages/agent/test/extensions/subagent/panel.test.ts"]
+
 [observability]
 description = "cmux live progress dashboard, child identity, and transcript rendering"
 read = []

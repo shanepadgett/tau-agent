@@ -6,9 +6,17 @@ import { createToolRowStateStore } from "../../shared/tool-row-state.js";
 import contextSettings from "../context/settings.ts";
 import { discoverAgents, type AgentDiscovery } from "./agents.ts";
 import { createCmuxDashboard, type CmuxDashboard, type DashboardOrphan } from "./cmux-dashboard.ts";
+import { createAgentsPanel } from "./panel.ts";
 import { renderSubagentCall, renderSubagentResult } from "./render.ts";
 import type { SubagentDetails } from "./run.ts";
 import { failedToolResult, SubagentRuntime } from "./runtime.ts";
+import subagentSettings from "./settings.ts";
+
+interface SubagentSessionState {
+	disabled: string[];
+}
+
+const SUBAGENT_SESSION_STATE_TYPE = "tau.subagent.disabled";
 
 const params = Type.Union([
 	Type.Object(
@@ -39,6 +47,7 @@ const params = Type.Union([
 
 export default function subagentExtension(pi: ExtensionAPI): void {
 	const runtime = new SubagentRuntime(pi);
+	let sessionDisabled = new Set<string>();
 	let failureNotify: ((message: string) => void) | undefined;
 	const orphans: DashboardOrphan[] = [];
 	const retryOrphans = async () => {
@@ -122,13 +131,74 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 		}
 		for (const path of fingerprints.keys()) if (!current.has(path)) fingerprints.delete(path);
 	};
+	const disabledAgentNames = async (ctx: ExtensionContext) => {
+		const configured = new Set((await loadTauExtensionSettings(ctx, subagentSettings)).disabled);
+		return { configured, effective: new Set([...configured, ...sessionDisabled]) };
+	};
 	const parentVisibleAgents = async (ctx: ExtensionContext, discovery: AgentDiscovery) => {
-		const sync = (await loadTauExtensionSettings(ctx, contextSettings)).sync;
+		const [sync, disabled] = await Promise.all([
+			loadTauExtensionSettings(ctx, contextSettings).then((settings) => settings.sync),
+			disabledAgentNames(ctx),
+		]);
 		const parentVisible = sync.enabled && sync.automation;
 		return [...discovery.agents.values()]
-			.filter((agent) => agent.name !== "context-sync" || parentVisible)
+			.filter((agent) => !disabled.effective.has(agent.name) && (agent.name !== "context-sync" || parentVisible))
 			.sort((a, b) => a.name.localeCompare(b.name));
 	};
+	const restoreSessionState = (ctx: ExtensionContext) => {
+		let saved: string[] | undefined;
+		for (const entry of ctx.sessionManager.getBranch()) {
+			if (entry.type !== "custom" || entry.customType !== SUBAGENT_SESSION_STATE_TYPE) continue;
+			const data = entry.data as { disabled?: unknown } | undefined;
+			if (Array.isArray(data?.disabled)) {
+				saved = data.disabled.filter((name): name is string => typeof name === "string" && name.length > 0);
+			}
+		}
+		sessionDisabled = new Set(saved ?? []);
+	};
+
+	pi.registerCommand("agents", {
+		description: "Enable/disable subagents for this session",
+		handler: async (_args, ctx) => {
+			if (ctx.mode !== "tui") {
+				ctx.ui.notify("/agents requires TUI mode", "error");
+				return;
+			}
+
+			const [discovery, disabled] = await Promise.all([
+				discoverAgents(ctx.cwd, ctx.isProjectTrusted()),
+				disabledAgentNames(ctx),
+			]);
+			warn(discovery, ctx);
+			const agents = [...discovery.agents.values()].sort((a, b) => a.name.localeCompare(b.name));
+			if (agents.length === 0) {
+				ctx.ui.notify("No valid subagents found", "warning");
+				return;
+			}
+
+			await ctx.ui.custom((tui, theme, _keybindings, done) =>
+				createAgentsPanel(
+					tui,
+					theme,
+					agents.map((agent) => ({
+						id: agent.name,
+						disabled: disabled.effective.has(agent.name),
+						configured: disabled.configured.has(agent.name),
+					})),
+					(disabledNames) => {
+						for (const agent of agents) {
+							if (!disabled.configured.has(agent.name)) sessionDisabled.delete(agent.name);
+						}
+						for (const name of disabledNames) sessionDisabled.add(name);
+						pi.appendEntry<SubagentSessionState>(SUBAGENT_SESSION_STATE_TYPE, {
+							disabled: [...sessionDisabled].sort(),
+						});
+					},
+					() => done(undefined),
+				),
+			);
+		},
+	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
 		if (!pi.getActiveTools().includes("subagent")) return undefined;
@@ -184,6 +254,27 @@ Scout only for substantial multi-hop lookup that would flood parent context. Ski
 					return failedToolResult(agent, task, "queue", parentModel, parentThinking, error, threadKey);
 				}
 
+				if (continuing) {
+					const thread = runtime.listThreads(ctx.cwd).find((item) => item.id === threadKey);
+					if (thread) {
+						const disabled = await disabledAgentNames(ctx);
+						if (disabled.effective.has(thread.definition.name)) {
+							const source = disabled.configured.has(thread.definition.name)
+								? "in Tau settings"
+								: "for this session";
+							return failedToolResult(
+								thread.definition.name,
+								task,
+								"discovery",
+								parentModel,
+								parentThinking,
+								`Agent ${thread.definition.name} is disabled ${source}.`,
+								threadKey,
+							);
+						}
+					}
+				}
+
 				return runtime.execute({
 					agent,
 					task,
@@ -218,6 +309,11 @@ Scout only for substantial multi-hop lookup that would flood parent context. Ski
 								phase: "discovery",
 								error: `Agent ${agent} discovery failed: ${reason}. Runnable agents: ${names}`,
 							};
+						}
+						const disabled = await disabledAgentNames(ctx);
+						if (disabled.effective.has(definition.name)) {
+							const source = disabled.configured.has(definition.name) ? "in Tau settings" : "for this session";
+							return { ok: false, phase: "discovery", error: `Agent ${definition.name} is disabled ${source}.` };
 						}
 						if (definition.name === "context-sync") {
 							const sync = (await loadTauExtensionSettings(ctx, contextSettings)).sync;
@@ -261,12 +357,16 @@ Scout only for substantial multi-hop lookup that would flood parent context. Ski
 		const details = event.details as SubagentDetails | undefined;
 		if (details?.status === "failed" || details?.status === "aborted") return { isError: true };
 	});
-	pi.on("session_start", async () => {
+	pi.on("session_start", async (_event, ctx) => {
+		restoreSessionState(ctx);
 		await runtime.reset();
 		await replaceDashboard();
 		rowState.clear();
 		fingerprints.clear();
 		failureNotify = undefined;
+	});
+	pi.on("session_tree", (_event, ctx) => {
+		restoreSessionState(ctx);
 	});
 	pi.on("session_shutdown", async () => {
 		unsubscribeDashboard();
@@ -277,5 +377,6 @@ Scout only for substantial multi-hop lookup that would flood parent context. Ski
 		rowState.clear();
 		fingerprints.clear();
 		failureNotify = undefined;
+		sessionDisabled.clear();
 	});
 }

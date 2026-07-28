@@ -248,6 +248,21 @@
 					},
 					"additionalProperties": false
 				},
+				"subagent": {
+					"type": "object",
+					"properties": {
+						"disabled": {
+							"type": "array",
+							"items": {
+								"type": "string",
+								"minLength": 1
+							},
+							"default": [],
+							"description": "Agent names unavailable for delegation."
+						}
+					},
+					"additionalProperties": false
+				},
 				"workingMemory": {
 					"type": "object",
 					"properties": {

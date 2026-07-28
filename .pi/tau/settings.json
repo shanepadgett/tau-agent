@@ -16,6 +16,9 @@
 		"contextPruning": {
 			"enabled": false
 		},
+		"subagent": {
+			"disabled": ["scout"]
+		},
 		"silentCommandRunner": {
 			"commands": [
 				{

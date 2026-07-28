@@ -15,6 +15,20 @@ Tau includes these built-in agents:
 
 Ask Tau to delegate a task, or let it call `subagent` with an agent name and task. Children use the parent's current working directory and inherit its model and thinking level unless their definition overrides either value. They do not receive the parent conversation. Tau loads only the extensions that own a child's declared tools, so unrelated extension hooks do not run in child sessions. When a child must inspect another repository, put its exact absolute path in the delegated task.
 
+Run `/agents` to enable or disable agents for the current session. Press Space to stage each toggle, then Enter to apply the changes. Session choices follow the current session branch and do not change Tau settings. Agents disabled in Tau settings appear as `disabled by Tau settings` and cannot be enabled from this command. Disable agents persistently with `extensions.subagent.disabled`:
+
+```json
+{
+  "extensions": {
+    "subagent": {
+      "disabled": ["review", "web-research"]
+    }
+  }
+}
+```
+
+Disabled agents are hidden from the parent prompt and cannot start or continue a child thread.
+
 When the relevant files are already known, pass them with the call so Tau can autoread them into that child turn:
 
 ```text

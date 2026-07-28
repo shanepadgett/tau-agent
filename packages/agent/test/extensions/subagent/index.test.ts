@@ -1,9 +1,12 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createEventBus, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import subagentExtension from "../../../extensions/subagent/index.ts";
 
 describe("subagent extension", () => {
-	it("registers one strict parallel tool", () => {
+	it("registers one strict parallel tool and the session command", () => {
 		const tools: Array<{
 			name: string;
 			executionMode?: string;
@@ -15,11 +18,15 @@ describe("subagent extension", () => {
 				}>;
 			};
 		}> = [];
+		const commands: string[] = [];
 		const handlers = new Map<string, Array<(...args: never[]) => unknown>>();
 		const pi = {
 			events: createEventBus(),
 			registerTool(tool: (typeof tools)[number]) {
 				tools.push(tool);
+			},
+			registerCommand(name: string) {
+				commands.push(name);
 			},
 			on(name: string, handler: (...args: never[]) => unknown) {
 				const current = handlers.get(name) ?? [];
@@ -39,5 +46,72 @@ describe("subagent extension", () => {
 		expect(tools[0]?.parameters.anyOf?.[1]?.required).toEqual(["thread", "task"]);
 		expect(Object.keys(tools[0]?.parameters.anyOf?.[1]?.properties ?? {})).toEqual(["thread", "task", "files"]);
 		expect(tools[0]?.parameters.anyOf?.[1]?.additionalProperties).toBe(false);
+		expect(commands).toEqual(["agents"]);
+	});
+
+	it("hides agents disabled by settings or the current session", async () => {
+		const root = await mkdtemp(join(tmpdir(), "tau-subagent-index-"));
+		try {
+			await mkdir(join(root, ".pi", "tau"), { recursive: true });
+			await writeFile(
+				join(root, ".pi", "tau", "settings.json"),
+				JSON.stringify({ extensions: { subagent: { disabled: ["review"] } } }),
+			);
+			const handlers = new Map<string, Array<(event: unknown, ctx: unknown) => unknown | Promise<unknown>>>();
+			let executeTool:
+				| ((
+						id: string,
+						params: { agent: string; task: string },
+						signal: AbortSignal | undefined,
+						onUpdate: undefined,
+						ctx: unknown,
+				  ) => Promise<{ content: Array<{ text: string }> }>)
+				| undefined;
+			const pi = {
+				events: createEventBus(),
+				registerTool(tool: { execute: typeof executeTool }) {
+					executeTool = tool.execute;
+				},
+				registerCommand() {},
+				on(name: string, handler: (event: unknown, ctx: unknown) => unknown | Promise<unknown>) {
+					handlers.set(name, [...(handlers.get(name) ?? []), handler]);
+				},
+				getActiveTools: () => ["subagent"],
+				getThinkingLevel: () => "medium",
+			} as unknown as ExtensionAPI;
+			subagentExtension(pi);
+			const ctx = {
+				cwd: root,
+				isProjectTrusted: () => true,
+				sessionManager: {
+					getBranch: () => [
+						{
+							type: "custom",
+							customType: "tau.subagent.disabled",
+							data: { disabled: ["scout"] },
+						},
+					],
+				},
+				ui: { notify() {} },
+			};
+			for (const handler of handlers.get("session_tree") ?? []) await handler({}, ctx);
+			let result: unknown;
+			for (const handler of handlers.get("before_agent_start") ?? []) {
+				result = await handler({ systemPrompt: "base" }, ctx);
+			}
+			const prompt = (result as { systemPrompt?: string } | undefined)?.systemPrompt;
+			expect(prompt).toContain("- web-research:");
+			expect(prompt).not.toContain("- review:");
+			expect(prompt).not.toContain("- scout:");
+			if (!executeTool) throw new Error("subagent tool was not registered");
+			const failed = await executeTool("call-1", { agent: "review", task: "Review this" }, undefined, undefined, {
+				...ctx,
+				mode: "print",
+				hasUI: false,
+			});
+			expect(failed.content[0]?.text).toContain("Agent review is disabled in Tau settings.");
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
 	});
 });

@@ -68,6 +68,9 @@ Tau assigns one display name to each fresh child and keeps it for follow-up turn
 
 ## Runtime rules
 
+- Run `/agents` to enable or disable agents for the current session branch. Press Space to stage each toggle, then Enter to apply the changes. Session choices do not change Tau settings.
+- Set `extensions.subagent.disabled` to an array of agent names for persistent global or project-level disabling. Agents disabled this way appear as `disabled by Tau settings` in `/agents` and cannot be enabled there.
+- Disabled agents are omitted from the parent's available-agent list and cannot start or continue a retained thread.
 - Children use the parent's cwd and inherit model/thinking unless the definition overrides them.
 - Children do not receive the parent conversation.
 - Calls can include `files` to autoread line-numbered snapshots into that child turn.
