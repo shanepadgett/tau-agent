@@ -1,6 +1,6 @@
 ---
 name: scout
-description: "Mechanical local code lookup only: finds paths, declarations, literals, registrations, imports, references, and direct call relationships; returns cited facts without diagnosis or judgment"
+description: "Substantial multi-hop local code lookup that would chew parent context; paths, declarations, imports, references, call edges; facts only. Skip small digs"
 tools:
   - read
   - bash
