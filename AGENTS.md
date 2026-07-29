@@ -28,6 +28,13 @@
 - Keep tasks green and committable. Slice tasks so each change wires added code and leaves no dead files, exports, or types.
 - If approved task must stage unreachable code for later integration, add local Fallow suppression with reason: `// fallow-ignore-file unused-file -- wired by <task/name>`. Remove it in wiring task. No repo-wide ignores for temporary staged code.
 
+## Cache Safety
+
+- Treat cache behavior as a correctness requirement for any change that can affect model requests, directly or indirectly.
+- Before implementation, identify which final serialized request fields can change across consecutive calls. Preserve the longest stable prefix and place unavoidable mutable data after stable cached content.
+- Validate the final request after all transformations and lifecycle behavior. An intermediate representation or isolated unit can look stable while the provider payload is not.
+- Add regression coverage using consecutive requests. Assert unchanged content keeps the same fingerprint and necessary invalidation starts no earlier than intended.
+
 ## Tool Results
 
 - New or changed tools capable of returning unbounded model-visible text must construct their result through Tau's shared bounded text-result handler once it exists. Inherently bounded and non-text results may bypass it for a stated reason.

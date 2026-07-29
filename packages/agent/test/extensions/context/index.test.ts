@@ -151,7 +151,7 @@ describe("context extension", () => {
 		expect(state.entries.at(-1)).toMatchObject({ data: { v: 1, entryIds: [] } });
 	});
 
-	it("rebuilds one ephemeral projection and removes old Context injections", async () => {
+	it("appends one rebuilt ephemeral projection and removes old Context injections", async () => {
 		const root = await mkdtemp(join(tmpdir(), "tau-context-projection-"));
 		roots.push(root);
 		await mkdir(join(root, ".pi", "contexts", "code"), { recursive: true });
@@ -170,15 +170,16 @@ describe("context extension", () => {
 			customType: CONTEXT_SELECTION_TYPE,
 			data: { v: 1, entryIds: ["code/source/runtime"] },
 		});
+		const initialMessage = {
+			role: "user" as const,
+			content: [{ type: "text" as const, text: "current request" }],
+			timestamp: 1,
+		};
 		const result = (await state.emit(
 			"context",
 			{
 				messages: [
-					{
-						role: "user",
-						content: [{ type: "text", text: "current request" }],
-						timestamp: 1,
-					},
+					initialMessage,
 					{
 						role: "custom",
 						customType: "tau.autoread",
@@ -198,10 +199,27 @@ describe("context extension", () => {
 		)) as { messages: Array<{ customType?: string; content?: string }> };
 
 		expect(result.messages).toHaveLength(2);
-		expect(result.messages[0]?.customType).toBe(CONTEXT_PROJECTION_TYPE);
-		expect(result.messages[0]?.content).toContain("export const current = true;");
-		expect(result.messages[0]?.content).toContain("- src/fetch.ts");
-		expect(result.messages[1]).toMatchObject({ role: "user" });
+		expect(result.messages[0]).toMatchObject({ role: "user" });
+		expect(result.messages[1]?.customType).toBe(CONTEXT_PROJECTION_TYPE);
+		expect(result.messages[1]?.content).toContain("export const current = true;");
+		expect(result.messages[1]?.content).toContain("- src/fetch.ts");
+
+		await writeFile(join(root, "src", "main.ts"), "export const current = false;\n");
+		const next = (await state.emit(
+			"context",
+			{
+				messages: [initialMessage, { role: "user", content: [{ type: "text", text: "follow-up" }], timestamp: 2 }],
+			},
+			{
+				cwd: root,
+				isProjectTrusted: () => true,
+				sessionManager: { getBranch: () => state.entries },
+				signal: undefined,
+			},
+		)) as { messages: Array<{ customType?: string; content?: string }> };
+		expect(next.messages.slice(0, result.messages.length - 1)).toEqual(result.messages.slice(0, -1));
+		expect(next.messages.at(-1)?.customType).toBe(CONTEXT_PROJECTION_TYPE);
+		expect(next.messages.at(-1)?.content).toContain("export const current = false;");
 		expect(state.entries).toHaveLength(1);
 	});
 

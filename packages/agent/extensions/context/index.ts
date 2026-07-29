@@ -147,7 +147,7 @@ export default function contextExtension(pi: ExtensionAPI): void {
 				),
 			};
 		}
-		return { messages: [contextProjectionMessage(projectionCache.content), ...messages] };
+		return { messages: [...messages, contextProjectionMessage(projectionCache.content)] };
 	});
 	pi.on("agent_start", async (_event, ctx) => {
 		await refreshSettings(ctx);
