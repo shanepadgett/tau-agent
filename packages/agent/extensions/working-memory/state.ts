@@ -57,6 +57,7 @@ export function parseWorkingMemoryDetails(value: unknown): WorkingMemoryCheckpoi
 	const deferredFiles = parseDeferredFiles(value.deferredFiles);
 	if (
 		!retainedRefs ||
+		retainedRefs.length === 0 ||
 		!prunedRowIds ||
 		!readFiles ||
 		!warnings ||

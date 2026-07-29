@@ -38,6 +38,7 @@ describe("working-memory state", () => {
 	it("strictly parses and replays latest valid checkpoint", () => {
 		const valid = details("anchor");
 		expect(parseWorkingMemoryDetails(valid)).toEqual(valid);
+		expect(parseWorkingMemoryDetails({ ...valid, retainedRefs: [], retainedLabels: [] })).toBeUndefined();
 		expect(parseWorkingMemoryDetails({ ...valid, retainedRefs: ["m:user", "m:user"] })).toBeUndefined();
 		const branch = [
 			{

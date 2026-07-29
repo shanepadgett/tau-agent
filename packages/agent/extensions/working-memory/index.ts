@@ -22,7 +22,7 @@ import { replayWorkingMemoryState, WORKING_MEMORY_TOOL, type WorkingMemoryCheckp
 const NUDGE_TYPE = "tau.working-memory.nudge";
 const BASELINE_TYPE = "tau.working-memory.nudge-baseline";
 const TOOL_DESCRIPTION =
-	"Create a selective hard checkpoint for future model context. Keep valuable user and visible assistant messages, auto-read full source or carry file structure as needed, defer conditionally relevant files, and distill exploration findings into one compact continuation note.";
+	"Create a selective hard checkpoint for future model context. Retain one or more valuable user or visible assistant messages, auto-read full source or carry file structure as needed, defer conditionally relevant files, and distill exploration findings into one compact continuation note.";
 
 interface NudgeState {
 	anchorToolCallId: string | undefined;
@@ -99,6 +99,7 @@ export default function workingMemoryExtension(pi: ExtensionAPI): void {
 					promptGuidelines: [
 						"Use working_memory when stale evidence has accumulated or a memory reminder asks for reassessment; continue coherent exploration when current evidence remains useful.",
 						"A hidden working-memory reference catalog provides keep refs only for user messages and visible assistant text. Tool calls, tool results, hidden reasoning, and framework messages cannot be retained.",
+						"Every checkpoint must retain at least one relevant referenced message. Keep task framing, constraints, decisions, and immediate work chain when needed; continuation and file tiers supplement retained conversation and cannot replace it.",
 						"Choose one file tier: readFiles auto-reads source into the next turn when its body is needed; outlineFiles carries symbols and locations for later scoped inspection; deferFiles records inactive conditional paths. Do not read a file merely to decide whether to outline it.",
 						"Choose readFiles instead of outlineFiles when next work will require the complete file. Do not list a path in more than one file tier.",
 						"Use continuation as a working note for resuming mid-task. Carry durable decisions, concrete findings, live reasoning, unresolved questions, remaining work, and next action in as much detail as needed to continue without rereading discarded results. Do not make it a user-facing status update or narrate the checkpoint.",

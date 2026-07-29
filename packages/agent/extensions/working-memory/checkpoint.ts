@@ -23,7 +23,7 @@ export const workingMemoryParameters = Type.Object(
 			description:
 				"Working note for resuming mid-task. Carry durable decisions, concrete findings, live reasoning, unresolved questions, remaining work, and next action; include enough detail to continue without rereading discarded results.",
 		}),
-		keep: Type.Array(Type.String({ minLength: 3, maxLength: 100 }), { maxItems: 100 }),
+		keep: Type.Array(Type.String({ minLength: 3, maxLength: 100 }), { minItems: 1, maxItems: 100 }),
 		readFiles: Type.Array(PATH, {
 			maxItems: 12,
 			description:
@@ -91,6 +91,9 @@ export async function executeWorkingMemory(options: ExecuteWorkingMemoryOptions)
 		})
 		.sort((left, right) => left.order - right.order);
 	const retainedRefs = retained.map((unit) => unit.ref);
+	if (retained.length === 0) {
+		throw new Error("working_memory requires at least one valid keep reference");
+	}
 	const warnings = requestedRefs
 		.filter((ref) => !catalog.has(ref))
 		.map((ref) => `${ref}: memory reference is unavailable and was not retained`);

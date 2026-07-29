@@ -2,7 +2,7 @@
 
 Working Memory gives agent selective checkpoints without changing saved conversation.
 
-`working_memory` keeps referenced user messages and visible assistant text. It has three file tiers:
+`working_memory` retains at least one referenced user message or visible assistant text. Keep task framing, constraints, decisions, and active work chain; continuation and file tiers support that conversation context. It has three file tiers:
 
 - Auto-read full source into next turn when agent needs its body to decide, edit, or debug.
 - Carry a structural outline when symbols and locations will support a later scoped read.

@@ -1,8 +1,9 @@
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { createEventBus } from "@earendil-works/pi-coding-agent";
+import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
-import { executeWorkingMemory } from "../../../extensions/working-memory/checkpoint.ts";
+import { executeWorkingMemory, workingMemoryParameters } from "../../../extensions/working-memory/checkpoint.ts";
 import { onTauEvent } from "../../../shared/events.ts";
 import { registerOutlineInjectionProvider } from "../../../shared/outline-injection.ts";
 
@@ -69,6 +70,11 @@ function options() {
 }
 
 describe("working-memory checkpoint", () => {
+	it("requires a keep reference", () => {
+		const input = options();
+		expect(Value.Check(workingMemoryParameters, { ...input.params, keep: [] })).toBe(false);
+	});
+
 	it("persists valid refs and returns one canonical continuation", async () => {
 		const execution = await executeWorkingMemory(options());
 		expect(execution.result.details.retainedRefs).toEqual(["m:user"]);
@@ -79,6 +85,13 @@ describe("working-memory checkpoint", () => {
 		expect(execution.result.content[0]?.text).toContain("## Deferred files");
 		expect(execution.result.details.removedUnits).toBe(1);
 		expect(execution.outlines).toEqual([]);
+	});
+
+	it("rejects checkpoints that retain no available messages", async () => {
+		const input = options();
+		await expect(
+			executeWorkingMemory({ ...input, params: { ...input.params, keep: ["m:missing"] } }),
+		).rejects.toThrow("working_memory requires at least one valid keep reference");
 	});
 
 	it("aborts across lifecycle boundaries", async () => {
