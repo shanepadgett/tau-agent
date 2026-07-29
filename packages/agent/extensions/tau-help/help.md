@@ -92,7 +92,7 @@ Supplies the agent with the current local date and an initial root directory sna
 
 ## script-runner
 
-Gives the agent a first-class `script_runner` tool to execute Python and TypeScript instead of bash. On failure it returns a `scriptId`; the agent retries with targeted `{oldText,newText}` edits against the script it already wrote rather than resending the whole script. Languages are detected from the environment (Python via `python3`/`python`; TypeScript via Node `--experimental-strip-types`, Node 22.6+). The tool registers only available languages and is hidden from the prompt if neither is present.
+Gives the agent a first-class `script_runner` tool to execute Python 3 and TypeScript instead of bash. On failure it returns a `scriptId`; the agent retries with targeted `{oldText,newText}` edits against the script it already wrote rather than resending the whole script. Languages are detected from the environment (Python 3 via `python3`; TypeScript via Node `--experimental-strip-types`, Node 22.6+). The tool registers only available languages and is hidden from the prompt if neither is present.
 
 ## silent-command-runner
 

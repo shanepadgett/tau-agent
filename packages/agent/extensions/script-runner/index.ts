@@ -16,10 +16,10 @@ import {
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
-type Language = "python" | "typescript";
+type Language = "python3" | "typescript";
 
 interface Runtimes {
-	python: string | undefined;
+	python3: string | undefined;
 	typescript: string | undefined;
 }
 
@@ -32,26 +32,23 @@ const TIMEOUT_MS = 120_000;
 const MAX_STORED = 8;
 
 function detectRuntimes(): Runtimes {
-	let python: string | undefined;
-	for (const cmd of ["python3", "python"] as const) {
-		try {
-			execFileSync(cmd, ["--version"], { stdio: ["ignore", "pipe", "ignore"] });
-			python = cmd;
-			break;
-		} catch {
-			// runtime not installed
-		}
+	let python3: string | undefined;
+	try {
+		execFileSync("python3", ["--version"], { stdio: ["ignore", "pipe", "ignore"] });
+		python3 = "python3";
+	} catch {
+		// runtime not installed
 	}
 	const [major, minor] = process.versions.node.split(".").map(Number);
 	let typescript: string | undefined;
 	if (major > 22 || (major === 22 && minor >= 6)) {
 		typescript = process.execPath;
 	}
-	return { python, typescript };
+	return { python3, typescript };
 }
 
 function capitalize(lang: Language): string {
-	return lang === "python" ? "Python" : "TypeScript";
+	return lang === "python3" ? "Python 3" : "TypeScript";
 }
 
 function newScriptId(): string {
@@ -95,8 +92,8 @@ function renderEditsPreview(edits: ReadonlyArray<{ oldText: string; newText: str
 
 export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 	const runtimes = detectRuntimes();
-	const detected = (["python", "typescript"] as const).filter(
-		(lang): lang is Language => (lang === "python" ? runtimes.python : runtimes.typescript) !== undefined,
+	const detected = (["python3", "typescript"] as const).filter(
+		(lang): lang is Language => (lang === "python3" ? runtimes.python3 : runtimes.typescript) !== undefined,
 	);
 	if (detected.length === 0) return;
 
@@ -115,9 +112,9 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 	}
 
 	function resolveCommand(language: Language): string {
-		if (language === "python") {
-			const cmd = runtimes.python;
-			if (!cmd) throw new Error("Python is not available on this machine.");
+		if (language === "python3") {
+			const cmd = runtimes.python3;
+			if (!cmd) throw new Error("Python 3 is not available on this machine.");
 			return cmd;
 		}
 		const cmd = runtimes.typescript;
@@ -139,9 +136,9 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 		signal: AbortSignal | undefined,
 	): Promise<ExecResult> {
 		const dir = await ensureTempDir();
-		const file = join(dir, language === "python" ? "_run.py" : "_run.ts");
+		const file = join(dir, language === "python3" ? "_run.py" : "_run.ts");
 		await writeFile(file, source, "utf8");
-		const args = language === "python" ? [file] : ["--experimental-strip-types", file];
+		const args = language === "python3" ? [file] : ["--experimental-strip-types", file];
 		const result = await pi.exec(command, args, { cwd, signal, timeout: TIMEOUT_MS });
 		return {
 			...result,
