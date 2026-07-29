@@ -253,8 +253,7 @@ export default function footerExtension(pi: ExtensionAPI): void {
 
 function effortText(theme: Theme, effort: ModelEffort | undefined): string {
 	if (!effort) return "";
-	const color: ThemeColor = effort === "low" ? "success" : effort === "medium" ? "warning" : "accent";
-	return theme.fg(color, theme.bold(effort.toUpperCase()));
+	return theme.fg("dim", theme.bold(effort.toUpperCase()));
 }
 
 async function saveEnabled(ctx: ExtensionContext, enabled: boolean): Promise<void> {
