@@ -17,7 +17,7 @@ references = []
 description = "Shared workload-effort tiers resolved to ordered model and thinking-level candidates"
 read = []
 outline = ["packages/agent/shared/model-effort.ts"]
-references = []
+references = ["packages/agent/test/shared/model-effort.test.ts"]
 
 [agent-runtime-standard]
 description = "Authoritative extension policy for model selection, effort tiers, thinking levels, and fallback"

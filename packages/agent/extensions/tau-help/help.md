@@ -38,6 +38,10 @@ Adds `/context` to set branch-local reusable repository work scopes from `.pi/co
 
 Gives agent `working_memory` for selective hard checkpoints. Model-only references identify useful user messages and visible assistant text. Requested source files return as structural outlines, deferred files remain cheap conditional reminders, and a continuation note carries conclusions extracted from exploration. Tool history and full file reads leave future model input without changing saved session. Advisory reminders begin at 40k active-context tokens. Run `/prune` to request reassessment manually.
 
+## effort
+
+Adds `/effort [low|medium|high]` to select effort and a provider from current logins. Tau selects provider’s best available model for tier, then tries its configured model fallback. `Ctrl+Shift+E` cycles tiers on current provider. Footer derives effort from current provider, model, and thinking level, and hides it when no configured tier matches.
+
 ## explore
 
 Structural source tools on in-process tree-sitter (WASM), available on every Node-supported platform. Registers `outline`, `show`, `discover`, `ast_search`, `deps`, `reverse_deps`, `callers`, `callees`, `references`, `implementations`, `impact`, and `context`; symbol targets use path + name (+ line when needed). Pi keeps `ls` / `find` / `grep` / `read`. Large full `read`/autoread of registered source (including Markdown) returns outline by default (`explore.read.*`); ranged `read` or `show` for bodies. Disable with `explore.read.enabled: false`.

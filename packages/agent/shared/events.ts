@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ModelEffort } from "./model-effort.ts";
 import type { OutlineInjectionRequest, OutlineInjectionResponse } from "./outline-injection.js";
 import type { ToolRowVisualState } from "./tool-row-state.js";
 
@@ -46,6 +47,10 @@ export type TauAgentEvents = {
 		text?: string;
 		priority?: number;
 	};
+	"tau:model-effort.changed": {
+		effort: ModelEffort | undefined;
+	};
+	"tau:model-effort.snapshot.requested": Record<string, never>;
 	"tau:tool-row-state.set": {
 		rowId: string;
 		state?: ToolRowVisualState;

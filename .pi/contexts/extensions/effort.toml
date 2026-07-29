@@ -1,0 +1,12 @@
+name = "Effort"
+description = "Interactive model and thinking-level selection by workload effort tier"
+
+[runtime]
+description = "Effort-tier command, provider selection, persisted session state, and user guidance"
+read = []
+outline = ["packages/agent/extensions/effort/index.ts", "packages/agent/extensions/effort/state.ts"]
+references = [
+  "packages/agent/extensions/effort/README.md",
+  "packages/agent/test/extensions/effort/index.test.ts",
+  "packages/agent/test/extensions/effort/state.test.ts",
+]
