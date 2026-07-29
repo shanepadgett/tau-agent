@@ -149,6 +149,35 @@ describe("working-memory checkpoint", () => {
 		]);
 	});
 
+	it("omits root instructions from every checkpoint file tier", async () => {
+		const input = options();
+		const events: unknown[] = [];
+		onTauEvent(input.pi, "test.working-memory", "tau:autoread.requested", (event) => {
+			events.push(event);
+		});
+		const execution = await executeWorkingMemory({
+			...input,
+			params: {
+				...input.params,
+				readFiles: ["AGENTS.md"],
+				outlineFiles: ["./AGENTS.md"],
+				deferFiles: [
+					{ path: "/tmp/AGENTS.md", reason: "not active", relevantWhen: "needed" },
+					{ path: "nested/AGENTS.md", reason: "not active", relevantWhen: "needed" },
+				],
+			},
+		});
+		expect(execution.result.details.readFiles).toEqual([]);
+		expect(execution.result.details.outlinedFiles).toEqual([]);
+		expect(execution.result.details.deferredFiles).toEqual([
+			{ path: "nested/AGENTS.md", reason: "not active", relevantWhen: "needed" },
+		]);
+		expect(execution.result.details.warnings).toContain(
+			"AGENTS.md: omitted from working-memory checkpoint because it is already in your context window. Read it directly only when actively changing it.",
+		);
+		expect(events).toEqual([]);
+	});
+
 	it("does not count rows pruned by an earlier checkpoint again", async () => {
 		const input = options();
 		const branch: SessionEntry[] = [

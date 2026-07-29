@@ -95,10 +95,24 @@ export async function executeWorkingMemory(options: ExecuteWorkingMemoryOptions)
 		.filter((ref) => !catalog.has(ref))
 		.map((ref) => `${ref}: memory reference is unavailable and was not retained`);
 
-	const readPaths = dedupePaths(options.params.readFiles, options.ctx.cwd);
+	const rootInstructionsKey = resolve(options.ctx.cwd, "AGENTS.md");
+	const requestedRootInstructions = [
+		...options.params.readFiles,
+		...options.params.outlineFiles,
+		...options.params.deferFiles.map((file) => file.path),
+	].some((path) => resolve(options.ctx.cwd, normalizePath(path)) === rootInstructionsKey);
+	if (requestedRootInstructions) {
+		warnings.push(
+			"AGENTS.md: omitted from working-memory checkpoint because it is already in your context window. Read it directly only when actively changing it.",
+		);
+	}
+
+	const readPaths = dedupePaths(options.params.readFiles, options.ctx.cwd).filter(
+		(path) => resolve(options.ctx.cwd, path) !== rootInstructionsKey,
+	);
 	const readKeys = new Set(readPaths.map((path) => resolve(options.ctx.cwd, path)));
 	const outlinePaths = dedupePaths(options.params.outlineFiles, options.ctx.cwd).filter(
-		(path) => !readKeys.has(resolve(options.ctx.cwd, path)),
+		(path) => resolve(options.ctx.cwd, path) !== rootInstructionsKey && !readKeys.has(resolve(options.ctx.cwd, path)),
 	);
 	const outlineResponse = await requestOutlineInjections(options.pi, {
 		cwd: options.ctx.cwd,
@@ -119,7 +133,7 @@ export async function executeWorkingMemory(options: ExecuteWorkingMemoryOptions)
 	for (const file of options.params.deferFiles) {
 		const path = normalizePath(file.path);
 		const key = resolve(options.ctx.cwd, path);
-		if (carriedKeys.has(key) || deferredKeys.has(key)) continue;
+		if (key === rootInstructionsKey || carriedKeys.has(key) || deferredKeys.has(key)) continue;
 		deferredKeys.add(key);
 		deferredFiles.push({ path, reason: file.reason.trim(), relevantWhen: file.relevantWhen.trim() });
 	}
