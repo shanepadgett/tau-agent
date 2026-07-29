@@ -4,11 +4,11 @@ description = "Tagged Tau release creation and GitHub Actions publish monitoring
 [runtime]
 description = "Release command, package-source checks, tags, and workflow monitoring"
 read = []
-outline = ["packages/agent/extensions/publish/index.ts"]
-references = ["packages/agent/extensions/publish/README.md", "packages/agent/scripts/check-package-sources.ts"]
+outline = [".pi/extensions/publish/index.ts"]
+references = [".pi/extensions/publish/README.md", "packages/agent/scripts/check-package-sources.ts"]
 
 [ui]
 description = "Interactive release confirmation and progress UI"
 read = []
-outline = ["packages/agent/extensions/publish/publish-ui.ts"]
+outline = [".pi/extensions/publish/publish-ui.ts"]
 references = []

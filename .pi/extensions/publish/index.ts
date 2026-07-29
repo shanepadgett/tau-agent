@@ -1,8 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { createGitRunner, type GitRunner, loadRepoStatus } from "../../shared/git.ts";
-import { errorText } from "../../shared/text.ts";
+import { createGitRunner, type GitRunner, loadRepoStatus } from "../../../packages/agent/shared/git.ts";
+import { errorText } from "../../../packages/agent/shared/text.ts";
 import { PublishActivityPanel, type PublishProgress } from "./publish-ui.ts";
 
 const PACKAGE_PATHS = ["packages/tui/package.json", "packages/agent/package.json"] as const;
