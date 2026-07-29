@@ -11,7 +11,7 @@ references = ["packages/agent/extensions/reference/README.md"]
 description = "Interactive reference picker"
 read = []
 outline = ["packages/agent/extensions/reference/panel.ts"]
-references = []
+references = ["packages/agent/test/extensions/reference/panel.test.ts"]
 
 [settings]
 description = "Configured reference repositories and paths"

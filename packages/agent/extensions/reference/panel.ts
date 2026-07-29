@@ -27,6 +27,7 @@ const BRANCH_VISIBLE_ROWS = 5;
 
 export interface ReferenceItem {
 	name: string;
+	displayName: string;
 	path: string;
 	dirty: boolean;
 	branch: string;
@@ -190,7 +191,7 @@ class ReferencePanel implements Component {
 			items,
 			emptyMessage: "No references. Press ctrl+n for new.",
 			selection: { kind: "multi", primaryLabel: "attach" },
-			filter: { searchText: (item) => `${item.name} ${item.branch} ${item.path}` },
+			filter: { searchText: (item) => `${item.displayName} ${item.name} ${item.branch} ${item.path}` },
 			actions: [
 				{ id: "new", key: Key.ctrl("n"), hint: rawHint("ctrl+n", "new") },
 				{ id: "open", key: Key.ctrl("o"), hint: rawHint("ctrl+o", "open"), target: "current" },
@@ -303,13 +304,16 @@ class ReferencePanel implements Component {
 	}
 
 	private renderReferenceRow(item: ReferenceListItem, active: boolean, width: number): string[] {
-		const name = item.dirty ? `${item.name} *` : item.name;
+		const separator = item.displayName.lastIndexOf("/");
+		const repository = separator < 0 ? item.displayName : item.displayName.slice(separator + 1);
+		const owner = separator < 0 ? "" : this.theme.fg("muted", ` (${item.displayName.slice(0, separator)})`);
+		const name = item.dirty ? `${repository} *` : repository;
 		const label = active ? this.theme.fg("accent", name) : this.theme.fg(item.dirty ? "warning" : "text", name);
 		const branch = item.branch ? this.theme.fg("muted", ` (${item.branch})`) : "";
 		const status = item.state
 			? ` ${this.theme.fg(item.state === "failed" ? "error" : item.state === "updated" ? "success" : "muted", item.state === "failed" ? "!" : item.state === "updated" ? "✓" : "…")}`
 			: "";
-		return [truncateToWidth(`${label}${branch}${status}`, width, "")];
+		return [truncateToWidth(`${label}${owner}${branch}${status}`, width, "")];
 	}
 
 	private handleBranchInput(data: string): void {
@@ -636,7 +640,7 @@ function toListItem(item: ReferenceItem, state?: ReferenceListItem["state"]): Re
 }
 
 function toReferenceItem(item: ReferenceListItem): ReferenceItem {
-	return { name: item.name, path: item.path, dirty: item.dirty, branch: item.branch };
+	return { name: item.name, displayName: item.displayName, path: item.path, dirty: item.dirty, branch: item.branch };
 }
 
 async function cloneReference(
@@ -747,8 +751,10 @@ async function loadReferences(git: GitRunner): Promise<ReferenceItem[]> {
 async function loadReference(git: GitRunner, name: string, path: string): Promise<ReferenceItem> {
 	const branch = await git.run(["branch", "--show-current"], { cwd: path, optional: true });
 	const commit = branch ? "" : await git.run(["rev-parse", "--short", "HEAD"], { cwd: path, optional: true });
+	const remoteUrl = await git.run(["config", "--get", "remote.origin.url"], { cwd: path, optional: true });
 	return {
 		name,
+		displayName: referenceDisplayName(remoteUrl, name),
 		path,
 		dirty: (await git.run(["status", "--porcelain=v1"], { cwd: path, optional: true })).length > 0,
 		branch: branch || (commit ? `detached ${commit}` : ""),
@@ -863,6 +869,30 @@ function referenceNameFromUrl(url: string): string {
 
 	if (!name || name === "." || name === "..") throw new Error("Could not derive reference folder name from Git URL.");
 	return name;
+}
+
+export function referenceDisplayName(remoteUrl: string, fallback: string): string {
+	const remote = remoteUrl
+		.trim()
+		.replace(/[?#].*$/, "")
+		.replace(/\/+$/, "")
+		.replace(/\.git$/i, "");
+	if (!remote) return fallback;
+
+	let path: string;
+	try {
+		const parsed = new URL(remote);
+		if (!parsed.host) return fallback;
+		path = parsed.pathname;
+	} catch {
+		const separator = remote.indexOf(":");
+		if (separator <= 0 || remote.slice(0, separator).includes("/")) return fallback;
+		path = remote.slice(separator + 1);
+	}
+
+	const segments = path.split("/").filter(Boolean);
+	if (segments.length < 2) return fallback;
+	return segments.slice(-2).join("/");
 }
 
 function shellQuote(value: string): string {

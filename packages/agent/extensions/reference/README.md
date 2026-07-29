@@ -13,6 +13,7 @@ Select local reference repositories, add new ones, and send a prompt that points
 
 - Stores references in `~/.local/share/tau-agent/references/`.
 - `/reference` opens a TUI picker.
+- The picker shows each repository's name with its `origin` owner in muted parentheses when available, falling back to its local folder name.
 - `n` adds a new reference from a git URL, showing clone progress in the list as `↓ 37%`.
 - New references clone the remote default branch.
 - `b` switches the highlighted reference to another branch.
