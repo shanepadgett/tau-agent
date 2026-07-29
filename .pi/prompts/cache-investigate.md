@@ -11,9 +11,11 @@ ${ARGUMENTS:-most recent cache debug}
 
 Reports are stored in `~/.pi/agent/cache-diagnostics/reports/`. Inspect lightweight top-level metadata from the newest candidates first. Match the description against creation time, originating working directory, session, model, miss count, and recorded markers. Do not ask the user for a path.
 
-Before reading the full report or investigating code, show the selected report's path, creation time, working directory, session identifier, models, and miss count. Ask the user to confirm that it is the intended report. If several candidates match, show the smallest useful set and ask which one they mean.
+If the description contains an exact report path or filename and that report exists, use it directly. Show its path, creation time, working directory, session identifier, models, and miss count, then continue without asking for confirmation.
 
-After confirmation, read the selected report and classify each incident as one of:
+Otherwise, before reading the full report or investigating code, show the selected report's path, creation time, working directory, session identifier, models, and miss count. If one candidate clearly matches, continue without asking for confirmation. If several candidates plausibly match, show the smallest useful set and ask which one the user means.
+
+After selection, read the report and classify each incident as one of:
 
 - expected local invalidation;
 - unexplained local payload change;

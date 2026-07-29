@@ -3,3 +3,4 @@
 {"id":"e4414b3d-ac1b-447f-80e1-1867c80ad1a2","text":"something similar to /btw for small ask and answer from agent with or without current context but the answer does not populate into the chat","createdAt":1783022035135}
 {"id":"75f8b146-b4c0-44a6-9f5f-416f932e175e","text":"way to connect a editor session in something like helix to pi to send over highlighted lines as a line range with a comment to give the agent exact feedback on what you dont like. Maybe it should include the line itself too, not sure yet","createdAt":1782930100735}
 {"id":"57445ee0-8086-4c09-a12e-d13020e98925","text":"focus feature and goal setting","createdAt":1782851050070}
+{"id":"e80b9983-1e9b-45d3-8c0a-34b68fcc1207","text":"We need to block the agent's markdown file from being allowed to be auto-read during a working memory checkpoint because it's literally always in the context.","createdAt":1785283776104}
