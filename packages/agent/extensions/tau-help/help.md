@@ -40,7 +40,7 @@ Adds `/context` to set branch-local reusable repository work scopes from `.pi/co
 
 ## session-memory
 
-Gives agent `session_memory` for one bounded goal, current objective, task list, memories, and checkpoint file manifest. Updates replace full state without loading files. Checkpoints restore requested reads and outlines; deferred files stay unloaded. Carry memories survive one checkpoint span; durable memories remain until removed. Fixed token gates warn first, then block other tools until required update is projected. Run `/prune` to request an update and checkpoint. Run `/session-memory` to open a panel; use Left and Right to switch tabs and Escape to close it.
+Gives agent `session_memory` for an optional long-term goal, active tasks, short-term and long-term memories, and a checkpoint file manifest. Long-term goals hold durable direction across many tasks or checkpoints when tasks alone cannot capture it; the agent changes the goal when that direction changes. Updates replace full state without loading files. Checkpoints restore requested reads and outlines; deferred files stay unloaded. Short-term memories survive one checkpoint span; long-term memories remain until removed. Fixed token gates warn first, then block other tools until required update is projected. Tool rows are hidden by default; set `extensions.sessionMemory.showToolRows` to `true` in Tau settings to show them for debugging. Run `/prune` to request an update and checkpoint. Run `/session-memory` to open a panel; use Left and Right to switch tabs and Escape to close it.
 
 ## effort
 

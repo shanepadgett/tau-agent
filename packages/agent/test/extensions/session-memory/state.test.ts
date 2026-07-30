@@ -11,18 +11,17 @@ import {
 	parseSessionMemoryDetails,
 	replaySessionMemory,
 	sessionMemoryParameters,
-	type SessionMemoryDetailsV1,
+	type SessionMemoryDetailsV2,
 	type SessionMemoryState,
 	type SessionMemoryUpdateInput,
 } from "../../../extensions/session-memory/state.ts";
 
 const update: SessionMemoryUpdateInput = {
 	action: "update",
-	goal: "Ship session memory",
-	objective: "Build canonical state",
+	longTermGoal: "Ship session memory",
 	tasks: ["Write tests"],
-	carry: [{ id: "new-finding", text: "Keep this for one span." }],
-	durable: [{ id: "cache-stability", text: "Preserve stable request prefixes." }],
+	shortTermMemories: [{ id: "new-finding", text: "Keep this for one span." }],
+	longTermMemories: [{ id: "cache-stability", text: "Preserve stable request prefixes." }],
 	readFiles: ["active.ts"],
 	outlineFiles: ["related.ts"],
 	deferFiles: [{ path: "later.ts", reason: "inactive", relevantWhen: "tests fail" }],
@@ -33,20 +32,21 @@ function details(
 	kind: "update" | "checkpoint",
 	checkpoint: number,
 	state: SessionMemoryState,
-): SessionMemoryDetailsV1 {
+): SessionMemoryDetailsV2 {
 	return {
-		v: 1,
+		v: 2,
 		toolCallId,
 		kind,
 		checkpoint,
 		state,
+		changes: ["Fixture created"],
 		outlinedRows: [],
 		prunedRowIds: [],
 		warnings: [],
 	};
 }
 
-function result(id: string, value: SessionMemoryDetailsV1): ToolResultMessage {
+function result(id: string, value: SessionMemoryDetailsV2): ToolResultMessage {
 	return {
 		role: "toolResult",
 		toolCallId: id,
@@ -82,19 +82,21 @@ function entry(id: string, message: ToolResultMessage): SessionEntry {
 describe("session-memory state", () => {
 	it("enforces the full update or checkpoint input union", () => {
 		expect(Value.Check(sessionMemoryParameters, update)).toBe(true);
+		expect(Value.Check(sessionMemoryParameters, { ...update, longTermGoal: null })).toBe(true);
+		expect(Value.Check(sessionMemoryParameters, { ...update, longTermGoal: "x".repeat(15_000) })).toBe(true);
 		expect(Value.Check(sessionMemoryParameters, { action: "checkpoint" })).toBe(true);
-		expect(Value.Check(sessionMemoryParameters, { ...update, objective: undefined })).toBe(false);
-		expect(Value.Check(sessionMemoryParameters, { action: "checkpoint", goal: "extra" })).toBe(false);
-		expect(Value.Check(sessionMemoryParameters, { ...update, carry: [{ id: "Not-Kebab", text: "bad" }] })).toBe(
-			false,
-		);
+		expect(Value.Check(sessionMemoryParameters, { ...update, longTermGoal: undefined })).toBe(false);
+		expect(Value.Check(sessionMemoryParameters, { action: "checkpoint", longTermGoal: "extra" })).toBe(false);
+		expect(
+			Value.Check(sessionMemoryParameters, { ...update, shortTermMemories: [{ id: "Not-Kebab", text: "bad" }] }),
+		).toBe(false);
 	});
 
 	it("normalizes full replacement state and file-tier precedence", () => {
 		const state = normalizeUpdate(
 			{
 				...update,
-				goal: "  Ship session memory  ",
+				longTermGoal: "  Ship session memory  ",
 				readFiles: ["@active.ts", "./active.ts"],
 				outlineFiles: ["active.ts", "related.ts", "related.ts"],
 				deferFiles: [
@@ -106,45 +108,48 @@ describe("session-memory state", () => {
 			0,
 			"/work",
 		);
-		expect(state.goal).toBe("Ship session memory");
+		expect(state.longTermGoal).toBe("Ship session memory");
 		expect(state.readFiles).toEqual(["active.ts"]);
 		expect(state.outlineFiles).toEqual(["related.ts"]);
 		expect(state.deferFiles).toEqual([{ path: "later.ts", reason: "inactive", relevantWhen: "tests fail" }]);
 	});
 
-	it("keeps carry for one checkpoint span without resetting age on edit", () => {
+	it("keeps short-term memory for one checkpoint span without resetting age on edit", () => {
 		const initial = normalizeUpdate(update, undefined, 0, "/work");
 		const first = checkpointState(initial, 0);
-		expect(first.state.carry[0]?.bornAtCheckpoint).toBe(0);
+		expect(first.state.shortTermMemories[0]?.bornAtCheckpoint).toBe(0);
 		expect(first.warnings).toEqual([]);
 
 		const edited = normalizeUpdate(
-			{ ...update, carry: [{ id: "new-finding", text: "Edited without extending lifetime." }] },
+			{ ...update, shortTermMemories: [{ id: "new-finding", text: "Edited without extending lifetime." }] },
 			first.state,
 			1,
 			"/work",
 		);
-		expect(edited.carry[0]?.bornAtCheckpoint).toBe(0);
+		expect(edited.shortTermMemories[0]?.bornAtCheckpoint).toBe(0);
 		const second = checkpointState(edited, 1);
-		expect(second.state.carry).toEqual([]);
-		expect(second.warnings).toEqual(["new-finding: carry memory expired"]);
+		expect(second.state.shortTermMemories).toEqual([]);
+		expect(second.warnings).toEqual(["new-finding: short-term memory expired"]);
 	});
 
-	it("promotes carry by keeping the same ID in durable memory", () => {
+	it("promotes short-term memory by keeping the same ID in long-term memory", () => {
 		const initial = normalizeUpdate(update, undefined, 0, "/work");
 		const promoted = normalizeUpdate(
 			{
 				...update,
-				carry: [],
-				durable: [...update.durable, { id: "new-finding", text: "Keep this until explicitly forgotten." }],
+				shortTermMemories: [],
+				longTermMemories: [
+					...update.longTermMemories,
+					{ id: "new-finding", text: "Keep this until explicitly forgotten." },
+				],
 			},
 			initial,
 			1,
 			"/work",
 		);
 		const checkpoint = checkpointState(promoted, 1);
-		expect(checkpoint.state.carry).toEqual([]);
-		expect(checkpoint.state.durable.map((item) => item.id)).toContain("new-finding");
+		expect(checkpoint.state.shortTermMemories).toEqual([]);
+		expect(checkpoint.state.longTermMemories.map((item) => item.id)).toContain("new-finding");
 	});
 
 	it("strictly parses canonical details and replays the latest valid branch state", () => {
@@ -235,8 +240,14 @@ describe("session-memory state", () => {
 		const state = normalizeUpdate(
 			{
 				...update,
-				carry: Array.from({ length: 12 }, (_, index) => ({ id: `carry-${index}`, text: "x".repeat(1_000) })),
-				durable: Array.from({ length: 24 }, (_, index) => ({ id: `durable-${index}`, text: "y".repeat(1_000) })),
+				shortTermMemories: Array.from({ length: 12 }, (_, index) => ({
+					id: `short-term-${index}`,
+					text: "x".repeat(1_000),
+				})),
+				longTermMemories: Array.from({ length: 24 }, (_, index) => ({
+					id: `long-term-${index}`,
+					text: "y".repeat(1_000),
+				})),
 			},
 			undefined,
 			0,
@@ -247,16 +258,18 @@ describe("session-memory state", () => {
 
 	it("keeps warning output within the snapshot byte bound", () => {
 		const base: SessionMemoryState = {
-			goal: "Ship session memory",
-			objective: "Keep canonical output bounded",
+			longTermGoal: "Ship session memory",
 			tasks: [],
-			carry: Array.from({ length: 12 }, (_, index) => ({
-				id: `carry-${index}`,
+			shortTermMemories: Array.from({ length: 12 }, (_, index) => ({
+				id: `short-term-${index}`,
 				text: "x".repeat(1_000),
 				bornAtCheckpoint: 0,
 			})),
-			durable: [
-				...Array.from({ length: 3 }, (_, index) => ({ id: `durable-${index}`, text: "y".repeat(1_000) })),
+			longTermMemories: [
+				...Array.from({ length: 3 }, (_, index) => ({
+					id: `long-term-${index}`,
+					text: "y".repeat(1_000),
+				})),
 				{ id: "padding", text: "z" },
 			],
 			readFiles: [],
@@ -267,7 +280,7 @@ describe("session-memory state", () => {
 		const padding = MAX_SNAPSHOT_BYTES - initialBytes - 1;
 		expect(padding).toBeGreaterThan(0);
 		expect(padding).toBeLessThan(1_000);
-		base.durable[3] = { id: "padding", text: "z".repeat(padding + 1) };
+		base.longTermMemories[3] = { id: "padding", text: "z".repeat(padding + 1) };
 
 		const output = formatSessionMemory(base, 0, ["warning"]);
 		expect(Buffer.byteLength(output, "utf8")).toBeLessThanOrEqual(MAX_SNAPSHOT_BYTES);

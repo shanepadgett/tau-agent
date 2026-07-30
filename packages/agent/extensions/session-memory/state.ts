@@ -34,11 +34,10 @@ const deferredFileSchema = Type.Object(
 const updateSchema = Type.Object(
 	{
 		action: Type.Literal("update"),
-		goal: Type.String({ ...NONEMPTY, maxLength: 2_000 }),
-		objective: Type.String({ ...NONEMPTY, maxLength: 1_000 }),
+		longTermGoal: Type.Union([Type.String(NONEMPTY), Type.Null()]),
 		tasks: Type.Array(Type.String({ ...NONEMPTY, maxLength: 400 }), { maxItems: 8 }),
-		carry: Type.Array(memoryItemSchema, { maxItems: 12 }),
-		durable: Type.Array(memoryItemSchema, { maxItems: 24 }),
+		shortTermMemories: Type.Array(memoryItemSchema, { maxItems: 12 }),
+		longTermMemories: Type.Array(memoryItemSchema, { maxItems: 24 }),
 		readFiles: Type.Array(PATH, { maxItems: 12 }),
 		outlineFiles: Type.Array(PATH, { maxItems: 12 }),
 		deferFiles: Type.Array(deferredFileSchema, { maxItems: 8 }),
@@ -51,7 +50,7 @@ export const sessionMemoryParameters = Type.Union([
 	Type.Object({ action: Type.Literal("checkpoint") }, { additionalProperties: false }),
 ]);
 
-const carryMemorySchema = Type.Object(
+const shortTermMemorySchema = Type.Object(
 	{
 		id: MEMORY_ID,
 		text: Type.String({ ...NONEMPTY, maxLength: 1_000 }),
@@ -62,11 +61,10 @@ const carryMemorySchema = Type.Object(
 
 const stateSchema = Type.Object(
 	{
-		goal: Type.String({ ...NONEMPTY, maxLength: 2_000 }),
-		objective: Type.String({ ...NONEMPTY, maxLength: 1_000 }),
+		longTermGoal: Type.Union([Type.String(NONEMPTY), Type.Null()]),
 		tasks: Type.Array(Type.String({ ...NONEMPTY, maxLength: 400 }), { maxItems: 8 }),
-		carry: Type.Array(carryMemorySchema, { maxItems: 12 }),
-		durable: Type.Array(memoryItemSchema, { maxItems: 24 }),
+		shortTermMemories: Type.Array(shortTermMemorySchema, { maxItems: 12 }),
+		longTermMemories: Type.Array(memoryItemSchema, { maxItems: 24 }),
 		readFiles: Type.Array(PATH, { maxItems: 12 }),
 		outlineFiles: Type.Array(PATH, { maxItems: 12 }),
 		deferFiles: Type.Array(deferredFileSchema, { maxItems: 8 }),
@@ -76,11 +74,12 @@ const stateSchema = Type.Object(
 
 const detailsSchema = Type.Object(
 	{
-		v: Type.Literal(1),
+		v: Type.Literal(2),
 		toolCallId: Type.String(NONEMPTY),
 		kind: Type.Union([Type.Literal("update"), Type.Literal("checkpoint")]),
 		checkpoint: Type.Integer({ minimum: 0 }),
 		state: stateSchema,
+		changes: Type.Array(Type.String({ ...NONEMPTY, maxLength: 100 }), { minItems: 1, maxItems: 16 }),
 		outlinedRows: Type.Array(
 			Type.Object({ path: PATH, rowId: Type.String(NONEMPTY) }, { additionalProperties: false }),
 		),
@@ -94,14 +93,14 @@ export type SessionMemoryInput = Static<typeof sessionMemoryParameters>;
 export type SessionMemoryUpdateInput = Static<typeof updateSchema>;
 export type MemoryItem = Static<typeof memoryItemSchema>;
 export type DeferredFile = Static<typeof deferredFileSchema>;
-export type CarryMemory = Static<typeof carryMemorySchema>;
+export type ShortTermMemory = Static<typeof shortTermMemorySchema>;
 export type SessionMemoryState = Static<typeof stateSchema>;
-export type SessionMemoryDetailsV1 = Static<typeof detailsSchema>;
+export type SessionMemoryDetailsV2 = Static<typeof detailsSchema>;
 
 export interface ReplayedSessionMemory {
-	latest: SessionMemoryDetailsV1 | undefined;
+	latest: SessionMemoryDetailsV2 | undefined;
 	latestText: string | undefined;
-	latestCheckpoint: SessionMemoryDetailsV1 | undefined;
+	latestCheckpoint: SessionMemoryDetailsV2 | undefined;
 	latestCheckpointText: string | undefined;
 	recoveryText: string | undefined;
 	latestCheckpointResultIndex: number;
@@ -125,12 +124,12 @@ export function normalizeUpdate(
 			memoryIds.add(item.id);
 			return { id: item.id, text: item.text.trim() };
 		});
-	const previousCarry = new Map(previous?.carry.map((item) => [item.id, item]) ?? []);
-	const carry = memory(input.carry).map((item) => ({
+	const previousShortTerm = new Map(previous?.shortTermMemories.map((item) => [item.id, item]) ?? []);
+	const shortTermMemories = memory(input.shortTermMemories).map((item) => ({
 		...item,
-		bornAtCheckpoint: previousCarry.get(item.id)?.bornAtCheckpoint ?? checkpoint,
+		bornAtCheckpoint: previousShortTerm.get(item.id)?.bornAtCheckpoint ?? checkpoint,
 	}));
-	const durable = memory(input.durable);
+	const longTermMemories = memory(input.longTermMemories);
 
 	const rootInstructions = resolve(cwd, "AGENTS.md");
 	const pathKeys = new Set<string>();
@@ -157,11 +156,10 @@ export function normalizeUpdate(
 	}
 
 	return {
-		goal: input.goal.trim(),
-		objective: input.objective.trim(),
+		longTermGoal: input.longTermGoal === null ? null : input.longTermGoal.trim(),
 		tasks: input.tasks.map((task) => task.trim()),
-		carry,
-		durable,
+		shortTermMemories,
+		longTermMemories,
 		readFiles,
 		outlineFiles,
 		deferFiles,
@@ -172,14 +170,18 @@ export function checkpointState(
 	state: SessionMemoryState,
 	currentCheckpoint: number,
 ): { state: SessionMemoryState; warnings: string[] } {
-	const durableIds = new Set(state.durable.map((item) => item.id));
-	const expired = state.carry.filter((item) => item.bornAtCheckpoint < currentCheckpoint && !durableIds.has(item.id));
+	const longTermIds = new Set(state.longTermMemories.map((item) => item.id));
+	const expired = state.shortTermMemories.filter(
+		(item) => item.bornAtCheckpoint < currentCheckpoint && !longTermIds.has(item.id),
+	);
 	return {
 		state: {
 			...state,
-			carry: state.carry.filter((item) => item.bornAtCheckpoint >= currentCheckpoint && !durableIds.has(item.id)),
+			shortTermMemories: state.shortTermMemories.filter(
+				(item) => item.bornAtCheckpoint >= currentCheckpoint && !longTermIds.has(item.id),
+			),
 		},
-		warnings: expired.map((item) => `${item.id}: carry memory expired`),
+		warnings: expired.map((item) => `${item.id}: short-term memory expired`),
 	};
 }
 
@@ -191,20 +193,17 @@ export function formatSessionMemory(
 	const lines = [
 		`Session memory · checkpoint ${checkpoint}`,
 		"",
-		"Goal",
-		state.goal,
-		"",
-		"Objective",
-		state.objective,
+		"Long-term goal",
+		state.longTermGoal ?? "None",
 		"",
 		`Tasks ${state.tasks.length}`,
 		...state.tasks.map((task) => `- ${task}`),
 		"",
-		`Carry ${state.carry.length}`,
-		...state.carry.map((item) => `- ${item.id}: ${item.text}`),
+		`Short-term memories ${state.shortTermMemories.length}`,
+		...state.shortTermMemories.map((item) => `- ${item.id}: ${item.text}`),
 		"",
-		`Durable ${state.durable.length}`,
-		...state.durable.map((item) => `- ${item.id}: ${item.text}`),
+		`Long-term memories ${state.longTermMemories.length}`,
+		...state.longTermMemories.map((item) => `- ${item.id}: ${item.text}`),
 		"",
 		"Files",
 		`Read ${state.readFiles.length}`,
@@ -247,12 +246,12 @@ export function parseSessionMemoryDetails(
 	toolCallId: string,
 	content: string,
 	cwd = "/",
-): SessionMemoryDetailsV1 | undefined {
+): SessionMemoryDetailsV2 | undefined {
 	if (!Value.Check(detailsSchema, value)) return undefined;
-	const details = value as SessionMemoryDetailsV1;
+	const details = value as SessionMemoryDetailsV2;
 	if (details.toolCallId !== toolCallId) return undefined;
-	if (details.state.carry.some((item) => item.bornAtCheckpoint > details.checkpoint)) return undefined;
-	const ids = [...details.state.carry, ...details.state.durable].map((item) => item.id);
+	if (details.state.shortTermMemories.some((item) => item.bornAtCheckpoint > details.checkpoint)) return undefined;
+	const ids = [...details.state.shortTermMemories, ...details.state.longTermMemories].map((item) => item.id);
 	if (new Set(ids).size !== ids.length) return undefined;
 	if (!tiersSeparated(details.state, cwd)) return undefined;
 	if (new Set(details.prunedRowIds).size !== details.prunedRowIds.length) return undefined;
@@ -264,9 +263,9 @@ export function parseSessionMemoryDetails(
 }
 
 export function replaySessionMemory(branch: readonly SessionEntry[], cwd = "/"): ReplayedSessionMemory {
-	let latest: SessionMemoryDetailsV1 | undefined;
+	let latest: SessionMemoryDetailsV2 | undefined;
 	let latestText: string | undefined;
-	let latestCheckpoint: SessionMemoryDetailsV1 | undefined;
+	let latestCheckpoint: SessionMemoryDetailsV2 | undefined;
 	let latestCheckpointText: string | undefined;
 	let recoveryText: string | undefined;
 	let latestCheckpointResultIndex = -1;

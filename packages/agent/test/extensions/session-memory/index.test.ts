@@ -12,6 +12,7 @@ import { type Component, type KeybindingsManager, type TUI } from "@earendil-wor
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import sessionMemoryExtension from "../../../extensions/session-memory/index.ts";
 import type { SessionMemoryInput } from "../../../extensions/session-memory/state.ts";
+import { renderedText, testTheme } from "../../helpers.ts";
 
 const mocks = vi.hoisted(() => ({ loadTauExtensionSettings: vi.fn() }));
 
@@ -32,6 +33,18 @@ interface RegisteredTool {
 	description: string;
 	promptGuidelines: readonly string[];
 	parameters: unknown;
+	renderShell: "self";
+	renderCall(
+		args: SessionMemoryInput,
+		theme: Theme,
+		context: {
+			toolCallId: string;
+			invalidate: () => void;
+			lastComponent: Component | undefined;
+			executionStarted: boolean;
+			isError: boolean;
+		},
+	): Component;
 	execute(
 		toolCallId: string,
 		params: SessionMemoryInput,
@@ -43,11 +56,10 @@ interface RegisteredTool {
 
 const update: Extract<SessionMemoryInput, { action: "update" }> = {
 	action: "update",
-	goal: "Ship session memory",
-	objective: "Pass required gate",
+	longTermGoal: "Ship session memory",
 	tasks: ["Project checkpoint"],
-	carry: [],
-	durable: [{ id: "cache-stability", text: "Keep tool definitions stable." }],
+	shortTermMemories: [],
+	longTermMemories: [{ id: "cache-stability", text: "Keep tool definitions stable." }],
 	readFiles: [],
 	outlineFiles: [],
 	deferFiles: [],
@@ -128,7 +140,11 @@ describe("session-memory extension", () => {
 
 	beforeEach(() => {
 		mocks.loadTauExtensionSettings.mockReset();
-		mocks.loadTauExtensionSettings.mockResolvedValue({ enabled: true, contextCeilingTokens: 150_000 });
+		mocks.loadTauExtensionSettings.mockResolvedValue({
+			enabled: true,
+			showToolRows: false,
+			contextCeilingTokens: 150_000,
+		});
 	});
 
 	it("blocks every other tool until a required update is projected without changing tools", async () => {
@@ -210,6 +226,30 @@ describe("session-memory extension", () => {
 		).toBe(toolFingerprint);
 	});
 
+	it("hides tool rows by default and shows them when enabled for debugging", async () => {
+		const hidden = harness();
+		const ctx = context([], () => 1_000);
+		await hidden.emit("session_start", { type: "session_start", reason: "startup" }, ctx);
+		const renderContext = {
+			toolCallId: "memory-call",
+			invalidate() {},
+			lastComponent: undefined,
+			executionStarted: false,
+			isError: false,
+		};
+		expect(hidden.tool().renderShell).toBe("self");
+		expect(renderedText(hidden.tool().renderCall(update, testTheme, renderContext))).toBe("");
+
+		mocks.loadTauExtensionSettings.mockResolvedValue({
+			enabled: true,
+			showToolRows: true,
+			contextCeilingTokens: 150_000,
+		});
+		const visible = harness();
+		await visible.emit("session_start", { type: "session_start", reason: "startup" }, ctx);
+		expect(renderedText(visible.tool().renderCall(update, testTheme, renderContext))).toContain("session_memory");
+	});
+
 	it("uses smaller model windows for required gates and resets stale gate IDs on branch changes", async () => {
 		const test = harness();
 		const branch: SessionEntry[] = [];
@@ -246,12 +286,15 @@ describe("session-memory extension", () => {
 		expect(test.sent).toEqual([]);
 	});
 
-	it("guides task cleanup before final responses and manual checkpoints", async () => {
+	it("guides goal and task lifecycle before final responses and manual checkpoints", async () => {
 		const test = harness();
 		const branch: SessionEntry[] = [];
 		const ctx = context(branch, () => 1_000);
 		await test.emit("session_start", { type: "session_start", reason: "startup" }, ctx);
 
+		expect(test.tool().promptGuidelines).toContain(
+			"Set longTermGoal to null unless work needs durable direction across many tasks or checkpoints that tasks alone cannot capture. Change it when that direction changes.",
+		);
 		expect(test.tool().promptGuidelines).toContain(
 			"Keep tasks as ordered unfinished work with the current task first. Remove completed or abandoned tasks immediately.",
 		);
@@ -302,9 +345,9 @@ describe("session-memory extension", () => {
 		await test.command("session-memory")("", ctx);
 
 		expect(custom).toHaveBeenCalledOnce();
-		expect(output[0]).toContain("No goal recorded.");
+		expect(output[0]).toContain("LONG-TERM GOAL  None");
 		expect(output[0]).toContain("not saved yet");
-		expect(output[1]).toContain("Carry  0");
+		expect(output[1]).toContain("Short term  0");
 		expect(tui.requestRender).toHaveBeenCalledOnce();
 		expect(done).toHaveBeenCalledOnce();
 	});

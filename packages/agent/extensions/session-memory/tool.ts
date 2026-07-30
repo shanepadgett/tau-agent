@@ -9,7 +9,7 @@ import {
 	formatSessionMemory,
 	normalizeUpdate,
 	replaySessionMemory,
-	type SessionMemoryDetailsV1,
+	type SessionMemoryDetailsV2,
 	type SessionMemoryInput,
 	type SessionMemoryState,
 } from "./state.ts";
@@ -28,7 +28,7 @@ interface ExecuteSessionMemoryOptions {
 export interface SessionMemoryExecution {
 	result: {
 		content: Array<{ type: "text"; text: string }>;
-		details: SessionMemoryDetailsV1;
+		details: SessionMemoryDetailsV2;
 	};
 	outlines: PreparedOutlineInjection[];
 	readFiles: string[];
@@ -67,13 +67,6 @@ export async function executeSessionMemory(options: ExecuteSessionMemoryOptions)
 			options.required ? nextCheckpoint : (replay.latest?.checkpoint ?? 0),
 			options.ctx.cwd,
 		);
-		if (replay.latest && replay.latest.state.goal !== state.goal) {
-			if (!options.ctx.hasUI) {
-				throw new Error("Goal change requires user approval. Keep the current goal and ask the user first.");
-			}
-			const approved = await options.ctx.ui.confirm("Change session goal?", state.goal);
-			if (!approved) throw new Error("Session goal change was not approved");
-		}
 	} else {
 		if (!replay.latest) throw new Error("session_memory requires an update before checkpoint");
 		state = replay.latest.state;
@@ -133,12 +126,17 @@ export async function executeSessionMemory(options: ExecuteSessionMemoryOptions)
 		prunedRowIds = [...new Set([...prunedRowIds, ...collectPrunedRowIds(branch, anchorIndex)])];
 	}
 	warnings = [...new Set(warnings.map(boundedWarning))].slice(0, 32);
-	const details: SessionMemoryDetailsV1 = {
-		v: 1,
+	const changes = [
+		...(checkpointing ? [`Checkpoint ${nextCheckpoint} created`] : []),
+		...(options.params.action === "update" ? summarizeUpdate(replay.latest?.state, state) : []),
+	];
+	const details: SessionMemoryDetailsV2 = {
+		v: 2,
 		toolCallId: options.toolCallId,
 		kind: checkpointing ? "checkpoint" : "update",
 		checkpoint: nextCheckpoint,
 		state,
+		changes: changes.length > 0 ? changes : ["No changes"],
 		outlinedRows,
 		prunedRowIds,
 		warnings,
@@ -148,6 +146,76 @@ export async function executeSessionMemory(options: ExecuteSessionMemoryOptions)
 		outlines: outlineResponse.messages,
 		readFiles,
 	};
+}
+
+function summarizeUpdate(previous: SessionMemoryState | undefined, next: SessionMemoryState): string[] {
+	if (!previous) return ["Session memory created"];
+	const changes: string[] = [];
+	if (previous.longTermGoal !== next.longTermGoal) changes.push("Long-term goal updated");
+	addCount(changes, differenceCount(next.tasks, previous.tasks), "new task", "new tasks");
+	addCount(changes, differenceCount(previous.tasks, next.tasks), "task closed", "tasks closed");
+
+	const previousMemory = new Map<string, { text: string; tier: "short-term" | "long-term" }>();
+	const nextMemory = new Map<string, { text: string; tier: "short-term" | "long-term" }>();
+	for (const item of previous.shortTermMemories) previousMemory.set(item.id, { text: item.text, tier: "short-term" });
+	for (const item of previous.longTermMemories) previousMemory.set(item.id, { text: item.text, tier: "long-term" });
+	for (const item of next.shortTermMemories) nextMemory.set(item.id, { text: item.text, tier: "short-term" });
+	for (const item of next.longTermMemories) nextMemory.set(item.id, { text: item.text, tier: "long-term" });
+	let addedMemory = 0;
+	let promotedMemory = 0;
+	let movedToShortTerm = 0;
+	let updatedMemory = 0;
+	for (const [id, item] of nextMemory) {
+		const old = previousMemory.get(id);
+		if (!old) addedMemory += 1;
+		else {
+			if (old.tier === "short-term" && item.tier === "long-term") promotedMemory += 1;
+			if (old.tier === "long-term" && item.tier === "short-term") movedToShortTerm += 1;
+			if (old.text !== item.text) updatedMemory += 1;
+		}
+	}
+	const forgottenMemory = [...previousMemory.keys()].filter((id) => !nextMemory.has(id)).length;
+	addCount(changes, addedMemory, "new memory", "new memories");
+	addCount(changes, promotedMemory, "memory promoted", "memories promoted");
+	addCount(changes, movedToShortTerm, "memory moved to short term", "memories moved to short term");
+	addCount(changes, updatedMemory, "memory updated", "memories updated");
+	addCount(changes, forgottenMemory, "memory forgotten", "memories forgotten");
+
+	const previousFiles = new Map<string, "read" | "outline" | "deferred">();
+	const nextFiles = new Map<string, "read" | "outline" | "deferred">();
+	for (const path of previous.readFiles) previousFiles.set(path, "read");
+	for (const path of previous.outlineFiles) previousFiles.set(path, "outline");
+	for (const item of previous.deferFiles) previousFiles.set(item.path, "deferred");
+	for (const path of next.readFiles) nextFiles.set(path, "read");
+	for (const path of next.outlineFiles) nextFiles.set(path, "outline");
+	for (const item of next.deferFiles) nextFiles.set(item.path, "deferred");
+	let addedFiles = 0;
+	let changedFileTiers = 0;
+	for (const [path, tier] of nextFiles) {
+		const oldTier = previousFiles.get(path);
+		if (!oldTier) addedFiles += 1;
+		else if (oldTier !== tier) changedFileTiers += 1;
+	}
+	const removedFiles = [...previousFiles.keys()].filter((path) => !nextFiles.has(path)).length;
+	addCount(changes, addedFiles, "file added", "files added");
+	addCount(changes, changedFileTiers, "file tier changed", "file tiers changed");
+	addCount(changes, removedFiles, "file removed", "files removed");
+	return changes.length > 0 ? changes : ["No changes"];
+}
+
+function differenceCount(values: readonly string[], previous: readonly string[]): number {
+	const remaining = [...previous];
+	let count = 0;
+	for (const value of values) {
+		const index = remaining.indexOf(value);
+		if (index < 0) count += 1;
+		else remaining.splice(index, 1);
+	}
+	return count;
+}
+
+function addCount(changes: string[], count: number, singular: string, plural: string): void {
+	if (count > 0) changes.push(`${count} ${count === 1 ? singular : plural}`);
 }
 
 function boundedWarning(value: string): string {

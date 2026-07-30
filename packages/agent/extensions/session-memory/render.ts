@@ -2,7 +2,7 @@ import type { AgentToolResult, Theme } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Marker } from "@shanepadgett/tau-tui";
 import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.ts";
-import { parseSessionMemoryDetails, type SessionMemoryDetailsV1, type SessionMemoryInput } from "./state.ts";
+import type { SessionMemoryInput } from "./state.ts";
 
 export interface SessionMemoryInstructionDetails {
 	v: 1;
@@ -23,58 +23,39 @@ export function renderSessionMemoryInstruction(details: unknown, theme: Theme): 
 }
 
 export function renderSessionMemoryCall(
-	args: SessionMemoryInput,
+	_args: SessionMemoryInput,
 	theme: Theme,
 	context: {
+		visible: boolean;
 		rowState: ToolRowStateStore;
 		rowId: string;
 		invalidate: () => void;
 		lastComponent: unknown;
-		executionStarted: boolean;
 	},
 ): Text {
-	context.rowState.watch(context.rowId, context.invalidate);
 	const component = context.lastComponent instanceof Text ? context.lastComponent : new Text("", 0, 0);
-	if (context.executionStarted) {
+	if (!context.visible) {
 		component.setText("");
 		return component;
 	}
-	const summary =
-		args.action === "checkpoint"
-			? "checkpoint"
-			: `${args.tasks.length} tasks · ${args.carry.length} carry · ${args.durable.length} durable · ${args.readFiles.length} read · ${args.outlineFiles.length} outline · ${args.deferFiles.length} deferred`;
-	component.setText(
-		`${formatToolRowTitle(context.rowState, context.rowId, "session_memory", theme)} ${theme.fg("muted", summary)}`,
-	);
+	context.rowState.watch(context.rowId, context.invalidate);
+	component.setText(formatToolRowTitle(context.rowState, context.rowId, "session_memory", theme));
 	return component;
 }
 
 export function renderSessionMemoryResult(
 	result: AgentToolResult<unknown>,
-	expanded: boolean,
+	visible: boolean,
 	theme: Theme,
 	lastComponent: unknown,
-	toolCallId: string,
 ): Text {
 	const component = lastComponent instanceof Text ? lastComponent : new Text("", 0, 0);
-	const text = firstText(result);
-	const details = parseSessionMemoryDetails(result.details, toolCallId, text);
-	if (!details) {
-		component.setText(theme.fg("warning", text || "session_memory returned invalid details"));
+	if (!visible) {
+		component.setText("");
 		return component;
 	}
-	component.setText(expanded ? text : collapsed(details, theme));
+	component.setText(`\n${theme.fg("toolOutput", firstText(result))}`);
 	return component;
-}
-
-function collapsed(details: SessionMemoryDetailsV1, theme: Theme): string {
-	const state = details.state;
-	const files = state.readFiles.length + state.outlineFiles.length + state.deferFiles.length;
-	const label = details.kind === "checkpoint" ? `Checkpoint ${details.checkpoint}` : "Updated";
-	return theme.fg(
-		details.warnings.length > 0 ? "warning" : "success",
-		`${label} · ${state.tasks.length} tasks · ${state.carry.length} carry · ${state.durable.length} durable · ${files} files${details.warnings.length > 0 ? ` · ${details.warnings.length} warnings` : ""}`,
-	);
 }
 
 function firstText(result: AgentToolResult<unknown>): string {

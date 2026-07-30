@@ -20,7 +20,7 @@ import {
 	formatSessionMemory,
 	replaySessionMemory,
 	sessionMemoryParameters,
-	type SessionMemoryDetailsV1,
+	type SessionMemoryDetailsV2,
 	type SessionMemoryInput,
 	type SessionMemoryState,
 } from "../../../extensions/session-memory/state.ts";
@@ -35,22 +35,20 @@ interface NativePayload {
 
 const system = "stable system prompt";
 const state: SessionMemoryState = {
-	goal: "Ship cache-stable session memory",
-	objective: "Capture provider payloads",
+	longTermGoal: "Ship cache-stable session memory",
 	tasks: ["Preserve longest stable prefix"],
-	carry: [],
-	durable: [{ id: "cache-stability", text: "Only checkpoints may replace message history." }],
+	shortTermMemories: [],
+	longTermMemories: [{ id: "cache-stability", text: "Only checkpoints may replace message history." }],
 	readFiles: [],
 	outlineFiles: [],
 	deferFiles: [],
 };
 const updateInput: Extract<SessionMemoryInput, { action: "update" }> = {
 	action: "update",
-	goal: state.goal,
-	objective: state.objective,
+	longTermGoal: state.longTermGoal,
 	tasks: state.tasks,
-	carry: [],
-	durable: state.durable,
+	shortTermMemories: [],
+	longTermMemories: state.longTermMemories,
 	readFiles: [],
 	outlineFiles: [],
 	deferFiles: [],
@@ -93,14 +91,15 @@ function details(
 	toolCallId: string,
 	kind: "update" | "checkpoint",
 	checkpoint: number,
-	objective: string,
-): SessionMemoryDetailsV1 {
+	task: string,
+): SessionMemoryDetailsV2 {
 	return {
-		v: 1,
+		v: 2,
 		toolCallId,
 		kind,
 		checkpoint,
-		state: { ...state, objective },
+		state: { ...state, tasks: [task] },
+		changes: ["Fixture created"],
 		outlinedRows: [],
 		prunedRowIds: [],
 		warnings: [],
@@ -111,7 +110,7 @@ function call(id: string, input: SessionMemoryInput): ContextMessage {
 	return fauxAssistantMessage(fauxToolCall("session_memory", input, { id }));
 }
 
-function result(id: string, value: SessionMemoryDetailsV1): ToolResultMessage {
+function result(id: string, value: SessionMemoryDetailsV2): ToolResultMessage {
 	return {
 		role: "toolResult",
 		toolCallId: id,
@@ -252,9 +251,9 @@ describe("session-memory provider cache stability", () => {
 			const checkpoint2 = details("checkpoint-2", "checkpoint", 2, "Checkpoint two");
 			const checkpoint1Call = call("checkpoint-1", { action: "checkpoint" });
 			const checkpoint1Result = result("checkpoint-1", checkpoint1);
-			const update1Call = call("update-1", updateInput);
+			const update1Call = call("update-1", { ...updateInput, tasks: ["Ordinary update one"] });
 			const update1Result = result("update-1", update1);
-			const update2Call = call("update-2", { ...updateInput, objective: "Ordinary update two" });
+			const update2Call = call("update-2", { ...updateInput, tasks: ["Ordinary update two"] });
 			const update2Result = result("update-2", update2);
 			const required: ContextMessage = {
 				role: "custom",
@@ -263,7 +262,7 @@ describe("session-memory provider cache stability", () => {
 				display: false,
 				timestamp: 1,
 			};
-			const checkpoint2Call = call("checkpoint-2", { ...updateInput, objective: "Checkpoint two" });
+			const checkpoint2Call = call("checkpoint-2", { ...updateInput, tasks: ["Checkpoint two"] });
 			const checkpoint2Result = result("checkpoint-2", checkpoint2);
 			const old: ContextMessage = { role: "user", content: "old context", timestamp: 1 };
 			const branch1 = [entry("checkpoint-1-call", checkpoint1Call), entry("checkpoint-1-result", checkpoint1Result)];
@@ -326,7 +325,7 @@ describe("session-memory provider cache stability", () => {
 				timestamp: 2,
 			};
 			const firstPostCheckpointPayload = await serialize([...checkpoint2Messages, fileInjection]);
-			const nextUpdateCall = call("update-3", { ...updateInput, objective: "After checkpoint" });
+			const nextUpdateCall = call("update-3", { ...updateInput, tasks: ["After checkpoint"] });
 			const nextUpdate = details("update-3", "update", 2, "After checkpoint");
 			const nextPostCheckpointPayload = await serialize([
 				...checkpoint2Messages,

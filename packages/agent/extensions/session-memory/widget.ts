@@ -7,19 +7,18 @@ import {
 	wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 import { bindingHint, Tabs, ToolPanel } from "@shanepadgett/tau-tui";
-import type { CarryMemory, DeferredFile, MemoryItem } from "./state.ts";
+import type { DeferredFile, MemoryItem, ShortTermMemory } from "./state.ts";
 
 export type SessionMemoryTab = "tasks" | "memories" | "files";
 
 export interface SessionMemoryWidgetView {
-	goal: string;
-	objective: string;
+	longTermGoal: string | null;
 	checkpoint: number;
 	activeTokens: number;
 	updatedAt: number | undefined;
 	tasks: readonly string[];
-	carry: readonly CarryMemory[];
-	durable: readonly MemoryItem[];
+	shortTermMemories: readonly ShortTermMemory[];
+	longTermMemories: readonly MemoryItem[];
 	readFiles: readonly string[];
 	outlineFiles: readonly string[];
 	deferFiles: readonly DeferredFile[];
@@ -70,13 +69,13 @@ class SessionMemoryWidget implements Component {
 				{
 					id: "memories",
 					label: "Memories",
-					count: view.carry.length + view.durable.length,
+					count: view.shortTermMemories.length + view.longTermMemories.length,
 					body: new WrappedLines(() => [
-						theme.fg("warning", theme.bold(`Carry  ${view.carry.length}`)),
-						...view.carry.map((item) => `${theme.fg("warning", "◆")} ${item.text}`),
+						theme.fg("warning", theme.bold(`Short term  ${view.shortTermMemories.length}`)),
+						...view.shortTermMemories.map((item) => `${theme.fg("warning", "◆")} ${item.text}`),
 						"",
-						theme.fg("success", theme.bold(`Durable  ${view.durable.length}`)),
-						...view.durable.map((item) => `${theme.fg("success", "●")} ${item.text}`),
+						theme.fg("success", theme.bold(`Long term  ${view.longTermMemories.length}`)),
+						...view.longTermMemories.map((item) => `${theme.fg("success", "●")} ${item.text}`),
 					]),
 				},
 				{
@@ -106,8 +105,7 @@ class SessionMemoryWidget implements Component {
 				view.updatedAt === undefined ? "not saved yet" : `updated ${formatUpdated(view.updatedAt)}`
 			}`,
 			header: new WrappedLines(() => [
-				`${theme.fg("muted", theme.bold("GOAL"))}  ${view.goal}`,
-				`${theme.fg("accent", theme.bold("NOW"))}   ${view.objective}`,
+				`${theme.fg("muted", theme.bold("LONG-TERM GOAL"))}  ${view.longTermGoal ?? "None"}`,
 			]),
 			body: this.tabs,
 			footer: {

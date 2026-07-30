@@ -6,11 +6,7 @@
 		},
 		"context": {
 			"validation": {
-				"ignoreGlobs": [
-					".pi/tau/*.jsonl",
-					"docs/plans/**",
-					"packages/agent/native-bin/**"
-				]
+				"ignoreGlobs": [".pi/tau/*.jsonl", "docs/plans/**", "packages/agent/native-bin/**"]
 			}
 		},
 		"contextPruning": {
@@ -40,9 +36,7 @@
 					"name": "md-check",
 					"command": "mise run check:md",
 					"details": "Runs Markdown linting and fixes through markdownlint-cli2.",
-					"includeGlobs": [
-						"**/*.md"
-					]
+					"includeGlobs": ["**/*.md"]
 				}
 			]
 		}

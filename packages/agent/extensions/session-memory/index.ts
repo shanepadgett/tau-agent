@@ -14,7 +14,7 @@ import {
 	replaySessionMemory,
 	SESSION_MEMORY_TOOL,
 	sessionMemoryParameters,
-	type SessionMemoryDetailsV1,
+	type SessionMemoryDetailsV2,
 } from "./state.ts";
 import { executeSessionMemory } from "./tool.ts";
 import { createSessionMemoryWidget } from "./widget.ts";
@@ -25,7 +25,7 @@ const REQUIRED_INSTRUCTION =
 const MEMORY_REMINDER =
 	"Review session memory. Record expensive findings, keep only unfinished tasks, and remove stale state with session_memory action update.";
 const CHECKPOINT_WARNING =
-	"Checkpoint approaching. Reconcile carry memory, unfinished tasks, and files with session_memory action update.";
+	"Checkpoint approaching. Reconcile short-term memories, unfinished tasks, and files with session_memory action update.";
 const REQUIRED_RESERVE = 30_000;
 const ADVISORY_THRESHOLDS = [50_000, 100_000] as const;
 
@@ -33,6 +33,7 @@ type Gate = { kind: "open" } | { kind: "required" } | { kind: "awaiting"; toolCa
 
 export default function sessionMemoryExtension(pi: ExtensionAPI): void {
 	let enabled = false;
+	let showToolRows = sessionMemorySettings.defaults.showToolRows;
 	let generation = 0;
 	let contextCeilingTokens = sessionMemorySettings.defaults.contextCeilingTokens;
 	let gate: Gate = { kind: "open" };
@@ -120,19 +121,20 @@ export default function sessionMemoryExtension(pi: ExtensionAPI): void {
 	);
 
 	pi.registerTool(
-		defineTool<typeof sessionMemoryParameters, SessionMemoryDetailsV1>({
+		defineTool<typeof sessionMemoryParameters, SessionMemoryDetailsV2>({
 			name: SESSION_MEMORY_TOOL,
 			label: SESSION_MEMORY_TOOL,
+			renderShell: "self",
 			description:
 				"Replace bounded session state or checkpoint it. Every successful call returns the full authoritative state with stable memory IDs.",
 			promptSnippet: "Update or checkpoint bounded session memory",
 			promptGuidelines: [
-				"Use session_memory action update to replace the full current goal, objective, tasks, memories, and file tiers; the latest successful result is authoritative.",
+				"Use session_memory action update to replace the optional long-term goal, tasks, short-term and long-term memories, and file tiers; the latest successful result is authoritative.",
+				"Set longTermGoal to null unless work needs durable direction across many tasks or checkpoints that tasks alone cannot capture. Change it when that direction changes.",
 				"Keep tasks as ordered unfinished work with the current task first. Remove completed or abandoned tasks immediately.",
 				"Before a final response, use action update to reconcile session memory whenever task status or other saved state changed.",
-				"Keep existing session_memory memory IDs when editing or promoting memories. Omit an ID to forget it and use a new lowercase kebab-case ID for new memory.",
+				"Keep existing memory IDs when editing or moving memories between short-term and long-term. Omit an ID to forget it and use a new lowercase kebab-case ID for new memory.",
 				"Use session_memory action checkpoint as the only tool call in its assistant message and only after an update in the current checkpoint span. A required checkpoint accepts action update and checkpoints it automatically.",
-				"Keep the session_memory goal unchanged unless the user redirects it or explicitly approves a proposed change.",
 				"Treat file tiers as the next checkpoint restore manifest. Ordinary updates only save tiers; checkpoints load readFiles and outlineFiles.",
 				"Put exact source needed after the next checkpoint in readFiles, structural context in outlineFiles, and inactive paths with a concrete reconsideration condition in deferFiles. Use one tier per path.",
 			],
@@ -171,21 +173,15 @@ export default function sessionMemoryExtension(pi: ExtensionAPI): void {
 			},
 			renderCall(args, theme, context) {
 				return renderSessionMemoryCall(args, theme, {
+					visible: showToolRows,
 					rowState,
 					rowId: context.toolCallId,
 					invalidate: context.invalidate,
 					lastComponent: context.lastComponent,
-					executionStarted: context.executionStarted,
 				});
 			},
-			renderResult(result, options, theme, context) {
-				return renderSessionMemoryResult(
-					result,
-					options.expanded,
-					theme,
-					context.lastComponent,
-					context.toolCallId,
-				);
+			renderResult(result, _options, theme, context) {
+				return renderSessionMemoryResult(result, showToolRows, theme, context.lastComponent);
 			},
 		}),
 	);
@@ -233,27 +229,25 @@ export default function sessionMemoryExtension(pi: ExtensionAPI): void {
 				createSessionMemoryWidget(tui, theme, keys, {
 					view: state
 						? {
-								goal: state.goal,
-								objective: state.objective,
+								longTermGoal: state.longTermGoal,
 								checkpoint: latest.checkpoint,
 								activeTokens,
 								updatedAt: replay.updatedAt,
 								tasks: state.tasks,
-								carry: state.carry,
-								durable: state.durable,
+								shortTermMemories: state.shortTermMemories,
+								longTermMemories: state.longTermMemories,
 								readFiles: state.readFiles,
 								outlineFiles: state.outlineFiles,
 								deferFiles: state.deferFiles,
 							}
 						: {
-								goal: "No goal recorded.",
-								objective: "No current objective recorded.",
+								longTermGoal: null,
 								checkpoint: 0,
 								activeTokens,
 								updatedAt: undefined,
 								tasks: [],
-								carry: [],
-								durable: [],
+								shortTermMemories: [],
+								longTermMemories: [],
 								readFiles: [],
 								outlineFiles: [],
 								deferFiles: [],
@@ -268,11 +262,13 @@ export default function sessionMemoryExtension(pi: ExtensionAPI): void {
 	pi.on("session_start", async (_event, ctx) => {
 		invalidate();
 		enabled = false;
+		showToolRows = sessionMemorySettings.defaults.showToolRows;
 		setToolActive(false);
 		const current = generation;
 		const settings = await loadTauExtensionSettings(ctx, sessionMemorySettings);
 		if (current !== generation) return;
 		enabled = settings.enabled;
+		showToolRows = settings.showToolRows;
 		contextCeilingTokens = settings.contextCeilingTokens;
 		setToolActive(enabled);
 		syncBranch(ctx);
@@ -349,6 +345,7 @@ export default function sessionMemoryExtension(pi: ExtensionAPI): void {
 	pi.on("session_shutdown", () => {
 		invalidate();
 		enabled = false;
+		showToolRows = sessionMemorySettings.defaults.showToolRows;
 		setToolActive(false);
 		gate = { kind: "open" };
 		requiredToolCallId = undefined;

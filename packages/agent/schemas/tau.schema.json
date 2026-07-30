@@ -153,6 +153,11 @@
 							"default": true,
 							"description": "Enable session memory."
 						},
+						"showToolRows": {
+							"type": "boolean",
+							"default": false,
+							"description": "Show session_memory tool rows for debugging."
+						},
 						"contextCeilingTokens": {
 							"type": "integer",
 							"default": 150000,

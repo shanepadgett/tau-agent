@@ -9,18 +9,17 @@ import { describe, expect, it, vi } from "vitest";
 import { registerOutlineInjectionProvider, type PreparedOutlineInjection } from "../../../shared/outline-injection.ts";
 import {
 	formatSessionMemory,
-	type SessionMemoryDetailsV1,
+	type SessionMemoryDetailsV2,
 	type SessionMemoryInput,
 } from "../../../extensions/session-memory/state.ts";
 import { executeSessionMemory } from "../../../extensions/session-memory/tool.ts";
 
 const update: Extract<SessionMemoryInput, { action: "update" }> = {
 	action: "update",
-	goal: "Ship session memory",
-	objective: "Test tool transaction",
+	longTermGoal: "Ship session memory",
 	tasks: ["Run transaction"],
-	carry: [{ id: "new-finding", text: "Keep for one span." }],
-	durable: [],
+	shortTermMemories: [{ id: "new-finding", text: "Keep for one span." }],
+	longTermMemories: [],
 	readFiles: ["active.ts"],
 	outlineFiles: [],
 	deferFiles: [],
@@ -36,7 +35,7 @@ function pi(): ExtensionAPI {
 	} as unknown as ExtensionAPI;
 }
 
-function result(id: string, value: SessionMemoryDetailsV1): ToolResultMessage {
+function result(id: string, value: SessionMemoryDetailsV2): ToolResultMessage {
 	return {
 		role: "toolResult",
 		toolCallId: id,
@@ -96,13 +95,45 @@ describe("session-memory tool", () => {
 		expect(execution.result.details).toMatchObject({
 			kind: "update",
 			checkpoint: 0,
-			state: { goal: input.goal, objective: input.objective, outlineFiles: ["related.ts"] },
+			state: { longTermGoal: input.longTermGoal, outlineFiles: ["related.ts"] },
 		});
 		expect(execution.result.content[0]?.text).toContain("Session memory · checkpoint 0");
 		expect(execution.result.content[0]?.text).toContain("new-finding: Keep for one span.");
+		expect(execution.result.details.changes).toEqual(["Session memory created"]);
 		expect(execution.readFiles).toEqual([]);
 		expect(execution.outlines).toEqual([]);
 		expect(outlineProvider).not.toHaveBeenCalled();
+	});
+
+	it("records a compact summary of changes from the previous update", async () => {
+		const first = await executeSessionMemory(options(update));
+		const changed = {
+			...update,
+			tasks: ["Write docs", "Run checks"],
+			shortTermMemories: [{ id: "new-memory", text: "A new finding." }],
+			longTermMemories: [{ id: "new-finding", text: "Keep for one span." }],
+			readFiles: [],
+			outlineFiles: ["active.ts"],
+		};
+		const branch = [
+			call("prior", update),
+			{
+				type: "message",
+				id: "prior-result",
+				parentId: null,
+				timestamp: "2026-07-29T12:00:01.000Z",
+				message: result("prior", { ...first.result.details, toolCallId: "prior" }),
+			} satisfies SessionEntry,
+			call("current", changed),
+		];
+		const execution = await executeSessionMemory(options(changed, branch));
+		expect(execution.result.details.changes).toEqual([
+			"2 new tasks",
+			"1 task closed",
+			"1 new memory",
+			"1 memory promoted",
+			"1 file tier changed",
+		]);
 	});
 
 	it("rejects voluntary checkpoints without an update in the current span", async () => {
@@ -159,41 +190,45 @@ describe("session-memory tool", () => {
 		const execution = await executeSessionMemory(test);
 		expect(execution.result.details.kind).toBe("checkpoint");
 		expect(execution.result.details.checkpoint).toBe(1);
-		expect(execution.result.details.state.carry[0]?.bornAtCheckpoint).toBe(0);
+		expect(execution.result.details.changes).toEqual(["Checkpoint 1 created"]);
+		expect(execution.result.details.state.shortTermMemories[0]?.bornAtCheckpoint).toBe(0);
 		expect(execution.readFiles).toEqual(["active.ts"]);
 		expect(execution.outlines).toEqual([outline("related.ts")]);
 		expect(execution.result.details.outlinedRows).toEqual([{ path: "related.ts", rowId: "outline:related.ts" }]);
 		expect(outlineProvider).toHaveBeenCalledOnce();
 	});
 
-	it("turns the required full update into a checkpoint and ages new carry from that checkpoint", async () => {
+	it("turns the required full update into a checkpoint and ages new short-term memory from it", async () => {
 		const execution = await executeSessionMemory({ ...options(update), required: true });
 		expect(execution.result.details.kind).toBe("checkpoint");
 		expect(execution.result.details.checkpoint).toBe(1);
-		expect(execution.result.details.state.carry[0]?.bornAtCheckpoint).toBe(1);
+		expect(execution.result.details.changes).toEqual(["Checkpoint 1 created", "Session memory created"]);
+		expect(execution.result.details.state.shortTermMemories[0]?.bornAtCheckpoint).toBe(1);
 		expect(execution.readFiles).toEqual(["active.ts"]);
 	});
 
-	it("fails closed on an unapproved goal change before outline work", async () => {
-		const initial = await executeSessionMemory(options(update));
-		const prior = { ...initial.result.details, toolCallId: "prior" };
-		const changed = { ...update, goal: "Different goal", outlineFiles: ["related.ts"] };
+	it.each([
+		[null, "New long-term goal"],
+		["Ship session memory", null],
+		["Ship session memory", "Different long-term goal"],
+	])("accepts an agent-managed long-term goal change from %s to %s", async (previousGoal, nextGoal) => {
+		const previous = { ...update, longTermGoal: previousGoal };
+		const initial = await executeSessionMemory(options(previous));
+		const changed = { ...update, longTermGoal: nextGoal };
 		const branch = [
-			call("prior", update),
+			call("prior", previous),
 			{
 				type: "message",
 				id: "prior-result",
 				parentId: null,
 				timestamp: "2026-07-29T12:00:01.000Z",
-				message: result("prior", prior),
+				message: result("prior", { ...initial.result.details, toolCallId: "prior" }),
 			} satisfies SessionEntry,
 			call("current", changed),
 		];
-		const test = options(changed, branch);
-		const outlineProvider = vi.fn(async () => ({ messages: [], warnings: [] }));
-		registerOutlineInjectionProvider(test.pi, outlineProvider);
-		await expect(executeSessionMemory(test)).rejects.toThrow("requires user approval");
-		expect(outlineProvider).not.toHaveBeenCalled();
+		const execution = await executeSessionMemory(options(changed, branch));
+		expect(execution.result.details.state.longTermGoal).toBe(nextGoal);
+		expect(execution.result.details.changes).toContain("Long-term goal updated");
 	});
 
 	it("keeps a requested outline in the manifest when checkpoint loading fails", async () => {

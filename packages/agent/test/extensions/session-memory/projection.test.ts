@@ -9,35 +9,35 @@ import {
 import {
 	formatSessionMemory,
 	replaySessionMemory,
-	type SessionMemoryDetailsV1,
+	type SessionMemoryDetailsV2,
 	type SessionMemoryState,
 } from "../../../extensions/session-memory/state.ts";
 
 const state: SessionMemoryState = {
-	goal: "Ship session memory",
-	objective: "Test projection",
+	longTermGoal: "Ship session memory",
 	tasks: ["Keep one canonical pair"],
-	carry: [],
-	durable: [{ id: "stable-prefix", text: "Reuse checkpoint bytes and IDs." }],
+	shortTermMemories: [],
+	longTermMemories: [{ id: "stable-prefix", text: "Reuse checkpoint bytes and IDs." }],
 	readFiles: [],
 	outlineFiles: [],
 	deferFiles: [],
 };
 
-function details(id: string): SessionMemoryDetailsV1 {
+function details(id: string): SessionMemoryDetailsV2 {
 	return {
-		v: 1,
+		v: 2,
 		toolCallId: id,
 		kind: "checkpoint",
 		checkpoint: 1,
 		state,
+		changes: ["Checkpoint 1 created"],
 		outlinedRows: [],
 		prunedRowIds: ["old-read"],
 		warnings: [],
 	};
 }
 
-function result(id: string, value: SessionMemoryDetailsV1): ToolResultMessage {
+function result(id: string, value: SessionMemoryDetailsV2): ToolResultMessage {
 	return {
 		role: "toolResult",
 		toolCallId: id,
@@ -60,7 +60,7 @@ describe("session-memory projection", () => {
 		const oldRead = fauxAssistantMessage(fauxToolCall("read", { path: "old.ts" }, { id: "old-read" }));
 		const anchor = fauxAssistantMessage([
 			fauxText("This text leaves projected context."),
-			fauxToolCall("session_memory", { action: "update", goal: "large arguments" }, { id: "checkpoint" }),
+			fauxToolCall("session_memory", { action: "update", longTermGoal: "large arguments" }, { id: "checkpoint" }),
 			fauxToolCall("bash", { command: "echo sibling" }, { id: "sibling" }),
 		]);
 		const siblingResult: ToolResultMessage = {
@@ -110,13 +110,13 @@ describe("session-memory projection", () => {
 			...checkpoint,
 			toolCallId: "compacted-update",
 			kind: "update" as const,
-			state: { ...state, objective: "Compacted objective" },
+			state: { ...state, tasks: ["Compacted task"] },
 		};
 		const laterUpdate = {
 			...checkpoint,
 			toolCallId: "later-update",
 			kind: "update" as const,
-			state: { ...state, objective: "Later objective" },
+			state: { ...state, tasks: ["Later task"] },
 		};
 		const branch = [
 			entry("checkpoint-result", result("checkpoint", checkpoint)),
@@ -145,17 +145,17 @@ describe("session-memory projection", () => {
 		expect(first.messages[1]).toMatchObject({
 			role: "custom",
 			customType: "tau.session-memory.recovery",
-			content: expect.stringContaining("Compacted objective"),
+			content: expect.stringContaining("Compacted task"),
 			display: false,
 			timestamp: 0,
 		});
-		expect(JSON.stringify(first.messages[1])).not.toContain("Later objective");
+		expect(JSON.stringify(first.messages[1])).not.toContain("Later task");
 
 		const laterCheckpoint = {
 			...checkpoint,
 			toolCallId: "later-checkpoint",
 			checkpoint: 2,
-			state: { ...state, objective: "Later checkpoint objective" },
+			state: { ...state, tasks: ["Later checkpoint task"] },
 		};
 		const afterCheckpoint = projectSessionMemory(
 			[compaction, later],
@@ -166,7 +166,7 @@ describe("session-memory projection", () => {
 		);
 		expect(afterCheckpoint.messages[1]).toMatchObject({
 			role: "custom",
-			content: expect.stringContaining("Later checkpoint objective"),
+			content: expect.stringContaining("Later checkpoint task"),
 		});
 	});
 
