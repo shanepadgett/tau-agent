@@ -47,9 +47,9 @@ describe("effort extension", () => {
 		} as unknown as ExtensionAPI;
 		effortExtension(pi);
 
-		await commandHandler?.("high", ctx);
+		await commandHandler?.("deep", ctx);
 		await Promise.resolve();
 
-		expect(entries).toEqual([{ v: 1, effort: "high" }]);
+		expect(entries).toEqual([{ v: 1, effort: "deep" }]);
 	});
 });

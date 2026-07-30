@@ -21,13 +21,13 @@ export function replayEffortState(branch: readonly SessionEntry[]): ModelEffort 
 		const value = data as Record<string, unknown>;
 		if (value.v !== 1) continue;
 		if (value.effort === null) return undefined;
-		if (value.effort === "low" || value.effort === "medium" || value.effort === "high") return value.effort;
+		if (value.effort === "quick" || value.effort === "standard" || value.effort === "deep") return value.effort;
 	}
 	return undefined;
 }
 
 export function nextEffort(effort: ModelEffort | undefined): ModelEffort {
-	if (effort === "low") return "medium";
-	if (effort === "medium") return "high";
-	return "low";
+	if (effort === "quick") return "standard";
+	if (effort === "standard") return "deep";
+	return "quick";
 }

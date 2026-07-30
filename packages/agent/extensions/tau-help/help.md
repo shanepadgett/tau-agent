@@ -44,7 +44,7 @@ Gives agent `session_memory` for an optional long-term goal, active tasks, short
 
 ## effort
 
-Adds `/effort [low|medium|high]` to select effort and a provider from current logins. Tau selects provider’s best available model for tier, then tries its configured model fallback. `Ctrl+Shift+E` cycles tiers on current provider. Footer derives effort from current provider, model, and thinking level, and hides it when no configured tier matches.
+Adds `/effort [quick|standard|deep]` to select effort and a provider from current logins. Tau selects provider’s best available model for tier, then tries its configured model fallback. `Ctrl+Shift+E` cycles tiers on current provider. Footer derives effort from current provider, model, and thinking level, and hides it when no configured tier matches.
 
 ## explore
 

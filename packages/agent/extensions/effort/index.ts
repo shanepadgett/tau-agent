@@ -9,7 +9,7 @@ import {
 } from "../../shared/model-effort.ts";
 import { EFFORT_STATE_TYPE, effortState, nextEffort } from "./state.ts";
 
-const EFFORTS: readonly ModelEffort[] = ["low", "medium", "high"];
+const EFFORTS: readonly ModelEffort[] = ["quick", "standard", "deep"];
 
 export default function effortExtension(pi: ExtensionAPI): void {
 	let activeEffort: ModelEffort | undefined;
@@ -81,7 +81,7 @@ export default function effortExtension(pi: ExtensionAPI): void {
 			}
 			const arg = args.trim().toLowerCase();
 			if (arg && !isModelEffort(arg)) {
-				ctx.ui.notify("Usage: /effort [low|medium|high]", "error");
+				ctx.ui.notify("Usage: /effort [quick|standard|deep]", "error");
 				return;
 			}
 			let effort: ModelEffort | undefined = isModelEffort(arg) ? arg : undefined;
@@ -130,5 +130,5 @@ export default function effortExtension(pi: ExtensionAPI): void {
 }
 
 function isModelEffort(value: string): value is ModelEffort {
-	return value === "low" || value === "medium" || value === "high";
+	return value === "quick" || value === "standard" || value === "deep";
 }

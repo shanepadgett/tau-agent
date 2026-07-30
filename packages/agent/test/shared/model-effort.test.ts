@@ -19,44 +19,43 @@ describe("model effort policy", () => {
 		const providers = resolveEffortProviders(
 			context([
 				model("openai-codex", "gpt-5.6-sol"),
-				model("openai-codex", "gpt-5.5"),
 				model("xai", "grok-4.5"),
 				model("anthropic", "claude-opus-5"),
-				model("anthropic", "claude-opus-4-8"),
+				model("anthropic", "claude-fable-5"),
 			]),
-			"high",
+			"deep",
 		);
 
-		expect(providers.map((provider) => provider.provider)).toEqual(["openai-codex", "xai", "anthropic"]);
+		expect(providers.map((provider) => provider.provider)).toEqual(["openai-codex", "anthropic"]);
 		expect(providers[0]?.candidates.map((candidate) => [candidate.model.id, candidate.reasoning])).toEqual([
 			["gpt-5.6-sol", "high"],
-			["gpt-5.5", "high"],
 		]);
-		expect(providers[2]?.candidates.map((candidate) => candidate.model.id)).toEqual([
+		expect(providers[1]?.candidates.map((candidate) => candidate.model.id)).toEqual([
 			"claude-opus-5",
-			"claude-opus-4-8",
+			"claude-fable-5",
 		]);
+		expect(providers[1]?.candidates.map((candidate) => candidate.reasoning)).toEqual(["high", "low"]);
 	});
 
 	it("only offers logged-in providers and available fallback models", () => {
-		const providers = resolveEffortProviders(context([model("anthropic", "claude-opus-4-8")]), "high");
+		const providers = resolveEffortProviders(context([model("anthropic", "claude-fable-5")]), "deep");
 		expect(providers).toHaveLength(1);
 		expect(providers[0]?.provider).toBe("anthropic");
-		expect(providers[0]?.candidates[0]?.model.id).toBe("claude-opus-4-8");
+		expect(providers[0]?.candidates[0]?.model.id).toBe("claude-fable-5");
 	});
 
-	it("maps the shared OpenAI fallback to each tier's thinking level", () => {
-		const ctx = context([model("openai-codex", "gpt-5.5")]);
-		expect(resolveEffortProviders(ctx, "low")[0]?.candidates[0]?.reasoning).toBe("low");
-		expect(resolveEffortProviders(ctx, "medium")[0]?.candidates[0]?.reasoning).toBe("medium");
-		expect(resolveEffortProviders(ctx, "high")[0]?.candidates[0]?.reasoning).toBe("high");
+	it("maps each tier to its configured thinking level", () => {
+		const ctx = context([model("openai-codex", "gpt-5.6-luna"), model("openai-codex", "gpt-5.6-sol")]);
+		expect(resolveEffortProviders(ctx, "quick")[0]?.candidates[0]?.reasoning).toBe("medium");
+		expect(resolveEffortProviders(ctx, "standard")[0]?.candidates[0]?.reasoning).toBe("max");
+		expect(resolveEffortProviders(ctx, "deep")[0]?.candidates[0]?.reasoning).toBe("high");
 	});
 
 	it("derives effort from the active provider, model, and thinking level", () => {
-		expect(effortForSelection("openai-codex", "gpt-5.6-luna", "high")).toBe("low");
-		expect(effortForSelection("openai-codex", "gpt-5.5", "medium")).toBe("medium");
-		expect(effortForSelection("xai", "grok-4.5", "high")).toBe("high");
-		expect(effortForSelection("anthropic", "claude-opus-4-8", "high")).toBe("high");
+		expect(effortForSelection("openai-codex", "gpt-5.6-luna", "medium")).toBe("quick");
+		expect(effortForSelection("openai-codex", "gpt-5.6-luna", "max")).toBe("standard");
+		expect(effortForSelection("xai", "grok-4.5", "high")).toBe("standard");
+		expect(effortForSelection("anthropic", "claude-fable-5", "low")).toBe("deep");
 	});
 
 	it("does not derive an effort for an incomplete or unrelated selection", () => {

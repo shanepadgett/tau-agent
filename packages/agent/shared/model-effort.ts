@@ -3,7 +3,7 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { resolveCandidates } from "./model-fallback/index.ts";
 import type { ModelCandidate } from "./model-fallback/types.ts";
 
-export type ModelEffort = "low" | "medium" | "high";
+export type ModelEffort = "quick" | "standard" | "deep";
 
 interface ModelPreference {
 	model: string;
@@ -25,42 +25,32 @@ export interface EffortProviderCandidates {
 }
 
 const MODEL_PREFERENCES: Record<ModelEffort, readonly ProviderPreference[]> = {
-	low: [
+	quick: [
 		{
 			provider: "openai-codex",
-			models: [
-				{ model: "gpt-5.6-luna", reasoning: "high" },
-				{ model: "gpt-5.5", reasoning: "low" },
-			],
+			models: [{ model: "gpt-5.6-luna", reasoning: "medium" }],
 		},
 		{ provider: "xai", models: [{ model: "grok-4.5", reasoning: "medium" }] },
 		{ provider: "anthropic", models: [{ model: "claude-haiku-4-5", reasoning: "high" }] },
 	],
-	medium: [
+	standard: [
 		{
 			provider: "openai-codex",
-			models: [
-				{ model: "gpt-5.6-terra", reasoning: "high" },
-				{ model: "gpt-5.5", reasoning: "medium" },
-			],
+			models: [{ model: "gpt-5.6-luna", reasoning: "max" }],
 		},
 		{ provider: "xai", models: [{ model: "grok-4.5", reasoning: "high" }] },
 		{ provider: "anthropic", models: [{ model: "claude-sonnet-5", reasoning: "high" }] },
 	],
-	high: [
+	deep: [
 		{
 			provider: "openai-codex",
-			models: [
-				{ model: "gpt-5.6-sol", reasoning: "high" },
-				{ model: "gpt-5.5", reasoning: "high" },
-			],
+			models: [{ model: "gpt-5.6-sol", reasoning: "high" }],
 		},
-		{ provider: "xai", models: [{ model: "grok-4.5", reasoning: "high" }] },
 		{
 			provider: "anthropic",
 			models: [
 				{ model: "claude-opus-5", reasoning: "high" },
-				{ model: "claude-opus-4-8", reasoning: "high" },
+				{ model: "claude-fable-5", reasoning: "low" },
 			],
 		},
 	],
@@ -72,7 +62,7 @@ export function effortForSelection(
 	reasoning: string | undefined,
 ): ModelEffort | undefined {
 	if (!provider || !model || !reasoning) return undefined;
-	for (const effort of ["high", "medium", "low"] as const) {
+	for (const effort of ["deep", "standard", "quick"] as const) {
 		const preference = MODEL_PREFERENCES[effort].find((item) => item.provider === provider);
 		if (preference?.models.some((item) => item.model === model && item.reasoning === reasoning)) return effort;
 	}
