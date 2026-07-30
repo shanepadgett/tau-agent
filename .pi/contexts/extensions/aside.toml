@@ -1,0 +1,14 @@
+name = "Aside"
+description = "One-off side questions to the current model outside the conversation transcript"
+
+[runtime]
+description = "Aside command registration, context selection, background requests, and lifecycle state"
+read = []
+outline = ["packages/agent/extensions/aside/index.ts"]
+references = ["packages/agent/extensions/aside/README.md", "packages/agent/test/extensions/aside/index.test.ts"]
+
+[ui]
+description = "Aside answer widget preview and scrollable Markdown result panel"
+read = []
+outline = ["packages/agent/extensions/aside/panel.ts"]
+references = ["packages/agent/test/extensions/aside/panel.test.ts"]
