@@ -6,6 +6,10 @@ Tau is a coding agent built to be a reliable partner during software work. It ca
 
 Gives the agent macOS window discovery, screenshots, and app activation tools for visual validation. Requires macOS 14 and Screen & System Audio Recording permission.
 
+## aside
+
+Adds `/aside <question>` for a one-off question to the current model without putting the question or answer in the conversation. Choose the current conversation branch or no context. A thinking widget clears when the answer opens. Run `/aside` to reopen the latest answer and `/aside clear` to cancel or clear it.
+
 ## attention
 
 Shows attention state when Tau needs the user to look at the chat, finishes compacting a session, or summarizes an abandoned branch.
@@ -34,9 +38,9 @@ Adds `/commit` for semantic commit grouping, review, and committing selected rep
 
 Adds `/context` to set branch-local reusable repository work scopes from `.pi/contexts`, and `/context-sync` or `/context-sync <nudge>` for human-driven catalog sync. Active entries produce one ephemeral per-call projection instead of transcript messages. Entry `read` paths supply exact contents, `outline` paths use Explore, and `references` stay unloaded. Clear all selections and confirm to remove active context. Escape cancels a running manual sync. When `sync.automation` is on, coding agent can also run `context-sync` after meaningful uncommitted work. Sync catalogs durable code and long-lived documentation; recurring scratch, planning, interview, and rough-idea paths belong in `validation.ignoreGlobs`. `sync.enabled` is master switch for command, automation, and validation auto-run. Context validation is off by default; when on (and sync enabled), Tau auto-runs context-sync on failure. Folder names are tabs, TOML files are concepts, and TOML sections are selectable entries.
 
-## working-memory
+## session-memory
 
-Gives agent `working_memory` for selective hard checkpoints. Every checkpoint retains at least one useful user message or visible assistant text. Requested source files return as structural outlines, deferred files remain cheap conditional reminders, and a continuation note carries conclusions extracted from exploration. Tool history and full file reads leave future model input without changing saved session. Advisory reminders begin at 40k active-context tokens. Run `/prune` to request reassessment manually.
+Gives agent `session_memory` for one bounded goal, current objective, task list, memories, and checkpoint file manifest. Updates replace full state without loading files. Checkpoints restore requested reads and outlines; deferred files stay unloaded. Carry memories survive one checkpoint span; durable memories remain until removed. Fixed token gates warn first, then block other tools until required update is projected. Run `/prune` to request an update and checkpoint. Run `/session-memory` to open a panel; use Left and Right to switch tabs and Escape to close it.
 
 ## effort
 

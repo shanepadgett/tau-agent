@@ -17,7 +17,7 @@ references = []
 description = "Complete-file knowledge, legacy autoread transport, and shared structural-outline requests"
 read = []
 outline = ["packages/agent/shared/full-file-knowledge.ts", "packages/agent/shared/outline-injection.ts"]
-references = ["packages/agent/shared/autoread.ts"]
+references = ["packages/agent/shared/autoread.ts", "packages/agent/test/shared/autoread.test.ts"]
 
 [repository]
 description = "Git operations and path glob matching"

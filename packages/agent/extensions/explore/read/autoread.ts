@@ -47,7 +47,6 @@ async function prepareExploreAutoreadMessage(options: {
 	batchId: string;
 	signal: AbortSignal | undefined;
 	isLifecycleCurrent: () => boolean;
-	maximumBytes?: number;
 	engine: ExploreEngine;
 	readSettings: ExploreReadSettings;
 }): Promise<PreparedAutoreadMessage> {

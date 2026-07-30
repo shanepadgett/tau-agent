@@ -32,7 +32,7 @@ export function registerExploreOutlineInjection(
 			try {
 				const abort = request.signal ?? new AbortController().signal;
 				const result = await outlinePath(engine, path, OPTIONS, abort);
-				if (result.mode !== "file") throw new Error("Working-memory outlines require a file path");
+				if (result.mode !== "file") throw new Error("Outline injection requires a file path");
 				const body =
 					result.file.rows.length === 0
 						? formatOutlineEmpty(OPTIONS.names)

@@ -1,0 +1,8 @@
+name = "Session Memory"
+description = "Bounded agent state, checkpoint projection, and session-memory UI for long runs"
+
+[feature]
+description = "Session-memory tool lifecycle, bounded state, replay accounting, checkpoint projection, task-reconciliation reminders, prompts, UI, settings, and regression coverage"
+read = []
+outline = ["packages/agent/extensions/session-memory/index.ts", "packages/agent/extensions/session-memory/projection.ts", "packages/agent/extensions/session-memory/state.ts", "packages/agent/extensions/session-memory/tool.ts", "packages/agent/extensions/session-memory/widget.ts"]
+references = ["packages/agent/extensions/session-memory/README.md", "packages/agent/extensions/session-memory/render.ts", "packages/agent/extensions/session-memory/settings.ts", "packages/agent/test/extensions/session-memory/cache.test.ts", "packages/agent/test/extensions/session-memory/index.test.ts", "packages/agent/test/extensions/session-memory/projection.test.ts", "packages/agent/test/extensions/session-memory/render.test.ts", "packages/agent/test/extensions/session-memory/settings.test.ts", "packages/agent/test/extensions/session-memory/state.test.ts", "packages/agent/test/extensions/session-memory/tool.test.ts", "packages/agent/test/extensions/session-memory/widget.test.ts"]

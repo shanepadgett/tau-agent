@@ -5,7 +5,7 @@ description = "Tau settings runtime, registration, and schema pipeline"
 description = "Settings scopes, path resolution, file reads, merging, atomic writes, and focused loading tests"
 read = []
 outline = ["packages/agent/shared/settings/files.ts", "packages/agent/shared/settings/load.ts", "packages/agent/shared/settings/paths.ts"]
-references = [".pi/settings.json", ".pi/tau/settings.json", "packages/agent/shared/settings/json.ts", "packages/agent/shared/settings/merge.ts", "packages/agent/test/shared/settings-load.test.ts"]
+references = [".pi/tau/settings.json", "packages/agent/shared/settings/json.ts", "packages/agent/shared/settings/merge.ts", "packages/agent/test/shared/settings-load.test.ts"]
 
 [schema]
 description = "Settings declarations, discovery, schema generation, synchronization, generated schema, and schema-sync documentation"

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import { Marker, type MarkerState } from "@shanepadgett/tau-tui";
+import { truncateBoundedHead } from "./bounded-text-result.js";
 import { onTauEvent, type TauAgentEvents } from "./events.js";
 import { createCompleteFileMeta, type ReadCacheMetaV1 } from "./full-file-knowledge.ts";
 import type { ToolRowStateStore } from "./tool-row-state.js";
@@ -37,7 +38,6 @@ export type PrepareAutoreadMessage = (options: {
 	batchId: string;
 	signal: AbortSignal | undefined;
 	isLifecycleCurrent: () => boolean;
-	maximumBytes?: number;
 }) => Promise<PreparedAutoreadMessage>;
 
 export async function prepareAutoreadMessage(options: {
@@ -48,16 +48,15 @@ export async function prepareAutoreadMessage(options: {
 	batchId: string;
 	signal: AbortSignal | undefined;
 	isLifecycleCurrent: () => boolean;
-	maximumBytes?: number;
 }): Promise<PreparedAutoreadMessage> {
 	assertPreparationCurrent(options.signal, options.isLifecycleCurrent);
 	const pathKey = resolve(options.cwd, options.path);
 	const bytes = options.signal ? await readFile(pathKey, { signal: options.signal }) : await readFile(pathKey);
-	if (options.maximumBytes !== undefined && bytes.byteLength > options.maximumBytes) {
-		throw new Error(`File exceeds the ${options.maximumBytes}-byte complete-file snapshot limit`);
-	}
 	const content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
 	const messageContent = `${options.path}\n${content}`;
+	if (truncateBoundedHead(messageContent).truncated) {
+		throw new Error("File exceeds the complete autoread limit; use ranged read instead");
+	}
 	const totalLines = content.split("\n").length;
 	const readCache = createCompleteFileMeta({
 		pathKey,

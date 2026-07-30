@@ -145,6 +145,23 @@
 					},
 					"additionalProperties": false
 				},
+				"sessionMemory": {
+					"type": "object",
+					"properties": {
+						"enabled": {
+							"type": "boolean",
+							"default": true,
+							"description": "Enable session memory."
+						},
+						"contextCeilingTokens": {
+							"type": "integer",
+							"default": 150000,
+							"minimum": 30001,
+							"description": "Maximum active-context tokens before the fixed checkpoint reserve."
+						}
+					},
+					"additionalProperties": false
+				},
 				"silentCommandRunner": {
 					"type": "object",
 					"properties": {
@@ -259,39 +276,6 @@
 							},
 							"default": [],
 							"description": "Agent names unavailable for delegation."
-						}
-					},
-					"additionalProperties": false
-				},
-				"workingMemory": {
-					"type": "object",
-					"properties": {
-						"enabled": {
-							"type": "boolean",
-							"default": true,
-							"description": "Enable working-memory checkpoints."
-						},
-						"nudgeEveryTokens": {
-							"type": "integer",
-							"default": 40000,
-							"minimum": 1,
-							"description": "Active-context token interval between advisory working-memory reminders."
-						},
-						"nudgeInstructions": {
-							"type": "array",
-							"items": {
-								"type": "string",
-								"minLength": 1,
-								"maxLength": 2000
-							},
-							"default": [
-								"Reassess working memory. Continue coherent exploration when its evidence remains useful; otherwise prune known dead ends, obsolete outputs, and other context with no expected value.",
-								"Context is materially larger. Prune stale or bulky irrelevant evidence when safe, but keep active working evidence that would otherwise need to be reread.",
-								"Strongly reassess before more broad work. Remove accumulated waste and carry useful information at cheapest sufficient fidelity without scrubbing the active working set."
-							],
-							"minItems": 1,
-							"maxItems": 5,
-							"description": "Ordered advisory working-memory instructions. Later reminders repeat final instruction."
 						}
 					},
 					"additionalProperties": false

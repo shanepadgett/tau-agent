@@ -21,7 +21,7 @@ import {
 } from "./widgets/relationships.ts";
 import { createTabsListPreviewWidget } from "./widgets/tabs-list.ts";
 import { createToolPanelPreviewWidget } from "./widgets/tool-panel.ts";
-import { createWorkingMemoryPreviewWidget } from "./widgets/working-memory.ts";
+import { createSessionMemoryPreviewWidget } from "./widgets/session-memory.ts";
 
 const COMMAND = "tool-preview";
 
@@ -47,7 +47,7 @@ const STORIES: readonly PreviewStory[] = [
 	{ label: "references — row states", createWidget: createReferencesPreviewWidget },
 	{ label: "tabs-list — Tabs and SelectableList", createWidget: createTabsListPreviewWidget },
 	{ label: "tool-panel — shell states", createWidget: createToolPanelPreviewWidget },
-	{ label: "working_memory — tiers and row states", createWidget: createWorkingMemoryPreviewWidget },
+	{ label: "session memory — widget", createWidget: createSessionMemoryPreviewWidget },
 ];
 
 export default function toolPreview(pi: ExtensionAPI): void {
