@@ -266,24 +266,55 @@ describe("session-memory extension", () => {
 		).toBeUndefined();
 	});
 
-	it("does not queue a stale required instruction when an update crosses the gate", async () => {
+	it("lets an admitted tool batch finish before requiring the next turn to checkpoint", async () => {
 		const test = harness();
 		const branch: SessionEntry[] = [];
-		let tokens = 1_000;
+		let tokens = 10_000;
 		const ctx = context(branch, () => tokens);
 		await test.emit("session_start", { type: "session_start", reason: "startup" }, ctx);
-		tokens = 120_000;
-		branch.push(callEntry("crossing-update"));
+		expect(await test.emit("before_agent_start", { type: "before_agent_start" }, ctx)).toBeUndefined();
+
 		expect(
 			await test.emit(
 				"tool_call",
-				{ type: "tool_call", toolCallId: "crossing-update", toolName: "session_memory", input: update },
+				{ type: "tool_call", toolCallId: "large-patch", toolName: "patch", input: {} },
 				ctx,
 			),
 		).toBeUndefined();
-		const execution = await test.tool().execute("crossing-update", update, undefined, undefined as never, ctx);
-		expect(execution.details).toMatchObject({ kind: "checkpoint", checkpoint: 1 });
+		tokens = 130_000;
+		expect(
+			await test.emit(
+				"tool_call",
+				{ type: "tool_call", toolCallId: "sibling-patch", toolName: "patch", input: {} },
+				ctx,
+			),
+		).toBeUndefined();
 		expect(test.sent).toEqual([]);
+
+		await test.emit("turn_end", { type: "turn_end", turnIndex: 0 }, ctx);
+		expect(test.sent).toEqual([
+			expect.objectContaining({
+				message: expect.objectContaining({ details: { v: 1, kind: "required", boundaryTokens: 120_000 } }),
+				options: { deliverAs: "steer" },
+			}),
+		]);
+		expect(
+			await test.emit("tool_call", { type: "tool_call", toolCallId: "blocked", toolName: "patch", input: {} }, ctx),
+		).toEqual({
+			block: true,
+			reason: "Checkpoint required. Update session memory first.",
+		});
+
+		branch.push(callEntry("required-update"));
+		expect(
+			await test.emit(
+				"tool_call",
+				{ type: "tool_call", toolCallId: "required-update", toolName: "session_memory", input: update },
+				ctx,
+			),
+		).toBeUndefined();
+		const execution = await test.tool().execute("required-update", update, undefined, undefined as never, ctx);
+		expect(execution.details).toMatchObject({ kind: "checkpoint", checkpoint: 1 });
 	});
 
 	it("guides goal and task lifecycle before final responses and manual checkpoints", async () => {

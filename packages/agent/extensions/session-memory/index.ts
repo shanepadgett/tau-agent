@@ -38,7 +38,6 @@ export default function sessionMemoryExtension(pi: ExtensionAPI): void {
 	let contextCeilingTokens = sessionMemorySettings.defaults.contextCeilingTokens;
 	let gate: Gate = { kind: "open" };
 	let requiredToolCallId: string | undefined;
-	let requiredInstructionQueued = false;
 	let advisoryBoundaries = new Set<number>();
 	let visualRows = new Set<string>();
 	const rowState = createToolRowStateStore(pi, "session-memory.tool-row-state");
@@ -71,7 +70,6 @@ export default function sessionMemoryExtension(pi: ExtensionAPI): void {
 		visualRows = new Set(replay.prunedRowIds);
 		gate = { kind: "open" };
 		requiredToolCallId = undefined;
-		requiredInstructionQueued = false;
 		advisoryBoundaries = new Set();
 		pushVisualSnapshot();
 	};
@@ -279,15 +277,7 @@ export default function sessionMemoryExtension(pi: ExtensionAPI): void {
 		return instruction ? { message: instructionMessage(instruction) } : undefined;
 	});
 
-	pi.on("tool_call", (event, ctx) => {
-		const instruction = evaluateGate(ctx);
-		if (
-			instruction?.kind === "required" &&
-			!(event.toolName === SESSION_MEMORY_TOOL && isUpdateAction(event.input))
-		) {
-			pi.sendMessage(instructionMessage(instruction), { deliverAs: "steer" });
-			requiredInstructionQueued = true;
-		}
+	pi.on("tool_call", (event) => {
 		if (gate.kind === "open") return undefined;
 		if (gate.kind === "awaiting") {
 			return { block: true, reason: "Checkpoint projection is pending." };
@@ -307,11 +297,9 @@ export default function sessionMemoryExtension(pi: ExtensionAPI): void {
 
 	pi.on("turn_end", (_event, ctx) => {
 		if (gate.kind === "required") {
-			if (requiredInstructionQueued) requiredInstructionQueued = false;
-			else
-				pi.sendMessage(instructionMessage({ v: 1, kind: "required", boundaryTokens: null }), {
-					deliverAs: "steer",
-				});
+			pi.sendMessage(instructionMessage({ v: 1, kind: "required", boundaryTokens: null }), {
+				deliverAs: "steer",
+			});
 			return;
 		}
 		const instruction = evaluateGate(ctx);
