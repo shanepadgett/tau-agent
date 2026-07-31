@@ -16,7 +16,7 @@ export function createDiscoverPreviewWidget(tui: TUI, cwd: string, theme: Theme)
 			target: "packages/agent/extensions/explore",
 			options: "[exactName=createOutlineTool public limit=10]",
 			result: [
-				"packages/agent/extensions/explore/ast/tools/outline.ts",
+				"packages/agent/extensions/explore/tools/outline.ts",
 				"36-126 function: export function createOutlineTool(",
 				"  rowState: ToolRowStateStore,",
 				"  temporaryOutput: TemporaryOutputStore,",

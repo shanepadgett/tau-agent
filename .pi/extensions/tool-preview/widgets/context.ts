@@ -54,5 +54,5 @@ export function createContextPreviewOverlay(
 	theme: Theme,
 	done: (result: readonly ContextEntry[] | undefined) => void,
 ): Component {
-	return new ContextPanel(tui, theme, ENTRIES, [], done);
+	return new ContextPanel(tui, theme, ENTRIES, done);
 }

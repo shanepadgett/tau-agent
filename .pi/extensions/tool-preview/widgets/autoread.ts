@@ -8,7 +8,7 @@ interface AutoreadLine {
 	state: "reading" | "read" | "pruned";
 }
 
-const samplePath = "packages/agent/extensions/explore/ast/engine.ts";
+const samplePath = "packages/agent/src/ast/engine.ts";
 
 export function createAutoreadPreviewWidget(_tui: TUI, _cwd: string, theme: Theme): Container {
 	const container = new Container();

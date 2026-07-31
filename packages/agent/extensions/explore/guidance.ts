@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { ExploreEngine } from "./ast/engine.ts";
-import { walkPaths } from "./traverse.ts";
+import type { ExploreEngine } from "../../src/ast/engine.ts";
+import { walkPaths } from "../../src/ast/traverse.ts";
 
 const GUIDANCE_SCAN_MAX_ENTRIES = 4096;
 

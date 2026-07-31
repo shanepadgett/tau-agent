@@ -1,5 +1,5 @@
 // Rebuilds the vendored grammar .wasm artifacts listed in
-// packages/agent/extensions/explore/ast/grammars/manifest.json.
+// packages/agent/src/ast/grammars/manifest.json.
 //
 // Grammars with source "vscode" ship prebuilt inside the
 // @vscode/tree-sitter-wasm npm dependency and are never touched here.
@@ -19,7 +19,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { grammarsDir, loadGrammarManifest } from "../extensions/explore/ast/grammars/manifest.ts";
+import { grammarsDir, loadGrammarManifest } from "../src/ast/grammars/manifest.ts";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..", "..", "..");

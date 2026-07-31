@@ -20,8 +20,8 @@ export function createReadPreviewWidget(tui: TUI, cwd: string, theme: Theme): Co
 		{
 			name: "read",
 			sampleTitle: "Ranged Source",
-			args: { path: "packages/agent/extensions/explore/ast/engine.ts", offset: 212, limit: 20 },
-			argText: "packages/agent/extensions/explore/ast/engine.ts:212-231",
+			args: { path: "packages/agent/src/ast/engine.ts", offset: 212, limit: 20 },
+			argText: "packages/agent/src/ast/engine.ts:212-231",
 			result: [
 				"export function createExploreEngine(options: ExploreEngineOptions): ExploreEngine {",
 				"  const cwd = resolve(options.cwd);",
@@ -34,8 +34,8 @@ export function createReadPreviewWidget(tui: TUI, cwd: string, theme: Theme): Co
 		{
 			name: "read",
 			sampleTitle: "Large Supported Source — Outline Overlay",
-			args: { path: "packages/agent/extensions/explore/ast/engine.ts" },
-			argText: "packages/agent/extensions/explore/ast/engine.ts",
+			args: { path: "packages/agent/src/ast/engine.ts" },
+			argText: "packages/agent/src/ast/engine.ts",
 			result: [
 				"18-22: export type FileSource = {",
 				"24-28: export type AstSearchBinding = {",

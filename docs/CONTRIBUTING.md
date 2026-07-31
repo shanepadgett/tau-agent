@@ -39,7 +39,7 @@ Extensions live in `packages/agent/extensions/`. Run `/reload` after changing an
 
 ## Grammar artifacts
 
-Explore's structural engine parses source code through WebAssembly. Most grammar `.wasm` files arrive prebuilt via npm dependencies; kotlin, swift, and odin are committed at `packages/agent/extensions/explore/ast/grammars/` and only need rebuilding when you bump their pins in `manifest.json` there.
+Explore's structural engine parses source code through WebAssembly. Most grammar `.wasm` files arrive prebuilt via npm dependencies; c_sharp, kotlin, and swift are committed at `packages/agent/src/ast/grammars/` and only need rebuilding when you bump their pins in `manifest.json` there.
 
 Rebuilding on macOS requires a Docker-compatible container runtime — install [OrbStack](https://orbstack.dev/) or [Rancher Desktop](https://rancherdesktop.io/). A local wasm toolchain is neither required nor supported. Then:
 

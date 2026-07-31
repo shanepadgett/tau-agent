@@ -1,7 +1,8 @@
-import { type Theme, type ToolDefinition, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
+import { type Theme, type ToolDefinition, type ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
 import { Container, Text, type TUI } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { addMessageBox, addPageTitle, addSampleTitle, addSection } from "./layout.ts";
+import { buildPreviewRow } from "./preview-row.ts";
 
 export interface ToolPreviewSpec {
 	name: string;
@@ -57,25 +58,20 @@ function createToolRow(
 	state: "pending" | "collapsed" | "expanded",
 	warning: boolean,
 ): ToolExecutionComponent {
-	const row = new ToolExecutionComponent(
-		spec.name,
-		`${spec.name}-${warning ? "warning" : "normal"}-${state}`,
-		spec.args,
-		{},
-		createDefinition(spec, warning),
+	return buildPreviewRow({
 		tui,
 		cwd,
-	);
-	row.markExecutionStarted();
-	row.setArgsComplete();
-	if (state === "pending") return row;
-
-	row.updateResult(
-		{ content: [{ type: "text", text: spec.result }], details: undefined, isError: spec.isError ?? false },
-		false,
-	);
-	row.setExpanded(state === "expanded");
-	return row;
+		name: spec.name,
+		args: spec.args,
+		definition: createDefinition(spec, warning),
+		state,
+		warning,
+		result: {
+			content: [{ type: "text", text: spec.result }],
+			details: undefined,
+			isError: spec.isError ?? false,
+		},
+	});
 }
 
 function createDefinition(spec: ToolPreviewSpec, warning: boolean): ToolDefinition {

@@ -1,13 +1,14 @@
-import { defineTool, type Theme, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
+import { defineTool, type Theme, type ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
 import { Container, type TUI } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import {
 	ExploreCallComponent,
 	renderExploreResult,
 	type ExploreToolDetails,
-} from "../../../../packages/agent/extensions/explore/ast/tools/render.ts";
+} from "../../../../packages/agent/extensions/explore/tools/render.ts";
 import type { ToolRowStateStore } from "../../../../packages/agent/shared/tool-row-state.ts";
 import { addMessageBox, addPageTitle, addSampleTitle, addSection } from "./layout.ts";
+import { buildPreviewRow } from "./preview-row.ts";
 
 export interface AstToolPreviewSpec {
 	name: string;
@@ -55,21 +56,15 @@ function createAstToolRow(
 	state: "pending" | "collapsed" | "expanded",
 	warning: boolean,
 ): ToolExecutionComponent {
-	const row = new ToolExecutionComponent(
-		spec.name,
-		`${spec.name}-${warning ? "warning" : "normal"}-${state}`,
-		spec.args,
-		{},
-		createAstPreviewDefinition(spec, warning),
+	return buildPreviewRow({
 		tui,
 		cwd,
-	);
-	row.markExecutionStarted();
-	row.setArgsComplete();
-	if (state === "pending") return row;
-
-	row.updateResult(
-		{
+		name: spec.name,
+		args: spec.args,
+		definition: createAstPreviewDefinition(spec, warning),
+		state,
+		warning,
+		result: {
 			content: [{ type: "text", text: spec.result }],
 			details: {
 				declarationCount: spec.declarationCount,
@@ -78,10 +73,7 @@ function createAstToolRow(
 			},
 			isError: spec.isError ?? false,
 		},
-		false,
-	);
-	row.setExpanded(state === "expanded");
-	return row;
+	});
 }
 
 function createAstPreviewDefinition(spec: AstToolPreviewSpec, warning: boolean) {

@@ -1,10 +1,6 @@
 import { beforeAll, describe, expect, test } from "vitest";
 import { Language, Parser } from "web-tree-sitter";
-import {
-	grammarWasmPath,
-	loadGrammarManifest,
-	runtimeWasmPath,
-} from "../../../extensions/explore/ast/grammars/manifest.ts";
+import { grammarWasmPath, loadGrammarManifest, runtimeWasmPath } from "../../../src/ast/grammars/manifest.ts";
 
 type Fixture = { source: string; rootType: string };
 
@@ -41,10 +37,6 @@ const fixtures: Record<string, Fixture> = {
 	swift: {
 		// Interpolation exercises the external scanner compiled into the wasm.
 		source: 'func greet(name: String) -> String {\n\treturn "hi \\(name)"\n}\n',
-		rootType: "source_file",
-	},
-	odin: {
-		source: "package main\n\nadd :: proc(a: int, b: int) -> int {\n\treturn a + b\n}\n",
 		rootType: "source_file",
 	},
 };

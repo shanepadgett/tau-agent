@@ -8,12 +8,12 @@ export function createFindPreviewWidget(tui: TUI, cwd: string, theme: Theme): Co
 			name: "find",
 			sampleTitle: "Single Directory",
 			args: {
-				queries: [{ path: "packages/agent/extensions/explore/ast/tools", patterns: ["*.ts"], type: "file" }],
+				queries: [{ path: "packages/agent/extensions/explore/tools", patterns: ["*.ts"], type: "file" }],
 				limit: 20,
 			},
-			argText: "packages/agent/extensions/explore/ast/tools (*.ts,file) limit=20",
+			argText: "packages/agent/extensions/explore/tools (*.ts,file) limit=20",
 			result: [
-				"packages/agent/extensions/explore/ast/tools/",
+				"packages/agent/extensions/explore/tools/",
 				"  ast-search.ts",
 				"  context.ts",
 				"  deps.ts",

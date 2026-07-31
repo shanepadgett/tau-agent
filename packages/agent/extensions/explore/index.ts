@@ -3,50 +3,42 @@ import { resolve } from "node:path";
 import { onTauEvent } from "../../shared/events.ts";
 import { createTemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { createToolRowStateStore } from "../../shared/tool-row-state.ts";
-import { createExploreEngine, type ExploreEngine } from "./ast/engine.ts";
-import { createFileGraph, type ExploreFileGraph } from "./ast/graph/file-graph.ts";
-import { registerReadOutlineHook } from "./ast/read/hook.ts";
-import { createAstSearchTool } from "./ast/tools/ast-search.ts";
-import { createContextTool } from "./ast/tools/context.ts";
-import { createDepsTool } from "./ast/tools/deps.ts";
-import { createDiscoverTool } from "./ast/tools/discover.ts";
-import { createImpactTool } from "./ast/tools/impact.ts";
-import { createOutlineTool } from "./ast/tools/outline.ts";
+import type { ExploreEngine } from "../../src/ast/engine.ts";
+import type { ExploreFileGraph } from "../../src/ast/graph/file-graph.ts";
+import {
+	astEngineFor,
+	astGraphFor,
+	clearAstSession,
+	invalidateAstPaths,
+	restartAstSession,
+	shutdownAstSession,
+} from "../../src/ast/session.ts";
+import { registerFileInjection } from "../../src/file-injection/index.ts";
+import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
+import { registerReadOutlineHook } from "./read/hook.ts";
+import { createAstSearchTool } from "./tools/ast-search.ts";
+import { createContextTool } from "./tools/context.ts";
+import { createDepsTool } from "./tools/deps.ts";
+import { createDiscoverTool } from "./tools/discover.ts";
+import { createImpactTool } from "./tools/impact.ts";
+import { createOutlineTool } from "./tools/outline.ts";
 import {
 	createCalleesTool,
 	createCallersTool,
 	createImplementationsTool,
 	createReferencesTool,
-} from "./ast/tools/relationships.ts";
-import { createReverseDepsTool } from "./ast/tools/reverse-deps.ts";
-import { createShowTool } from "./ast/tools/show.ts";
+} from "./tools/relationships.ts";
+import { createReverseDepsTool } from "./tools/reverse-deps.ts";
+import { createShowTool } from "./tools/show.ts";
 import { registerExploreGuidance } from "./guidance.ts";
-import { registerExploreOutlineInjection } from "./outline-injection.ts";
-import { registerExploreAutoread } from "./read/autoread.ts";
+import exploreSettings from "./settings.ts";
 
 export default function exploreExtension(pi: ExtensionAPI): void {
 	const rowState = createToolRowStateStore(pi, "explore.tool-row-state");
 	const temporaryOutput = createTemporaryOutputStore();
-	let engine: ExploreEngine | undefined;
-	let graph: ExploreFileGraph | undefined;
-
-	const engineFor = (cwd: string): ExploreEngine => {
-		const absoluteCwd = resolve(cwd);
-		if (engine !== undefined && engine.cwd === absoluteCwd) return engine;
-		engine?.shutdown();
-		graph?.clear();
-		engine = createExploreEngine({ cwd: absoluteCwd });
-		graph = createFileGraph(engine);
-		return engine;
-	};
-
-	const graphFor = (cwd: string): ExploreFileGraph => {
-		engineFor(cwd);
-		if (graph === undefined) {
-			throw new Error("Explore file graph failed to initialize");
-		}
-		return graph;
-	};
+	let readSettings = exploreSettings.defaults.read;
+	const engineFor = (cwd: string): ExploreEngine => astEngineFor(cwd);
+	const graphFor = (cwd: string): ExploreFileGraph => astGraphFor(cwd);
 
 	pi.registerTool(createOutlineTool(rowState, temporaryOutput, engineFor));
 	pi.registerTool(createShowTool(rowState, engineFor));
@@ -61,45 +53,38 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 	pi.registerTool(createImpactTool(rowState, temporaryOutput, engineFor, graphFor));
 	pi.registerTool(createContextTool(rowState, temporaryOutput, engineFor, graphFor));
 	registerReadOutlineHook(pi, engineFor);
-	registerExploreAutoread(pi, rowState, engineFor);
-	registerExploreOutlineInjection(pi, rowState, temporaryOutput, engineFor);
+	registerFileInjection(pi, rowState, {
+		temporaryOutput,
+		autoOutline: () => ({ enabled: readSettings.enabled, thresholdLines: readSettings.structureThresholdLines }),
+	});
 	registerExploreGuidance(pi, engineFor);
 
 	pi.on("session_start", async (_event, ctx) => {
+		readSettings = (await loadTauExtensionSettings(ctx, exploreSettings)).read;
 		await temporaryOutput.shutdown();
 		await temporaryOutput.start();
 		rowState.clear();
-		engine?.shutdown();
-		graph?.clear();
-		engine = createExploreEngine({ cwd: ctx.cwd });
-		graph = createFileGraph(engine);
+		restartAstSession(ctx.cwd);
 	});
 
 	onTauEvent(pi, "explore.ast", "tau:file-mutation.applied", (event) => {
-		if (engine === undefined) return;
 		const paths = event.changes.flatMap((change) => {
 			const main = resolve(event.cwd, change.path);
 			if (change.move === undefined) return [main];
 			return [main, resolve(event.cwd, change.move.from), resolve(event.cwd, change.move.to)];
 		});
-		engine.invalidate(paths);
-		const topologyChanged = event.changes.some(
-			(change) => change.kind === "add" || change.kind === "delete" || change.move !== undefined,
+		invalidateAstPaths(
+			paths,
+			event.changes.some((change) => change.kind === "add" || change.kind === "delete" || change.move !== undefined),
 		);
-		if (topologyChanged) graph?.clear();
-		else graph?.invalidate(paths);
 	});
 
 	pi.on("session_tree", () => {
-		engine?.clear();
-		graph?.clear();
+		clearAstSession();
 	});
 
 	pi.on("session_shutdown", async () => {
-		engine?.shutdown();
-		engine = undefined;
-		graph?.clear();
-		graph = undefined;
+		shutdownAstSession();
 		await temporaryOutput.shutdown();
 	});
 }

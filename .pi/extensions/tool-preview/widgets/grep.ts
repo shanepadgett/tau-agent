@@ -41,7 +41,7 @@ export function createGrepPreviewWidget(tui: TUI, cwd: string, theme: Theme): Co
 			args: {
 				queries: [
 					{ patterns: ["# Explore"], paths: ["packages/agent/extensions/explore/README.md"] },
-					{ patterns: ["createDiscoverTool"], paths: ["packages/agent/extensions/explore/ast/tools/discover.ts"] },
+					{ patterns: ["createDiscoverTool"], paths: ["packages/agent/extensions/explore/tools/discover.ts"] },
 				],
 			},
 			argText: "2 queries",
@@ -50,7 +50,7 @@ export function createGrepPreviewWidget(tui: TUI, cwd: string, theme: Theme): Co
 				"packages/agent/extensions/explore/README.md (23 lines)",
 				"1: # Explore",
 				"query 2",
-				"packages/agent/extensions/explore/ast/tools/discover.ts (207 lines)",
+				"packages/agent/extensions/explore/tools/discover.ts (207 lines)",
 				"127: export function createDiscoverTool(",
 			].join("\n"),
 		},

@@ -7,8 +7,8 @@ export function createOutlinePreviewWidget(tui: TUI, cwd: string, theme: Theme):
 		{
 			name: "outline",
 			sampleTitle: "File Outline",
-			args: { path: "packages/agent/extensions/explore/traverse.ts" },
-			target: "packages/agent/extensions/explore/traverse.ts",
+			args: { path: "packages/agent/src/ast/traverse.ts" },
+			target: "packages/agent/src/ast/traverse.ts",
 			result: [
 				"12-14: export function stripLeadingAt(value: string): string",
 				"16-18: export function toSlashPath(value: string): string",
@@ -22,13 +22,13 @@ export function createOutlinePreviewWidget(tui: TUI, cwd: string, theme: Theme):
 		{
 			name: "outline",
 			sampleTitle: "Recursive Subtree",
-			args: { path: "packages/agent/extensions/explore/ast/tools", recursive: true },
-			target: "packages/agent/extensions/explore/ast/tools",
+			args: { path: "packages/agent/extensions/explore/tools", recursive: true },
+			target: "packages/agent/extensions/explore/tools",
 			options: "[recursive]",
 			result: [
-				"packages/agent/extensions/explore/ast/tools/outline.ts",
+				"packages/agent/extensions/explore/tools/outline.ts",
 				"36-126: export function createOutlineTool(",
-				"packages/agent/extensions/explore/ast/tools/show.ts",
+				"packages/agent/extensions/explore/tools/show.ts",
 				"30-108: export function createShowTool(",
 			].join("\n"),
 			declarationCount: 12,
@@ -37,8 +37,8 @@ export function createOutlinePreviewWidget(tui: TUI, cwd: string, theme: Theme):
 		{
 			name: "outline",
 			sampleTitle: "Exact Name Filter",
-			args: { path: "packages/agent/extensions/explore/traverse.ts", names: ["resolveExplorePath"] },
-			target: "packages/agent/extensions/explore/traverse.ts",
+			args: { path: "packages/agent/src/ast/traverse.ts", names: ["resolveExplorePath"] },
+			target: "packages/agent/src/ast/traverse.ts",
 			options: "[names=resolveExplorePath]",
 			result: "20-24: export function resolveExplorePath(cwd: string, input: string): string",
 			declarationCount: 1,

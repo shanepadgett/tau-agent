@@ -20,6 +20,20 @@
     "docs/plans/explore-archive/**"
   ],
   "ignoreDependencies": ["@vscode/tree-sitter-wasm", "tree-sitter-cli"],
+  "duplicates": {
+    // Grammar adapters are parallel by design: each one maps a different
+    // tree-sitter node vocabulary through the same shape. Shared behavior lives
+    // in languages/tree.ts; the rest must stay free to diverge per grammar.
+    // Tests repeat fixtures and arrange blocks on purpose.
+    // Panel classes repeat ToolPanel construction plus render/invalidate
+    // delegation. A base class cannot absorb it: their config literals read
+    // `this`, which TypeScript forbids before `super()`.
+    "ignore": [
+      "packages/agent/src/ast/languages/*.ts",
+      "packages/agent/test/**",
+      "packages/agent/extensions/*/panel.ts"
+    ]
+  },
   "ignoreExports": [
     {
       "file": "packages/agent/extensions/*/index.ts",

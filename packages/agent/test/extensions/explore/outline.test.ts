@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { createExploreEngine } from "../../../extensions/explore/ast/engine.ts";
-import { outlinePath } from "../../../extensions/explore/ast/queries/outline.ts";
+import { createExploreEngine } from "../../../src/ast/engine.ts";
+import { outlinePath } from "../../../src/ast/queries/outline.ts";
 import { createWorkspace } from "../../helpers.ts";
 
 describe("outline", () => {

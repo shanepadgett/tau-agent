@@ -14,7 +14,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 repo_root="$(cd "$script_dir/../../.." && pwd)"
-grammars_dir="$repo_root/packages/agent/extensions/explore/ast/grammars"
+grammars_dir="$repo_root/packages/agent/src/ast/grammars"
 
 if [[ "$(uname -s)" == "Linux" ]]; then
 	exec node --experimental-strip-types "$script_dir/build-grammars.ts"
