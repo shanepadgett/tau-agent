@@ -278,7 +278,7 @@ describe("runSubagentTurn", () => {
 			expect(result.details.status).toBe("completed");
 			expect(messages).toHaveLength(2);
 			expect(messages[0]?.message).toMatchObject({
-				customType: "tau.autoread",
+				customType: "tau.file",
 				content: "sample.ts\n1: const one = 1;\n2: const two = 2;\n3: ",
 				display: false,
 				details: {
@@ -287,14 +287,14 @@ describe("runSubagentTurn", () => {
 					cwd: directory,
 					source: "subagent",
 					batchId: "inv-7",
-					status: "read",
+					status: "injected",
 					readCache: { scopeKey: "full", presentation: "line-numbered", totalLines: 3 },
 				},
 			});
 			expect(messages[0]?.options).toEqual({ deliverAs: "nextTurn" });
 			expect(messages[1]?.message).toMatchObject({
-				customType: "tau.autoread",
-				content: expect.stringContaining("missing.ts\nAutoread failed:"),
+				customType: "tau.file",
+				content: expect.stringContaining("missing.ts\nInjection failed:"),
 				display: false,
 				details: {
 					rowId: "inv-7:1",

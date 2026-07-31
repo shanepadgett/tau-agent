@@ -1,29 +1,23 @@
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { getKeybindings } from "@earendil-works/pi-tui";
 import { createGitRunner, loadRepoStatus } from "../../shared/git.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
+import { injectFiles } from "@shanepadgett/tau-agent";
 import { ContextPanel, ContextSyncStatusPanel } from "./panel.ts";
 import { findProjectRoot, loadContextEntries, type ContextEntry } from "./definitions.ts";
 import { hideContextSyncEvidenceTool, registerContextSyncEvidenceTool } from "./evidence.ts";
-import {
-	buildContextProjection,
-	contextProjectionKey,
-	contextProjectionMessage,
-	removeLegacyContextMessages,
-	selectContextEntries,
-} from "./projection.ts";
 import contextSettings from "./settings.ts";
-import { CONTEXT_SELECTION_TYPE, createContextSelectionState, replayContextSelection } from "./state.ts";
 import { runContextSync } from "./sync.ts";
 import { formatContextValidationFailure, validateContextCatalog } from "./validation.ts";
+
+const CONTEXT_BRIEF_TYPE = "tau.context.brief";
 
 export default function contextExtension(pi: ExtensionAPI): void {
 	let settings = contextSettings.defaults;
 	let lastValidationFailure: string | undefined;
 	let syncCommandRegistered = false;
-	let lifecycleGeneration = 0;
-	let projectionCache: { key: string; content: string } | undefined;
 
 	registerContextSyncEvidenceTool(pi);
 
@@ -86,7 +80,7 @@ export default function contextExtension(pi: ExtensionAPI): void {
 	};
 
 	pi.registerCommand("context", {
-		description: "Select active repository context entries",
+		description: "Inject repository context entries into the conversation",
 		handler: async (_args, ctx) => {
 			if (ctx.mode !== "tui" || !ctx.isProjectTrusted()) {
 				ctx.ui.notify("/context requires a trusted TUI project", "warning");
@@ -99,21 +93,51 @@ export default function contextExtension(pi: ExtensionAPI): void {
 				ctx.ui.notify(`No context entries found in ${join(root, ".pi", "contexts")}`, "warning");
 				return;
 			}
-			const active = replayContextSelection(ctx.sessionManager.getBranch()).entryIds;
 			const selected = await ctx.ui.custom<ContextEntry[] | undefined>(
-				(tui, theme, _keys, done) => new ContextPanel(tui, theme, entries, active, done),
+				(tui, theme, _keys, done) => new ContextPanel(tui, theme, entries, done),
 				{
 					overlay: true,
 					overlayOptions: { anchor: "top-center", width: "70%", minWidth: 64, maxHeight: "80%", margin: 2 },
 				},
 			);
-			if (selected === undefined) return;
-			pi.appendEntry(CONTEXT_SELECTION_TYPE, createContextSelectionState(selected.map((entry) => entry.id)));
-			projectionCache = undefined;
-			ctx.ui.notify(
-				selected.length ? `${selected.length} context entries active` : "Active context cleared",
-				"info",
-			);
+			if (selected === undefined || selected.length === 0) return;
+
+			// read wins over outline wins over references, so one path is injected once.
+			const read = new Set(selected.flatMap((entry) => entry.read));
+			const outline = new Set(selected.flatMap((entry) => entry.outline).filter((path) => !read.has(path)));
+			const references = [
+				...new Set(
+					selected.flatMap((entry) => entry.references).filter((path) => !read.has(path) && !outline.has(path)),
+				),
+			].sort((left, right) => left.localeCompare(right));
+
+			pi.sendMessage({
+				customType: CONTEXT_BRIEF_TYPE,
+				content: [
+					"Active repository context, injected once from the current catalog:",
+					...selected.map((entry) => `- ${entry.id}: ${entry.description}`),
+					"",
+					"Unloaded references:",
+					...(references.length ? references.map((path) => `- ${path}`) : ["(none)"]),
+					"",
+					"The complete files and outlines that follow are current. Treat them as authoritative and do not read them again. Use a ranged read for bodies an outline omits, and re-read a file only after you change it.",
+				].join("\n"),
+				display: false,
+			});
+			await injectFiles(pi, {
+				cwd: root,
+				source: "context",
+				batchId: randomUUID(),
+				files: [
+					...[...read]
+						.sort((left, right) => left.localeCompare(right))
+						.map((path) => ({ path, mode: "full" as const })),
+					...[...outline]
+						.sort((left, right) => left.localeCompare(right))
+						.map((path) => ({ path, mode: "outline" as const })),
+				],
+			});
+			ctx.ui.notify(`Injected ${read.size + outline.size} files from ${selected.length} context entries`, "info");
 		},
 	});
 
@@ -121,33 +145,7 @@ export default function contextExtension(pi: ExtensionAPI): void {
 	if (settings.sync.enabled) registerContextSyncCommand();
 
 	pi.on("session_start", async (_event, ctx) => {
-		lifecycleGeneration += 1;
-		projectionCache = undefined;
 		await refreshSettings(ctx);
-	});
-	pi.on("context", async (event, ctx) => {
-		const messages = removeLegacyContextMessages(event.messages);
-		if (!ctx.isProjectTrusted()) return { messages };
-		const entryIds = replayContextSelection(ctx.sessionManager.getBranch()).entryIds;
-		if (entryIds.length === 0) return { messages };
-		const generation = lifecycleGeneration;
-		const root = await findProjectRoot(ctx.cwd);
-		const selection = selectContextEntries(await loadContextEntries(root), entryIds);
-		const key = await contextProjectionKey(root, selection, ctx.signal, () => generation === lifecycleGeneration);
-		if (generation !== lifecycleGeneration) return { messages };
-		if (projectionCache?.key !== key) {
-			projectionCache = {
-				key,
-				content: await buildContextProjection(
-					pi,
-					root,
-					selection,
-					ctx.signal,
-					() => generation === lifecycleGeneration,
-				),
-			};
-		}
-		return { messages: [...messages, contextProjectionMessage(projectionCache.content)] };
 	});
 	pi.on("agent_start", async (_event, ctx) => {
 		await refreshSettings(ctx);
@@ -212,18 +210,6 @@ export default function contextExtension(pi: ExtensionAPI): void {
 			ctx.ui.notify(`Context validation failed: ${error instanceof Error ? error.message : String(error)}`, "error");
 		}
 	});
-	pi.on("session_tree", () => {
-		lifecycleGeneration += 1;
-		projectionCache = undefined;
-	});
-	pi.on("session_compact", () => {
-		lifecycleGeneration += 1;
-		projectionCache = undefined;
-	});
-	pi.on("session_shutdown", () => {
-		lifecycleGeneration += 1;
-		projectionCache = undefined;
-	});
 }
 
 function showContextSyncWidget(ctx: ExtensionContext): { update(status: string): void; clear(): void } {
@@ -237,6 +223,7 @@ function showContextSyncWidget(ctx: ExtensionContext): { update(status: string):
 			widget?.update(status);
 		},
 		clear() {
+			widget?.dispose();
 			ctx.ui.setWidget("context-sync", undefined);
 			widget = undefined;
 		},

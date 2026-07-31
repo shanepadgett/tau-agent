@@ -11,7 +11,7 @@ import {
 	extensionPathsForTools,
 	runSubagentTurn,
 } from "../subagent/run.ts";
-import { collectSyncEvidence, CONTEXT_SYNC_EVIDENCE_TOOL } from "./evidence.ts";
+import { collectSyncEvidence } from "./evidence.ts";
 import { pathExists } from "./definitions.ts";
 import contextSettings from "./settings.ts";
 import { formatContextValidationFailure, validateContextCatalog } from "./validation.ts";
@@ -168,7 +168,7 @@ async function runContextSyncLocked(
 	};
 }
 
-export function buildContextSyncTask(root: string, nudge?: string): string {
+function buildContextSyncTask(root: string, nudge?: string): string {
 	const trimmed = nudge?.trim();
 	return [
 		`Synchronize the repository context catalog at ${root}.`,
@@ -221,6 +221,3 @@ function changedCatalogPaths(before: Map<string, string>, after: Map<string, str
 		.filter((path) => before.get(path) !== after.get(path))
 		.sort((left, right) => left.localeCompare(right));
 }
-
-// Ensure evidence tool name stays aligned with agent definition tooling.
-export const CONTEXT_SYNC_REQUIRED_TOOLS = ["read", "bash", "patch", CONTEXT_SYNC_EVIDENCE_TOOL] as const;

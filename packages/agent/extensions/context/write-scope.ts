@@ -4,7 +4,7 @@ import type { GitRunner } from "../../shared/git.ts";
 
 export type OutsidePathSnapshot = Map<string, Buffer | null>;
 
-export function isContextCatalogPath(path: string): boolean {
+function isContextCatalogPath(path: string): boolean {
 	const normalized = path.replaceAll("\\", "/");
 	return normalized === ".pi/contexts" || normalized.startsWith(".pi/contexts/");
 }

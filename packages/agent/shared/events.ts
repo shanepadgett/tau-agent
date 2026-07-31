@@ -1,6 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ModelEffort } from "./model-effort.ts";
-import type { OutlineInjectionRequest, OutlineInjectionResponse } from "./outline-injection.js";
 import type { ToolRowVisualState } from "./tool-row-state.js";
 
 export type TauAgentEvents = {
@@ -30,17 +29,6 @@ export type TauAgentEvents = {
 			resultingFingerprint: string | null;
 			snapshotRanges?: Array<{ startLine: number; endLine: number }>;
 		}>;
-	};
-	"tau:autoread.requested": {
-		source: string;
-		title?: string;
-		cwd: string;
-		batchId: string;
-		files: Array<{ path: string }>;
-	};
-	"tau:outline-injection.requested": {
-		request: OutlineInjectionRequest;
-		accept(response: Promise<OutlineInjectionResponse>): void;
 	};
 	"tau:footer-item": {
 		id: string;

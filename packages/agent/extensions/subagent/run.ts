@@ -14,13 +14,13 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { createCompleteFileMeta } from "../../shared/full-file-knowledge.ts";
 import { createIsolatedSessionResource, type IsolatedSessionResource } from "../../shared/isolated-session.ts";
+import { FILE_INJECTION_TYPE } from "@shanepadgett/tau-agent";
 import type { AgentDefinition } from "./agents.ts";
 import { emptySubagentResumeState, type RetainedTurnOutcome, type SubagentResumeState } from "./resume.ts";
 import { resolveSubagentSessionInputs, type SubagentSessionInputs } from "./session-resource.ts";
 
 const PREVIEW_LIMIT = 600;
 const VALUE_LIMIT = 180;
-const AUTOREAD_MESSAGE_TYPE = "tau.autoread";
 
 export interface SubagentAction {
 	tool: string;
@@ -391,6 +391,7 @@ export async function runSubagentTurn(options: {
 				files.map(async (file, index) => {
 					const pathKey = resolve(thread.cwd, file);
 					const common = {
+						v: 1 as const,
 						rowId: `${invocationId}:${index}`,
 						path: file,
 						cwd: thread.cwd,
@@ -403,12 +404,13 @@ export async function runSubagentTurn(options: {
 						const lines = content.split("\n");
 						const numbered = lines.map((line, lineIndex) => `${lineIndex + 1}: ${line}`).join("\n");
 						return {
-							customType: AUTOREAD_MESSAGE_TYPE,
+							customType: FILE_INJECTION_TYPE,
 							content: `${file}\n${numbered}`,
 							display: false,
 							details: {
 								...common,
-								status: "read",
+								kind: "full",
+								status: "injected",
 								readCache: createCompleteFileMeta({
 									pathKey,
 									presentation: "line-numbered",
@@ -424,10 +426,10 @@ export async function runSubagentTurn(options: {
 					} catch (error) {
 						const message = error instanceof Error ? error.message : String(error);
 						return {
-							customType: AUTOREAD_MESSAGE_TYPE,
-							content: `${file}\nAutoread failed: ${message}`,
+							customType: FILE_INJECTION_TYPE,
+							content: `${file}\nInjection failed: ${message}`,
 							display: false,
-							details: { ...common, status: "failed", error: message },
+							details: { ...common, kind: "full", status: "failed", error: message },
 						};
 					}
 				}),

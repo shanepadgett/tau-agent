@@ -4,7 +4,7 @@ Context stores reusable repository work scopes in `.pi/contexts`. Folder names b
 
 See [Context management](../../docs/context.md) for catalog structure and taxonomy guidance.
 
-Use `/context` to set active entries for the current session branch. Tau stores only the selected entry IDs. Before each model call it rebuilds one ephemeral projection from current files, so repeated selections do not accumulate snapshots in conversation history. Open `/context`, press `Ctrl+C`, then confirm to clear active context.
+Use `/context` to inject entries into the conversation. Selecting entries reads `read` paths in full, outlines `outline` paths, and adds one hidden note listing `references` and instructing the agent to treat the injected files as current. Injection happens once, immediately, before your next prompt; nothing is rebuilt on later model calls.
 
 After meaningful uncommitted work (new/moved ownership, not trivial already-covered polish), the coding agent should run the `context-sync` subagent so `.pi/contexts` stays aligned. Context sync catalogs durable code and long-lived documentation. Scratch pads, working plans, interviews, rough ideas, and other temporary artifacts should stay out; add recurring transient paths to `validation.ignoreGlobs`. Humans can also run `/context-sync` or `/context-sync <nudge>` and press Escape to cancel a running sync. It walks domain → concept → entry → membership, edits only `.pi/contexts` with `patch`, and the harness verifies write scope plus catalog invariants afterward. Out-of-scope writes are restored and the run fails. Optional nudge text soft-steers judgment without skipping evidence.
 

@@ -1,6 +1,6 @@
 # Context management
 
-Tau uses `.pi/contexts` as a reusable map of the repository. A selected context supplies a small bootstrap projection for a work scope and points toward related files without loading everything.
+Tau uses `.pi/contexts` as a reusable map of the repository. Selecting a context injects a small bootstrap for a work scope and points toward related files without loading everything.
 
 ## Structure
 
@@ -53,12 +53,12 @@ Catalog durable code, configuration, tests, standards, and long-lived documentat
 ## Choose loading modes
 
 - `read` supplies exact complete file contents. Reserve it for instructions, small authoritative specifications, and other files whose exact wording is routinely needed.
-- `outline` supplies current structural outlines through Explore. Use it for recurring source entry points.
+- `outline` supplies structural outlines through Explore. Use it for recurring source entry points.
 - `references` supplies unloaded navigation paths. This should be the default for durable code, tests, callers, shared dependencies, and secondary documentation.
 
-Every entry declares all three arrays, including empty arrays. Keep `read` and `outline` small because Tau rebuilds them before model calls. Keep each path's loading mode consistent across the catalog. When selected entries disagree, precedence is `read`, then `outline`, then `references`.
+Every entry declares all three arrays, including empty arrays. Keep `read` and `outline` small because every selected path is injected into the conversation. Keep each path's loading mode consistent across the catalog. When selected entries disagree, precedence is `read`, then `outline`, then `references`.
 
-`/context` persists selected entry IDs as branch-local session state. It does not append file contents to conversation history. Before each model call Tau resolves those IDs against the current catalog, reads current `read` files, refreshes changed outlines, and adds one ephemeral projection. Reopening `/context` replaces the active selection. Clear all selections and confirm to remove the projection.
+`/context` injects the selected entries once, as soon as you confirm the selector. Tau adds one hidden note naming the selected entries and their `references`, then appends the complete `read` files and the `outline` structures as visible rows. Those messages stay in the conversation exactly as injected, so the prompt prefix stays cacheable. Run `/context` again to inject more entries.
 
 ## Maintain the map
 

@@ -21,7 +21,6 @@ export class ContextPanel implements Component {
 		tui: TUI,
 		theme: Theme,
 		entries: readonly ContextEntry[],
-		activeEntryIds: readonly string[],
 		done: (result: ContextEntry[] | undefined) => void,
 	) {
 		const firstEntry = entries[0];
@@ -68,8 +67,6 @@ export class ContextPanel implements Component {
 			border: "box",
 		};
 		this.panel = new ToolPanel(theme, this.config);
-		for (const [tab, list] of this.lists)
-			list.setSelectedIds(activeEntryIds.filter((id) => id.startsWith(`${tab}/`)));
 	}
 
 	handleInput(data: string): void {

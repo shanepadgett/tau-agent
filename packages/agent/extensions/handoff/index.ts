@@ -6,9 +6,9 @@ import {
 	type ExtensionAPI,
 	serializeConversation,
 } from "@earendil-works/pi-coding-agent";
-import { prepareAutoreadMessage, type AutoreadDetails } from "../../shared/autoread.ts";
 import { generateToolValidated, resolveCandidates } from "../../shared/model-fallback/index.ts";
 import { errorText } from "../../shared/text.ts";
+import { prepareFileInjection } from "@shanepadgett/tau-agent";
 import { buildHandoffRequest, type HandoffDraft, handoffDraftFromToolInput, HANDOFF_TOOL } from "./model.ts";
 
 export default function handoffExtension(pi: ExtensionAPI): void {
@@ -97,32 +97,12 @@ export default function handoffExtension(pi: ExtensionAPI): void {
 			const result = await ctx.newSession({
 				parentSession: currentSessionFile,
 				setup: async (sessionManager) => {
-					const messages = await Promise.all(
-						draft.files.map(async (path, index) => {
-							const details = {
-								rowId: `${batchId}:${index}`,
-								path,
-								cwd,
-								source: "handoff",
-								batchId,
-							};
-							try {
-								return await prepareAutoreadMessage({
-									...details,
-									signal: undefined,
-									isLifecycleCurrent: () => true,
-								});
-							} catch (error) {
-								const message = errorText(error);
-								return {
-									customType: "tau.autoread" as const,
-									content: `${path}\nAutoread failed: ${message}`,
-									display: true as const,
-									details: { ...details, status: "failed", error: message } satisfies AutoreadDetails,
-								};
-							}
-						}),
-					);
+					const messages = await prepareFileInjection({
+						cwd,
+						source: "handoff",
+						batchId,
+						files: draft.files.map((path) => ({ path, mode: "full" as const })),
+					});
 					for (const message of messages) {
 						sessionManager.appendCustomMessageEntry(
 							message.customType,

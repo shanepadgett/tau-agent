@@ -16,7 +16,7 @@ import {
 import contextSettings from "./settings.ts";
 import { formatContextValidationFailure, validateContextCatalog } from "./validation.ts";
 
-export const CONTEXT_SYNC_EVIDENCE_TOOL = "context_sync_evidence";
+const CONTEXT_SYNC_EVIDENCE_TOOL = "context_sync_evidence";
 
 const MAX_DIRTY_EVIDENCE = 4_000;
 const MAX_STRUCTURAL_PREVIEW = 1_500;
@@ -178,7 +178,7 @@ export async function collectSyncEvidence(
 	};
 }
 
-export async function discoverDirectDependencies(
+async function discoverDirectDependencies(
 	root: string,
 	files: readonly Pick<SyncDirtyFile, "path" | "evidence">[],
 ): Promise<Set<string>> {
@@ -234,7 +234,7 @@ export async function discoverDirectDependencies(
 	return result;
 }
 
-export function formatEvidenceSection(evidence: SyncEvidence, section: string, path?: string): string {
+function formatEvidenceSection(evidence: SyncEvidence, section: string, path?: string): string {
 	switch (section) {
 		case "overview":
 			return truncAt(formatOverview(evidence), MAX_SECTION);
