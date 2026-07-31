@@ -35,4 +35,4 @@ references = ["packages/agent/src/ast/read-policy.ts", "packages/agent/test/exte
 description = "Grammar manifests, build scripts, CI rebuild verification, artifacts, and fixtures"
 read = []
 outline = ["packages/agent/src/ast/grammars/manifest.ts", "packages/agent/scripts/build-grammars.ts"]
-references = [".github/workflows/grammars.yml", "packages/agent/src/ast/grammars/c_sharp.wasm", "packages/agent/src/ast/grammars/kotlin.wasm", "packages/agent/src/ast/grammars/manifest.json", "packages/agent/src/ast/grammars/swift.wasm", "packages/agent/scripts/build-grammars-container.sh"]
+references = [".github/workflows/grammars.yml", "packages/agent/src/ast/grammars/c_sharp.wasm", "packages/agent/src/ast/grammars/kotlin.wasm", "packages/agent/src/ast/grammars/manifest.json", "packages/agent/src/ast/grammars/swift.wasm"]

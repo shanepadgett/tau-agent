@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - "packages/agent/extensions/explore/ast/grammars/**"
+      - "packages/agent/src/ast/grammars/**"
       - "packages/agent/scripts/build-grammars.ts"
+      - "mise.toml"
       - ".github/workflows/grammars.yml"
 
 permissions:
@@ -18,13 +19,10 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24.18.0
+      - uses: jdx/mise-action@v3
       - run: npm ci --ignore-scripts
-      - run: npm rebuild tree-sitter-cli
-      - run: node --experimental-strip-types packages/agent/scripts/build-grammars.ts
+      - run: mise run grammars:build
       - name: Fail on artifact drift
-        run: git diff --exit-code --stat -- packages/agent/extensions/explore/ast/grammars
+        run: git diff --exit-code --stat -- packages/agent/src/ast/grammars
       - name: Smoke-test grammar loading
         run: npx vitest --run packages/agent/test/extensions/explore/grammars.test.ts

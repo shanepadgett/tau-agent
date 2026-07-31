@@ -41,15 +41,13 @@ Extensions live in `packages/agent/extensions/`. Run `/reload` after changing an
 
 Explore's structural engine parses source code through WebAssembly. Most grammar `.wasm` files arrive prebuilt via npm dependencies; c_sharp, kotlin, and swift are committed at `packages/agent/src/ast/grammars/` and only need rebuilding when you bump their pins in `manifest.json` there.
 
-Rebuilding on macOS requires a Docker-compatible container runtime — install [OrbStack](https://orbstack.dev/) or [Rancher Desktop](https://rancherdesktop.io/). A local wasm toolchain is neither required nor supported. Then:
+Rebuild them natively on macOS or Linux:
 
 ```bash
 mise run grammars:build
 ```
 
-The host downloads the pinned toolchain and grammar sources; compilation runs offline inside the container. If your environment only allows images from a registry mirror, set `TAU_GRAMMAR_IMAGE` (default `node:24-trixie`), e.g. `TAU_GRAMMAR_IMAGE=<mirror-host>/node:24-trixie`.
-
-On Linux the same task builds natively without a container. CI (`.github/workflows/grammars.yml`) rebuilds the artifacts and fails on byte drift, so a forgotten rebuild cannot land silently.
+Mise installs the pinned tree-sitter CLI. Its first build installs the WASI SDK; later builds reuse it from `~/.cache/tree-sitter/`. CI (`.github/workflows/grammars.yml`) rebuilds the artifacts and fails on byte drift, so a forgotten rebuild cannot land silently.
 
 ## Publishing
 

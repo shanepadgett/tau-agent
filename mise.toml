@@ -4,6 +4,10 @@ node = "24.18.0"
 "npm:oxlint" = "1.76.0"
 "npm:markdownlint-cli2" = "0.22.1"
 "npm:fallow" = "2.100.0"
+"npm:tree-sitter-cli" = "0.26.11"
+
+[env]
+NODE_USE_SYSTEM_CA = "1"
 
 [settings]
 jobs = 1
@@ -64,5 +68,5 @@ description = "Run Fallow dead-code and duplication checks"
 run = "fallow --only dead-code,dupes --fail-on-issues"
 
 [tasks."grammars:build"]
-description = "Rebuild vendored tree-sitter grammar wasm artifacts (Linux container on macOS)"
-run = "packages/agent/scripts/build-grammars-container.sh"
+description = "Rebuild vendored tree-sitter grammar wasm artifacts"
+run = "node --experimental-strip-types packages/agent/scripts/build-grammars.ts"

@@ -1,8 +1,6 @@
 {
 	"webTreeSitter": "0.26.11",
 	"vscodeTreeSitterWasm": "0.3.1",
-	"treeSitterCli": "0.26.11",
-	"wasiSdk": "wasi-sdk-29",
 	"grammars": [
 		{ "id": "typescript", "source": "vscode", "file": "tree-sitter-typescript.wasm" },
 		{ "id": "tsx", "source": "vscode", "file": "tree-sitter-tsx.wasm" },

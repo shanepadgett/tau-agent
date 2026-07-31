@@ -34,8 +34,6 @@ export type GrammarPin = VscodeGrammarPin | BuiltGrammarPin | ReleaseGrammarPin;
 export type GrammarManifest = {
 	webTreeSitter: string;
 	vscodeTreeSitterWasm: string;
-	treeSitterCli: string;
-	wasiSdk: string;
 	grammars: GrammarPin[];
 };
 
@@ -92,8 +90,6 @@ export function loadGrammarManifest(): GrammarManifest {
 	return {
 		webTreeSitter: requireString(root, "webTreeSitter", "root"),
 		vscodeTreeSitterWasm: requireString(root, "vscodeTreeSitterWasm", "root"),
-		treeSitterCli: requireString(root, "treeSitterCli", "root"),
-		wasiSdk: requireString(root, "wasiSdk", "root"),
 		grammars: root.grammars.map(parseGrammarPin),
 	};
 }

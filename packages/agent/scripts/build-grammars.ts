@@ -8,12 +8,8 @@
 // first use). Grammars with source "release" are downloaded from their
 // pinned upstream release asset.
 //
-// CI/maintainer-only. Run from the repo root on Linux (CI):
-//   node --experimental-strip-types packages/agent/scripts/build-grammars.ts
-//
-// On the managed Mac, endpoint policy kills the wasi-sdk clang binary. Build
-// inside a Linux container instead; see
-// docs/plans/explore-wasm-rewrite/01-grammar-toolchain/README.md.
+// CI/maintainer-only. Run from the repo root:
+//   mise run grammars:build
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,7 +19,7 @@ import { grammarsDir, loadGrammarManifest } from "../src/ast/grammars/manifest.t
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..", "..", "..");
-const treeSitterBin = join(repoRoot, "node_modules", ".bin", "tree-sitter");
+const treeSitterBin = "tree-sitter";
 
 function run(command: string, args: readonly string[], cwd: string): void {
 	const result = spawnSync(command, args, { cwd, stdio: "inherit" });
@@ -31,13 +27,6 @@ function run(command: string, args: readonly string[], cwd: string): void {
 	if (result.status !== 0) {
 		throw new Error(`${command} ${args.join(" ")} exited with ${result.status ?? "signal"}`);
 	}
-}
-
-function capture(command: string, args: readonly string[]): string {
-	const result = spawnSync(command, args, { cwd: repoRoot, encoding: "utf8" });
-	if (result.error) throw result.error;
-	if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} exited with ${result.status ?? "signal"}`);
-	return result.stdout.trim();
 }
 
 function installedVersion(packageName: string): string {
@@ -58,11 +47,6 @@ for (const [packageName, pinned] of [
 ] as const) {
 	const found = installedVersion(packageName);
 	if (found !== pinned) throw new Error(`${packageName} mismatch: manifest pins ${pinned}, found ${found}`);
-}
-
-const cliVersion = capture(treeSitterBin, ["--version"]);
-if (cliVersion !== `tree-sitter ${manifest.treeSitterCli}`) {
-	throw new Error(`tree-sitter-cli mismatch: manifest pins ${manifest.treeSitterCli}, found "${cliVersion}"`);
 }
 
 const workRoot = mkdtempSync(join(tmpdir(), "tau-grammars-"));
