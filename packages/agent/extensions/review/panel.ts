@@ -1,6 +1,6 @@
-import { bindingHint, bindingsHint, rawHint, ToolPanel } from "@shanepadgett/tau-tui";
-import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
-import { Markdown, type Component, type KeybindingsManager, truncateToWidth, type TUI } from "@earendil-works/pi-tui";
+import { bindingHint, bindingsHint, rawHint, ScrollableMarkdown, ToolPanel } from "@shanepadgett/tau-tui";
+import type { Theme } from "@earendil-works/pi-coding-agent";
+import { type Component, type KeybindingsManager, truncateToWidth, type TUI } from "@earendil-works/pi-tui";
 import { formatReviewMarkdown, reviewModeLabel, type ReviewMode, type ReviewRecord } from "./model.ts";
 
 export class ReviewProgressPanel implements Component {
@@ -53,7 +53,7 @@ export type ReviewResultAction = "send" | "export" | "close";
 
 export class ReviewResultPanel implements Component {
 	private readonly panel: ToolPanel;
-	private readonly body: ReviewMarkdownBody;
+	private readonly body: ScrollableMarkdown;
 
 	constructor(
 		tui: TUI,
@@ -62,7 +62,7 @@ export class ReviewResultPanel implements Component {
 		review: ReviewRecord,
 		done: (action: ReviewResultAction) => void,
 	) {
-		this.body = new ReviewMarkdownBody(tui, formatReviewMarkdown(review));
+		this.body = new ScrollableMarkdown(tui, formatReviewMarkdown(review), 9);
 		this.panel = new ToolPanel(theme, {
 			title: `${reviewModeLabel(review.mode)} review · ${review.verdict}`,
 			secondary: `${review.findings.length} finding${review.findings.length === 1 ? "" : "s"} · not in parent context`,
@@ -95,34 +95,5 @@ export class ReviewResultPanel implements Component {
 
 	invalidate(): void {
 		this.panel.invalidate();
-	}
-}
-
-class ReviewMarkdownBody implements Component {
-	private readonly tui: TUI;
-	private readonly markdown: Markdown;
-	private offset = 0;
-	private maxOffset = 0;
-
-	constructor(tui: TUI, content: string) {
-		this.tui = tui;
-		this.markdown = new Markdown(content, 0, 0, getMarkdownTheme());
-	}
-
-	scroll(delta: number): void {
-		this.offset = Math.max(0, Math.min(this.maxOffset, this.offset + delta));
-		this.tui.requestRender();
-	}
-
-	render(width: number): string[] {
-		const lines = this.markdown.render(width);
-		const height = Math.max(4, Math.floor(this.tui.terminal.rows * 0.9) - 9);
-		this.maxOffset = Math.max(0, lines.length - height);
-		this.offset = Math.min(this.offset, this.maxOffset);
-		return lines.slice(this.offset, this.offset + height);
-	}
-
-	invalidate(): void {
-		this.markdown.invalidate();
 	}
 }

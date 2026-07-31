@@ -1,7 +1,6 @@
-import { bindingHint, bindingsHint, ToolPanel, visibleWindow } from "@shanepadgett/tau-tui";
-import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
+import { bindingHint, bindingsHint, ScrollableMarkdown, ToolPanel } from "@shanepadgett/tau-tui";
+import type { Theme } from "@earendil-works/pi-coding-agent";
 import {
-	Markdown,
 	type Component,
 	type KeybindingsManager,
 	truncateToWidth,
@@ -47,10 +46,10 @@ export class AsideWidget implements Component {
 
 export class AsideResultPanel implements Component {
 	private readonly panel: ToolPanel;
-	private readonly body: AsideMarkdownBody;
+	private readonly body: ScrollableMarkdown;
 
 	constructor(tui: TUI, theme: Theme, keys: KeybindingsManager, result: AsideResult, done: () => void) {
-		this.body = new AsideMarkdownBody(tui, result.answer);
+		this.body = new ScrollableMarkdown(tui, result.answer, 8);
 		this.panel = new ToolPanel(theme, {
 			title: "Aside",
 			secondary: `${result.context} · ${result.question.slice(0, 240)}`,
@@ -80,35 +79,5 @@ export class AsideResultPanel implements Component {
 
 	invalidate(): void {
 		this.panel.invalidate();
-	}
-}
-
-class AsideMarkdownBody implements Component {
-	private readonly tui: TUI;
-	private readonly markdown: Markdown;
-	private cursor = 0;
-	private lineCount = 0;
-
-	constructor(tui: TUI, content: string) {
-		this.tui = tui;
-		this.markdown = new Markdown(content, 0, 0, getMarkdownTheme());
-	}
-
-	scroll(delta: number): void {
-		this.cursor = Math.min(Math.max(0, this.cursor + delta), Math.max(0, this.lineCount - 1));
-		this.tui.requestRender();
-	}
-
-	render(width: number): string[] {
-		const lines = this.markdown.render(width);
-		this.lineCount = lines.length;
-		this.cursor = Math.min(this.cursor, Math.max(0, lines.length - 1));
-		const height = Math.max(4, Math.floor(this.tui.terminal.rows * 0.9) - 8);
-		const window = visibleWindow(this.cursor, lines.length, height);
-		return lines.slice(window.start, window.end).map((line) => truncateToWidth(line, width, ""));
-	}
-
-	invalidate(): void {
-		this.markdown.invalidate();
 	}
 }
