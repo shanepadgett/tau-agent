@@ -29,7 +29,7 @@ references = ["packages/agent/src/ast/format/ast-search.ts", "packages/agent/src
 description = "Pi read outline overlay, autoread integration, settings, guidance, and previews"
 read = []
 outline = ["packages/agent/extensions/explore/read/hook.ts", "packages/agent/src/file-injection/index.ts"]
-references = ["packages/agent/src/ast/read-policy.ts", "packages/agent/test/extensions/explore/outline.test.ts"]
+references = ["packages/agent/src/ast/read-policy.ts", "packages/agent/test/extensions/explore/outline.test.ts", "packages/agent/test/src/file-injection/index.test.ts"]
 
 [grammars]
 description = "Grammar manifests, build scripts, CI rebuild verification, artifacts, and fixtures"

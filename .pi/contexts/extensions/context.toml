@@ -5,19 +5,19 @@ description = "Reusable repository context selection, ephemeral projection, and 
 description = "Strict TOML loading, loading-mode validation, project boundaries, and membership"
 read = []
 outline = ["packages/agent/extensions/context/definitions.ts"]
-references = ["packages/agent/test/extensions/context/definitions.test.ts"]
+references = []
 
 [selection]
 description = "Branch-local active selection, tabbed selector, and ephemeral read/outline/reference projection"
 read = []
-outline = ["packages/agent/extensions/context/index.ts", "packages/agent/extensions/context/panel.ts", "packages/agent/extensions/context/projection.ts", "packages/agent/extensions/context/state.ts"]
-references = ["packages/agent/shared/context-messages.ts", "packages/agent/test/extensions/context/index.test.ts", "packages/agent/test/extensions/context/panel.test.ts", "packages/agent/test/extensions/context/projection.test.ts"]
+outline = ["packages/agent/extensions/context/index.ts", "packages/agent/extensions/context/panel.ts"]
+references = []
 
 [maintenance]
 description = "Automatic validation, settings, evidence, write-scope enforcement, and subagent-driven catalog synchronization"
 read = []
 outline = ["packages/agent/extensions/context/evidence.ts", "packages/agent/extensions/context/sync.ts", "packages/agent/extensions/context/validation.ts"]
-references = ["packages/agent/extensions/context/settings.ts", "packages/agent/extensions/context/write-scope.ts", "packages/agent/test/extensions/context/auto-sync.test.ts", "packages/agent/test/extensions/context/sync.test.ts", "packages/agent/test/extensions/context/validation.test.ts", "packages/agent/test/extensions/context/write-scope.test.ts"]
+references = ["packages/agent/extensions/context/settings.ts", "packages/agent/extensions/context/write-scope.ts"]
 
 [documentation]
 description = "Product behavior, catalog taxonomy, and user-facing selection guidance"

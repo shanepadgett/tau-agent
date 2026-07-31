@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
+import { keyText, type ExtensionAPI, type Theme } from "@earendil-works/pi-coding-agent";
+import { truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { Marker } from "@shanepadgett/tau-tui";
 import { BoundedTextResultBuilder, truncateBoundedHead } from "../../shared/bounded-text-result.ts";
+import { areContinuityRowsVisible } from "../../shared/continuity-visibility.ts";
 import { createCompleteFileMeta, type ReadCacheMetaV1 } from "../../shared/full-file-knowledge.ts";
+import type { LineRange } from "../../shared/ranges.ts";
 import type { TemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import type { ToolRowStateStore } from "../../shared/tool-row-state.ts";
 import { formatOutlineEmpty, formatOutlineFile } from "../ast/format/outline.ts";
@@ -17,6 +19,8 @@ import { formatPathForDisplay, resolveExplorePath, stripLeadingAt } from "../ast
 export const FILE_INJECTION_TYPE = "tau.file";
 
 const OUTLINE_OPTIONS = { includePrivate: false, includeDocs: false, names: [] as readonly string[] };
+const FILE_RENDER_CHARACTERS = 20_000;
+const FILE_RENDER_LINES = 200;
 
 /**
  * `full` always injects complete contents, `outline` always injects structure,
@@ -32,6 +36,8 @@ export interface FileInjectionDetails {
 	cwd: string;
 	source: string;
 	batchId: string;
+	/** One-based, inclusive ranges used for a partial file read. */
+	ranges?: ReadonlyArray<LineRange>;
 	/** What was actually injected. `auto` resolves to `full` or `outline`. */
 	kind: "full" | "outline";
 	status: "injected" | "failed";
@@ -42,8 +48,15 @@ export interface FileInjectionDetails {
 export interface PreparedFileInjection {
 	customType: typeof FILE_INJECTION_TYPE;
 	content: string;
-	display: true;
+	display: boolean;
 	details: FileInjectionDetails;
+}
+
+export interface FileInjectionFile {
+	path: string;
+	mode: FileInjectionMode;
+	/** One-based, inclusive line ranges. Ranges take precedence over `auto` outlining. */
+	ranges?: ReadonlyArray<LineRange>;
 }
 
 export interface FileInjectionRequest {
@@ -52,7 +65,7 @@ export interface FileInjectionRequest {
 	source: string;
 	/** Groups the visible rows produced by one call. */
 	batchId: string;
-	files: ReadonlyArray<{ path: string; mode: FileInjectionMode }>;
+	files: ReadonlyArray<FileInjectionFile>;
 	signal?: AbortSignal;
 }
 
@@ -90,10 +103,11 @@ export function registerFileInjection(pi: ExtensionAPI, rowState: ToolRowStateSt
 /** Builds injection messages without sending them. */
 export async function prepareFileInjection(request: FileInjectionRequest): Promise<PreparedFileInjection[]> {
 	const prepared: PreparedFileInjection[] = [];
+	const display = request.source !== "continuity" || areContinuityRowsVisible();
 	for (const [index, file] of request.files.entries()) {
 		request.signal?.throwIfAborted();
 		const path = stripLeadingAt(file.path);
-		const base = {
+		const common = {
 			v: 1 as const,
 			rowId: `${request.batchId}:${index}`,
 			path,
@@ -101,16 +115,24 @@ export async function prepareFileInjection(request: FileInjectionRequest): Promi
 			source: request.source,
 			batchId: request.batchId,
 		};
+		let base: InjectionBase = common;
 		try {
-			prepared.push(await prepareOne(base, file.mode, request.signal));
+			const ranges = file.ranges === undefined ? undefined : normalizeLineRanges(file.ranges);
+			base = { ...common, ...(ranges === undefined ? {} : { ranges }) };
+			prepared.push({ ...(await prepareOne(base, file.mode, request.signal)), display });
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			if (request.signal?.aborted) throw error;
 			prepared.push({
 				customType: FILE_INJECTION_TYPE,
 				content: `${path}\nInjection failed: ${message}`,
-				display: true,
-				details: { ...base, kind: file.mode === "outline" ? "outline" : "full", status: "failed", error: message },
+				display,
+				details: {
+					...base,
+					kind: file.mode === "outline" ? "outline" : "full",
+					status: "failed",
+					error: message,
+				},
 			});
 		}
 	}
@@ -134,6 +156,10 @@ async function prepareOne(
 	mode: FileInjectionMode,
 	signal: AbortSignal | undefined,
 ): Promise<PreparedFileInjection> {
+	if (base.ranges !== undefined) {
+		if (mode === "outline") throw new Error("Line ranges are supported only for file reads");
+		return prepareRangedRead(base, signal);
+	}
 	if (mode === "outline") return prepareOutline(base, signal);
 	if (mode === "full") return prepareFull(base, signal);
 	const settings = requireHost().autoOutline();
@@ -149,6 +175,30 @@ async function prepareOne(
 	}
 	if (!shouldOutlineFullRead(lineCount, settings.thresholdLines)) return prepareFull(base, signal);
 	return prepareLargeSourceOutline(base, lineCount, signal);
+}
+
+async function prepareRangedRead(base: InjectionBase, signal: AbortSignal | undefined): Promise<PreparedFileInjection> {
+	const ranges = base.ranges;
+	if (ranges === undefined) throw new Error("Ranged injection requires line ranges");
+	const pathKey = resolve(base.cwd, base.path);
+	const bytes = signal ? await readFile(pathKey, { signal }) : await readFile(pathKey);
+	const sourceText = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+	const lines = sourceText.split("\n");
+	const selectedLines = ranges.flatMap((range) => {
+		if (range.startLine > lines.length) return [];
+		return lines.slice(range.startLine - 1, Math.min(range.endLine, lines.length));
+	});
+	if (selectedLines.length === 0) throw new Error("Line range starts beyond end of file");
+	const selectedText = selectedLines.join("\n");
+	const messageContent = `${base.path}\n${selectedText}`;
+	if (truncateBoundedHead(messageContent).truncated)
+		throw new Error("File range exceeds the complete injection limit; request a smaller range");
+	return {
+		customType: FILE_INJECTION_TYPE,
+		content: messageContent,
+		display: true,
+		details: { ...base, kind: "full", status: "injected" },
+	};
 }
 
 async function prepareFull(base: InjectionBase, signal: AbortSignal | undefined): Promise<PreparedFileInjection> {
@@ -256,6 +306,8 @@ function parseDetails(value: unknown): FileInjectionDetails | undefined {
 		(details.status !== "injected" && details.status !== "failed")
 	)
 		return undefined;
+	const ranges = details.ranges === undefined ? undefined : parseRanges(details.ranges);
+	if (details.ranges !== undefined && ranges === undefined) return undefined;
 	return {
 		v: 1,
 		rowId: details.rowId,
@@ -263,10 +315,59 @@ function parseDetails(value: unknown): FileInjectionDetails | undefined {
 		cwd: details.cwd,
 		source: details.source,
 		batchId: details.batchId,
+		...(ranges === undefined ? {} : { ranges }),
 		kind: details.kind,
 		status: details.status,
 		...(typeof details.error === "string" ? { error: details.error } : {}),
 	};
+}
+
+function normalizeLineRanges(ranges: ReadonlyArray<LineRange>): LineRange[] {
+	if (ranges.length === 0) throw new Error("At least one line range is required");
+	const sorted = ranges
+		.map((range) => {
+			if (
+				!Number.isSafeInteger(range.startLine) ||
+				!Number.isSafeInteger(range.endLine) ||
+				range.startLine < 1 ||
+				range.endLine < range.startLine
+			)
+				throw new Error("Line ranges must use positive, ordered line numbers");
+			return { startLine: range.startLine, endLine: range.endLine };
+		})
+		.sort((left, right) => left.startLine - right.startLine || left.endLine - right.endLine);
+	const normalized: LineRange[] = [];
+	for (const range of sorted) {
+		const previous = normalized[normalized.length - 1];
+		if (previous && range.startLine <= previous.endLine + 1) {
+			previous.endLine = Math.max(previous.endLine, range.endLine);
+		} else {
+			normalized.push(range);
+		}
+	}
+	return normalized;
+}
+
+function parseRanges(value: unknown): LineRange[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	const ranges: LineRange[] = [];
+	for (const item of value) {
+		if (!item || typeof item !== "object" || Array.isArray(item)) return undefined;
+		const range = item as Record<string, unknown>;
+		const startLine = range.startLine;
+		const endLine = range.endLine;
+		if (
+			typeof startLine !== "number" ||
+			typeof endLine !== "number" ||
+			!Number.isSafeInteger(startLine) ||
+			!Number.isSafeInteger(endLine) ||
+			startLine < 1 ||
+			endLine < startLine
+		)
+			return undefined;
+		ranges.push({ startLine, endLine });
+	}
+	return ranges;
 }
 
 class FileInjectionComponent {
@@ -304,8 +405,21 @@ class FileInjectionComponent {
 			label: this.details.kind === "outline" ? "outline" : "read",
 			parts: [this.details.path],
 		}).render(width);
-		if (!this.expanded || this.details.status === "failed") return marker;
-		return [...marker, ...new Text(this.theme.fg("dim", this.content), 1, 0).render(width)];
+		if (!this.expanded || this.details.status === "failed") {
+			if (this.details.status === "failed") return marker;
+			const hint = this.theme.fg("muted", `(${keyText("app.tools.expand")} to expand)`);
+			const last = marker.length - 1;
+			return marker.map((line, index) => (index === last ? truncateToWidth(`${line} ${hint}`, width, "…") : line));
+		}
+
+		const bounded =
+			this.content.length > FILE_RENDER_CHARACTERS
+				? `${this.content.slice(0, FILE_RENDER_CHARACTERS)}\n…`
+				: this.content;
+		const content = wrapTextWithAnsi(this.theme.fg("dim", bounded), Math.max(1, width - 1))
+			.slice(0, FILE_RENDER_LINES)
+			.map((line) => truncateToWidth(` ${line}`, width, "…"));
+		return [...marker, ...content];
 	}
 
 	invalidate(): void {}

@@ -120,13 +120,13 @@ describe("extensionPathsForTools", () => {
 		const pi = {
 			getAllTools: () => [
 				{ name: "read", sourceInfo: { path: "/extensions/read.ts" } },
-				{ name: "session_memory", sourceInfo: { path: "/extensions/session-memory/index.ts" } },
+				{ name: "checkpoint", sourceInfo: { path: "/extensions/continuity/index.ts" } },
 			],
 		} as unknown as ExtensionAPI;
 
-		expect(extensionPathsForTools(pi, ["read", "session_memory"])).toEqual([
+		expect(extensionPathsForTools(pi, ["read", "checkpoint"])).toEqual([
+			"/extensions/continuity/index.ts",
 			"/extensions/read.ts",
-			"/extensions/session-memory/index.ts",
 		]);
 	});
 });

@@ -7,7 +7,7 @@ Give long-running Pi sessions a rolling working context that can replace raw con
 ## Product decisions
 
 - The chat is a stream of user messages, agent messages, tool calls, and tool results.
-- A checkpoint produces the next active context block. It replaces the previous checkpoint block and retires older unselected context.
+- The checkpoint tool result is the next active context block. It replaces the previous checkpoint state and retires older unselected context.
 - Retained user and agent messages stay exact. The agent selects the messages that still define the work.
 - The current user message and active user requirements remain protected.
 - The checkpoint carries four text sections:
@@ -18,6 +18,7 @@ Give long-running Pi sessions a rolling working context that can replace raw con
 - Work items do not need IDs or a separate task system. A separate task system can be considered later if tasks need independent operations, dependencies, parallel ownership, or a user-facing view.
 - There is no recall tool. The agent continues from the checkpoint itself.
 - Raw tool results are disposable after their useful findings have been recorded. Derived findings from scripts, searches, web research, and complex data analysis must be captured as facts before pruning.
+- User and assistant session-entry IDs are exposed to the model through stable hidden provider-context metadata messages added by the continuity context handler. Checkpoint arguments retain IDs rather than copied message text; normal message content and TUI rows stay free of those IDs.
 
 ## File context
 
@@ -29,7 +30,7 @@ The checkpoint carries file directives with three modes:
 - `outline`: regenerate the file outline.
 - `deferred`: keep only the path and a human-readable condition for loading it later.
 
-Read and outline directives are system metadata. After the checkpoint, the context projection fulfills them and injects current results into active context. Those results do not render inside the checkpoint block.
+Read and outline directives are system metadata. During checkpoint execution, the direct file-injection API fulfills them and adds current results as separate file messages. Those results do not render inside the checkpoint text.
 
 Deferred files render in the checkpoint so the agent can recognize when to promote them to normal read or outline behavior.
 
@@ -38,13 +39,15 @@ The repository remains authoritative for current files. Facts preserve conclusio
 ## Current implementation findings
 
 - `packages/agent/extensions/explore/ast/read/hook.ts` replaces successful full reads of registered large source files with outlines. Explicit ranged reads already bypass that substitution.
-- `packages/agent/shared/autoread.ts` currently accepts only complete file paths and emits visible `tau.autoread` messages through `pi.sendMessage()`. These messages are ordinary conversation history and are not replayed after compaction.
-- `packages/agent/extensions/explore/read/autoread.ts` applies the same large-file outline policy to autoread, but has no range path.
-- `packages/agent/extensions/context/projection.ts` already rebuilds current complete reads and outlines before model calls, removes the previous projection, and injects one ephemeral projection message.
-- Current `.pi/contexts` selections persist full `read`, full `outline`, and unloaded `references` by branch-local entry ID. They do not represent checkpoint-specific ranges or deferred conditions.
-- The outline injection provider already regenerates current outlines from paths and needs little conceptual change.
+- `packages/agent/src/file-injection/index.ts` now provides the direct injection seam:
+  - `prepareFileInjection(request)` prepares file messages without sending them.
+  - `injectFiles(pi, request)` prepares and sends them in order.
+  - Current modes are `full`, `outline`, and `auto`; `auto` applies the Explore size threshold.
+- `/context` uses `injectFiles()` for selected files and sends one separate hidden context brief. Handoff uses `prepareFileInjection()`.
+- Explicit ranges are normalized, force a current read, and omit complete-file cache metadata. `FileInjectionFile` carries optional one-based inclusive ranges.
+- Current `.pi/contexts` entries still describe durable full `read`, full `outline`, and unloaded `references`; checkpoint file directives are session-local and should remain separate.
 
-The checkpoint file directives should feed the projection machinery rather than become ordinary autoread conversation messages. They should remain separate from the durable `.pi/contexts` catalog because they are session-local and dynamic.
+The continuity checkpoint tool returns the conversation/work state through its own tool result. It accepts exact provider-visible session-entry IDs, resolves original messages from the active branch, and keeps only user text and assistant text blocks. It calls the direct file-injection API only for active file reads and outlines, then queues one hidden continuation instruction after those file messages. The continuation is an instruction, not a second checkpoint state message.
 
 ## Rough interaction
 
@@ -72,26 +75,30 @@ files: [
 
 The system then:
 
-1. Builds a new block from selected exact messages and the current text state.
-2. Retains active file directives as system metadata.
-3. Regenerates requested reads and outlines from the current repository.
-4. Injects those current results through the ephemeral context projection.
-5. Leaves deferred files in the rendered block.
-6. Removes older unselected messages and raw tool results from active context.
+1. Builds the checkpoint tool result from selected exact messages and the current text state.
+2. Records active file directives and a checkpoint-owned file batch.
+3. Calls the direct file-injection API for requested reads and outlines.
+4. Returns the text checkpoint result to the agent as the state block.
+5. Leaves deferred files in that result and queues the hidden continuation instruction after active file messages.
+6. Filters older unselected messages and raw tool results from the next provider context while retaining the checkpoint tool pair, current file batch, and continuation instruction.
 
-## Immediate Explore changes
+## Immediate continuity changes
 
-- Extend autoread requests and preparation to support explicit line ranges.
-- Keep explicit ranged autoreads exact; do not replace them with a large-file outline.
-- Preserve the existing full-autoread behavior for small files and outline substitution for large files.
-- Reuse the existing outline provider and projection lifecycle for checkpoint-driven outlines.
-- Add projection support for dynamic ranged reads and deferred-file state without changing the repository context catalog yet.
+- Add the `continuity` extension with the `checkpoint` tool and make its result the continuation state.
+- Add stable hidden `display: false` provider-context metadata messages through Pi's `context` event. Keep session history, normal message content, and TUI rows unmodified.
+- Resolve selected IDs from active-branch session entries; automatically retain the latest user message and omit assistant thinking/tool-call blocks.
+- Extend the direct file-injection API to support explicit line ranges.
+- Keep explicit ranged reads exact; do not replace them with a large-file outline.
+- Preserve `auto` behavior for small files and large-file outline substitution.
+- Use a checkpoint-owned source and batch marker so prior checkpoint file messages can be filtered from active context.
+- Keep deferred files in checkpoint text and load them only when their condition is met.
+- Add a Tau setting that hides checkpoint and file-injection rows by default. When enabled and reloaded, show checkpoint and newly injected-file content with a short preview and Pi's configured expand hint; expanded output shows more of that content.
+- Keep checkpoint/file messages model-visible even when their TUI rows are hidden. Set continuity file-message display at injection time so hidden rows are not mounted by Pi's custom-message wrapper; existing injected-file rows keep their saved display state.
 
 Pi's built-in compaction remains an emergency fallback during initial development.
 
 ## Deliberately deferred design work
 
-- Exact checkpoint tool schema and message reference format
 - How the system decides when to nudge
 - How line ranges behave after file edits
 - Checkpoint completeness checks before pruning

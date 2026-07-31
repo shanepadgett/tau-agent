@@ -53,6 +53,17 @@
 					},
 					"additionalProperties": false
 				},
+				"continuity": {
+					"type": "object",
+					"properties": {
+						"showToolRows": {
+							"type": "boolean",
+							"default": false,
+							"description": "Show continuity checkpoint and injected-file rows in the TUI for debugging."
+						}
+					},
+					"additionalProperties": false
+				},
 				"explore": {
 					"type": "object",
 					"properties": {
@@ -141,28 +152,6 @@
 							"minimum": 1,
 							"maximum": 50,
 							"description": "Maximum branch choices shown when switching a reference branch."
-						}
-					},
-					"additionalProperties": false
-				},
-				"sessionMemory": {
-					"type": "object",
-					"properties": {
-						"enabled": {
-							"type": "boolean",
-							"default": true,
-							"description": "Enable session memory."
-						},
-						"showToolRows": {
-							"type": "boolean",
-							"default": false,
-							"description": "Show session_memory tool rows for debugging."
-						},
-						"contextCeilingTokens": {
-							"type": "integer",
-							"default": 150000,
-							"minimum": 30001,
-							"description": "Maximum active-context tokens before the fixed checkpoint reserve."
 						}
 					},
 					"additionalProperties": false
