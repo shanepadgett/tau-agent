@@ -1,4 +1,5 @@
 import { sessionEntryToContextMessages, type ContextEvent, type SessionEntry } from "@earendil-works/pi-coding-agent";
+import { FILE_INJECTION_TYPE } from "@shanepadgett/tau-agent";
 import { SESSION_MEMORY_TOOL, type ReplayedSessionMemory } from "./state.ts";
 
 type ContextMessage = ContextEvent["messages"][number];
@@ -99,7 +100,7 @@ export function collectPrunedRowIds(branch: readonly SessionEntry[], before: num
 			}
 			if (
 				message.role === "custom" &&
-				(message.customType === "tau.explore.outline" || message.customType === "tau.autoread") &&
+				message.customType === FILE_INJECTION_TYPE &&
 				isRecord(message.details) &&
 				typeof message.details.rowId === "string"
 			) {

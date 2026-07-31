@@ -1,18 +1,19 @@
 import { fauxAssistantMessage, fauxToolCall, type ToolResultMessage } from "@earendil-works/pi-ai";
-import {
-	createEventBus,
-	type ExtensionAPI,
-	type ExtensionContext,
-	type SessionEntry,
-} from "@earendil-works/pi-coding-agent";
+import { type ExtensionContext, type SessionEntry } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
-import { registerOutlineInjectionProvider, type PreparedOutlineInjection } from "../../../shared/outline-injection.ts";
+import type { PreparedFileInjection } from "@shanepadgett/tau-agent";
 import {
 	formatSessionMemory,
 	type SessionMemoryDetailsV2,
 	type SessionMemoryInput,
 } from "../../../extensions/session-memory/state.ts";
 import { executeSessionMemory } from "../../../extensions/session-memory/tool.ts";
+
+const prepareFileInjection = vi.hoisted(() => vi.fn(async (): Promise<PreparedFileInjection[]> => []));
+vi.mock("@shanepadgett/tau-agent", () => ({
+	FILE_INJECTION_TYPE: "tau.file",
+	prepareFileInjection,
+}));
 
 const update: Extract<SessionMemoryInput, { action: "update" }> = {
 	action: "update",
@@ -24,16 +25,6 @@ const update: Extract<SessionMemoryInput, { action: "update" }> = {
 	outlineFiles: [],
 	deferFiles: [],
 };
-
-function pi(): ExtensionAPI {
-	const events = createEventBus();
-	return {
-		events,
-		on(name: string, handler: () => void) {
-			if (name === "session_start") handler();
-		},
-	} as unknown as ExtensionAPI;
-}
 
 function result(id: string, value: SessionMemoryDetailsV2): ToolResultMessage {
 	return {
@@ -57,19 +48,28 @@ function call(id: string, input: SessionMemoryInput): SessionEntry {
 	};
 }
 
-function outline(path: string): PreparedOutlineInjection {
+function outline(path: string): PreparedFileInjection {
 	return {
-		customType: "tau.explore.outline",
+		customType: "tau.file",
 		content: `${path}\noutline`,
 		display: true,
-		details: { v: 1, rowId: `outline:${path}`, path, cwd: "/work", batchId: "current:outline" },
+		details: {
+			v: 1,
+			rowId: `outline:${path}`,
+			path,
+			cwd: "/work",
+			source: "session_memory",
+			batchId: "current:outline",
+			kind: "outline",
+			status: "injected",
+		},
 	};
 }
 
 function options(input: SessionMemoryInput, branch: SessionEntry[] = [call("current", input)]) {
-	const extension = pi();
+	prepareFileInjection.mockClear();
+	prepareFileInjection.mockResolvedValue([]);
 	return {
-		pi: extension,
 		toolCallId: "current",
 		params: input,
 		signal: undefined,
@@ -89,8 +89,6 @@ describe("session-memory tool", () => {
 	it("commits a full authoritative update without loading its file manifest", async () => {
 		const input = { ...update, outlineFiles: ["related.ts"] };
 		const test = options(input);
-		const outlineProvider = vi.fn(async () => ({ messages: [], warnings: [] }));
-		registerOutlineInjectionProvider(test.pi, outlineProvider);
 		const execution = await executeSessionMemory(test);
 		expect(execution.result.details).toMatchObject({
 			kind: "update",
@@ -102,7 +100,7 @@ describe("session-memory tool", () => {
 		expect(execution.result.details.changes).toEqual(["Session memory created"]);
 		expect(execution.readFiles).toEqual([]);
 		expect(execution.outlines).toEqual([]);
-		expect(outlineProvider).not.toHaveBeenCalled();
+		expect(prepareFileInjection).not.toHaveBeenCalled();
 	});
 
 	it("records a compact summary of changes from the previous update", async () => {
@@ -185,8 +183,7 @@ describe("session-memory tool", () => {
 			call("current", { action: "checkpoint" }),
 		];
 		const test = options({ action: "checkpoint" }, branch);
-		const outlineProvider = vi.fn(async () => ({ messages: [outline("related.ts")], warnings: [] }));
-		registerOutlineInjectionProvider(test.pi, outlineProvider);
+		prepareFileInjection.mockResolvedValue([outline("related.ts")]);
 		const execution = await executeSessionMemory(test);
 		expect(execution.result.details.kind).toBe("checkpoint");
 		expect(execution.result.details.checkpoint).toBe(1);
@@ -195,7 +192,7 @@ describe("session-memory tool", () => {
 		expect(execution.readFiles).toEqual(["active.ts"]);
 		expect(execution.outlines).toEqual([outline("related.ts")]);
 		expect(execution.result.details.outlinedRows).toEqual([{ path: "related.ts", rowId: "outline:related.ts" }]);
-		expect(outlineProvider).toHaveBeenCalledOnce();
+		expect(prepareFileInjection).toHaveBeenCalledOnce();
 	});
 
 	it("turns the required full update into a checkpoint and ages new short-term memory from it", async () => {
@@ -249,10 +246,13 @@ describe("session-memory tool", () => {
 			call("current", { action: "checkpoint" }),
 		];
 		const test = options({ action: "checkpoint" }, branch);
-		registerOutlineInjectionProvider(test.pi, async () => ({
-			messages: [],
-			warnings: ["related.ts: outline unavailable"],
-		}));
+		prepareFileInjection.mockResolvedValue([
+			{
+				...outline("related.ts"),
+				content: "related.ts\nInjection failed: outline unavailable",
+				details: { ...outline("related.ts").details, status: "failed", error: "outline unavailable" },
+			},
+		]);
 		const execution = await executeSessionMemory(test);
 		expect(execution.result.details.state.outlineFiles).toEqual(["related.ts"]);
 		expect(execution.result.details.state.deferFiles).toEqual([]);

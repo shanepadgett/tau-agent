@@ -2,6 +2,7 @@ import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-
 import { emitTauEvent, onTauEvent } from "../../shared/events.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { createToolRowStateStore } from "../../shared/tool-row-state.ts";
+import { injectFiles } from "@shanepadgett/tau-agent";
 import { projectSessionMemory } from "./projection.ts";
 import {
 	renderSessionMemoryCall,
@@ -142,7 +143,6 @@ export default function sessionMemoryExtension(pi: ExtensionAPI): void {
 				const required = requiredToolCallId === toolCallId && gate.kind === "required";
 				try {
 					const execution = await executeSessionMemory({
-						pi,
 						toolCallId,
 						params,
 						signal,
@@ -153,15 +153,15 @@ export default function sessionMemoryExtension(pi: ExtensionAPI): void {
 					});
 					if (execution.result.details.kind === "checkpoint") {
 						if (execution.readFiles.length > 0) {
-							emitTauEvent(pi, "tau:autoread.requested", {
-								source: SESSION_MEMORY_TOOL,
-								title: "Session-memory checkpoint",
+							await injectFiles(pi, {
 								cwd: ctx.cwd,
+								source: SESSION_MEMORY_TOOL,
 								batchId: `${toolCallId}:read`,
-								files: execution.readFiles.map((path) => ({ path })),
+								files: execution.readFiles.map((path) => ({ path, mode: "auto" as const })),
+								signal,
 							});
 						}
-						for (const outline of execution.outlines) pi.sendMessage(outline, { deliverAs: "steer" });
+						for (const outline of execution.outlines) pi.sendMessage(outline);
 						gate = { kind: "awaiting", toolCallId };
 					}
 					return execution.result;

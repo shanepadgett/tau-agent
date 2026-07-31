@@ -1,7 +1,6 @@
 import { resolve } from "node:path";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { PreparedOutlineInjection } from "../../shared/outline-injection.ts";
-import { requestOutlineInjections } from "../../shared/outline-injection.ts";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { prepareFileInjection, type PreparedFileInjection } from "@shanepadgett/tau-agent";
 import { collectPrunedRowIds, findToolCallEntry } from "./projection.ts";
 import {
 	assertSnapshotBound,
@@ -9,13 +8,13 @@ import {
 	formatSessionMemory,
 	normalizeUpdate,
 	replaySessionMemory,
+	SESSION_MEMORY_TOOL,
 	type SessionMemoryDetailsV2,
 	type SessionMemoryInput,
 	type SessionMemoryState,
 } from "./state.ts";
 
 interface ExecuteSessionMemoryOptions {
-	pi: Pick<ExtensionAPI, "events">;
 	toolCallId: string;
 	params: SessionMemoryInput;
 	signal: AbortSignal | undefined;
@@ -30,7 +29,7 @@ export interface SessionMemoryExecution {
 		content: Array<{ type: "text"; text: string }>;
 		details: SessionMemoryDetailsV2;
 	};
-	outlines: PreparedOutlineInjection[];
+	outlines: PreparedFileInjection[];
 	readFiles: string[];
 }
 
@@ -94,26 +93,32 @@ export async function executeSessionMemory(options: ExecuteSessionMemoryOptions)
 		replay.latest?.outlinedRows.map((item) => [resolve(options.ctx.cwd, item.path), item] as const) ?? [],
 	);
 	const readFiles = checkpointing ? state.readFiles : [];
-	const outlineResponse = checkpointing
-		? await requestOutlineInjections(options.pi, {
+	const outlines = checkpointing
+		? await prepareFileInjection({
 				cwd: options.ctx.cwd,
+				source: SESSION_MEMORY_TOOL,
 				batchId: `${options.toolCallId}:outline`,
-				paths: state.outlineFiles,
+				files: state.outlineFiles.map((path) => ({ path, mode: "outline" as const })),
 				signal: options.signal,
-				isLifecycleCurrent: () => options.generation === options.currentGeneration(),
 			})
-		: { messages: [], warnings: [] };
-	warnings.push(...outlineResponse.warnings.map(boundedWarning));
+		: [];
+	warnings.push(
+		...outlines
+			.filter((message) => message.details.status === "failed")
+			.map((message) => boundedWarning(`${message.details.path}: ${message.details.error ?? "injection failed"}`)),
+	);
 	assertCurrent(options);
 
 	const newOutlineRows = new Map(
-		outlineResponse.messages.map(
-			(message) =>
-				[
-					resolve(options.ctx.cwd, message.details.path),
-					{ path: message.details.path, rowId: message.details.rowId },
-				] as const,
-		),
+		outlines
+			.filter((message) => message.details.status === "injected")
+			.map(
+				(message) =>
+					[
+						resolve(options.ctx.cwd, message.details.path),
+						{ path: message.details.path, rowId: message.details.rowId },
+					] as const,
+			),
 	);
 	const outlinedRows = state.outlineFiles.flatMap((path) => {
 		const key = resolve(options.ctx.cwd, path);
@@ -143,7 +148,7 @@ export async function executeSessionMemory(options: ExecuteSessionMemoryOptions)
 	};
 	return {
 		result: { content: [{ type: "text", text: formatSessionMemory(state, nextCheckpoint, warnings) }], details },
-		outlines: outlineResponse.messages,
+		outlines,
 		readFiles,
 	};
 }

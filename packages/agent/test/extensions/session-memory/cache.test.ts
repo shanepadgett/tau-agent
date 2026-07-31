@@ -319,7 +319,7 @@ describe("session-memory provider cache stability", () => {
 
 			const fileInjection: ContextMessage = {
 				role: "custom",
-				customType: "tau.autoread",
+				customType: "tau.file",
 				content: "active.ts\nconst current = true;",
 				display: true,
 				timestamp: 2,

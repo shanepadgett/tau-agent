@@ -73,7 +73,7 @@ describe("session-memory projection", () => {
 		};
 		const injection: ContextEvent["messages"][number] = {
 			role: "custom",
-			customType: "tau.autoread",
+			customType: "tau.file",
 			content: "active.ts\nsource",
 			display: true,
 			timestamp: 1,
@@ -231,7 +231,7 @@ describe("session-memory projection", () => {
 			id: "outline",
 			parentId: null,
 			timestamp: "2026-07-29",
-			customType: "tau.explore.outline",
+			customType: "tau.file",
 			content: "outline",
 			display: true,
 			details: { rowId: "outline-row" },
