@@ -78,6 +78,10 @@ Replaces separate edit/write operations with one multi-file `patch` tool. It can
 
 Adds `/qna` for when the agent has asked you several questions in chat and you want a friendly UI for answering them on your own terms. It is only active when you manually run the command.
 
+## ready
+
+Adds `/ready` to scan agent-readiness rails (cold start, toolchain, verify, lint/entropy, policy, standards, context, and related signals). Choose Markdown or HTML; Tau writes a timestamped report under `.pi/tau/ready/` and notifies with the path. Scan-only in v1 — no model judgment and no scores.
+
 ## review
 
 Adds `/review` for explicit isolated review of current Git changes. Choose `simplify`, `architecture`, or `correctness`, or run a mode directly. Results stay outside agent context until you send them from result view, and can be exported under `.pi/tau/reviews/`. `/review show` reopens latest result on current session branch.
@@ -96,7 +100,7 @@ Supplies the agent with the current local date and an initial root directory sna
 
 ## script-runner
 
-Gives the agent a first-class `script_runner` tool to execute Python 3 and TypeScript instead of bash. On failure it returns a `scriptId`; the agent retries with targeted `{oldText,newText}` edits against the script it already wrote rather than resending the whole script. Languages are detected from the environment (Python 3 via `python3`; TypeScript via Node `--experimental-strip-types`, Node 22.6+). The tool registers only available languages and is hidden from the prompt if neither is present.
+Gives the agent a first-class `script_runner` tool to execute Python 3, Node.js, and Deno scripts instead of bash. On failure it returns a `scriptId`; the agent retries with targeted `{oldText,newText}` edits against the script it already wrote rather than resending the whole script. Runtimes are detected from the environment (Python 3 via `python3`; `node` is the local Node.js runtime with `--experimental-strip-types`, Node 22.6+ — full Node APIs, TypeScript with erasable syntax or plain JavaScript; `deno` via `deno run -A` — full permissions, native TypeScript/JavaScript, Deno APIs). The tool registers only available runtimes and is hidden from the prompt if none are present.
 
 ## silent-command-runner
 
