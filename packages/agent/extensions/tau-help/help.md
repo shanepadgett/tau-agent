@@ -40,7 +40,7 @@ Adds `/context` to inject reusable repository work scopes from `.pi/contexts`, a
 
 ## continuity
 
-Adds the `checkpoint` tool for retaining exact user and assistant messages, current file reads and outlines, durable work state, and deferred file paths as a rolling continuation context. Checkpoint rows are hidden by default. Set `extensions.continuity.showToolRows` to `true` before `/reload` to watch checkpoint and newly injected-file rows while working; existing injected-file rows keep their saved display state.
+Adds the `checkpoint` tool for retaining exact user and assistant messages, current file reads and outlines, durable work state, and deferred file paths as a rolling continuation context. Checkpoint rows are hidden by default. Set `extensions.continuity.showToolRows` to `true` before `/reload` to watch checkpoint and newly injected-file rows while working; existing injected-file rows keep their saved display state. The agent receives hidden checkpoint nudges at 50% and 75% of `extensions.continuity.checkpointTokenLimit` (150,000 by default); non-checkpoint tools are blocked at the limit until checkpoint succeeds.
 
 ## effort
 

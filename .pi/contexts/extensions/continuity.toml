@@ -2,7 +2,7 @@ name = "Continuity"
 description = "Rolling working checkpoints that preserve focused agent context while disposable history is retired"
 
 [feature]
-description = "Checkpoint tool, stable conversation-message metadata, and active file injection"
+description = "Checkpoint tool with a configurable token budget, 50% and 75% nudges, a 100% non-checkpoint tool gate, stable conversation-message metadata, and active file injection"
 read = []
 outline = ["packages/agent/extensions/continuity/index.ts", "packages/agent/extensions/continuity/settings.ts", "packages/agent/extensions/continuity/checkpoint.ts", "packages/agent/extensions/continuity/messages.ts", "packages/agent/shared/continuity-visibility.ts"]
-references = ["packages/agent/extensions/continuity/README.md"]
+references = ["packages/agent/extensions/continuity/README.md", "packages/agent/extensions/continuity/checkpoint-budget.ts"]

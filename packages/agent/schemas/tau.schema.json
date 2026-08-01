@@ -55,11 +55,20 @@
 				},
 				"continuity": {
 					"type": "object",
+					"required": [
+						"checkpointTokenLimit"
+					],
 					"properties": {
 						"showToolRows": {
 							"type": "boolean",
 							"default": false,
 							"description": "Show continuity checkpoint and injected-file rows in the TUI for debugging."
+						},
+						"checkpointTokenLimit": {
+							"type": "integer",
+							"minimum": 1,
+							"default": 150000,
+							"description": "Context-token ceiling before continuity requires a checkpoint."
 						}
 					},
 					"additionalProperties": false

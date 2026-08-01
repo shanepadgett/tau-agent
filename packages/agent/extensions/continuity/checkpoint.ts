@@ -8,12 +8,12 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, type Component, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { Type, type Static } from "typebox";
-import { injectFiles } from "@shanepadgett/tau-agent";
+import { prepareFileInjection } from "@shanepadgett/tau-agent";
 import { areContinuityRowsVisible } from "../../shared/continuity-visibility.ts";
 import type { FileInjectionFile } from "../../src/file-injection/index.ts";
 import { extractConversationText } from "./messages.ts";
 
-const CHECKPOINT_TOOL = "checkpoint";
+export const CHECKPOINT_TOOL = "checkpoint";
 const CONTINUATION_TYPE = "tau.continuity";
 const CONTINUATION_MESSAGE =
 	"Continue directly from the checkpoint state and provided files. Do not acknowledge the checkpoint or describe this context transition. Continuity message metadata is internal; never repeat or mention its IDs. Trust the provided sources and continue the listed work.";
@@ -85,7 +85,7 @@ export function registerCheckpointTool(pi: ExtensionAPI): void {
 	pi.registerTool(createCheckpointTool(pi));
 }
 
-function createCheckpointTool(pi: Pick<ExtensionAPI, "sendMessage">) {
+function createCheckpointTool(pi: Pick<ExtensionAPI, "events" | "sendMessage">) {
 	return defineTool<typeof checkpointParams, CheckpointToolDetails>({
 		name: CHECKPOINT_TOOL,
 		label: "checkpoint",
@@ -117,7 +117,15 @@ function createCheckpointTool(pi: Pick<ExtensionAPI, "sendMessage">) {
 			const text = formatCheckpointText(selected, params);
 			const fileBatchId = `checkpoint:${toolCallId}`;
 			const fileRequest = buildFileInjectionRequest(ctx.cwd, fileBatchId, params.files, signal);
-			if (fileRequest.files.length > 0) await injectFiles(pi, fileRequest);
+			const prepared = fileRequest.files.length === 0 ? [] : await prepareFileInjection(pi, fileRequest);
+			const failed = prepared.find((message) => message.details.status === "failed");
+			if (failed) {
+				throw new Error(
+					`Checkpoint file injection failed for ${failed.details.path}: ${failed.details.error ?? "unknown error"}`,
+				);
+			}
+			const display = areContinuityRowsVisible();
+			for (const message of prepared) pi.sendMessage({ ...message, display });
 			pi.sendMessage({
 				customType: CONTINUATION_TYPE,
 				content: CONTINUATION_MESSAGE,
