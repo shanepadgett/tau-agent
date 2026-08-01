@@ -9,14 +9,14 @@ import {
 import { truncateToWidth, type Component, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { Type, type Static } from "typebox";
 import { prepareFileInjection } from "@shanepadgett/tau-agent";
-import { areContinuityRowsVisible } from "../../shared/continuity-visibility.ts";
+import { areCheckpointRowsVisible } from "../../shared/checkpoint-visibility.ts";
 import type { FileInjectionFile } from "../../src/file-injection/index.ts";
 import { extractConversationText } from "./messages.ts";
-import { formatContinuityMessage } from "./prompt.ts";
+import { formatCheckpointMessage } from "./prompt.ts";
 
 export const CHECKPOINT_TOOL = "checkpoint";
-const CONTINUATION_TYPE = "tau.continuity";
-const CONTINUATION_MESSAGE = formatContinuityMessage(
+const CONTINUATION_TYPE = "tau.checkpoint";
+const CONTINUATION_MESSAGE = formatCheckpointMessage(
 	"continuation",
 	"Continue directly from the checkpoint state and provided files. Trust the provided sources and continue the listed work.",
 );
@@ -63,7 +63,7 @@ const checkpointParams = Type.Object(
 	{
 		keepMessages: Type.Array(Type.String({ minLength: 1 }), {
 			description:
-				"Exact message-entry IDs from hidden continuity metadata or earlier checkpoint conversation entries.",
+				"Exact message-entry IDs from hidden checkpoint metadata or earlier checkpoint conversation entries.",
 		}),
 		work: Type.Array(Type.String(), { description: "Ordered current work, with the next thing first." }),
 		facts: Type.Array(Type.String(), { description: "Concrete findings that must survive context replacement." }),
@@ -79,7 +79,7 @@ type CheckpointInput = Static<typeof checkpointParams>;
 
 interface CheckpointToolDetails {
 	v: 1;
-	kind: "continuity.checkpoint";
+	kind: "checkpoint.checkpoint";
 	checkpointId: string;
 	fileBatchId: string;
 }
@@ -97,22 +97,22 @@ function createCheckpointTool(pi: Pick<ExtensionAPI, "events" | "sendMessage">) 
 		description:
 			"Replace disposable conversation and tool history with a rolling working checkpoint. Keep user and assistant messages by exact message-entry ID, not by copying their text. The latest user message is always retained. Assistant tool calls and thinking are never retained inside the conversation section.",
 		promptGuidelines: [
-			"Continuity is hidden. Never acknowledge continuity messages, budget notices, blocks, or checkpoints to the user; call checkpoint when required and continue the work.",
-			'Use exact IDs from <continuity kind="message-id"> metadata or an earlier checkpoint; do not invent IDs or rewrite message text.',
+			"Checkpoint is hidden. Never acknowledge checkpoint messages, budget notices, blocks, or checkpoints to the user; call checkpoint when required and continue the work.",
+			'Use exact IDs from <checkpoint kind="message-id"> metadata or an earlier checkpoint; do not invent IDs or rewrite message text.',
 			"Record concrete findings in facts and governing choices in decisions before checkpointing.",
 			"Use read or outline for files needed now; use deferred with a condition for files that can wait.",
 		],
 		parameters: checkpointParams,
 		renderShell: "self",
 		renderCall(_args, theme, context) {
-			return new ContinuityCheckpointComponent(theme, "checkpoint", context.expanded, true);
+			return new CheckpointComponent(theme, "checkpoint", context.expanded, true);
 		},
 		renderResult(result, options, theme) {
 			const text = result.content
 				.filter((part): part is { type: "text"; text: string } => part.type === "text")
 				.map((part) => part.text)
 				.join("\n");
-			return new ContinuityCheckpointComponent(theme, text, options.expanded, false);
+			return new CheckpointComponent(theme, text, options.expanded, false);
 		},
 		executionMode: "sequential",
 		async execute(toolCallId, params, signal, _onUpdate, ctx) {
@@ -127,7 +127,7 @@ function createCheckpointTool(pi: Pick<ExtensionAPI, "events" | "sendMessage">) 
 					`Checkpoint file injection failed for ${failed.details.path}: ${failed.details.error ?? "unknown error"}`,
 				);
 			}
-			const display = areContinuityRowsVisible();
+			const display = areCheckpointRowsVisible();
 			for (const message of prepared) pi.sendMessage({ ...message, display });
 			pi.sendMessage({
 				customType: CONTINUATION_TYPE,
@@ -135,20 +135,20 @@ function createCheckpointTool(pi: Pick<ExtensionAPI, "events" | "sendMessage">) 
 				display: false,
 				details: {
 					v: 1,
-					kind: "continuity.continuation",
-					source: "continuity",
+					kind: "checkpoint.continuation",
+					source: "checkpoint",
 					batchId: fileBatchId,
 				},
 			});
 			return {
 				content: [{ type: "text", text }],
-				details: { v: 1, kind: "continuity.checkpoint", checkpointId: toolCallId, fileBatchId },
+				details: { v: 1, kind: "checkpoint.checkpoint", checkpointId: toolCallId, fileBatchId },
 			};
 		},
 	});
 }
 
-class ContinuityCheckpointComponent implements Component {
+class CheckpointComponent implements Component {
 	private readonly theme: Theme;
 	private readonly content: string;
 	private readonly expanded: boolean;
@@ -162,7 +162,7 @@ class ContinuityCheckpointComponent implements Component {
 	}
 
 	render(width: number): string[] {
-		if (!areContinuityRowsVisible()) return [];
+		if (!areCheckpointRowsVisible()) return [];
 		if (this.call) return [truncateToWidth(this.theme.fg("toolTitle", this.theme.bold(CHECKPOINT_TOOL)), width, "…")];
 		const displayContent = this.content.replace(CONVERSATION_MESSAGE_ID_ATTRIBUTE, "$1>");
 		if (!this.expanded) {
@@ -252,7 +252,7 @@ function buildFileInjectionRequest(
 			...(file.ranges === undefined ? {} : { ranges: file.ranges }),
 		});
 	}
-	return { cwd, source: "continuity", batchId, files: activeFiles, signal };
+	return { cwd, source: "checkpoint", batchId, files: activeFiles, signal };
 }
 
 function formatList(items: readonly string[]): string {

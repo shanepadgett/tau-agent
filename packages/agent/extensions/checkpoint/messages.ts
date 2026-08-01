@@ -1,15 +1,15 @@
 import type { AssistantMessage, TextContent, UserMessage } from "@earendil-works/pi-ai";
 import { sessionEntryToContextMessages, type ContextEvent, type SessionEntry } from "@earendil-works/pi-coding-agent";
-import { formatContinuityMessage } from "./prompt.ts";
+import { formatCheckpointMessage } from "./prompt.ts";
 
 type AgentMessage = ContextEvent["messages"][number];
 type ContextPair = { entry: SessionEntry; message: AgentMessage };
 
-const CHECKPOINT_KIND = "continuity.checkpoint";
-const CONTINUITY_SOURCE = "continuity";
-const MESSAGE_ID_METADATA_TYPE = "tau.continuity.message-id";
+const CHECKPOINT_KIND = "checkpoint.checkpoint";
+const CHECKPOINT_SOURCE = "checkpoint";
+const MESSAGE_ID_METADATA_TYPE = "tau.checkpoint.message-id";
 
-type ContinuityMetadataMessage = Extract<AgentMessage, { role: "custom" }>;
+type CheckpointMetadataMessage = Extract<AgentMessage, { role: "custom" }>;
 
 /** Prunes completed checkpoint history and adds hidden provider-context message IDs. */
 export function projectContextMessages(
@@ -54,7 +54,7 @@ export function projectContextMessages(
 	return pairs
 		.filter(({ entry, message }, index) => {
 			if (checkpoint === undefined) return true;
-			const batchId = continuityBatchId(entry);
+			const batchId = checkpointBatchId(entry);
 			if (index > checkpoint.resultIndex) return batchId === undefined || batchId === checkpoint.fileBatchId;
 			if (entry.id === checkpoint.call.entry.id || entry.id === checkpoint.result.entry.id) return true;
 			if (batchId === checkpoint.fileBatchId) return true;
@@ -99,25 +99,25 @@ function hasCheckpointToolCall(message: AgentMessage, checkpointId: string): boo
 	);
 }
 
-function continuityBatchId(entry: SessionEntry): string | undefined {
+function checkpointBatchId(entry: SessionEntry): string | undefined {
 	if (entry.type !== "custom_message") return undefined;
 	if (typeof entry.details !== "object" || entry.details === null) return undefined;
 	const details = entry.details as Record<string, unknown>;
-	if (details.source !== CONTINUITY_SOURCE || typeof details.batchId !== "string") return undefined;
+	if (details.source !== CHECKPOINT_SOURCE || typeof details.batchId !== "string") return undefined;
 	return details.batchId;
 }
 
-function createMessageIdMetadata(id: string, message: AgentMessage): ContinuityMetadataMessage {
+function createMessageIdMetadata(id: string, message: AgentMessage): CheckpointMetadataMessage {
 	const role = message.role === "user" ? "user" : "assistant";
 	return {
 		role: "custom",
 		customType: MESSAGE_ID_METADATA_TYPE,
-		content: formatContinuityMessage(
+		content: formatCheckpointMessage(
 			"message-id",
 			`<message-id>${JSON.stringify(id)}</message-id>\n<message-role>${role}</message-role>`,
 		),
 		display: false,
-		details: { v: 1, kind: "continuity.message-id", id, role },
+		details: { v: 1, kind: "checkpoint.message-id", id, role },
 		timestamp: message.timestamp,
 	};
 }

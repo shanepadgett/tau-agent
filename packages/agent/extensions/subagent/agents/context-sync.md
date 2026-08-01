@@ -35,7 +35,7 @@ The map is not a file index. Each selectable entry is a **work pack**: enough pr
 
 Gold-standard shapes in this repo (copy these patterns, not weaker neighbors):
 
-- `.pi/contexts/01_extensions/continuity.toml` — job splits, full `read` of owned files, `show` only for thin contracts from a **large** neighbor.
+- `.pi/contexts/01_extensions/checkpoint.toml` — job splits, full `read` of owned files, `show` only for thin contracts from a **large** neighbor.
 - `.pi/contexts/01_extensions/patch.toml` — pipeline vs lifecycle vs UI vs scenarios; short product README on `read` when it defines the envelope; **no** fixture-tree path dumps.
 - `.pi/contexts/01_extensions/handoff.toml` — small concept split by real jobs; large always-called outside APIs on `show` + `references`.
 - `.pi/contexts/01_extensions/explore.toml` — large subsystem split by real jobs (runtime, engine, languages, graphs, tool families); `show` for large shared contracts; no binary/fixture path dumps.
@@ -67,7 +67,7 @@ Every entry declares all four arrays (`read`, `show`, `outline`, `references`), 
 ```toml
 [checkpoint-tool]
 description = "checkpoint tool: schema, keepMessages, continuation, file injection, TUI row"
-read = ["packages/agent/extensions/continuity/checkpoint.ts", "..."]
+read = ["packages/agent/extensions/checkpoint/checkpoint.ts", "..."]
 show = [
   { path = "packages/agent/src/file-injection/index.ts", name = "prepareFileInjection" },
 ]
@@ -112,7 +112,7 @@ Inject order / precedence when entries disagree: **`read` > `show` > `outline` >
 2. **Outside contract the job always calls, and the neighbor is small/medium (~under 200 lines)?**  
    → **`read`** the whole file (or `references` if it is only a soft next hop). Do not `show`-slice small shared helpers.
 3. **Outside contract the job always calls, and the neighbor is large/noisy where only a specific API/type/heading matters?**  
-   → **`show`** `{ path, name, view? }` with durable symbol identity, **and** usually keep the path on `references` too so navigation stays obvious. Default `view` is `declaration`. Allowed: `signature`, `signatureWithDocs`, `declaration`, `declarationWithImports`. Prefer **1 show** per external file; **2** only when clearly distinct contracts. **3+ shows into one file means you wanted `read`.** Continuity’s `prepareFileInjection` shows are the pattern: large shared API, thin `show`, path also referenced.
+   → **`show`** `{ path, name, view? }` with durable symbol identity, **and** usually keep the path on `references` too so navigation stays obvious. Default `view` is `declaration`. Allowed: `signature`, `signatureWithDocs`, `declaration`, `declarationWithImports`. Prefer **1 show** per external file; **2** only when clearly distinct contracts. **3+ shows into one file means you wanted `read`.** Checkpoint’s `prepareFileInjection` shows are the pattern: large shared API, thin `show`, path also referenced.
 4. **Is the file huge/noisy and you only need a map for this job, not bodies?**  
    → **`outline`**. Exception, not house style for small clean files.
 5. **Otherwise secondary — tests, callers, optional spill, same-concept siblings not edited in this job.**  
@@ -223,7 +223,7 @@ Do not catalog scratch pads, working plans, interview notes, rough ideas, or oth
 
 - **Additive / local edit** — membership tweak or a new entry under a stable concept; still pass the quality bar.
 - **Semantic move / refactor** — meaning moved even if paths stayed covered. Re-evaluate domain/concept/entry. Moves and splits are required verbs.
-- **Quality rewrite** — concept exists but packs are outline bags or single `[feature]` entries. Rebuild entries as start packs (see Continuity / Patch / Handoff gold). Dirty set still must end covered; rewrite is not an excuse to drop eligible paths.
+- **Quality rewrite** — concept exists but packs are outline bags or single `[feature]` entries. Rebuild entries as start packs (see Checkpoint / Patch / Handoff gold). Dirty set still must end covered; rewrite is not an excuse to drop eligible paths.
 
 ## Working loop
 

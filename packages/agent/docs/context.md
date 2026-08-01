@@ -15,7 +15,7 @@ The catalog has three levels:
 - **Concept**: a coherent subsystem or capability inside a domain. Each concept is one TOML file.
 - **Entry**: a selectable work scope inside that concept. Each TOML section defines one entry.
 
-Domain slugs (after `NN_`), concept filenames, and entry section names use lowercase kebab-case. Orders are contiguous from `01` with no gaps or duplicate slugs. Entry ids use the slug (`extensions/continuity/checkpoint`), not the folder prefix.
+Domain slugs (after `NN_`), concept filenames, and entry section names use lowercase kebab-case. Orders are contiguous from `01` with no gaps or duplicate slugs. Entry ids use the slug (`extensions/checkpoint/checkpoint-tool`), not the folder prefix.
 
 ```toml
 name = "Checkout"
@@ -42,7 +42,7 @@ Saved as `.pi/contexts/01_commerce/checkout.toml`, these entries have the IDs `c
 
 ## Build a useful taxonomy
 
-Each entry is a **work pack**: enough primary material that selecting only that entry lets an agent start one recurring job with little search. Taxonomy groups packs; it is not a file index. Gold-standard example: `.pi/contexts/01_extensions/continuity.toml`.
+Each entry is a **work pack**: enough primary material that selecting only that entry lets an agent start one recurring job with little search. Taxonomy groups packs; it is not a file index. Gold-standard example: `.pi/contexts/01_extensions/checkpoint.toml`.
 
 Classify from the top down:
 

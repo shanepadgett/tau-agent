@@ -120,12 +120,12 @@ describe("extensionPathsForTools", () => {
 		const pi = {
 			getAllTools: () => [
 				{ name: "read", sourceInfo: { path: "/extensions/read.ts" } },
-				{ name: "checkpoint", sourceInfo: { path: "/extensions/continuity/index.ts" } },
+				{ name: "checkpoint", sourceInfo: { path: "/extensions/checkpoint/index.ts" } },
 			],
 		} as unknown as ExtensionAPI;
 
 		expect(extensionPathsForTools(pi, ["read", "checkpoint"])).toEqual([
-			"/extensions/continuity/index.ts",
+			"/extensions/checkpoint/index.ts",
 			"/extensions/read.ts",
 		]);
 	});
