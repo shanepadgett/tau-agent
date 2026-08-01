@@ -4,6 +4,7 @@ import { setContinuityRowsVisible } from "../../shared/continuity-visibility.ts"
 import { CHECKPOINT_TOOL, registerCheckpointTool } from "./checkpoint.ts";
 import { createCheckpointBudget, type CheckpointBudgetNoticeLevel } from "./checkpoint-budget.ts";
 import { projectContextMessages } from "./messages.ts";
+import { CONTINUITY_SYSTEM_GUIDANCE, formatContinuityMessage } from "./prompt.ts";
 import continuitySettings from "./settings.ts";
 
 export default function continuityExtension(pi: ExtensionAPI): void {
@@ -29,6 +30,9 @@ export default function continuityExtension(pi: ExtensionAPI): void {
 	pi.on("session_tree", resetBudget);
 	pi.on("session_before_fork", resetBudget);
 	pi.on("session_before_switch", resetBudget);
+	pi.on("before_agent_start", (event) => ({
+		systemPrompt: `${event.systemPrompt}\n\n${CONTINUITY_SYSTEM_GUIDANCE}`,
+	}));
 	pi.on("turn_start", (_event, ctx) => {
 		if (checkpointSucceeded) resetBudget();
 		const noticeLevel = budget.beginTurn(ctx.getContextUsage()?.tokens ?? null);
@@ -47,7 +51,13 @@ export default function continuityExtension(pi: ExtensionAPI): void {
 	});
 	pi.on("tool_call", (event) => {
 		if (!budget.shouldBlockTool(event.toolName, CHECKPOINT_TOOL)) return;
-		return { block: true, reason: "Checkpoint required before using other tools." };
+		return {
+			block: true,
+			reason: formatContinuityMessage(
+				"block",
+				"Checkpoint required before using other tools. Call checkpoint, then continue the user's work.",
+			),
+		};
 	});
 	pi.on("context", (event, ctx) => ({
 		messages: projectContextMessages(event.messages, ctx.sessionManager.buildContextEntries()),
@@ -71,10 +81,22 @@ function sendCheckpointBudgetNotice(pi: ExtensionAPI, level: CheckpointBudgetNot
 function checkpointBudgetMessage(level: CheckpointBudgetNoticeLevel): string {
 	switch (level) {
 		case 50:
-			return "Checkpoint budget notice: context usage reached 50% of the configured continuity checkpoint limit. Continue current work and checkpoint when convenient.";
+			return formatContinuityMessage(
+				"budget",
+				"Context usage reached 50% of the configured continuity checkpoint limit. Continue current work and checkpoint when convenient.",
+				{ level: "50" },
+			);
 		case 75:
-			return "Checkpoint budget warning: context usage reached 75% of the configured continuity checkpoint limit. Run checkpoint soon. At 100%, non-checkpoint tool calls will be blocked until checkpoint succeeds.";
+			return formatContinuityMessage(
+				"budget",
+				"Context usage reached 75% of the configured continuity checkpoint limit. Run checkpoint soon. At 100%, non-checkpoint tool calls will be blocked until checkpoint succeeds.",
+				{ level: "75" },
+			);
 		case 100:
-			return "Checkpoint budget reached. Call checkpoint now before using any other tool. Do not call other tools.";
+			return formatContinuityMessage(
+				"budget",
+				"Checkpoint budget reached. Call checkpoint now before using any other tool. Do not call other tools.",
+				{ level: "100" },
+			);
 	}
 }

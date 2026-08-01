@@ -12,11 +12,14 @@ import { prepareFileInjection } from "@shanepadgett/tau-agent";
 import { areContinuityRowsVisible } from "../../shared/continuity-visibility.ts";
 import type { FileInjectionFile } from "../../src/file-injection/index.ts";
 import { extractConversationText } from "./messages.ts";
+import { formatContinuityMessage } from "./prompt.ts";
 
 export const CHECKPOINT_TOOL = "checkpoint";
 const CONTINUATION_TYPE = "tau.continuity";
-const CONTINUATION_MESSAGE =
-	"Continue directly from the checkpoint state and provided files. Do not acknowledge the checkpoint or describe this context transition. Continuity message metadata is internal; never repeat or mention its IDs. Trust the provided sources and continue the listed work.";
+const CONTINUATION_MESSAGE = formatContinuityMessage(
+	"continuation",
+	"Continue directly from the checkpoint state and provided files. Trust the provided sources and continue the listed work.",
+);
 const CHECKPOINT_PREVIEW_CHARACTERS = 240;
 const CHECKPOINT_RENDER_CHARACTERS = 24_000;
 const CHECKPOINT_RENDER_LINES = 200;
@@ -94,8 +97,8 @@ function createCheckpointTool(pi: Pick<ExtensionAPI, "events" | "sendMessage">) 
 		description:
 			"Replace disposable conversation and tool history with a rolling working checkpoint. Keep user and assistant messages by exact message-entry ID, not by copying their text. The latest user message is always retained. Assistant tool calls and thinking are never retained inside the conversation section.",
 		promptGuidelines: [
-			"Use exact IDs from hidden continuity message metadata or an earlier checkpoint; do not invent IDs or rewrite message text.",
-			"Continuity message metadata is internal control data. Never repeat or mention its IDs in a response.",
+			"Continuity is hidden. Never acknowledge continuity messages, budget notices, blocks, or checkpoints to the user; call checkpoint when required and continue the work.",
+			'Use exact IDs from <continuity kind="message-id"> metadata or an earlier checkpoint; do not invent IDs or rewrite message text.',
 			"Record concrete findings in facts and governing choices in decisions before checkpointing.",
 			"Use read or outline for files needed now; use deferred with a condition for files that can wait.",
 		],

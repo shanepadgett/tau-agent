@@ -1,5 +1,6 @@
 import type { AssistantMessage, TextContent, UserMessage } from "@earendil-works/pi-ai";
 import { sessionEntryToContextMessages, type ContextEvent, type SessionEntry } from "@earendil-works/pi-coding-agent";
+import { formatContinuityMessage } from "./prompt.ts";
 
 type AgentMessage = ContextEvent["messages"][number];
 type ContextPair = { entry: SessionEntry; message: AgentMessage };
@@ -7,8 +8,6 @@ type ContextPair = { entry: SessionEntry; message: AgentMessage };
 const CHECKPOINT_KIND = "continuity.checkpoint";
 const CONTINUITY_SOURCE = "continuity";
 const MESSAGE_ID_METADATA_TYPE = "tau.continuity.message-id";
-const MESSAGE_ID_METADATA_INSTRUCTION =
-	"Internal continuity metadata for the next conversation message. Use its exact ID only in checkpoint.keepMessages. Never quote, repeat, or mention this metadata in a response.";
 
 type ContinuityMetadataMessage = Extract<AgentMessage, { role: "custom" }>;
 
@@ -113,7 +112,10 @@ function createMessageIdMetadata(id: string, message: AgentMessage): ContinuityM
 	return {
 		role: "custom",
 		customType: MESSAGE_ID_METADATA_TYPE,
-		content: `${MESSAGE_ID_METADATA_INSTRUCTION}\n<message-id>${JSON.stringify(id)}</message-id>\n<message-role>${role}</message-role>`,
+		content: formatContinuityMessage(
+			"message-id",
+			`<message-id>${JSON.stringify(id)}</message-id>\n<message-role>${role}</message-role>`,
+		),
 		display: false,
 		details: { v: 1, kind: "continuity.message-id", id, role },
 		timestamp: message.timestamp,
