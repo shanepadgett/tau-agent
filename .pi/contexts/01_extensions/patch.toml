@@ -1,56 +1,106 @@
 name = "Patch"
-description = "Structured multi-file creation, editing, moving, deletion, and result rendering"
+description = "Structured multi-file create, replace, update, move, and delete tool replacing edit/write"
 
-[application]
-description = "Parse structured patch envelopes, match update chunks, and stage safe file mutations"
-read = [
-  "packages/agent/extensions/patch/parser.ts",
-  "packages/agent/extensions/patch/matcher.ts",
-  "packages/agent/extensions/patch/executor.ts",
-  "packages/agent/extensions/patch/README.md",
-]
-show = []
-outline = []
-references = []
-
-[tool-lifecycle]
-description = "Register the patch tool, switch mutation tools by model, and format applied-change summaries"
+[extension-shell]
+description = "Register sequential patch tool with Codex-style input schema; suppress edit/write except xAI/Grok where patch is off and edit/write stay on; stream and return formatPatchSummary text with ApplyPatchSummary details; on tool_result emit tau:file-mutation.applied and mark partial/failed as isError; clear tool-row state and reconfigure tools on session_start and model_select"
 read = [
   "packages/agent/extensions/patch/index.ts",
   "packages/agent/extensions/patch/summary.ts",
   "packages/agent/extensions/patch/README.md",
-  "packages/agent/shared/tool-row-state.ts",
 ]
-show = []
+show = [
+  { path = "packages/agent/extensions/patch/executor.ts", name = "applyPatch" },
+  { path = "packages/agent/extensions/patch/executor.ts", name = "ApplyPatchSummary", view = "declaration" },
+  { path = "packages/agent/extensions/patch/executor.ts", name = "ApplyPatchChange", view = "declaration" },
+  { path = "packages/agent/extensions/patch/render.ts", name = "renderPatchCall" },
+  { path = "packages/agent/extensions/patch/render.ts", name = "renderPatchResult" },
+  { path = "packages/agent/shared/tool-row-state.ts", name = "createToolRowStateStore" },
+  { path = "packages/agent/shared/events.ts", name = "emitTauEvent" },
+]
 outline = []
 references = [
+  "packages/agent/extensions/patch/executor.ts",
+  "packages/agent/extensions/patch/render.ts",
+  "packages/agent/shared/tool-row-state.ts",
   "packages/agent/shared/events.ts",
-  "packages/agent/extensions/patch/executor.ts",
-  "packages/agent/extensions/patch/render.ts",
+  "packages/agent/extensions/explore/index.ts",
+  "packages/agent/extensions/tau-help/help.md",
 ]
 
-[ui]
-description = "Render streaming patch previews and applied-operation status rows"
+[parse]
+description = "Parse Begin/End envelope into add|replace|update|delete operations with section indexes; optional Move to after Update File; @@ and End of File hunk markers; tolerant marker whitespace; envelope failure vs per-section parseFailures with independent valid sections retained"
 read = [
-  "packages/agent/extensions/patch/render.ts",
-  "packages/agent/shared/tool-row-state.ts",
+  "packages/agent/extensions/patch/parser.ts",
 ]
-show = []
+show = [
+  { path = "packages/agent/extensions/patch/matcher.ts", name = "ChunkLine", view = "declaration" },
+  { path = "packages/agent/extensions/patch/matcher.ts", name = "UpdateFileChunk", view = "declaration" },
+]
 outline = []
 references = [
+  "packages/agent/extensions/patch/matcher.ts",
   "packages/agent/extensions/patch/executor.ts",
-  "packages/agent/extensions/patch/summary.ts",
+  "packages/agent/extensions/patch/README.md",
+  "packages/agent/test/extensions/patch/scenarios.test.ts",
 ]
 
-[scenarios]
-description = "Scenario runner and fixture layout for patch operations"
+[match]
+description = "Apply Update File chunks preserving BOM and CRLF/LF; @@ context seek; pure + append EOF; fuzzy match trailing whitespace smart quotes dashes Unicode spaces; first forward unanchored match; post-apply snapshot line ranges; UpdateChunkApplyError with chunk index and context hint"
 read = [
+  "packages/agent/extensions/patch/matcher.ts",
+]
+show = [
+  { path = "packages/agent/shared/ranges.ts", name = "LineRange", view = "declaration" },
+  { path = "packages/agent/shared/ranges.ts", name = "mergeLineRanges" },
+]
+outline = []
+references = [
+  "packages/agent/shared/ranges.ts",
+  "packages/agent/extensions/patch/parser.ts",
+  "packages/agent/extensions/patch/executor.ts",
+]
+
+[apply]
+description = "Stage then commit operations under withFileMutationQueue; whole-file add/replace; delete with empty parent cleanup; update via matcher then optional move; duplicate-path and missing-file failures; partial apply keeps earlier commits; onProgress after each commit; applyExactSourceMutations fingerprint-checked whole-file writes for callers outside the patch grammar"
+read = [
+  "packages/agent/extensions/patch/executor.ts",
+]
+show = [
+  { path = "packages/agent/extensions/patch/parser.ts", name = "parsePatch" },
+  { path = "packages/agent/extensions/patch/parser.ts", name = "ParsedPatch", view = "declaration" },
+  { path = "packages/agent/extensions/patch/parser.ts", name = "PatchOperation", view = "declaration" },
+  { path = "packages/agent/extensions/patch/parser.ts", name = "PatchFailure", view = "declaration" },
+  { path = "packages/agent/extensions/patch/matcher.ts", name = "applyChunksWithRanges" },
+  { path = "packages/agent/extensions/patch/matcher.ts", name = "UpdateChunkApplyError" },
+  { path = "packages/agent/extensions/patch/matcher.ts", name = "countLogicalLines" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/patch/parser.ts",
+  "packages/agent/extensions/patch/matcher.ts",
+  "packages/agent/extensions/patch/index.ts",
+  "packages/agent/extensions/patch/summary.ts",
   "packages/agent/test/extensions/patch/scenarios.test.ts",
   "packages/agent/test/extensions/patch/fixtures/scenarios/README.md",
 ]
-show = []
+
+[result-ui]
+description = "Tolerant streaming preview scan of partial input for op list; renderPatchCall only before execution starts; renderPatchResult shows applied/failed/pending op lines and stats badge from summary details; pruned title via tool-row state"
+read = [
+  "packages/agent/extensions/patch/render.ts",
+]
+show = [
+  { path = "packages/agent/extensions/patch/executor.ts", name = "ApplyPatchSummary", view = "declaration" },
+  { path = "packages/agent/extensions/patch/executor.ts", name = "deriveStats" },
+  { path = "packages/agent/extensions/patch/summary.ts", name = "formatPatchSummary" },
+  { path = "packages/agent/shared/tool-row-state.ts", name = "formatToolRowTitle" },
+  { path = "packages/agent/shared/tool-row-state.ts", name = "ToolRowStateStore", view = "declaration" },
+]
 outline = []
 references = [
+  "packages/agent/extensions/patch/index.ts",
+  "packages/agent/extensions/patch/summary.ts",
   "packages/agent/extensions/patch/executor.ts",
-  "packages/agent/extensions/patch/parser.ts",
+  "packages/agent/shared/tool-row-state.ts",
+  ".pi/extensions/tool-preview/widgets/patch.ts",
 ]

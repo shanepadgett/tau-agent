@@ -1,14 +1,87 @@
 name = "Review"
-description = "Explicit isolated review of current Git changes"
+description = "Isolated simplify, architecture, or correctness review of current Git changes"
 
-[runtime]
-description = "Review command, focused modes, shared isolated model session, TypeBox-derived results, and session persistence"
-read = []
-outline = ["packages/agent/extensions/review/index.ts", "packages/agent/extensions/review/model.ts", "packages/agent/extensions/review/session.ts"]
-references = ["packages/agent/extensions/review/README.md", "packages/agent/test/extensions/review/model.test.ts"]
+[command-lifecycle]
+description = "Register TUI trusted-project /review [simplify|architecture|correctness|show]; require dirty Git tree via loadRepoStatus; run progress overlay with cancel; append tau.review.result custom entry; show overlay actions send via createInjectedContext nextTurn, export Markdown under .pi/tau/reviews/, or close; /review show walks branch newest-first for latest valid record"
+read = [
+  "packages/agent/extensions/review/index.ts",
+  "packages/agent/extensions/review/README.md",
+]
+show = [
+  { path = "packages/agent/extensions/review/model.ts", name = "REVIEW_ENTRY_TYPE" },
+  { path = "packages/agent/extensions/review/model.ts", name = "ReviewMode", view = "declaration" },
+  { path = "packages/agent/extensions/review/model.ts", name = "ReviewRecord", view = "declaration" },
+  { path = "packages/agent/extensions/review/model.ts", name = "isReviewMode" },
+  { path = "packages/agent/extensions/review/model.ts", name = "isReviewRecord" },
+  { path = "packages/agent/extensions/review/model.ts", name = "formatReviewMarkdown" },
+  { path = "packages/agent/extensions/review/session.ts", name = "runReview" },
+  { path = "packages/agent/extensions/review/panel.ts", name = "ReviewProgressPanel" },
+  { path = "packages/agent/extensions/review/panel.ts", name = "ReviewResultPanel" },
+  { path = "packages/agent/extensions/review/panel.ts", name = "ReviewResultAction", view = "declaration" },
+  { path = "packages/agent/shared/git.ts", name = "createGitRunner" },
+  { path = "packages/agent/shared/git.ts", name = "loadRepoStatus" },
+  { path = "packages/agent/shared/injected-context.ts", name = "createInjectedContext" },
+  { path = "packages/agent/shared/text.ts", name = "errorText" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/review/session.ts",
+  "packages/agent/extensions/review/model.ts",
+  "packages/agent/extensions/review/panel.ts",
+  "packages/agent/shared/git.ts",
+  "packages/agent/shared/injected-context.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]
 
-[ui]
-description = "Progress and result panels for isolated reviews"
-read = []
-outline = ["packages/agent/extensions/review/panel.ts"]
-references = []
+[review-session]
+description = "Resolve preferred openai-codex/gpt-5.6-sol high thinking with parent fallback; createIsolatedSessionResource with explore extension path, read/bash/explore tools plus terminating review_result custom tool; prompt buildReviewPrompt; stream tool progress; dispose on finish or abort"
+read = [
+  "packages/agent/extensions/review/session.ts",
+]
+show = [
+  { path = "packages/agent/extensions/review/model.ts", name = "buildReviewPrompt" },
+  { path = "packages/agent/extensions/review/model.ts", name = "REVIEW_RESULT_TOOL" },
+  { path = "packages/agent/extensions/review/model.ts", name = "ReviewMode", view = "declaration" },
+  { path = "packages/agent/extensions/review/model.ts", name = "ReviewOutput", view = "declaration" },
+  { path = "packages/agent/shared/isolated-session.ts", name = "resolveIsolatedSessionModel" },
+  { path = "packages/agent/shared/isolated-session.ts", name = "createIsolatedSessionResource" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/review/index.ts",
+  "packages/agent/extensions/review/model.ts",
+  "packages/agent/shared/isolated-session.ts",
+  "packages/agent/extensions/explore/index.ts",
+]
+
+[review-contract]
+description = "Mode literals simplify|architecture|correctness; structured ReviewOutput and ReviewRecord schemas with severity findings; review_result tool schema; mode instructions; buildReviewPrompt; formatReviewMarkdown; type guards"
+read = [
+  "packages/agent/extensions/review/model.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/review/session.ts",
+  "packages/agent/extensions/review/index.ts",
+  "packages/agent/test/extensions/review/model.test.ts",
+]
+
+[result-ui]
+description = "ReviewProgressPanel last-five tool status lines with cancel; ReviewResultPanel scrollable markdown with a send, e export, cancel close"
+read = [
+  "packages/agent/extensions/review/panel.ts",
+]
+show = [
+  { path = "packages/agent/extensions/review/model.ts", name = "formatReviewMarkdown" },
+  { path = "packages/agent/extensions/review/model.ts", name = "reviewModeLabel" },
+  { path = "packages/agent/extensions/review/model.ts", name = "ReviewMode", view = "declaration" },
+  { path = "packages/agent/extensions/review/model.ts", name = "ReviewRecord", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/review/index.ts",
+  "packages/agent/extensions/review/model.ts",
+  "packages/tui/src/tool-panel.ts",
+  "packages/tui/src/scrollable-markdown.ts",
+]

@@ -1,8 +1,77 @@
 name = "Web"
-description = "Bounded URL fetching, public web search, and code example retrieval"
+description = "Web search, code search, and page fetch tools backed by Exa with bounded tool output"
 
-[runtime]
-description = "Web search, code search, URL fetch, HTML extraction, output limits, and tool registration"
-read = []
-outline = ["packages/agent/extensions/web/codesearch.ts", "packages/agent/extensions/web/exa.ts", "packages/agent/extensions/web/index.ts"]
-references = ["packages/agent/extensions/web/README.md", "packages/agent/extensions/web/html.ts", "packages/agent/extensions/web/limits.ts", "packages/agent/extensions/web/tool-output.ts", "packages/agent/extensions/web/webfetch.ts", "packages/agent/extensions/web/websearch.ts", "packages/agent/test/extensions/web/exa.test.ts", "packages/agent/test/extensions/web/helpers.ts", "packages/agent/test/extensions/web/html.test.ts", "packages/agent/test/extensions/web/tools.test.ts", "packages/agent/test/extensions/web/webfetch.test.ts"]
+[extension-shell]
+description = "Register webfetch, websearch, and codesearch; create shared tool-row state; clear row state on session_start"
+read = [
+  "packages/agent/extensions/web/index.ts",
+  "packages/agent/extensions/web/README.md",
+]
+show = [
+  { path = "packages/agent/shared/tool-row-state.ts", name = "createToolRowStateStore" },
+  { path = "packages/agent/extensions/web/websearch.ts", name = "createWebSearchTool" },
+  { path = "packages/agent/extensions/web/codesearch.ts", name = "createCodeSearchTool" },
+  { path = "packages/agent/extensions/web/webfetch.ts", name = "createWebFetchTool" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/web/websearch.ts",
+  "packages/agent/extensions/web/codesearch.ts",
+  "packages/agent/extensions/web/webfetch.ts",
+  "packages/agent/shared/tool-row-state.ts",
+]
+
+[exa-client]
+description = "Call Exa MCP over JSON-RPC HTTP or SSE: optional EXA_API_KEY, timeout abort, JSON-RPC error surfacing, text content extraction"
+read = [
+  "packages/agent/extensions/web/exa.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/web/websearch.ts",
+  "packages/agent/extensions/web/codesearch.ts",
+  "packages/agent/test/extensions/web/exa.test.ts",
+  "packages/agent/test/extensions/web/helpers.ts",
+]
+
+[search-tools]
+description = "websearch and codesearch tools: TypeBox params, Exa web_search_exa / get_code_context_exa execution, head-truncated output, TUI call and result rows"
+read = [
+  "packages/agent/extensions/web/websearch.ts",
+  "packages/agent/extensions/web/codesearch.ts",
+  "packages/agent/extensions/web/tool-output.ts",
+  "packages/agent/extensions/web/limits.ts",
+]
+show = [
+  { path = "packages/agent/extensions/web/exa.ts", name = "callExa" },
+  { path = "packages/agent/extensions/web/exa.ts", name = "ExaRequest", view = "declaration" },
+  { path = "packages/agent/shared/tool-row-state.ts", name = "formatToolRowTitle" },
+  { path = "packages/agent/shared/tool-row-state.ts", name = "ToolRowStateStore", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/web/exa.ts",
+  "packages/agent/extensions/web/index.ts",
+  "packages/agent/test/extensions/web/tools.test.ts",
+  "packages/agent/test/extensions/web/exa.test.ts",
+]
+
+[fetch-tool]
+description = "webfetch tool: HTTP(S) GET with Accept negotiation, 5MB body cap, Cloudflare challenge retry, image inline or HTML-to-markdown/text, head-truncated output, TUI rows"
+read = [
+  "packages/agent/extensions/web/webfetch.ts",
+  "packages/agent/extensions/web/html.ts",
+  "packages/agent/extensions/web/tool-output.ts",
+  "packages/agent/extensions/web/limits.ts",
+]
+show = [
+  { path = "packages/agent/shared/tool-row-state.ts", name = "formatToolRowTitle" },
+  { path = "packages/agent/shared/tool-row-state.ts", name = "ToolRowStateStore", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/web/index.ts",
+  "packages/agent/test/extensions/web/webfetch.test.ts",
+  "packages/agent/test/extensions/web/html.test.ts",
+]

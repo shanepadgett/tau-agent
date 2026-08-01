@@ -1,8 +1,17 @@
 name = "Run Summary"
-description = "Settled-run timing and direct, delegated, and combined cost markers"
+description = "Post-turn run cost and wall-time marker in the transcript"
 
-[runtime]
-description = "Settled-run timing and cost marker registration"
-read = []
-outline = ["packages/agent/extensions/run-summary/index.ts"]
-references = ["packages/agent/extensions/run-summary/README.md", "packages/agent/test/extensions/run-summary/index.test.ts"]
+[extension-runtime]
+description = "Accumulate assistant and subagent toolResult costs across agent_end; on agent_settled append display-only tau.run-summary entry with wall time, run cost, subagent cost, and total; Marker renderer; reset on session_start; entry never enters model context"
+read = [
+  "packages/agent/extensions/run-summary/index.ts",
+  "packages/agent/extensions/run-summary/README.md",
+]
+show = [
+  { path = "packages/tui/src/marker.ts", name = "Marker" },
+]
+outline = []
+references = [
+  "packages/agent/test/extensions/run-summary/index.test.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]

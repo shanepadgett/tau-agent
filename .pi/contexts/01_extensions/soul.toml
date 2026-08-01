@@ -1,14 +1,20 @@
 name = "Soul"
-description = "Independent build-ethos and terse-communication prompt sections"
+description = "Optional build-ethos and communication-style system prompt appendices"
 
-[runtime]
-description = "Build-ethos and communication prompt assembly"
-read = []
-outline = ["packages/agent/extensions/soul/index.ts", "packages/agent/extensions/soul/prompt.ts"]
-references = ["packages/agent/extensions/soul/README.md"]
-
-[settings]
-description = "Soul section enablement and prompt settings"
-read = []
-outline = ["packages/agent/extensions/soul/settings.ts"]
-references = []
+[extension-runtime]
+description = "Load soul.ponytail and soul.caveman on session_start; on before_agent_start append PONYTAIL_ETHOS and/or CAVEMAN_STYLE after Pi native system prompt; both default on; settings take effect next session start"
+read = [
+  "packages/agent/extensions/soul/index.ts",
+  "packages/agent/extensions/soul/settings.ts",
+  "packages/agent/extensions/soul/prompt.ts",
+  "packages/agent/extensions/soul/README.md",
+]
+show = [
+  { path = "packages/agent/shared/settings/load.ts", name = "loadTauExtensionSettings" },
+]
+outline = []
+references = [
+  "packages/agent/shared/settings/load.ts",
+  "packages/agent/shared/settings/define.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]

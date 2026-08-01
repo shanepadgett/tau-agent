@@ -1,8 +1,25 @@
 name = "Tau"
-description = "Tau configuration setup and diagnostics commands"
+description = "Core Tau settings setup and doctor diagnostics for global and project config"
 
-[feature]
-description = "Tau initialization command and settings placement"
-read = []
-outline = ["packages/agent/extensions/tau/index.ts"]
-references = ["packages/agent/extensions/tau/README.md"]
+[extension-runtime]
+description = "Register /tau with TUI picker; init writes empty settings with $schema when missing; doctor checks global and project JSON, trust, $schema, and discovered extension sections; startup/reload warns on startup-flagged findings"
+read = [
+  "packages/agent/extensions/tau/index.ts",
+  "packages/agent/extensions/tau/README.md",
+]
+show = [
+  { path = "packages/agent/shared/settings/json.ts", name = "readJsonStatus" },
+  { path = "packages/agent/shared/settings/json.ts", name = "writeJsonObject" },
+  { path = "packages/agent/shared/settings/json.ts", name = "JsonStatus", view = "declaration" },
+  { path = "packages/agent/shared/settings/paths.ts", name = "TAU_SCHEMA_URL" },
+  { path = "packages/agent/shared/settings/paths.ts", name = "globalTauSettingsPath" },
+  { path = "packages/agent/shared/settings/paths.ts", name = "projectTauSettingsPath" },
+  { path = "packages/agent/shared/settings/paths.ts", name = "exists" },
+  { path = "packages/agent/shared/settings/specs.ts", name = "discoverTauSettingsSpecs" },
+]
+outline = []
+references = [
+  "packages/agent/shared/settings/define.ts",
+  "packages/agent/shared/settings/load.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]

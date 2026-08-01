@@ -1,8 +1,18 @@
 name = "System Prompt Viewer"
-description = "Local inspection of effective system prompts and active tool schemas"
+description = "Local display-only snapshots of effective system prompt and active tool schemas"
 
-[feature]
-description = "Snapshot command, context filtering, schema formatting, footer state, and product guidance"
-read = []
-outline = [".pi/extensions/system-prompt-viewer/index.ts"]
-references = [".pi/extensions/system-prompt-viewer/README.md"]
+[command-lifecycle]
+description = "Register /system-prompt-viewer toggle with system prompt footer marker; when enabled on agent_start send collapsible tau.system-prompt-viewer.snapshot custom message with rendered system prompt plus active tool parameter summaries; filter snapshots out of model context; cancel session_before_tree onto snapshot entries; clear enabled and footer on session_shutdown"
+read = [
+  ".pi/extensions/system-prompt-viewer/index.ts",
+  ".pi/extensions/system-prompt-viewer/README.md",
+]
+show = [
+  { path = "packages/agent/shared/events.ts", name = "setTauFooterItem" },
+  { path = "packages/agent/shared/events.ts", name = "TauFooterItem", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/shared/events.ts",
+  "packages/agent/extensions/footer/index.ts",
+]

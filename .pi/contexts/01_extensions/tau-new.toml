@@ -1,8 +1,19 @@
 name = "Tau New"
-description = "Scaffolding flow for Tau extensions, prompts, themes, and skills"
+description = "Interactive scaffold wizard for Tau extensions, prompts, themes, and skills"
 
-[feature]
-description = "Kind and placement selection, collision checks, naming rules, and scaffold prompt generation"
-read = []
-outline = [".pi/extensions/tau-new/index.ts"]
-references = []
+[command-lifecycle]
+description = "Register TUI-only /tau-new [extension|prompt|theme|skill]; pick extension placement tau|local; validate kebab-case name against paths and existing commands/themes/skills or leave blank for agent naming; prompt description via write, ideas, or stash; load editor with scaffold request listing targets, Pi docs pointers, placement rules, and description"
+read = [
+  ".pi/extensions/tau-new/index.ts",
+]
+show = [
+  { path = "packages/agent/shared/description.ts", name = "promptForDescription" },
+  { path = "packages/agent/shared/description.ts", name = "DescriptionPromptResult", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/shared/description.ts",
+  "packages/agent/extensions/ideas/browser.ts",
+  "packages/agent/extensions/stash/browser.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]

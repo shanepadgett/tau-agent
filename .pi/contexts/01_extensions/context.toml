@@ -1,41 +1,114 @@
 name = "Context"
-description = "Reusable repository context selection, ephemeral projection, and maintenance"
+description = "Reusable repository context selection, ephemeral projection, and catalog maintenance"
+
+[extension-shell]
+description = "Register /context and /context-sync, project selected packs once, and auto-sync after validation failures"
+read = [
+  "packages/agent/extensions/context/index.ts",
+  "packages/agent/extensions/context/settings.ts",
+  "packages/agent/extensions/context/README.md",
+]
+show = [
+  { path = "packages/agent/src/file-injection/index.ts", name = "prepareFileInjection" },
+  { path = "packages/agent/shared/settings/load.ts", name = "loadTauExtensionSettings" },
+  { path = "packages/agent/shared/git.ts", name = "createGitRunner" },
+  { path = "packages/agent/shared/git.ts", name = "loadRepoStatus" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/context/definitions.ts",
+  "packages/agent/extensions/context/panel.ts",
+  "packages/agent/extensions/context/sync.ts",
+  "packages/agent/extensions/context/validation.ts",
+  "packages/agent/src/file-injection/index.ts",
+  "packages/agent/docs/context.md",
+]
 
 [catalog]
-description = "Context catalog model, loading-mode policy, path eligibility, validation, and settings"
+description = "Load and validate `.pi/contexts` domain/concept/entry TOML packs into selectable entries"
 read = [
   "packages/agent/extensions/context/definitions.ts",
-  "packages/agent/extensions/context/validation.ts",
-  "packages/agent/extensions/context/settings.ts",
+  "packages/agent/shared/glob.ts",
 ]
 show = []
 outline = []
 references = [
+  "packages/agent/docs/context.md",
   "packages/agent/extensions/context/README.md",
-  "packages/agent/test/extensions/context/definitions.test.ts",
+  "packages/agent/extensions/context/validation.ts",
+  "packages/agent/test/extensions/explore/context-pack.test.ts",
 ]
 
-[selection]
-description = "One-time tabbed selection, loading-mode precedence, and file-injection projection"
-read = ["packages/agent/extensions/context/index.ts", "packages/agent/extensions/context/panel.ts"]
-show = []
-outline = []
-references = ["packages/agent/extensions/context/README.md"]
-
-[synchronization]
-description = "Context-sync orchestration, subagent handoff, and catalog verification"
+[validation]
+description = "Check catalog membership against eligible dirty paths and format validation failures"
 read = [
+  "packages/agent/extensions/context/validation.ts",
+  "packages/agent/shared/git.ts",
+]
+show = [
+  { path = "packages/agent/extensions/context/definitions.ts", name = "loadContextEntries" },
+  { path = "packages/agent/extensions/context/definitions.ts", name = "contextEntryPaths" },
+  { path = "packages/agent/extensions/context/definitions.ts", name = "isContextEligiblePath" },
+  { path = "packages/agent/extensions/context/definitions.ts", name = "isSensitiveContextPath" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/context/definitions.ts",
   "packages/agent/extensions/context/sync.ts",
   "packages/agent/extensions/context/index.ts",
+]
+
+[selection-ui]
+description = "Tabbed multi-select context panel and live context-sync status panel"
+read = [
+  "packages/agent/extensions/context/panel.ts",
+]
+show = [
+  { path = "packages/agent/extensions/context/definitions.ts", name = "ContextEntry", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/context/index.ts",
+  "packages/agent/extensions/context/definitions.ts",
+]
+
+[synchronization]
+description = "Run the context-sync subagent under a queue lock, diff catalog files, and re-verify coverage"
+read = [
+  "packages/agent/extensions/context/sync.ts",
   "packages/agent/extensions/subagent/agents/context-sync.md",
+  "packages/agent/extensions/context/settings.ts",
+]
+show = [
+  { path = "packages/agent/extensions/subagent/agents.ts", name = "discoverAgents" },
+  { path = "packages/agent/extensions/subagent/run.ts", name = "createSubagentThread" },
+  { path = "packages/agent/extensions/subagent/run.ts", name = "runSubagentTurn" },
+  { path = "packages/agent/extensions/subagent/run.ts", name = "disposeSubagentThread" },
+  { path = "packages/agent/extensions/subagent/run.ts", name = "extensionPathsForTools" },
+  { path = "packages/agent/shared/git.ts", name = "createGitRunner" },
+  { path = "packages/agent/shared/git.ts", name = "loadRepoStatus" },
+  { path = "packages/agent/shared/settings/load.ts", name = "loadTauExtensionSettings" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/context/validation.ts",
+  "packages/agent/extensions/context/definitions.ts",
+  "packages/agent/extensions/context/index.ts",
+  "packages/agent/extensions/subagent/agents.ts",
+  "packages/agent/extensions/subagent/run.ts",
+  "packages/agent/docs/context.md",
+]
+
+[documentation]
+description = "Catalog taxonomy, loading-mode policy, and user-facing context commands"
+read = [
+  "packages/agent/docs/context.md",
+  "packages/agent/extensions/context/README.md",
 ]
 show = []
 outline = []
-references = ["packages/agent/extensions/context/README.md"]
-
-[documentation]
-description = "Context management guidance, catalog taxonomy, and extension usage"
-read = ["packages/agent/docs/context.md"]
-show = []
-outline = []
-references = ["packages/agent/extensions/context/README.md"]
+references = [
+  "packages/agent/extensions/context/settings.ts",
+  "packages/agent/extensions/subagent/agents/context-sync.md",
+  ".pi/contexts/01_extensions/continuity.toml",
+]

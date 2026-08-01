@@ -1,8 +1,27 @@
 name = "Tau Help"
-description = "In-chat Markdown guide to Tau extensions and prompts"
+description = "In-product extension and prompt guide plus Tau docs path guidance"
 
-[feature]
-description = "Generated Tau help command and extension catalog"
-read = []
-outline = ["packages/agent/extensions/tau-help/index.ts"]
-references = ["packages/agent/extensions/tau-help/README.md", "packages/agent/extensions/tau-help/help.md"]
+[extension-runtime]
+description = "On before_agent_start append Tau Agent docs path guidance for Tau/Rok/extension topics only; register tau-help message renderer with centered ASCII mark plus Markdown; register /tau-help to send display-only tau-help custom message from bundled help.md without triggering a turn"
+read = [
+  "packages/agent/extensions/tau-help/index.ts",
+  "packages/agent/extensions/tau-help/README.md",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/tau-help/help.md",
+  "packages/agent/docs",
+]
+
+[help-catalog]
+description = "Bundled Markdown guide of Tau extensions and prompt commands; keep updated when an extension or prompt is added, removed, renamed, or its basic usage changes; display-only, not model context"
+read = [
+  "packages/agent/extensions/tau-help/help.md",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/tau-help/index.ts",
+  "packages/agent/extensions/tau-help/README.md",
+]

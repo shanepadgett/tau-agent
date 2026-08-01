@@ -1,14 +1,59 @@
 name = "Manage Sessions"
-description = "Interactive Pi session archive, restore, and bulk deletion flows"
+description = "Browse, archive, restore, and delete Tau sessions"
 
-[runtime]
-description = "Session discovery, archive, restore, deletion, and command registration"
-read = []
-outline = ["packages/agent/extensions/manage-sessions/index.ts", "packages/agent/extensions/manage-sessions/sessions.ts"]
-references = ["packages/agent/extensions/manage-sessions/README.md"]
+[command-lifecycle]
+description = "Register /manage-sessions (TUI-only) to open manager; /sweep confirms Archive or Delete then newSession and archives or deletes the prior session file"
+read = [
+  "packages/agent/extensions/manage-sessions/index.ts",
+  "packages/agent/extensions/manage-sessions/README.md",
+]
+show = [
+  { path = "packages/agent/extensions/manage-sessions/manager-ui.ts", name = "showSessionManager" },
+  { path = "packages/agent/extensions/manage-sessions/sessions.ts", name = "archiveSession" },
+  { path = "packages/agent/extensions/manage-sessions/sessions.ts", name = "deleteSessionFile" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/manage-sessions/manager-ui.ts",
+  "packages/agent/extensions/manage-sessions/sessions.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]
 
-[ui]
-description = "Interactive session manager"
-read = []
-outline = ["packages/agent/extensions/manage-sessions/manager-ui.ts"]
-references = []
+[session-ops]
+description = "List active and archive ManagedSessions for current cwd or all projects via SessionManager; exclude current session file; archive root under getAgentDir()/session-archive with Pi-safe cwd encoding; rename into/out of archive with path containment checks; delete via trash then unlink fallback"
+read = [
+  "packages/agent/extensions/manage-sessions/sessions.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/manage-sessions/manager-ui.ts",
+  "packages/agent/extensions/manage-sessions/index.ts",
+]
+
+[manager-ui]
+description = "ToolPanel with Sessions/Archive tabs and multi-select lists; a/A archive, u/U unarchive, d/D delete (currentOrSelection or olderThanCursor); s toggles current-folder vs all-projects scope; destructiveAck confirm before bulk ops; path, age, and message-count rows"
+read = [
+  "packages/agent/extensions/manage-sessions/manager-ui.ts",
+]
+show = [
+  { path = "packages/agent/extensions/manage-sessions/sessions.ts", name = "ManagedSession", view = "declaration" },
+  { path = "packages/agent/extensions/manage-sessions/sessions.ts", name = "SessionScope", view = "declaration" },
+  { path = "packages/agent/extensions/manage-sessions/sessions.ts", name = "listManagedSessions" },
+  { path = "packages/agent/extensions/manage-sessions/sessions.ts", name = "archiveSession" },
+  { path = "packages/agent/extensions/manage-sessions/sessions.ts", name = "unarchiveSession" },
+  { path = "packages/agent/extensions/manage-sessions/sessions.ts", name = "deleteSessionFile" },
+  { path = "packages/agent/extensions/manage-sessions/sessions.ts", name = "getArchiveRoot" },
+  { path = "packages/agent/shared/text.ts", name = "errorText" },
+  { path = "packages/agent/shared/text.ts", name = "formatAge" },
+  { path = "packages/agent/shared/text.ts", name = "preview" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/manage-sessions/index.ts",
+  "packages/agent/extensions/manage-sessions/sessions.ts",
+  "packages/tui/src/tool-panel.ts",
+  "packages/tui/src/selectable-list.ts",
+  "packages/tui/src/tabs.ts",
+  "packages/tui/src/key-hints.ts",
+]

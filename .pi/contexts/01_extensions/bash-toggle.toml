@@ -1,8 +1,18 @@
 name = "Bash Toggle"
-description = "Local session control for agent bash access"
+description = "Local session toggle for agent bash versus Pi first-party filesystem tools"
 
-[feature]
-description = "Bash toggle command, persisted state, footer status, and fallback tool activation"
-read = []
-outline = [".pi/extensions/bash-toggle/index.ts"]
-references = [".pi/extensions/bash-toggle/README.md"]
+[command-lifecycle]
+description = "Register /bash to flip disabled; when off remove bash, enable grep/find/ls, block residual bash tool_call, show bash off footer; when on restore bash; persist bash-toggle custom entry; restore from branch on session_start and session_tree; clear footer on session_shutdown; ! and !! user shell unaffected"
+read = [
+  ".pi/extensions/bash-toggle/index.ts",
+  ".pi/extensions/bash-toggle/README.md",
+]
+show = [
+  { path = "packages/agent/shared/events.ts", name = "setTauFooterItem" },
+  { path = "packages/agent/shared/events.ts", name = "TauFooterItem", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/shared/events.ts",
+  "packages/agent/extensions/footer/index.ts",
+]

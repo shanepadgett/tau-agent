@@ -1,20 +1,44 @@
 name = "Reference"
-description = "Selection and registration of local comparison repositories"
+description = "Clone and browse external reference repositories from a managed panel"
 
-[runtime]
-description = "Reference repository discovery and command registration"
-read = []
-outline = ["packages/agent/extensions/reference/index.ts"]
-references = ["packages/agent/extensions/reference/README.md"]
+[extension-shell]
+description = "Register /reference and /reference new, load editor and branch-choice settings, open the panel or headless-clone, seed the editor with a selected-reference draft"
+read = [
+  "packages/agent/extensions/reference/index.ts",
+  "packages/agent/extensions/reference/settings.ts",
+  "packages/agent/extensions/reference/README.md",
+]
+show = [
+  { path = "packages/agent/shared/git.ts", name = "createGitRunner" },
+  { path = "packages/agent/shared/settings/load.ts", name = "loadTauExtensionSettings" },
+  { path = "packages/agent/extensions/reference/panel.ts", name = "showReferencePanel" },
+  { path = "packages/agent/extensions/reference/panel.ts", name = "cloneFromCommand" },
+  { path = "packages/agent/extensions/reference/panel.ts", name = "ReferenceItem", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/reference/panel.ts",
+  "packages/agent/shared/git.ts",
+  "packages/agent/shared/settings/define.ts",
+]
 
-[ui]
-description = "Interactive reference picker"
-read = []
-outline = ["packages/agent/extensions/reference/panel.ts"]
-references = ["packages/agent/test/extensions/reference/panel.test.ts"]
-
-[settings]
-description = "Configured reference repositories and paths"
-read = []
-outline = ["packages/agent/extensions/reference/settings.ts"]
-references = []
+[panel]
+description = "Reference library ToolPanel: multi-select list, clone-with-progress into ~/.local/share/tau-agent/references, branch pick and switch, ff-only update, delete confirm, open in editor, load dirty/branch metadata and owner/repo display names"
+read = [
+  "packages/agent/extensions/reference/panel.ts",
+]
+show = [
+  { path = "packages/agent/shared/git.ts", name = "GitRunner", view = "declaration" },
+  { path = "packages/tui/src/text.ts", name = "formatAge" },
+  { path = "packages/agent/extensions/reference/settings.ts", name = "ReferenceEditor", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/reference/index.ts",
+  "packages/agent/extensions/reference/settings.ts",
+  "packages/agent/shared/git.ts",
+  "packages/agent/shared/text.ts",
+  "packages/agent/test/extensions/reference/panel.test.ts",
+  "packages/tui/src/tool-panel.ts",
+  "packages/tui/src/selectable-list.ts",
+]

@@ -1,14 +1,99 @@
-name = "Qna"
-description = "Structured decision UI for blocked agent questions"
+name = "QnA"
+description = "Structured multi-question ask_question tool with blocking TUI panel"
 
-[runtime]
-description = "Question registration, model, body rendering, context, choices, text input, and inline editing"
-read = []
-outline = ["packages/agent/extensions/qna/additional-context-body.ts", "packages/agent/extensions/qna/body-render.ts", "packages/agent/extensions/qna/index.ts"]
-references = ["packages/agent/extensions/qna/README.md", "packages/agent/extensions/qna/choice-question-body.ts", "packages/agent/extensions/qna/inline-editor-row.ts", "packages/agent/extensions/qna/input-question-body.ts", "packages/agent/extensions/qna/model.ts"]
+[extension-shell]
+description = "Register ask_question inactive by default, enable via /qna, block agent, run panel, format answers, disable tool after result or turn end"
+read = [
+  "packages/agent/extensions/qna/index.ts",
+  "packages/agent/extensions/qna/README.md",
+]
+show = [
+  { path = "packages/agent/shared/agent-blocked.ts", name = "emitAgentBlocked" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "normalizeParams" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "QnaParams", view = "declaration" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "QnaResult", view = "declaration" },
+  { path = "packages/agent/extensions/qna/ui.ts", name = "runQnaUi" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/qna/model.ts",
+  "packages/agent/extensions/qna/ui.ts",
+  "packages/agent/extensions/qna/panel.ts",
+  "packages/agent/shared/agent-blocked.ts",
+]
 
-[ui]
-description = "Question panel and custom UI flow"
-read = []
-outline = ["packages/agent/extensions/qna/panel.ts", "packages/agent/extensions/qna/ui.ts"]
-references = []
+[answer-model]
+description = "Question kinds, param normalization, immutable answer state transitions, answered checks, and result building including recommendation acceptance"
+read = [
+  "packages/agent/extensions/qna/model.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/qna/index.ts",
+  "packages/agent/extensions/qna/ui.ts",
+  "packages/agent/extensions/qna/panel.ts",
+  "packages/agent/extensions/qna/choice-question-body.ts",
+  "packages/agent/extensions/qna/input-question-body.ts",
+  "packages/agent/extensions/qna/additional-context-body.ts",
+]
+
+[panel-shell]
+description = "Host ToolPanel with question tabs plus Additional Context, route focus and keys, advance through questions, submit or abort"
+read = [
+  "packages/agent/extensions/qna/ui.ts",
+  "packages/agent/extensions/qna/panel.ts",
+]
+show = [
+  { path = "packages/agent/extensions/qna/model.ts", name = "createState" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "buildResult" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "moveTab" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "isAnswered" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "activeQuestion" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "QnaState", view = "declaration" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "NormalizedQuestion", view = "declaration" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "QnaResult", view = "declaration" },
+  { path = "packages/agent/extensions/qna/choice-question-body.ts", name = "ChoiceQuestionBody" },
+  { path = "packages/agent/extensions/qna/input-question-body.ts", name = "InputQuestionBody" },
+  { path = "packages/agent/extensions/qna/additional-context-body.ts", name = "AdditionalContextBody" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/qna/model.ts",
+  "packages/agent/extensions/qna/choice-question-body.ts",
+  "packages/agent/extensions/qna/input-question-body.ts",
+  "packages/agent/extensions/qna/additional-context-body.ts",
+  "packages/agent/extensions/qna/index.ts",
+  "packages/tui/src/tool-panel.ts",
+  "packages/tui/src/tabs.ts",
+  "packages/tui/src/key-hints.ts",
+]
+
+[question-bodies]
+description = "Choice, input, and additional-context tab bodies: option navigate/toggle, custom answers, option notes, freeform input, recommendation display, inline editor rows"
+read = [
+  "packages/agent/extensions/qna/choice-question-body.ts",
+  "packages/agent/extensions/qna/input-question-body.ts",
+  "packages/agent/extensions/qna/additional-context-body.ts",
+  "packages/agent/extensions/qna/inline-editor-row.ts",
+  "packages/agent/extensions/qna/body-render.ts",
+]
+show = [
+  { path = "packages/agent/extensions/qna/model.ts", name = "getAnswer" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "hasCustom" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "moveOption" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "optionCount" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "toggleOrSelectOption" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "saveCustomAnswer" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "saveOptionNote" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "saveInputAnswer" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "saveAdditionalContext" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "NormalizedQuestion", view = "declaration" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "QnaState", view = "declaration" },
+  { path = "packages/agent/extensions/qna/model.ts", name = "AnswerState", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/qna/model.ts",
+  "packages/agent/extensions/qna/panel.ts",
+]

@@ -1,0 +1,19 @@
+name = "Tau Schema Sync"
+description = "Local auto-regeneration of packages/agent/schemas/tau.schema.json after extension settings edits"
+
+[extension-runtime]
+description = "Hash packages/agent/extensions/**/settings.ts on session_start; after each tool_result rehash and on drift run generate-tau-schema.ts --write via Node strip-types; notify regenerated path on agent_end when UI present; single-flight regenerate promise; race if agent reads tau.schema.json in same parallel batch as the settings edit"
+read = [
+  ".pi/extensions/tau-schema-sync/index.ts",
+  ".pi/extensions/tau-schema-sync/README.md",
+]
+show = [
+  { path = "packages/agent/shared/settings/files.ts", name = "listSettingsFiles" },
+]
+outline = []
+references = [
+  "packages/agent/shared/settings/files.ts",
+  "packages/agent/scripts/generate-tau-schema.ts",
+  "packages/agent/schemas/tau.schema.json",
+  "AGENTS.md",
+]

@@ -1,32 +1,124 @@
 name = "Tool Preview"
-description = "Developer-only visual stories for Tau and Pi tool rows"
+description = "Local TUI playground for Tau and Pi tool-row and panel widgets"
 
-[runtime]
-description = "Preview command, layout, and generic tool-row story composition"
-read = []
-outline = [".pi/extensions/tool-preview/index.ts", ".pi/extensions/tool-preview/widgets/layout.ts", ".pi/extensions/tool-preview/widgets/tool-preview.ts"]
-references = [".pi/extensions/tool-preview/README.md"]
+[command-lifecycle]
+description = "Register TUI-only bare /tool-preview; pick story or context overlay; place framed widget above editor; Escape or rerun clears current preview; dispose input handler on session_shutdown"
+read = [
+  ".pi/extensions/tool-preview/index.ts",
+  ".pi/extensions/tool-preview/README.md",
+]
+show = [
+  { path = ".pi/extensions/tool-preview/widgets/layout.ts", name = "framePreviewWidget" },
+  { path = ".pi/extensions/tool-preview/widgets/context.ts", name = "createContextPreviewOverlay" },
+]
+outline = []
+references = [
+  ".pi/extensions/tool-preview/widgets/layout.ts",
+  ".pi/extensions/tool-preview/widgets/ast-search.ts",
+  ".pi/extensions/tool-preview/widgets/outline.ts",
+  ".pi/extensions/tool-preview/widgets/discover.ts",
+  ".pi/extensions/tool-preview/widgets/relationships.ts",
+  ".pi/extensions/tool-preview/widgets/read.ts",
+  ".pi/extensions/tool-preview/widgets/find.ts",
+  ".pi/extensions/tool-preview/widgets/grep.ts",
+  ".pi/extensions/tool-preview/widgets/ls.ts",
+  ".pi/extensions/tool-preview/widgets/patch.ts",
+  ".pi/extensions/tool-preview/widgets/publish.ts",
+  ".pi/extensions/tool-preview/widgets/autoread.ts",
+  ".pi/extensions/tool-preview/widgets/tabs-list.ts",
+  ".pi/extensions/tool-preview/widgets/tool-panel.ts",
+]
 
-[explore]
-description = "Explore structural tool, relationship, read-overlay, and autoread stories"
-read = []
-outline = [".pi/extensions/tool-preview/widgets/ast-search.ts", ".pi/extensions/tool-preview/widgets/ast-tool-preview.ts", ".pi/extensions/tool-preview/widgets/autoread.ts"]
-references = [".pi/extensions/tool-preview/widgets/discover.ts", ".pi/extensions/tool-preview/widgets/outline.ts", ".pi/extensions/tool-preview/widgets/read.ts", ".pi/extensions/tool-preview/widgets/relationships.ts"]
+[preview-kit]
+description = "Shared page chrome and generic tool-row story builder: frame border, titles, sections, message boxes; buildPreviewRow settled ToolExecutionComponent states; createToolPreviewWidget pending/collapsed/expanded/pruned matrix from ToolPreviewSpec"
+read = [
+  ".pi/extensions/tool-preview/widgets/layout.ts",
+  ".pi/extensions/tool-preview/widgets/preview-row.ts",
+  ".pi/extensions/tool-preview/widgets/tool-preview.ts",
+]
+show = []
+outline = []
+references = [
+  ".pi/extensions/tool-preview/index.ts",
+  ".pi/extensions/tool-preview/widgets/read.ts",
+  ".pi/extensions/tool-preview/widgets/find.ts",
+  ".pi/extensions/tool-preview/widgets/grep.ts",
+  ".pi/extensions/tool-preview/widgets/ls.ts",
+]
 
-[filesystem]
-description = "Retained Pi filesystem and read tool stories"
-read = []
-outline = [".pi/extensions/tool-preview/widgets/find.ts", ".pi/extensions/tool-preview/widgets/grep.ts", ".pi/extensions/tool-preview/widgets/ls.ts"]
-references = []
+[explore-stories]
+description = "AST tool-row previews via real ExploreCallComponent and renderExploreResult with synthetic ToolRowStateStore pruned state; stories for ast_search, outline, discover, references, callers, callees, implementations"
+read = [
+  ".pi/extensions/tool-preview/widgets/ast-tool-preview.ts",
+  ".pi/extensions/tool-preview/widgets/ast-search.ts",
+  ".pi/extensions/tool-preview/widgets/outline.ts",
+  ".pi/extensions/tool-preview/widgets/discover.ts",
+  ".pi/extensions/tool-preview/widgets/relationships.ts",
+]
+show = [
+  { path = "packages/agent/extensions/explore/tools/render.ts", name = "ExploreCallComponent" },
+  { path = "packages/agent/extensions/explore/tools/render.ts", name = "renderExploreResult" },
+  { path = "packages/agent/extensions/explore/tools/render.ts", name = "ExploreToolDetails", view = "declaration" },
+  { path = "packages/agent/shared/tool-row-state.ts", name = "ToolRowStateStore", view = "declaration" },
+  { path = ".pi/extensions/tool-preview/widgets/layout.ts", name = "addPageTitle" },
+  { path = ".pi/extensions/tool-preview/widgets/preview-row.ts", name = "buildPreviewRow" },
+]
+outline = []
+references = [
+  ".pi/extensions/tool-preview/index.ts",
+  ".pi/extensions/tool-preview/widgets/layout.ts",
+  ".pi/extensions/tool-preview/widgets/preview-row.ts",
+  "packages/agent/extensions/explore/tools/render.ts",
+  "packages/agent/shared/tool-row-state.ts",
+  ".pi/contexts/01_extensions/explore.toml",
+]
 
-[tui]
-description = "Shared panel, list, marker, publish, and context component stories"
-read = []
-outline = [".pi/extensions/tool-preview/widgets/context.ts", ".pi/extensions/tool-preview/widgets/publish.ts", ".pi/extensions/tool-preview/widgets/tabs-list.ts"]
-references = [".pi/extensions/tool-preview/widgets/tool-panel.ts"]
+[filesystem-stories]
+description = "Generic Pi tool-row stories for read, find, grep, and ls using createToolPreviewWidget sample matrices"
+read = [
+  ".pi/extensions/tool-preview/widgets/read.ts",
+  ".pi/extensions/tool-preview/widgets/find.ts",
+  ".pi/extensions/tool-preview/widgets/grep.ts",
+  ".pi/extensions/tool-preview/widgets/ls.ts",
+]
+show = [
+  { path = ".pi/extensions/tool-preview/widgets/tool-preview.ts", name = "createToolPreviewWidget" },
+  { path = ".pi/extensions/tool-preview/widgets/tool-preview.ts", name = "ToolPreviewSpec", view = "declaration" },
+]
+outline = []
+references = [
+  ".pi/extensions/tool-preview/index.ts",
+  ".pi/extensions/tool-preview/widgets/tool-preview.ts",
+]
 
-[patch]
-description = "Patch streaming, success, partial failure, and error stories"
-read = []
-outline = [".pi/extensions/tool-preview/widgets/patch.ts"]
-references = []
+[panel-stories]
+description = "One-off previews: patch rows via real patch render/summary; publish activity ToolPanel; context ContextPanel overlay; autoread Marker line states; Tabs+SelectableList shell; ToolPanel hint and ack footers"
+read = [
+  ".pi/extensions/tool-preview/widgets/patch.ts",
+  ".pi/extensions/tool-preview/widgets/publish.ts",
+  ".pi/extensions/tool-preview/widgets/context.ts",
+  ".pi/extensions/tool-preview/widgets/autoread.ts",
+  ".pi/extensions/tool-preview/widgets/tabs-list.ts",
+  ".pi/extensions/tool-preview/widgets/tool-panel.ts",
+]
+show = [
+  { path = "packages/agent/extensions/patch/render.ts", name = "renderPatchCall" },
+  { path = "packages/agent/extensions/patch/render.ts", name = "renderPatchResult" },
+  { path = "packages/agent/extensions/patch/summary.ts", name = "formatPatchSummary" },
+  { path = "packages/agent/extensions/patch/executor.ts", name = "ApplyPatchSummary", view = "declaration" },
+  { path = "packages/agent/extensions/context/panel.ts", name = "ContextPanel" },
+  { path = "packages/agent/extensions/context/definitions.ts", name = "ContextEntry", view = "declaration" },
+  { path = ".pi/extensions/tool-preview/widgets/layout.ts", name = "addMessageBox" },
+]
+outline = []
+references = [
+  ".pi/extensions/tool-preview/index.ts",
+  ".pi/extensions/tool-preview/widgets/layout.ts",
+  "packages/agent/extensions/patch/render.ts",
+  "packages/agent/extensions/patch/summary.ts",
+  "packages/agent/extensions/context/panel.ts",
+  ".pi/extensions/publish/publish-ui.ts",
+  "packages/tui/src/tool-panel.ts",
+  "packages/tui/src/selectable-list.ts",
+  "packages/tui/src/tabs.ts",
+]

@@ -1,14 +1,42 @@
 name = "Silent Command Runner"
-description = "File-triggered validation commands with quiet success and agent-visible failure"
+description = "Automatic post-edit project commands with pass notifications and failure follow-ups"
 
-[runtime]
-description = "Change matching, command execution, failure injection, and focused tests"
-read = []
-outline = ["packages/agent/extensions/silent-command-runner/index.ts"]
-references = ["packages/agent/extensions/silent-command-runner/README.md", "packages/agent/test/extensions/silent-command-runner/index.test.ts"]
+[extension-runtime]
+description = "Load silentCommandRunner settings; inject automatic-command system prompt on before_agent_start; snapshot project file set on agent_start chain start and acquire attention hold; on agent_end walk project, match include/exclude globs plus mtime/deleted paths since turnStart, run changed commands via pi.exec sh -lc; pass notifies only; failures send tau:silent-command-runner followUp with stdout/stderr tails; release hold on agent_settled with notify disposition; skip aborted assistant turns; abort in-flight on session_shutdown; custom message renderer for expanded failure details"
+read = [
+  "packages/agent/extensions/silent-command-runner/index.ts",
+  "packages/agent/extensions/silent-command-runner/README.md",
+]
+show = [
+  { path = "packages/agent/shared/settings/load.ts", name = "loadTauExtensionSettings" },
+  { path = "packages/agent/shared/settings/paths.ts", name = "resolveProjectRoot" },
+  { path = "packages/agent/shared/glob.ts", name = "matchGlob" },
+  { path = "packages/agent/shared/glob.ts", name = "posixPath" },
+  { path = "packages/agent/shared/events.ts", name = "emitTauEvent" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/silent-command-runner/settings.ts",
+  "packages/agent/shared/settings/load.ts",
+  "packages/agent/shared/settings/paths.ts",
+  "packages/agent/shared/glob.ts",
+  "packages/agent/shared/events.ts",
+  "packages/agent/extensions/attention/index.ts",
+  "packages/agent/test/extensions/silent-command-runner/index.test.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]
 
 [settings]
-description = "Command definitions, path matching, and trigger settings"
-read = []
-outline = ["packages/agent/extensions/silent-command-runner/settings.ts"]
-references = []
+description = "silentCommandRunner.enabled, maxOutputBytes, and commands array: name, command, optional enabled cwd env details includeGlobs excludeGlobs timeoutMs"
+read = [
+  "packages/agent/extensions/silent-command-runner/settings.ts",
+]
+show = [
+  { path = "packages/agent/shared/settings/define.ts", name = "defineTauExtensionSettings" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/silent-command-runner/index.ts",
+  "packages/agent/extensions/silent-command-runner/README.md",
+  "packages/agent/shared/settings/define.ts",
+]

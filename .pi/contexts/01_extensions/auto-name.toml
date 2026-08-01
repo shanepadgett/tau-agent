@@ -1,8 +1,25 @@
 name = "Auto Name"
-description = "Background session naming from the first user prompt"
+description = "Generate a session name from early conversation context"
 
-[feature]
-description = "Automatic session naming from conversation context"
-read = []
-outline = ["packages/agent/extensions/auto-name/index.ts"]
-references = ["packages/agent/extensions/auto-name/README.md"]
+[extension-runtime]
+description = "On before_agent_start when session unnamed, build naming input from user prompt plus branch and pending injected contexts capped at 120k; background generateToolValidated name_session tool over cheap fallback models; setSessionName only when still unnamed and generation not aborted; cancel on session_shutdown; decline NONE or empty"
+read = [
+  "packages/agent/extensions/auto-name/index.ts",
+  "packages/agent/extensions/auto-name/README.md",
+]
+show = [
+  { path = "packages/agent/shared/model-fallback/index.ts", name = "generateToolValidated" },
+  { path = "packages/agent/shared/model-fallback/index.ts", name = "resolveCandidates" },
+  { path = "packages/agent/shared/injected-context.ts", name = "getBranchInjectedContexts" },
+  { path = "packages/agent/shared/injected-context.ts", name = "getPendingInjectedContexts" },
+  { path = "packages/agent/shared/injected-context.ts", name = "InjectedContext", view = "declaration" },
+  { path = "packages/agent/shared/text.ts", name = "errorText" },
+  { path = "packages/agent/shared/text.ts", name = "truncAt" },
+]
+outline = []
+references = [
+  "packages/agent/shared/model-fallback/index.ts",
+  "packages/agent/shared/injected-context.ts",
+  "packages/agent/shared/text.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]

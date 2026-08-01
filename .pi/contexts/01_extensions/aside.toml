@@ -1,14 +1,36 @@
 name = "Aside"
-description = "One-off side questions to the current model outside the conversation transcript"
+description = "One-off side question to the current model outside the transcript"
 
-[runtime]
-description = "Aside command registration, context selection, background requests, and lifecycle state"
-read = []
-outline = ["packages/agent/extensions/aside/index.ts"]
-references = ["packages/agent/extensions/aside/README.md", "packages/agent/test/extensions/aside/index.test.ts"]
+[command-lifecycle]
+description = "Register TUI-only /aside <question>; choose Current conversation branch or No context; stream current model without tools via buildAsideRequest (trim incomplete tool-call tail); keep latest result in memory; bare /aside reopens overlay; /aside clear cancels and drops result; clear on session_start and session_shutdown; status widget above editor while running"
+read = [
+  "packages/agent/extensions/aside/index.ts",
+  "packages/agent/extensions/aside/README.md",
+]
+show = [
+  { path = "packages/agent/extensions/aside/panel.ts", name = "AsideResult", view = "declaration" },
+  { path = "packages/agent/extensions/aside/panel.ts", name = "AsideWidget" },
+  { path = "packages/agent/extensions/aside/panel.ts", name = "AsideResultPanel" },
+  { path = "packages/agent/shared/text.ts", name = "errorText" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/aside/panel.ts",
+  "packages/agent/shared/text.ts",
+  "packages/agent/test/extensions/aside/index.test.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]
 
-[ui]
-description = "Aside answer widget preview and scrollable Markdown result panel"
-read = []
-outline = ["packages/agent/extensions/aside/panel.ts"]
-references = ["packages/agent/test/extensions/aside/panel.test.ts"]
+[result-ui]
+description = "AsideWidget thinking strip above editor with question preview; AsideResultPanel overlay with scrollable markdown answer, context label, and close bindings"
+read = [
+  "packages/agent/extensions/aside/panel.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/aside/index.ts",
+  "packages/agent/test/extensions/aside/panel.test.ts",
+  "packages/tui/src/tool-panel.ts",
+  "packages/tui/src/scrollable-markdown.ts",
+]

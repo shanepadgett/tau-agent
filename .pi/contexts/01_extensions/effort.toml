@@ -1,12 +1,42 @@
 name = "Effort"
-description = "Interactive model and thinking-level selection by workload effort tier"
+description = "Cycle and persist model effort level for the active session"
 
-[runtime]
-description = "Effort-tier command, provider selection, persisted session state, and user guidance"
-read = []
-outline = ["packages/agent/extensions/effort/index.ts", "packages/agent/extensions/effort/state.ts"]
-references = [
+[extension-shell]
+description = "Register /effort [quick|standard|deep] with provider picker from logged-in resolveEffortProviders; Ctrl+Shift+E cycles nextEffort on current provider; apply setModel and setThinkingLevel then append state and emit tau:model-effort.changed; answer tau:model-effort.snapshot.requested; resync from model and thinking on session_start, session_tree, model_select, thinking_level_select when not applying"
+read = [
+  "packages/agent/extensions/effort/index.ts",
   "packages/agent/extensions/effort/README.md",
+]
+show = [
+  { path = "packages/agent/shared/model-effort.ts", name = "ModelEffort", view = "declaration" },
+  { path = "packages/agent/shared/model-effort.ts", name = "EffortProviderCandidates", view = "declaration" },
+  { path = "packages/agent/shared/model-effort.ts", name = "effortForSelection" },
+  { path = "packages/agent/shared/model-effort.ts", name = "resolveEffortProviders" },
+  { path = "packages/agent/shared/events.ts", name = "emitTauEvent" },
+  { path = "packages/agent/shared/events.ts", name = "onTauEvent" },
+  { path = "packages/agent/extensions/effort/state.ts", name = "EFFORT_STATE_TYPE" },
+  { path = "packages/agent/extensions/effort/state.ts", name = "effortState" },
+  { path = "packages/agent/extensions/effort/state.ts", name = "nextEffort" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/effort/state.ts",
+  "packages/agent/shared/model-effort.ts",
+  "packages/agent/shared/events.ts",
   "packages/agent/test/extensions/effort/index.test.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]
+
+[session-state]
+description = "tau.model-effort.state v1 entries with effort or null; effortState builder; nextEffort cycle quick→standard→deep→quick; replayEffortState walks branch newest-first for last valid tier"
+read = [
+  "packages/agent/extensions/effort/state.ts",
+]
+show = [
+  { path = "packages/agent/shared/model-effort.ts", name = "ModelEffort", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/effort/index.ts",
   "packages/agent/test/extensions/effort/state.test.ts",
 ]

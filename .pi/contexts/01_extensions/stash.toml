@@ -1,14 +1,63 @@
 name = "Stash"
-description = "Prompt draft parking, browsing, and editor restoration"
+description = "Personal text stash store with browse and insert commands"
 
-[runtime]
-description = "Stash commands and durable prompt storage"
-read = []
-outline = ["packages/agent/extensions/stash/index.ts", "packages/agent/extensions/stash/store.ts"]
-references = ["packages/agent/extensions/stash/README.md"]
+[extension-shell]
+description = "Register Alt+S to stash trimmed editor text with identical-text dedupe and clear the editor; register /pop to browse and restore one stash into the editor then remove it; TUI-only"
+read = [
+  "packages/agent/extensions/stash/index.ts",
+  "packages/agent/extensions/stash/README.md",
+]
+show = [
+  { path = "packages/tui/src/text.ts", name = "preview" },
+  { path = "packages/agent/extensions/stash/store.ts", name = "addStash" },
+  { path = "packages/agent/extensions/stash/store.ts", name = "removeStash" },
+  { path = "packages/agent/extensions/stash/browser.ts", name = "browseStash" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/stash/store.ts",
+  "packages/agent/extensions/stash/browser.ts",
+  "packages/agent/shared/text.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]
 
-[ui]
-description = "Interactive stash browser and editor restoration"
-read = []
-outline = ["packages/agent/extensions/stash/browser.ts"]
-references = []
+[store]
+description = "User-global ~/.pi/tau/stash.jsonl DatedRecord list; load newest-first; append with identical-text dedupe returning null on no-op; remove by id with atomic full rewrite"
+read = [
+  "packages/agent/extensions/stash/store.ts",
+]
+show = [
+  { path = "packages/agent/shared/jsonl-store.ts", name = "DatedRecord", view = "declaration" },
+  { path = "packages/agent/shared/jsonl-store.ts", name = "loadRecordsAtPath" },
+  { path = "packages/agent/shared/jsonl-store.ts", name = "appendRecordAtPath" },
+  { path = "packages/agent/shared/jsonl-store.ts", name = "saveRecordsAtPath" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/stash/index.ts",
+  "packages/agent/extensions/stash/browser.ts",
+  "packages/agent/shared/jsonl-store.ts",
+]
+
+[browser]
+description = "TUI TextRecordSelectPanel over the stash path; primary pops selected item; ctrl+d discards with confirm and reloads list; filter and navigate via shared panel"
+read = [
+  "packages/agent/extensions/stash/browser.ts",
+]
+show = [
+  { path = "packages/agent/extensions/stash/store.ts", name = "Stash", view = "declaration" },
+  { path = "packages/agent/extensions/stash/store.ts", name = "stashFilePath" },
+  { path = "packages/agent/extensions/stash/store.ts", name = "loadStashes" },
+  { path = "packages/agent/extensions/stash/store.ts", name = "removeStash" },
+  { path = "packages/agent/shared/text.ts", name = "errorText" },
+  { path = "packages/tui/src/text-record-select-panel.ts", name = "createTextRecordSelectPanel" },
+  { path = "packages/tui/src/text-record-select-panel.ts", name = "TextRecordSelectPanelConfig", view = "declaration" },
+  { path = "packages/tui/src/text-record-select-panel.ts", name = "TextRecordSelectResult", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/stash/index.ts",
+  "packages/agent/extensions/stash/store.ts",
+  "packages/tui/src/text-record-select-panel.ts",
+  "packages/tui/src/selectable-list.ts",
+]

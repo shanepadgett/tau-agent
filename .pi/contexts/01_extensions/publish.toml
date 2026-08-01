@@ -1,14 +1,38 @@
 name = "Publish"
-description = "Tagged Tau release creation and GitHub Actions publish monitoring"
+description = "Tagged Tau monorepo release with GitHub Actions npm trusted publishing"
 
-[runtime]
-description = "Release command, package-source checks, tags, and workflow monitoring"
-read = []
-outline = [".pi/extensions/publish/index.ts"]
-references = [".pi/extensions/publish/README.md", "packages/agent/scripts/check-package-sources.ts"]
+[command-lifecycle]
+description = "Register bare /publish after idle; require UI, clean tree, gh auth, and check:package-sources; load shared tui+agent package versions; recommend patch|minor|major from commits since latest v* tag; confirm release tag; write versions and lockfile when bumping, dry-run npm pack both workspaces, commit chore(release), tag, push HEAD and tag; poll publish.yml up to 10m; on failure send read-only tau.publish-failure turn with no retry"
+read = [
+  ".pi/extensions/publish/index.ts",
+  ".pi/extensions/publish/README.md",
+]
+show = [
+  { path = ".pi/extensions/publish/publish-ui.ts", name = "PublishProgress", view = "declaration" },
+  { path = ".pi/extensions/publish/publish-ui.ts", name = "PublishActivityPanel" },
+  { path = "packages/agent/shared/git.ts", name = "createGitRunner" },
+  { path = "packages/agent/shared/git.ts", name = "loadRepoStatus" },
+  { path = "packages/agent/shared/git.ts", name = "GitRunner", view = "declaration" },
+  { path = "packages/agent/shared/text.ts", name = "errorText" },
+]
+outline = []
+references = [
+  ".pi/extensions/publish/publish-ui.ts",
+  "packages/agent/shared/git.ts",
+  "packages/agent/shared/text.ts",
+  "packages/agent/scripts/check-package-sources.ts",
+  ".github/workflows/publish.yml",
+]
 
-[ui]
-description = "Interactive release confirmation and progress UI"
-read = []
-outline = [".pi/extensions/publish/publish-ui.ts"]
-references = []
+[progress-ui]
+description = "PublishActivityPanel ToolPanel checklist of release steps with status and optional detail; PublishProgress.update advances completed list"
+read = [
+  ".pi/extensions/publish/publish-ui.ts",
+]
+show = []
+outline = []
+references = [
+  ".pi/extensions/publish/index.ts",
+  "packages/tui/src/tool-panel.ts",
+  ".pi/extensions/tool-preview/widgets/publish.ts",
+]

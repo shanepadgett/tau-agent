@@ -1,32 +1,176 @@
 name = "Subagent"
-description = "Delegation to isolated child Tau sessions"
+description = "Delegation to isolated child Tau sessions with retained threads and live progress"
+
+[extension-shell]
+description = "Register the subagent tool, session disable state, /agents command, parent prompt injection, dashboard lifecycle, and settings"
+read = [
+  "packages/agent/extensions/subagent/index.ts",
+  "packages/agent/extensions/subagent/settings.ts",
+  "packages/agent/extensions/subagent/README.md",
+]
+show = [
+  { path = "packages/agent/shared/settings/load.ts", name = "loadTauExtensionSettings" },
+  { path = "packages/agent/shared/tool-row-state.ts", name = "createToolRowStateStore" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/subagent/agents.ts",
+  "packages/agent/extensions/subagent/runtime.ts",
+  "packages/agent/extensions/subagent/panel.ts",
+  "packages/agent/extensions/subagent/render.ts",
+  "packages/agent/extensions/subagent/cmux-dashboard.ts",
+  "packages/agent/extensions/context/settings.ts",
+  "packages/agent/shared/settings/define.ts",
+  "packages/agent/test/extensions/subagent/index.test.ts",
+  "packages/agent/test/extensions/subagent/settings.test.ts",
+]
 
 [definitions]
-description = "Built-in, user, and project agent definition discovery"
-read = []
-outline = ["packages/agent/extensions/subagent/agents.ts"]
-references = ["packages/agent/extensions/subagent/agents/context-sync.md", "packages/agent/extensions/subagent/agents/dormant/generalist.md", "packages/agent/extensions/subagent/agents/scout.md", "packages/agent/extensions/subagent/agents/web-research.md"]
+description = "Discover and parse built-in, user, and project agent markdown definitions"
+read = [
+  "packages/agent/extensions/subagent/agents.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/subagent/agents/scout.md",
+  "packages/agent/extensions/subagent/agents/web-research.md",
+  "packages/agent/extensions/subagent/agents/context-sync.md",
+  "packages/agent/docs/subagents.md",
+  "packages/agent/extensions/subagent/README.md",
+  "packages/agent/test/extensions/subagent/agents.test.ts",
+]
 
-[execution]
-description = "Child session execution through the shared isolated-session lifecycle, retained-thread resume, replacement resource ownership, limits, and results"
-read = []
-outline = ["packages/agent/extensions/subagent/index.ts", "packages/agent/extensions/subagent/run.ts", "packages/agent/extensions/subagent/runtime.ts"]
-references = ["packages/agent/extensions/subagent/resume.ts", "packages/agent/extensions/subagent/session-resource.ts", "packages/agent/test/extensions/subagent/index.test.ts", "packages/agent/test/extensions/subagent/resume-integration.test.ts", "packages/agent/test/extensions/subagent/resume.test.ts", "packages/agent/test/extensions/subagent/run.test.ts", "packages/agent/test/extensions/subagent/runtime.test.ts"]
+[built-in-agents]
+description = "Tune shipped agent prompts, tools, models, and display-name pools"
+read = [
+  "packages/agent/extensions/subagent/agents/scout.md",
+  "packages/agent/extensions/subagent/agents/web-research.md",
+  "packages/agent/extensions/subagent/agents/context-sync.md",
+  "packages/agent/docs/subagents.md",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/subagent/agents.ts",
+  "packages/agent/extensions/subagent/agents/dormant/generalist.md",
+  "packages/agent/extensions/subagent/README.md",
+]
 
-[ui]
-description = "Interactive /agents panel for session-local subagent toggles"
-read = []
-outline = ["packages/agent/extensions/subagent/panel.ts"]
-references = ["packages/agent/test/extensions/subagent/panel.test.ts"]
+[session-binding]
+description = "Resolve child model, thinking, tools, and UI-blocked context inputs for an isolated session"
+read = [
+  "packages/agent/extensions/subagent/session-resource.ts",
+  "packages/agent/shared/isolated-session.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/subagent/agents.ts",
+  "packages/agent/extensions/subagent/run.ts",
+  "packages/agent/extensions/subagent/runtime.ts",
+]
 
-[observability]
-description = "cmux live progress dashboard, child identity, and transcript rendering"
-read = []
-outline = ["packages/agent/extensions/subagent/cmux-dashboard.ts", "packages/agent/extensions/subagent/render.ts"]
-references = ["packages/agent/test/extensions/subagent/agents.test.ts", "packages/agent/test/extensions/subagent/cmux-dashboard.test.ts"]
+[turn-execution]
+description = "Create child threads, run one turn, stream details, autoread files, bound output, and build cold-resume prompts"
+read = [
+  "packages/agent/extensions/subagent/run.ts",
+  "packages/agent/extensions/subagent/resume.ts",
+  "packages/agent/extensions/subagent/session-resource.ts",
+]
+show = [
+  { path = "packages/agent/shared/isolated-session.ts", name = "createIsolatedSessionResource" },
+  { path = "packages/agent/shared/isolated-session.ts", name = "IsolatedSessionInputs", view = "declaration" },
+  { path = "packages/agent/shared/full-file-knowledge.ts", name = "createCompleteFileMeta" },
+]
+outline = []
+references = [
+  "packages/agent/shared/isolated-session.ts",
+  "packages/agent/shared/full-file-knowledge.ts",
+  "packages/agent/extensions/subagent/agents.ts",
+  "packages/agent/extensions/subagent/runtime.ts",
+  "packages/agent/test/extensions/subagent/run.test.ts",
+  "packages/agent/test/extensions/subagent/resume.test.ts",
+  "packages/agent/test/extensions/subagent/resume-integration.test.ts",
+]
+
+[runtime-orchestration]
+description = "Admit work, enforce concurrency, retain or replace threads, publish snapshots, and shut down cleanly"
+read = [
+  "packages/agent/extensions/subagent/runtime.ts",
+  "packages/agent/extensions/subagent/resume.ts",
+]
+show = [
+  { path = "packages/agent/extensions/subagent/run.ts", name = "createSubagentThread" },
+  { path = "packages/agent/extensions/subagent/run.ts", name = "runSubagentTurn" },
+  { path = "packages/agent/extensions/subagent/run.ts", name = "disposeSubagentThread" },
+  { path = "packages/agent/extensions/subagent/run.ts", name = "SubagentThread", view = "declaration" },
+  { path = "packages/agent/extensions/subagent/run.ts", name = "SubagentDetails", view = "declaration" },
+  { path = "packages/agent/shared/isolated-session.ts", name = "createIsolatedSessionResource" },
+  { path = "packages/agent/shared/isolated-session.ts", name = "IsolatedSessionResource", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/subagent/run.ts",
+  "packages/agent/extensions/subagent/session-resource.ts",
+  "packages/agent/extensions/subagent/agents.ts",
+  "packages/agent/extensions/subagent/index.ts",
+  "packages/agent/shared/isolated-session.ts",
+  "packages/agent/test/extensions/subagent/runtime.test.ts",
+]
+
+[agents-panel]
+description = "Interactive /agents panel for session-local enable and disable toggles"
+read = [
+  "packages/agent/extensions/subagent/panel.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/subagent/index.ts",
+  "packages/agent/test/extensions/subagent/panel.test.ts",
+]
+
+[tool-rendering]
+description = "Render streaming subagent call rows and expanded result details in the TUI"
+read = [
+  "packages/agent/extensions/subagent/render.ts",
+  "packages/agent/shared/tool-row-state.ts",
+]
+show = [
+  { path = "packages/agent/extensions/subagent/run.ts", name = "SubagentDetails", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/subagent/run.ts",
+  "packages/agent/extensions/subagent/index.ts",
+]
+
+[cmux-dashboard]
+description = "Live cmux progress dashboard from invocation snapshots, including orphan cleanup"
+read = [
+  "packages/agent/extensions/subagent/cmux-dashboard.ts",
+]
+show = [
+  { path = "packages/agent/extensions/subagent/run.ts", name = "SubagentInvocationSnapshot", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/subagent/run.ts",
+  "packages/agent/extensions/subagent/index.ts",
+  "packages/agent/test/extensions/subagent/cmux-dashboard.test.ts",
+]
 
 [documentation]
-description = "User-facing subagent configuration and behavior"
-read = []
+description = "User-facing subagent configuration, built-in agents, and runtime behavior"
+read = [
+  "packages/agent/extensions/subagent/README.md",
+  "packages/agent/docs/subagents.md",
+]
+show = []
 outline = []
-references = ["packages/agent/docs/subagents.md", "packages/agent/extensions/subagent/README.md"]
+references = [
+  "packages/agent/extensions/subagent/agents/scout.md",
+  "packages/agent/extensions/subagent/agents/web-research.md",
+  "packages/agent/extensions/subagent/agents/context-sync.md",
+]

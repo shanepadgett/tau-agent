@@ -1,8 +1,26 @@
 name = "Image Gen"
-description = "Built-in image generation and editing adapter over Tau provider transport"
+description = "Agent tool for OpenAI GPT Image and xAI Grok Imagine generate and edit"
 
-[runtime]
-description = "Tool registration and adapter execution flow"
-read = []
-outline = ["packages/agent/extensions/image-gen/index.ts"]
-references = ["packages/agent/extensions/image-gen/README.md", "packages/agent/test/extensions/image-gen/index.test.ts"]
+[extension-shell]
+description = "Register image_gen tool: prompt plus optional provider openai|xai, path, and up to three referenced_image_paths; call generateImage; return path text and inline image when under 12 MiB attachment cap"
+read = [
+  "packages/agent/extensions/image-gen/index.ts",
+  "packages/agent/extensions/image-gen/README.md",
+]
+show = [
+  { path = "packages/agent/src/image-generation/index.ts", name = "generateImage" },
+  { path = "packages/agent/src/image-generation/index.ts", name = "GenerateImageRequest", view = "declaration" },
+  { path = "packages/agent/src/image-generation/index.ts", name = "GeneratedImageResult", view = "declaration" },
+  { path = "packages/agent/src/image-generation/index.ts", name = "ImageGenerationContext", view = "declaration" },
+  { path = "packages/agent/src/image-generation/constants.ts", name = "ImageProvider", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/src/image-generation/index.ts",
+  "packages/agent/src/image-generation/client.ts",
+  "packages/agent/src/image-generation/constants.ts",
+  ".pi/contexts/02_core/image-generation.toml",
+  "packages/agent/test/extensions/image-gen/index.test.ts",
+  "packages/agent/test/extensions/image-gen/client.test.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]

@@ -1,14 +1,15 @@
 name = "Cache Diagnostics"
-description = "Privacy-preserving provider request fingerprints for prompt-cache investigations"
+description = "Fingerprint final provider payloads to diagnose cache hits, misses, and local prompt drift"
 
-[runtime]
-description = "Provider request fingerprint capture, report storage, and debug command"
-read = []
-outline = ["packages/agent/extensions/cache-diagnostics/index.ts"]
-references = ["packages/agent/test/extensions/cache-diagnostics/index.test.ts"]
-
-[investigation]
-description = "Exact investigation prompt and user-facing privacy contract"
-read = [".pi/prompts/cache-investigate.md"]
+[extension-runtime]
+description = "Session jsonl under ~/.pi/agent/cache-diagnostics with 30-day prune and baseline restore past model-select; fingerprint prompt state and final provider payloads; compare envelope, tools, and sequence prefix; promote baseline on successful assistant turns; flag cacheMiss above 1KB noise once cache activity is seen; mark model/thinking/compact/tree and checkpoint/load_tools events; /cache-debug writes a bounded incident report"
+read = [
+  "packages/agent/extensions/cache-diagnostics/index.ts",
+  "packages/agent/extensions/cache-diagnostics/README.md",
+]
+show = []
 outline = []
-references = ["packages/agent/extensions/cache-diagnostics/README.md"]
+references = [
+  "packages/agent/test/extensions/cache-diagnostics/index.test.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]

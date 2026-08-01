@@ -1,8 +1,15 @@
 name = "Tool Loader"
-description = "Progressive activation of specialist web, image, and macOS application tools"
+description = "Progressive session loading of specialist tool groups for prompt-cache-friendly tool schemas"
 
-[runtime]
-description = "Specialist group registration, activation state, and load tool"
-read = []
-outline = ["packages/agent/extensions/tool-loader/index.ts"]
-references = ["packages/agent/extensions/tool-loader/README.md", "packages/agent/test/extensions/tool-loader/index.test.ts"]
+[extension-runtime]
+description = "Register load_tools for web, image, and appshot groups; capture allowed specialist names at session_start; activate registered tools for a capability; restore loaded capabilities from branch load_tools toolResult details on start and session_tree when the session began with load_tools plus all specialists active"
+read = [
+  "packages/agent/extensions/tool-loader/index.ts",
+  "packages/agent/extensions/tool-loader/README.md",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/test/extensions/tool-loader/index.test.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]

@@ -1,14 +1,64 @@
 name = "Ideas"
-description = "Durable capture and browsing of rough repository ideas"
+description = "Project-local rough idea parking lot with browse, edit, and insert"
 
-[runtime]
-description = "Idea command registration and durable JSONL storage"
-read = []
-outline = ["packages/agent/extensions/ideas/index.ts", "packages/agent/extensions/ideas/store.ts"]
-references = ["packages/agent/extensions/ideas/README.md"]
+[command-lifecycle]
+description = "Register /ideas <text> to append a project idea and notify; bare /ideas opens TUI browser and loads selected idea into the editor; non-TUI bare form only explains usage"
+read = [
+  "packages/agent/extensions/ideas/index.ts",
+  "packages/agent/extensions/ideas/README.md",
+]
+show = [
+  { path = "packages/agent/extensions/ideas/store.ts", name = "addIdea" },
+  { path = "packages/agent/extensions/ideas/browser.ts", name = "browseIdeas" },
+  { path = "packages/agent/shared/text.ts", name = "preview" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/ideas/store.ts",
+  "packages/agent/extensions/ideas/browser.ts",
+  "packages/agent/shared/text.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]
 
-[ui]
-description = "Interactive idea browser"
-read = []
-outline = ["packages/agent/extensions/ideas/browser.ts"]
-references = []
+[store]
+description = "Project-root .pi/tau/ideas.jsonl DatedRecord list via shared jsonl-store; load newest-first; append; update text by id; delete by id with atomic rewrite"
+read = [
+  "packages/agent/extensions/ideas/store.ts",
+]
+show = [
+  { path = "packages/agent/shared/jsonl-store.ts", name = "DatedRecord", view = "declaration" },
+  { path = "packages/agent/shared/jsonl-store.ts", name = "recordFilePath" },
+  { path = "packages/agent/shared/jsonl-store.ts", name = "loadRecords" },
+  { path = "packages/agent/shared/jsonl-store.ts", name = "appendRecord" },
+  { path = "packages/agent/shared/jsonl-store.ts", name = "saveRecords" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/ideas/index.ts",
+  "packages/agent/extensions/ideas/browser.ts",
+  "packages/agent/shared/jsonl-store.ts",
+]
+
+[browser]
+description = "TUI TextRecordSelectPanel over ideas path; primary inserts selected idea; ctrl+e multiline edit then updateIdea; ctrl+d delete with confirm and list reload"
+read = [
+  "packages/agent/extensions/ideas/browser.ts",
+]
+show = [
+  { path = "packages/agent/extensions/ideas/store.ts", name = "Idea", view = "declaration" },
+  { path = "packages/agent/extensions/ideas/store.ts", name = "ideasFilePath" },
+  { path = "packages/agent/extensions/ideas/store.ts", name = "loadIdeas" },
+  { path = "packages/agent/extensions/ideas/store.ts", name = "updateIdea" },
+  { path = "packages/agent/extensions/ideas/store.ts", name = "deleteIdea" },
+  { path = "packages/agent/shared/text.ts", name = "errorText" },
+  { path = "packages/tui/src/text-record-select-panel.ts", name = "createTextRecordSelectPanel" },
+  { path = "packages/tui/src/text-record-select-panel.ts", name = "TextRecordSelectPanelConfig", view = "declaration" },
+  { path = "packages/tui/src/text-record-select-panel.ts", name = "TextRecordSelectResult", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/ideas/index.ts",
+  "packages/agent/extensions/ideas/store.ts",
+  "packages/tui/src/text-record-select-panel.ts",
+  "packages/tui/src/selectable-list.ts",
+]

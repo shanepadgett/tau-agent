@@ -1,14 +1,40 @@
 name = "Branch"
-description = "Recent Git branch selection and typed branch creation"
+description = "Interactive git branch create and switch flow"
 
-[runtime]
-description = "Branch command registration, Git branch discovery, switching, and creation"
-read = []
-outline = ["packages/agent/extensions/branch/index.ts"]
-references = ["packages/agent/extensions/branch/README.md", "packages/agent/test/extensions/branch/index.test.ts"]
+[command-lifecycle]
+description = "Register /branch and /branch new; gate on interactive UI and TUI for switch; create feature/fix/chore branches with normalized names via git switch -c; list local and remote refs by committerdate excluding current and already-local remotes; open panel then switch local or track remote"
+read = [
+  "packages/agent/extensions/branch/index.ts",
+  "packages/agent/extensions/branch/README.md",
+]
+show = [
+  { path = "packages/agent/shared/git.ts", name = "createGitRunner" },
+  { path = "packages/agent/shared/git.ts", name = "GitRunner", view = "declaration" },
+  { path = "packages/agent/shared/text.ts", name = "errorText" },
+  { path = "packages/agent/extensions/branch/panel.ts", name = "showBranchPanel" },
+  { path = "packages/agent/extensions/branch/panel.ts", name = "BranchChoice", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/branch/panel.ts",
+  "packages/agent/shared/git.ts",
+  "packages/agent/test/extensions/branch/index.test.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]
 
-[ui]
-description = "Interactive recent-branch picker"
-read = []
-outline = ["packages/agent/extensions/branch/panel.ts"]
-references = ["packages/agent/test/extensions/branch/panel.test.ts"]
+[panel]
+description = "ToolPanel + SelectableList of local/remote branch choices; single-select switch; ctrl+f fetch-all refresh with busy footer; preserve cursor across refresh; cancel closes without switch"
+read = [
+  "packages/agent/extensions/branch/panel.ts",
+]
+show = [
+  { path = "packages/agent/shared/text.ts", name = "errorText" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/branch/index.ts",
+  "packages/agent/test/extensions/branch/panel.test.ts",
+  "packages/tui/src/tool-panel.ts",
+  "packages/tui/src/selectable-list.ts",
+  "packages/tui/src/key-hints.ts",
+]

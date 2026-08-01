@@ -1,8 +1,33 @@
 name = "Runtime Context"
-description = "Current-date and root-directory system prompt context"
+description = "Inject local display date and a frozen depth-2 root snapshot into each agent run system prompt"
 
-[runtime]
-description = "Runtime-context extension implementation, documentation, and automated tests"
-read = []
-outline = ["packages/agent/extensions/runtime-context/context.ts", "packages/agent/extensions/runtime-context/index.ts"]
-references = ["packages/agent/extensions/runtime-context/README.md", "packages/agent/test/extensions/runtime-context/context.test.ts", "packages/agent/test/extensions/runtime-context/index.test.ts"]
+[extension-shell]
+description = "Freeze runtime context once on session_start; on before_agent_start append current display date and the frozen root snapshot to the system prompt"
+read = [
+  "packages/agent/extensions/runtime-context/index.ts",
+  "packages/agent/extensions/runtime-context/README.md",
+]
+show = [
+  { path = "packages/agent/extensions/runtime-context/context.ts", name = "freezeRuntimeContext" },
+  { path = "packages/agent/extensions/runtime-context/context.ts", name = "formatLocalDisplayDate" },
+  { path = "packages/agent/extensions/runtime-context/context.ts", name = "formatRuntimeContextMessage" },
+  { path = "packages/agent/extensions/runtime-context/context.ts", name = "RuntimeContext", view = "declaration" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/runtime-context/context.ts",
+  "packages/agent/test/extensions/runtime-context/index.test.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]
+
+[snapshot]
+description = "Depth-2 root listing with git check-ignore and always-hidden .git, 300-path cap with ellipsis, freeze cwd and paths, format display date and system-prompt message; date-key and snapshot fingerprint helpers"
+read = [
+  "packages/agent/extensions/runtime-context/context.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/runtime-context/index.ts",
+  "packages/agent/test/extensions/runtime-context/context.test.ts",
+]

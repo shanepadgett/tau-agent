@@ -1,8 +1,14 @@
 name = "Clear Screen"
-description = "Terminal viewport and scrollback clearing across process lifecycle events"
+description = "Clear the TUI scrollback on process start and quit without resetting session state"
 
-[feature]
-description = "Terminal clearing command and renderer behavior"
-read = []
-outline = ["packages/agent/extensions/clear-screen/index.ts"]
-references = ["packages/agent/extensions/clear-screen/README.md"]
+[extension-runtime]
+description = "TTY-only; clear once per process on first load via globalThis symbol state so /reload does not re-clear; set clearOnExit only when session_shutdown reason is quit; process exit hook clears ANSI viewport and scrollback or newline-fill on old Windows; no-op for pipe and non-quit shutdowns"
+read = [
+  "packages/agent/extensions/clear-screen/index.ts",
+  "packages/agent/extensions/clear-screen/README.md",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/tau-help/help.md",
+]

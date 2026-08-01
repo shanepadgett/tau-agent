@@ -1,14 +1,28 @@
 name = "Footer"
-description = "Compact two-line Tau footer, usage accounting, and contributed status items"
+description = "Session footer status: model, effort, cost, git, and extension badges"
 
-[runtime]
-description = "Footer lifecycle, usage accounting, event contributions, and rendering"
-read = []
-outline = ["packages/agent/extensions/footer/index.ts"]
-references = ["packages/agent/extensions/footer/README.md", "packages/agent/test/extensions/footer/index.test.ts"]
-
-[settings]
-description = "Footer visibility and display settings"
-read = []
-outline = ["packages/agent/extensions/footer/settings.ts"]
-references = []
+[extension-runtime]
+description = "Replace Pi footer with two-line Tau footer; /footer on|off|refresh with global enabled setting; subscribe tau:footer-item and tau:model-effort.changed; request effort snapshot on session_start; refresh git porcelain and daily ~/.pi/agent/sessions jsonl cost on lifecycle without polling; session usage from branch entries; context percent and token/cache stats; extension statuses plus priority-sorted footer items bottom-right"
+read = [
+  "packages/agent/extensions/footer/index.ts",
+  "packages/agent/extensions/footer/settings.ts",
+  "packages/agent/extensions/footer/README.md",
+]
+show = [
+  { path = "packages/agent/shared/model-effort.ts", name = "effortForSelection" },
+  { path = "packages/agent/shared/model-effort.ts", name = "ModelEffort", view = "declaration" },
+  { path = "packages/agent/shared/events.ts", name = "onTauEvent" },
+  { path = "packages/agent/shared/events.ts", name = "emitTauEvent" },
+  { path = "packages/agent/shared/events.ts", name = "setTauFooterItem" },
+  { path = "packages/agent/shared/events.ts", name = "TauFooterItem", view = "declaration" },
+  { path = "packages/agent/shared/settings/load.ts", name = "loadTauExtensionSettings" },
+  { path = "packages/agent/shared/settings/load.ts", name = "updateTauExtensionSettings" },
+]
+outline = []
+references = [
+  "packages/agent/shared/model-effort.ts",
+  "packages/agent/shared/events.ts",
+  "packages/agent/shared/settings/load.ts",
+  "packages/agent/test/extensions/footer/index.test.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]
