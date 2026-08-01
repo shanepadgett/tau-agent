@@ -38,7 +38,7 @@ Stable IDs used by report rows and improve flows. Align names with the readiness
 | `policy` | Thin AGENTS.md, vocabulary pointers |
 | `standards` | Work-type standards tree, not dumped into AGENTS |
 | `context` | `.pi/contexts` packs, optional validation settings |
-| `reuse` | Obvious shared homes, golden paths named |
+| `reuse` | Obvious shared homes (UI kit, platform utils, …) |
 | `markers` | Greppable temp/until/invariant vocabulary (if used) |
 | `harness` | Gates/protections pattern (mostly guidance + detect known config) |
 | `side-effect-verbs` | Guidance: publish/migrate as local commands, not skills |
@@ -182,7 +182,6 @@ Deterministic scan cannot finish these; still language-agnostic process:
 - Authoring context pack boundaries
 - Local standards-nudge extension map (repo-shaped)
 - Whether AGENTS is thin enough in spirit (size is only a hint)
-- Golden path “still canonical”
 
 Language packs feed **improve lint-entropy** only: which tools to offer, config filenames, quiet flags, task snippets. They do not own standards or context.
 
@@ -207,7 +206,6 @@ Only when quality matters and files exist (or should):
 | `policy-thinness` | AGENTS always-on vs dump? Pointers out? |
 | `standards-quality` | Real law vs empty headings? Work-type split? |
 | `context-quality` | Job-shaped packs vs file dumps? |
-| `golden-path` | Named exemplar real and current? |
 | `reuse-homes` | Shared UI/platform obvious or shadow copies? |
 
 Each lane: fixed tool allowlist (explore/read), small output schema (status + evidence + next), cheap/fast model, hard cap on files/bytes. Prefer **one subagent per lane** for isolation and cancel/retry; run parallel with a concurrency limit. If cost hurts, sequential or merge “docs quality” into one lane with sectioned schema.
@@ -310,7 +308,7 @@ Turn “next” into guided remediation for top areas.
 Expand without redesigning the extension.
 
 - Flesh ecosystem packs from `agent-readiness-ecosystem-packs.md` (Go, Rust, Swift, C#, JVM, Odin ceilings)
-- More improve playbooks: policy, standards, context, markers, reuse/golden-path pointers
+- More improve playbooks: policy, standards, context, markers, reuse homes
 - Harden monorepo language thresholds, CI-parity heuristics, applied-vs-possible display
 - README + tau-help
 

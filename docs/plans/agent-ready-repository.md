@@ -62,7 +62,7 @@ Put here:
 - How to work in this repo at all: verify expectations, commit/PR norms, what never to do, harness quirks.
 - Cross-cutting reasoning rules that always matter (build ladder, deepen don't smear, failure protocol).
 - Language or stack rules that apply whenever that stack is touched *and* cannot be enforced well by lint/types/formatters. Prefer machines first; prose is the overflow valve.
-- Pointers to where the rest lives (standards tree, vocabulary, golden paths, cold start)—not the contents of those docs.
+- Pointers to where the rest lives (standards tree, vocabulary, cold start)—not the contents of those docs.
 
 Keep out:
 
@@ -72,12 +72,12 @@ Keep out:
 
 Same idea for every language, not TypeScript-only. Thin on purpose. Other rails carry the weight.
 
-### Maps and exemplars
+### Maps and structure
 
 - Vocabulary file for core nouns so humans and agents share names.
 - Feature / vertical-slice layout so work has obvious directory gravity.
 - Context work packs (job-shaped file sets for recurring work units), maintained as the tree changes—not a full file dump.
-- Named golden path per major artifact kind (extension, package, feature slice). One live canonical example beats many toy demos. Link it from policy docs. No in-repo anti-example folders; agents copy those too.
+- No in-repo anti-example folders; agents copy those too.
 - Short architecture norms: either a few lines in AGENTS.md or a linked doc; details stay out of the always-on file.
 
 ## Reuse and standards
@@ -97,7 +97,6 @@ Standards docs by work type:
 - Not dumped into AGENTS.md. That file points at the system; it does not host every playbook.
 - Prefer attaching the right standard when a context work pack is selected (UI pack brings UI standard, API pack brings API standard). Pay once to wire; cheap every later task.
 - Standards say: where reuse lives, how to extend it, what not to reinvent, which package APIs are canonical.
-- Golden paths double as reuse exemplars: the canonical slice imports from the shared homes the house way.
 - Optional: path-triggered standards nudges while the agent explores (local extension). Point at the doc; do not inline it until intent is to work there. See `docs/plans/standards-nudge-extension.md`.
 
 Enforce what you can: boundary lint so features cannot grow private UI kits; dead-code/dup so paste-bots lose; review when someone adds a parallel helper next to a shared one.
@@ -147,7 +146,7 @@ Operational rules:
 
 Human-triggered, not autonomous constitution rewriting.
 
-- **Readiness harvest prompt** — run on a session that taught something (hard bug, good path, repeated footgun). Distill concrete repo improvements: standards gaps, missing verbs, cold-start holes, markers to add, context packs, lint rules, golden path drift. Output a short proposal the human accepts or rejects. See `docs/plans/session-readiness-harvest.md`.
+- **Readiness harvest prompt** — run on a session that taught something (hard bug, good path, repeated footgun). Distill concrete repo improvements: standards gaps, missing verbs, cold-start holes, markers to add, context packs, lint rules. Output a short proposal the human accepts or rejects. See `docs/plans/session-readiness-harvest.md`.
 - **Taste replay** — when a human rejects a pattern ("why is this a new helper?"), file it as a durable micro-rule in the right standard or lint — not left only in chat history.
 
 ## Autonomy loop
@@ -172,7 +171,6 @@ Deterministic or nearly so:
 - Greppable marker vocabulary documented if the repo uses temp/until/invariant markers; sweep task optional
 - Formatter/linter/types/entropy wired when expected files exist
 - Thin AGENTS.md (always-on law + pointers), vocabulary, task runner, bootstrap tool config present
-- Golden path linked
 - Shared reuse homes exist and are named (UI kit, platform utils, etc.) when the repo has that kind of code
 - Work-type standards docs exist; AGENTS.md does not absorb them
 - Context packs can attach relevant standards
@@ -183,7 +181,7 @@ Deterministic or nearly so:
 Judgment or heavier tooling:
 
 - Bootstrap actually works on a clean machine (best: clean container CI)
-- Modules are deep; golden path is still canonical
+- Modules are deep; boundaries hold
 - Reuse homes are actually used; features are not growing shadow design systems
 - Lint rules encode real law, not only style
 - Harness gates exist and rail files are protected

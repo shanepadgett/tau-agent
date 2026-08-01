@@ -21,7 +21,7 @@ Only repo-facing improvements, each with a landing place:
 - New or tighter lint/entropy rule
 - Standard doc gap or split (UI vs API etc.)
 - AGENTS.md one-liner only if truly always-on
-- Context pack / golden path / vocabulary update
+- Context pack / vocabulary update
 - Cold-start or task-runner gap
 - `@agent` markers to add (temp/until/invariant) on leftover scaffolding
 - Deterministic verb (slash command/script) for a procedure that was re-derived

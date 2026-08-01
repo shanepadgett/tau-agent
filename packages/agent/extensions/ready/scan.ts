@@ -484,23 +484,6 @@ async function scanGeneral(fs: FsIndex): Promise<ReadyRow[]> {
 	}
 
 	const policyBlob = policy[0] ? ((await readIfExists(join(fs.root, policy[0]))) ?? "") : "";
-	const goldenHints =
-		textIncludes(`${fs.miseText}\n${fs.packageScripts}\n${policyBlob}`, "golden") ||
-		[...fs.files].some((path) => /golden|canonical.example/i.test(path));
-	rows.push(
-		row({
-			id: "reuse.golden",
-			area: "reuse",
-			title: "Golden path pointer",
-			status: goldenHints ? "pass" : "unknown",
-			evidence: goldenHints ? ["heuristic: golden/canonical mention or path"] : [],
-			note: goldenHints
-				? "Possible golden-path pointer detected (heuristic)."
-				: "Scan cannot confirm a named golden path; check AGENTS/standards manually.",
-			next: goldenHints ? undefined : "Name a canonical example per major artifact kind and link it from policy.",
-		}),
-	);
-
 	const markerHit =
 		textIncludes(fs.fallowText, "@agent") ||
 		textIncludes(fs.tauSettingsText, "@agent kind") ||
