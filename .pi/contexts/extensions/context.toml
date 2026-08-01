@@ -1,26 +1,30 @@
 name = "Context"
 description = "Reusable repository context selection, ephemeral projection, and maintenance"
 
-[definitions]
-description = "Strict TOML loading, loading-mode validation, project boundaries, and membership"
-read = []
-outline = ["packages/agent/extensions/context/definitions.ts"]
-references = []
+[catalog]
+description = "Context catalog model, loading-mode policy, path eligibility, validation, and settings"
+read = [
+	"packages/agent/extensions/context/definitions.ts",
+	"packages/agent/extensions/context/validation.ts",
+	"packages/agent/extensions/context/settings.ts",
+]
+outline = []
+references = ["packages/agent/extensions/context/README.md"]
 
 [selection]
-description = "Branch-local active selection, tabbed selector, and ephemeral read/outline/reference projection"
-read = []
-outline = ["packages/agent/extensions/context/index.ts", "packages/agent/extensions/context/panel.ts"]
-references = []
+description = "One-time tabbed selection, loading-mode precedence, and file-injection projection"
+read = ["packages/agent/extensions/context/index.ts", "packages/agent/extensions/context/panel.ts"]
+outline = []
+references = ["packages/agent/extensions/context/README.md"]
 
-[maintenance]
-description = "Automatic validation, settings, evidence, write-scope enforcement, and subagent-driven catalog synchronization"
-read = []
-outline = ["packages/agent/extensions/context/evidence.ts", "packages/agent/extensions/context/sync.ts", "packages/agent/extensions/context/validation.ts"]
-references = ["packages/agent/extensions/context/settings.ts", "packages/agent/extensions/context/write-scope.ts"]
+[synchronization]
+description = "Context-sync orchestration, evidence, subagent handoff, write-scope restoration, and verification"
+read = ["packages/agent/extensions/context/sync.ts", "packages/agent/extensions/context/write-scope.ts"]
+outline = ["packages/agent/extensions/context/evidence.ts"]
+references = ["packages/agent/extensions/context/README.md"]
 
 [documentation]
-description = "Product behavior, catalog taxonomy, and user-facing selection guidance"
+description = "Context management guidance, catalog taxonomy, and extension usage"
 read = ["packages/agent/docs/context.md"]
 outline = []
 references = ["packages/agent/extensions/context/README.md"]

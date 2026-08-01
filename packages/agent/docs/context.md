@@ -58,6 +58,8 @@ Catalog durable code, configuration, tests, standards, and long-lived documentat
 
 Every entry declares all three arrays, including empty arrays. Keep `read` and `outline` small because every selected path is injected into the conversation. Keep each path's loading mode consistent across the catalog. When selected entries disagree, precedence is `read`, then `outline`, then `references`.
 
+Catalog entries do not store line ranges. Ranges are useful for a current file-injection request, though line numbers drift as source changes and make a durable catalog range stale. Select the file as `outline` for a structural starting point, then use a current ranged read when you need a body the outline omitted. Use `read` when the complete file is small and routinely needed for that work scope.
+
 `/context` injects the selected entries once, as soon as you confirm the selector. Tau adds one hidden note naming the selected entries and their `references`, then appends the complete `read` files and the `outline` structures as visible rows. Those messages stay in the conversation exactly as injected, so the prompt prefix stays cacheable. Run `/context` again to inject more entries.
 
 ## Maintain the map
