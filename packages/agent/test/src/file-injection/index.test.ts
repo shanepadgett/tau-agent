@@ -141,4 +141,56 @@ describe("file injection", () => {
 			await workspace.cleanup();
 		}
 	});
+
+	test("injects a resolved show target without marking the whole file known", async () => {
+		const workspace = await createWorkspace();
+		try {
+			await workspace.write(
+				"source.ts",
+				["export function keep(): void {}", "export function target(): number {", "\treturn 1;", "}", ""].join(
+					"\n",
+				),
+			);
+
+			const [message] = await prepareFileInjection(pi, {
+				cwd: workspace.dir,
+				source: "test",
+				batchId: "batch",
+				files: [{ path: "source.ts", mode: "show", name: "target" }],
+			});
+
+			expect(message.details).toMatchObject({
+				kind: "show",
+				status: "injected",
+				showName: "target",
+				showView: "declaration",
+				ranges: [{ startLine: 2, endLine: 4 }],
+			});
+			expect(message.details.readCache).toBeUndefined();
+			expect(message.content).toContain("target");
+			expect(message.content).toContain("return 1");
+			expect(message.content).not.toContain("keep");
+		} finally {
+			await workspace.cleanup();
+		}
+	});
+
+	test("returns a per-file failure when a show target does not resolve", async () => {
+		const workspace = await createWorkspace();
+		try {
+			await workspace.write("source.ts", "export function keep(): void {}\n");
+
+			const [message] = await prepareFileInjection(pi, {
+				cwd: workspace.dir,
+				source: "test",
+				batchId: "batch",
+				files: [{ path: "source.ts", mode: "show", name: "missing" }],
+			});
+
+			expect(message.details).toMatchObject({ kind: "show", status: "failed" });
+			expect(message.content).toContain("No declaration matched");
+		} finally {
+			await workspace.cleanup();
+		}
+	});
 });

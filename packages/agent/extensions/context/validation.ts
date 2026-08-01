@@ -8,6 +8,17 @@ export interface ContextValidationResult {
 	uncovered: string[];
 }
 
+export async function listEligibleDirtyPaths(
+	git: GitRunner,
+	root: string,
+	ignoreGlobs: readonly string[],
+): Promise<string[]> {
+	const status = await git.run(["status", "--porcelain=v2", "-z", "--untracked-files=all"], { cwd: root });
+	return [...parseDirtyPaths(status)]
+		.filter((path) => !isSensitiveContextPath(path) && isContextEligiblePath(path, ignoreGlobs))
+		.sort((left, right) => left.localeCompare(right));
+}
+
 export async function validateContextCatalog(
 	git: GitRunner,
 	root: string,
@@ -28,31 +39,8 @@ export async function validateContextCatalog(
 		}
 	}
 
-	const status = await git.run(["status", "--porcelain=v2", "-z", "--untracked-files=all"], { cwd: root });
-	const records = status.split("\0");
-	const dirty = new Set<string>();
-	for (let index = 0; index < records.length; index++) {
-		const record = records[index];
-		if (!record) continue;
-		if (record.startsWith("? ")) {
-			dirty.add(record.slice(2).replaceAll("\\", "/"));
-			continue;
-		}
-		const fields = record.split(" ");
-		const state = fields[1] ?? "..";
-		if (record.startsWith("1 ") && !state.includes("D")) {
-			dirty.add(fields.slice(8).join(" ").replaceAll("\\", "/"));
-		} else if (record.startsWith("2 ")) {
-			if (!state.includes("D")) dirty.add(fields.slice(9).join(" ").replaceAll("\\", "/"));
-			index += 1;
-		} else if (record.startsWith("u ")) {
-			dirty.add(fields.slice(10).join(" ").replaceAll("\\", "/"));
-		}
-	}
-	const uncovered = [...dirty]
-		.filter(
-			(path) => !isSensitiveContextPath(path) && isContextEligiblePath(path, ignoreGlobs) && !memberships.has(path),
-		)
+	const uncovered = (await listEligibleDirtyPaths(git, root, ignoreGlobs))
+		.filter((path) => !memberships.has(path))
 		.sort((left, right) => left.localeCompare(right));
 	return { stale: stale.sort((left, right) => left.path.localeCompare(right.path)), uncovered };
 }
@@ -73,4 +61,28 @@ export function formatContextValidationFailure(result: ContextValidationResult):
 		"With validation enabled, Tau runs context-sync automatically after agent turns. Manual: /context-sync or /context-sync <nudge>.",
 	);
 	return output.join("\n");
+}
+
+function parseDirtyPaths(status: string): Set<string> {
+	const records = status.split("\0");
+	const dirty = new Set<string>();
+	for (let index = 0; index < records.length; index++) {
+		const record = records[index];
+		if (!record) continue;
+		if (record.startsWith("? ")) {
+			dirty.add(record.slice(2).replaceAll("\\", "/"));
+			continue;
+		}
+		const fields = record.split(" ");
+		const state = fields[1] ?? "..";
+		if (record.startsWith("1 ") && !state.includes("D")) {
+			dirty.add(fields.slice(8).join(" ").replaceAll("\\", "/"));
+		} else if (record.startsWith("2 ")) {
+			if (!state.includes("D")) dirty.add(fields.slice(9).join(" ").replaceAll("\\", "/"));
+			index += 1;
+		} else if (record.startsWith("u ")) {
+			dirty.add(fields.slice(10).join(" ").replaceAll("\\", "/"));
+		}
+	}
+	return dirty;
 }

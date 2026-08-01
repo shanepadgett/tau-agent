@@ -11,16 +11,14 @@ import {
 	extensionPathsForTools,
 	runSubagentTurn,
 } from "../subagent/run.ts";
-import { collectSyncEvidence } from "./evidence.ts";
 import { pathExists } from "./definitions.ts";
 import contextSettings from "./settings.ts";
-import { formatContextValidationFailure, validateContextCatalog } from "./validation.ts";
-import { restoreOutsideContextMutations, snapshotOutsideContext } from "./write-scope.ts";
+import { formatContextValidationFailure, listEligibleDirtyPaths, validateContextCatalog } from "./validation.ts";
 
 const CONTEXT_SYNC_AGENT = "context-sync";
 
 export interface ContextSyncDetails {
-	outcome: "applied" | "no-change" | "failed";
+	outcome: "applied" | "no-change" | "failed" | "cancelled";
 	summary: string;
 	reason: string;
 	changedContextFiles: string[];
@@ -44,22 +42,28 @@ async function runContextSyncLocked(
 	options: { nudge?: string; signal?: AbortSignal; onStatus?: (status: string) => void | Promise<void> },
 ): Promise<ContextSyncDetails> {
 	if (!ctx.isProjectTrusted()) throw new Error("Context sync requires a trusted project");
+	const signal = options.signal ?? ctx.signal ?? new AbortController().signal;
+	if (signal.aborted) return cancelledResult();
+
 	await options.onStatus?.("Inspecting repository context");
 	const git = createGitRunner(pi, ctx);
 	const status = await loadRepoStatus(git);
 	if (!status) throw new Error("No Git repository found");
 	const settings = await loadTauExtensionSettings(ctx, contextSettings);
-	const evidence = await collectSyncEvidence(git, status.root, settings.validation.ignoreGlobs);
-	if (evidence.files.length === 0 && evidence.missingPaths.size === 0)
+	const validation = await validateContextCatalog(git, status.root, settings.validation.ignoreGlobs);
+	const dirtyEligible = await listEligibleDirtyPaths(git, status.root, settings.validation.ignoreGlobs);
+	const force = Boolean(options.nudge?.trim());
+	if (!force && validation.stale.length === 0 && validation.uncovered.length === 0 && dirtyEligible.length === 0) {
 		return {
 			outcome: "no-change",
 			summary: "Existing context mappings already fit the changed scope.",
-			reason: "Changed files are outside context catalog scope.",
+			reason: "No eligible dirty files, stale catalog paths, or sync nudge.",
 			changedContextFiles: [],
 		};
+	}
+	if (signal.aborted) return cancelledResult();
 
 	const beforeCatalog = await catalogFileSnapshot(status.root);
-	const outsideBefore = await snapshotOutsideContext(git, status.root);
 	const discovery = await discoverAgents(ctx.cwd, ctx.isProjectTrusted());
 	const definition = discovery.agents.get(CONTEXT_SYNC_AGENT);
 	if (!definition) {
@@ -72,8 +76,6 @@ async function runContextSyncLocked(
 	}
 
 	const task = buildContextSyncTask(status.root, options.nudge);
-	const signal = options.signal ?? ctx.signal ?? new AbortController().signal;
-
 	await options.onStatus?.("Running context-sync subagent");
 	const thread = await createSubagentThread({
 		id: `context-sync-${Date.now()}`,
@@ -101,19 +103,14 @@ async function runContextSyncLocked(
 			},
 		});
 		agentResponse = result.content;
+		if (signal.aborted || result.details.status === "aborted") {
+			return cancelledResult(agentResponse);
+		}
 		if (result.details.status !== "completed") {
-			const writeScopeViolations = await restoreOutsideContextMutations(git, status.root, outsideBefore);
 			return {
 				outcome: "failed",
 				summary: "Context sync subagent failed.",
-				reason: [
-					result.details.error ?? result.content,
-					writeScopeViolations.length
-						? `Restored out-of-scope writes:\n${writeScopeViolations.map((path) => `- ${path}`).join("\n")}`
-						: undefined,
-				]
-					.filter((line): line is string => Boolean(line))
-					.join("\n\n"),
+				reason: result.details.error ?? result.content,
 				changedContextFiles: changedCatalogPaths(beforeCatalog, await catalogFileSnapshot(status.root)),
 				agentResponse,
 			};
@@ -122,19 +119,10 @@ async function runContextSyncLocked(
 		await disposeSubagentThread(thread);
 	}
 
-	await options.onStatus?.("Verifying write scope");
-	const writeScopeViolations = await restoreOutsideContextMutations(git, status.root, outsideBefore);
+	if (signal.aborted) return cancelledResult(agentResponse);
+
 	const afterCatalog = await catalogFileSnapshot(status.root);
 	const changedContextFiles = changedCatalogPaths(beforeCatalog, afterCatalog);
-	if (writeScopeViolations.length > 0) {
-		return {
-			outcome: "failed",
-			summary: "Context sync wrote outside .pi/contexts; out-of-scope paths were restored.",
-			reason: `Out-of-scope writes restored:\n${writeScopeViolations.map((path) => `- ${path}`).join("\n")}`,
-			changedContextFiles,
-			agentResponse,
-		};
-	}
 
 	await options.onStatus?.("Verifying context catalog");
 	const validationFailure = formatContextValidationFailure(
@@ -168,13 +156,24 @@ async function runContextSyncLocked(
 	};
 }
 
+function cancelledResult(agentResponse?: string): ContextSyncDetails {
+	return {
+		outcome: "cancelled",
+		summary: "Context sync cancelled",
+		reason: agentResponse?.trim() || "Cancelled by user.",
+		changedContextFiles: [],
+		agentResponse,
+	};
+}
+
 function buildContextSyncTask(root: string, nudge?: string): string {
 	const trimmed = nudge?.trim();
 	return [
-		`Synchronize the repository context catalog at ${root}.`,
-		"Use context_sync_evidence for git/catalog facts. Edit only .pi/contexts with patch.",
-		"Walk the typology ladder out loud before path placement. Recheck invariants before finishing.",
-		trimmed ? `Human nudge (soft steer, does not skip evidence or ladder):\n${trimmed}` : undefined,
+		`Keep the repository context catalog at ${root} honest.`,
+		"Job: update `.pi/contexts` so work packs match the codebase.",
+		"Use normal repo tools. Prefer patch for catalog edits under `.pi/contexts`.",
+		"Walk domain → concept → job entry before placing paths. Harness verifies catalog coverage after you finish.",
+		trimmed ? `Human nudge (soft steer, does not skip the ladder or coverage):\n${trimmed}` : undefined,
 	]
 		.filter((line): line is string => Boolean(line))
 		.join("\n\n");
@@ -198,18 +197,20 @@ async function catalogFileSnapshot(root: string): Promise<Map<string, string>> {
 	const snapshot = new Map<string, string>();
 	const base = join(root, ".pi", "contexts");
 	if (!(await pathExists(base))) return snapshot;
-	for (const tab of (await readdir(base, { withFileTypes: true }))
-		.filter((item) => item.isDirectory())
-		.sort((a, b) => a.name.localeCompare(b.name))) {
-		for (const file of (await readdir(join(base, tab.name), { withFileTypes: true }))
-			.filter((item) => item.isFile() && extname(item.name) === ".toml")
-			.sort((a, b) => a.name.localeCompare(b.name))) {
-			const absolute = join(base, tab.name, file.name);
-			const path = relative(root, absolute).split(sep).join("/");
-			const hash = createHash("sha256")
-				.update(await readFile(absolute))
-				.digest("hex");
-			snapshot.set(path, hash);
+	const stack = [base];
+	while (stack.length > 0) {
+		const directory = stack.pop();
+		if (!directory) continue;
+		for (const entry of await readdir(directory, { withFileTypes: true })) {
+			const fullPath = join(directory, entry.name);
+			if (entry.isDirectory()) {
+				stack.push(fullPath);
+				continue;
+			}
+			if (!entry.isFile() || extname(entry.name) !== ".toml") continue;
+			const relativePath = relative(root, fullPath).split(sep).join("/");
+			const content = await readFile(fullPath, "utf8");
+			snapshot.set(relativePath, createHash("sha256").update(content).digest("hex"));
 		}
 	}
 	return snapshot;

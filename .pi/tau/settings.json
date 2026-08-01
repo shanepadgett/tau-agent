@@ -6,7 +6,13 @@
 		},
 		"context": {
 			"validation": {
-				"ignoreGlobs": [".pi/tau/*.jsonl", "docs/plans/**", "packages/agent/native-bin/**"]
+				"ignoreGlobs": [
+					".pi/tau/*.jsonl",
+					"docs/plans/**",
+					"packages/agent/native-bin/**",
+					"packages/agent/test/extensions/patch/fixtures/**",
+					"packages/agent/src/ast/grammars/*.wasm"
+				]
 			}
 		},
 		"contextPruning": {

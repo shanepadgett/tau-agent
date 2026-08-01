@@ -29,7 +29,8 @@ export class ContextPanel implements Component {
 		this.theme = theme;
 		this.done = done;
 		this.current = firstEntry;
-		const tabNames = [...new Set(entries.map((entry) => entry.tab))].sort();
+		// loadContextEntries already emits tabs in NN_ folder order; keep first-seen order.
+		const tabNames = [...new Set(entries.map((entry) => entry.tab))];
 		this.tabs = new Tabs(
 			theme,
 			tabNames.map((tab) => {
@@ -151,9 +152,16 @@ export class ContextPanel implements Component {
 			invalidate: () => this.tabs.invalidate(),
 		};
 	}
-	private currentPaths(): Array<{ kind: "read" | "outline" | "reference"; path: string }> {
+	private currentPaths(): Array<{ kind: "read" | "show" | "outline" | "reference"; path: string }> {
 		return [
 			...this.current.read.map((path) => ({ kind: "read" as const, path })),
+			...this.current.show.map((target) => ({
+				kind: "show" as const,
+				path:
+					target.view === "declaration"
+						? `${target.name} · ${target.path}`
+						: `${target.name} [${target.view}] · ${target.path}`,
+			})),
 			...this.current.outline.map((path) => ({ kind: "outline" as const, path })),
 			...this.current.references.map((path) => ({ kind: "reference" as const, path })),
 		];
@@ -165,7 +173,7 @@ export class ContextPanel implements Component {
 		return this.currentPaths().length > pageSize ? Math.max(1, pageSize - 1) : pageSize;
 	}
 	private secondary(): string {
-		return `${[...this.selected.values()].reduce((sum, items) => sum + items.length, 0)} selected · ${this.current.read.length} read · ${this.current.outline.length} outline · ${this.current.references.length} references`;
+		return `${[...this.selected.values()].reduce((sum, items) => sum + items.length, 0)} selected · ${this.current.read.length} read · ${this.current.show.length} show · ${this.current.outline.length} outline · ${this.current.references.length} references`;
 	}
 	private hints() {
 		const list = this.activeList();
@@ -190,6 +198,7 @@ export class ContextSyncStatusPanel implements Component {
 	private readonly tui: TUI;
 	private readonly panel: ToolPanel;
 	private readonly config: ToolPanelConfig;
+	private readonly controller = new AbortController();
 	private readonly startedAt = Date.now();
 	private readonly timer: ReturnType<typeof setInterval>;
 	private lines: string[] = [];
@@ -211,13 +220,24 @@ export class ContextSyncStatusPanel implements Component {
 				},
 				invalidate: () => {},
 			},
-			footer: { kind: "hints", hints: [] },
+			footer: { kind: "hints", hints: [bindingHint("tui.select.cancel", "cancel")] },
 			border: "horizontal",
 		};
 		this.panel = new ToolPanel(theme, this.config);
 		this.update(status);
 		this.timer = setInterval(() => this.tui.requestRender(), 1_000);
 		this.timer.unref();
+	}
+
+	get signal(): AbortSignal {
+		return this.controller.signal;
+	}
+
+	handleInput(data: string): void {
+		if (!getKeybindings().matches(data, "tui.select.cancel")) return;
+		if (this.controller.signal.aborted) return;
+		this.update("Cancelling context sync");
+		this.controller.abort();
 	}
 
 	update(status: string): void {

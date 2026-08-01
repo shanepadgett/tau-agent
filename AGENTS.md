@@ -14,6 +14,12 @@
 - Minimal to zero helper functions unless reducing duplicate code.
 - Required state explicit unless domain is truly optional.
 
+## Tests
+
+- Never add new tests (unit, integration, e2e, fixtures, or snapshots). The suite is being unwound; do not grow it.
+- Do not update existing tests unless the user explicitly asks.
+- Do not add test-only exports, helpers, or scaffolding.
+
 ## TypeScript
 
 - Strict TypeScript. Erasable syntax only.
@@ -33,7 +39,7 @@
 - Treat cache behavior as a correctness requirement for any change that can affect model requests, directly or indirectly.
 - Before implementation, identify which final serialized request fields can change across consecutive calls. Preserve the longest stable prefix and place unavoidable mutable data after stable cached content.
 - Validate the final request after all transformations and lifecycle behavior. An intermediate representation or isolated unit can look stable while the provider payload is not.
-- Add regression coverage using consecutive requests. Assert unchanged content keeps the same fingerprint and necessary invalidation starts no earlier than intended.
+- When changing cache-sensitive paths, reason about consecutive requests: unchanged content must keep the same fingerprint and necessary invalidation must start no earlier than intended. Do not add tests for this unless the user explicitly asks.
 
 ## Tool Results
 

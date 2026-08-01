@@ -12,6 +12,7 @@ import type { TemporaryOutputStore } from "../../shared/temporary-output-store.t
 import type { ToolRowStateStore } from "../../shared/tool-row-state.ts";
 import { formatOutlineEmpty, formatOutlineFile } from "../ast/format/outline.ts";
 import { outlinePath } from "../ast/queries/outline.ts";
+import { showTargets, type ShowView } from "../ast/queries/show.ts";
 import { formatLargeReadOutline, shouldOutlineFullRead } from "../ast/read-policy.ts";
 import { astEngineFor } from "../ast/session.ts";
 import { formatPathForDisplay, resolveExplorePath, stripLeadingAt } from "../ast/traverse.ts";
@@ -24,10 +25,10 @@ const FILE_RENDER_LINES = 200;
 
 /**
  * `full` always injects complete contents, `outline` always injects structure,
- * and `auto` injects contents unless the source is larger than Explore's
- * structural read threshold.
+ * `show` injects one resolved declaration slice, and `auto` injects contents
+ * unless the source is larger than Explore's structural read threshold.
  */
-export type FileInjectionMode = "full" | "outline" | "auto";
+export type FileInjectionMode = "full" | "outline" | "auto" | "show";
 
 export interface FileInjectionDetails {
 	v: 1;
@@ -36,10 +37,14 @@ export interface FileInjectionDetails {
 	cwd: string;
 	source: string;
 	batchId: string;
-	/** One-based, inclusive ranges used for a partial file read. */
+	/** One-based, inclusive ranges used for a partial file read or show slice. */
 	ranges?: ReadonlyArray<LineRange>;
+	/** Declaration name when kind is show. */
+	showName?: string;
+	/** Extract view when kind is show. */
+	showView?: ShowView;
 	/** What was actually injected. `auto` resolves to `full` or `outline`. */
-	kind: "full" | "outline";
+	kind: "full" | "outline" | "show";
 	status: "injected" | "failed";
 	error?: string;
 	readCache?: ReadCacheMetaV1;
@@ -57,6 +62,10 @@ export interface FileInjectionFile {
 	mode: FileInjectionMode;
 	/** One-based, inclusive line ranges. Ranges take precedence over `auto` outlining. */
 	ranges?: ReadonlyArray<LineRange>;
+	/** Declaration name for mode `show`; may be dotted (`Type.method`). */
+	name?: string;
+	/** Show extract view; defaults to `declaration`. */
+	view?: ShowView;
 }
 
 export interface FileInjectionRequest {
@@ -131,8 +140,13 @@ async function prepareFileInjectionWithHost(
 		let base: InjectionBase = common;
 		try {
 			const ranges = file.ranges === undefined ? undefined : normalizeLineRanges(file.ranges);
-			base = { ...common, ...(ranges === undefined ? {} : { ranges }) };
-			prepared.push(await prepareOne(base, file.mode, request.signal, host));
+			base = {
+				...common,
+				...(ranges === undefined ? {} : { ranges }),
+				...(file.mode === "show" && file.name !== undefined ? { showName: file.name } : {}),
+				...(file.mode === "show" ? { showView: file.view ?? "declaration" } : {}),
+			};
+			prepared.push(await prepareOne(base, file, request.signal, host));
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			if (request.signal?.aborted) throw error;
@@ -142,7 +156,7 @@ async function prepareFileInjectionWithHost(
 				display: true,
 				details: {
 					...base,
-					kind: file.mode === "outline" ? "outline" : "full",
+					kind: file.mode === "outline" ? "outline" : file.mode === "show" ? "show" : "full",
 					status: "failed",
 					error: message,
 				},
@@ -156,16 +170,22 @@ type InjectionBase = Omit<FileInjectionDetails, "kind" | "status" | "error" | "r
 
 async function prepareOne(
 	base: InjectionBase,
-	mode: FileInjectionMode,
+	file: FileInjectionFile,
 	signal: AbortSignal | undefined,
 	host: FileInjectionHost | undefined,
 ): Promise<PreparedFileInjection> {
+	if (file.mode === "show") {
+		if (base.ranges !== undefined) throw new Error("Line ranges are not supported for show injection");
+		const name = file.name?.trim();
+		if (!name) throw new Error("Show injection requires a declaration name");
+		return prepareShow(base, name, file.view ?? "declaration", signal);
+	}
 	if (base.ranges !== undefined) {
-		if (mode === "outline") throw new Error("Line ranges are supported only for file reads");
+		if (file.mode === "outline") throw new Error("Line ranges are supported only for file reads");
 		return prepareRangedRead(base, signal);
 	}
-	if (mode === "outline") return prepareOutline(base, signal, requireHost(host));
-	if (mode === "full") return prepareFull(base, signal);
+	if (file.mode === "outline") return prepareOutline(base, signal, requireHost(host));
+	if (file.mode === "full") return prepareFull(base, signal);
 	const settings = requireHost(host).autoOutline();
 	if (!settings.enabled) return prepareFull(base, signal);
 	const engine = astEngineFor(base.cwd);
@@ -179,6 +199,42 @@ async function prepareOne(
 	}
 	if (!shouldOutlineFullRead(lineCount, settings.thresholdLines)) return prepareFull(base, signal);
 	return prepareLargeSourceOutline(base, lineCount, signal);
+}
+
+async function prepareShow(
+	base: InjectionBase,
+	name: string,
+	view: ShowView,
+	signal: AbortSignal | undefined,
+): Promise<PreparedFileInjection> {
+	const engine = astEngineFor(base.cwd);
+	const abort = signal ?? new AbortController().signal;
+	const batch = await showTargets(engine, [{ path: base.path, name }], view, undefined, abort);
+	const block = batch.blocks[0];
+	if (block === undefined) throw new Error(`No declaration matched ${name} @ ${base.path}`);
+	const rangeLabel =
+		block.startLine === block.endLine ? `L${block.startLine}` : `L${block.startLine}-${block.endLine}`;
+	const messageContent = [
+		base.path,
+		`${rangeLabel}: ${block.name}`,
+		...block.warnings.map((warning) => `warning: ${warning}`),
+		block.text,
+	].join("\n");
+	if (truncateBoundedHead(messageContent).truncated)
+		throw new Error("Show target exceeds the complete injection limit; request a narrower symbol");
+	return {
+		customType: FILE_INJECTION_TYPE,
+		content: messageContent,
+		display: true,
+		details: {
+			...base,
+			kind: "show",
+			status: "injected",
+			showName: block.name,
+			showView: view,
+			ranges: [{ startLine: block.startLine, endLine: block.endLine }],
+		},
+	};
 }
 
 async function prepareRangedRead(base: InjectionBase, signal: AbortSignal | undefined): Promise<PreparedFileInjection> {
@@ -310,12 +366,24 @@ function parseDetails(value: unknown): FileInjectionDetails | undefined {
 		typeof details.cwd !== "string" ||
 		typeof details.source !== "string" ||
 		typeof details.batchId !== "string" ||
-		(details.kind !== "full" && details.kind !== "outline") ||
+		(details.kind !== "full" && details.kind !== "outline" && details.kind !== "show") ||
 		(details.status !== "injected" && details.status !== "failed")
 	)
 		return undefined;
 	const ranges = details.ranges === undefined ? undefined : parseRanges(details.ranges);
 	if (details.ranges !== undefined && ranges === undefined) return undefined;
+	const showName = details.showName;
+	const showView = details.showView;
+	if (details.kind === "show") {
+		if (typeof showName !== "string" || showName.length === 0) return undefined;
+		if (
+			showView !== "signature" &&
+			showView !== "signatureWithDocs" &&
+			showView !== "declaration" &&
+			showView !== "declarationWithImports"
+		)
+			return undefined;
+	}
 	return {
 		v: 1,
 		rowId: details.rowId,
@@ -324,6 +392,7 @@ function parseDetails(value: unknown): FileInjectionDetails | undefined {
 		source: details.source,
 		batchId: details.batchId,
 		...(ranges === undefined ? {} : { ranges }),
+		...(details.kind === "show" ? { showName: showName as string, showView: showView as ShowView } : {}),
 		kind: details.kind,
 		status: details.status,
 		...(typeof details.error === "string" ? { error: details.error } : {}),
@@ -410,8 +479,11 @@ class FileInjectionComponent {
 		const marker = new Marker({
 			theme: this.theme,
 			state,
-			label: this.details.kind === "outline" ? "outline" : "read",
-			parts: [this.details.path],
+			label: this.details.kind === "outline" ? "outline" : this.details.kind === "show" ? "show" : "read",
+			parts:
+				this.details.kind === "show" && this.details.showName
+					? [`${this.details.showName} · ${this.details.path}`]
+					: [this.details.path],
 		}).render(width);
 		if (!this.expanded || this.details.status === "failed") {
 			if (this.details.status === "failed") return marker;

@@ -4,27 +4,38 @@ description = "Reusable repository context selection, ephemeral projection, and 
 [catalog]
 description = "Context catalog model, loading-mode policy, path eligibility, validation, and settings"
 read = [
-	"packages/agent/extensions/context/definitions.ts",
-	"packages/agent/extensions/context/validation.ts",
-	"packages/agent/extensions/context/settings.ts",
+  "packages/agent/extensions/context/definitions.ts",
+  "packages/agent/extensions/context/validation.ts",
+  "packages/agent/extensions/context/settings.ts",
 ]
+show = []
 outline = []
-references = ["packages/agent/extensions/context/README.md"]
+references = [
+  "packages/agent/extensions/context/README.md",
+  "packages/agent/test/extensions/context/definitions.test.ts",
+]
 
 [selection]
 description = "One-time tabbed selection, loading-mode precedence, and file-injection projection"
 read = ["packages/agent/extensions/context/index.ts", "packages/agent/extensions/context/panel.ts"]
+show = []
 outline = []
 references = ["packages/agent/extensions/context/README.md"]
 
 [synchronization]
-description = "Context-sync orchestration, evidence, subagent handoff, write-scope restoration, and verification"
-read = ["packages/agent/extensions/context/sync.ts", "packages/agent/extensions/context/write-scope.ts"]
-outline = ["packages/agent/extensions/context/evidence.ts"]
+description = "Context-sync orchestration, subagent handoff, and catalog verification"
+read = [
+  "packages/agent/extensions/context/sync.ts",
+  "packages/agent/extensions/context/index.ts",
+  "packages/agent/extensions/subagent/agents/context-sync.md",
+]
+show = []
+outline = []
 references = ["packages/agent/extensions/context/README.md"]
 
 [documentation]
 description = "Context management guidance, catalog taxonomy, and extension usage"
 read = ["packages/agent/docs/context.md"]
+show = []
 outline = []
 references = ["packages/agent/extensions/context/README.md"]

@@ -1,0 +1,34 @@
+name = "Handoff"
+description = "Fresh linked-session creation from a focused generated handoff prompt"
+
+[command-lifecycle]
+description = "Run /handoff, create the linked session, preload selected files, and stage the draft prompt"
+read = [
+  "packages/agent/extensions/handoff/index.ts",
+  "packages/agent/extensions/handoff/README.md",
+]
+show = [
+  { path = "packages/agent/src/file-injection/index.ts", name = "prepareFileInjection" },
+  { path = "packages/agent/shared/model-fallback/index.ts", name = "generateToolValidated" },
+  { path = "packages/agent/shared/model-fallback/index.ts", name = "resolveCandidates" },
+]
+outline = []
+references = [
+  "packages/agent/extensions/handoff/model.ts",
+  "packages/agent/src/file-injection/index.ts",
+  "packages/agent/shared/model-fallback/index.ts",
+  "packages/agent/test/extensions/handoff/model.test.ts",
+]
+
+[draft-contract]
+description = "Build the grounded handoff request and validate the generated prompt and autoread file list"
+read = [
+  "packages/agent/extensions/handoff/model.ts",
+  "packages/agent/extensions/handoff/README.md",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/handoff/index.ts",
+  "packages/agent/test/extensions/handoff/model.test.ts",
+]

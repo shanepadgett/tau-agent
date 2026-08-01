@@ -4,6 +4,14 @@ import { basename, dirname, extname, join, relative, resolve, sep } from "node:p
 import { parse } from "smol-toml";
 import { matchGlob } from "../../shared/glob.ts";
 
+export type ContextShowView = "signature" | "signatureWithDocs" | "declaration" | "declarationWithImports";
+
+export interface ContextShowTarget {
+	path: string;
+	name: string;
+	view: ContextShowView;
+}
+
 export interface ContextEntry {
 	id: string;
 	tab: string;
@@ -13,6 +21,7 @@ export interface ContextEntry {
 	name: string;
 	description: string;
 	read: string[];
+	show: ContextShowTarget[];
 	outline: string[];
 	references: string[];
 	path: string;
@@ -38,7 +47,14 @@ const CONTEXT_IGNORED_FILENAMES = new Set([
 	"uv.lock",
 	"yarn.lock",
 ]);
-const CONTEXT_ENTRY_FIELDS = new Set(["description", "read", "outline", "references"]);
+const CONTEXT_ENTRY_FIELDS = new Set(["description", "read", "show", "outline", "references"]);
+const CONTEXT_SHOW_VIEWS = new Set<ContextShowView>([
+	"signature",
+	"signatureWithDocs",
+	"declaration",
+	"declarationWithImports",
+]);
+const CONTEXT_SHOW_TARGET_FIELDS = new Set(["path", "name", "view"]);
 
 export function isContextEligiblePath(path: string, ignoreGlobs: readonly string[] = []): boolean {
 	return (
@@ -84,10 +100,46 @@ export async function findProjectRoot(cwd: string): Promise<string> {
 	return gitRoot ?? resolve(cwd);
 }
 
+const TAB_FOLDER_PATTERN = /^(\d{2})_([a-z0-9]+(?:-[a-z0-9]+)*)$/;
+
 function validSlug(value: string, label: string): string {
 	const slug = value.trim();
 	if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error(`${label} must use lowercase kebab-case: ${value}`);
 	return slug;
+}
+
+/** Domain folder: `01_extensions` → order 1, tab slug `extensions` (id/label). */
+function parseContextTabFolder(name: string): { order: number; slug: string; folder: string } {
+	const match = TAB_FOLDER_PATTERN.exec(name);
+	const digits = match?.[1];
+	const slug = match?.[2];
+	if (!match || digits === undefined || slug === undefined) {
+		throw new Error(
+			`Context tab folder must be NN_kebab-slug with a two-digit order starting at 01 (e.g. 01_extensions): ${name}`,
+		);
+	}
+	const order = Number(digits);
+	if (!Number.isInteger(order) || order < 1 || order > 99) {
+		throw new Error(`Context tab order must be an integer from 01 to 99: ${name}`);
+	}
+	return { order, slug, folder: name };
+}
+
+function assertContiguousTabOrders(tabs: readonly { order: number; slug: string; folder: string }[]): void {
+	const byOrder = [...tabs].sort((left, right) => left.order - right.order);
+	const seenSlugs = new Set<string>();
+	for (let index = 0; index < byOrder.length; index++) {
+		const tab = byOrder[index];
+		if (!tab) continue;
+		const expected = index + 1;
+		if (tab.order !== expected) {
+			throw new Error(
+				`Context tab orders must be contiguous from 01 (expected ${String(expected).padStart(2, "0")}_…, found ${tab.folder})`,
+			);
+		}
+		if (seenSlugs.has(tab.slug)) throw new Error(`Duplicate context tab slug: ${tab.slug}`);
+		seenSlugs.add(tab.slug);
+	}
 }
 
 function normalizeProjectPath(root: string, input: string): string {
@@ -102,8 +154,55 @@ function sortedUnique(values: readonly string[]): string[] {
 	return [...new Set(values)].sort((a, b) => a.localeCompare(b));
 }
 
-export function contextEntryPaths(entry: Pick<ContextEntry, "read" | "outline" | "references">): string[] {
-	return sortedUnique([...entry.read, ...entry.outline, ...entry.references]);
+export function contextEntryPaths(entry: Pick<ContextEntry, "read" | "show" | "outline" | "references">): string[] {
+	return sortedUnique([
+		...entry.read,
+		...entry.show.map((target) => target.path),
+		...entry.outline,
+		...entry.references,
+	]);
+}
+
+function parseShowTargets(root: string, catalogPath: string, entryName: string, raw: unknown): ContextShowTarget[] {
+	if (!Array.isArray(raw) || raw.some((item) => !item || typeof item !== "object" || Array.isArray(item)))
+		throw new Error(`Invalid context entry show list: ${catalogPath} [${entryName}]`);
+	const targets: ContextShowTarget[] = [];
+	for (const item of raw) {
+		const record = item as Record<string, unknown>;
+		const unknownField = Object.keys(record).find((field) => !CONTEXT_SHOW_TARGET_FIELDS.has(field));
+		if (unknownField) throw new Error(`Invalid context show field: ${catalogPath} [${entryName}] ${unknownField}`);
+		if (
+			typeof record.path !== "string" ||
+			!record.path.trim() ||
+			typeof record.name !== "string" ||
+			!record.name.trim()
+		)
+			throw new Error(`Invalid context show target: ${catalogPath} [${entryName}]`);
+		let view: ContextShowView = "declaration";
+		if (record.view !== undefined) {
+			if (typeof record.view !== "string" || !CONTEXT_SHOW_VIEWS.has(record.view as ContextShowView))
+				throw new Error(`Invalid context show view: ${catalogPath} [${entryName}] ${String(record.view)}`);
+			view = record.view as ContextShowView;
+		}
+		targets.push({
+			path: normalizeProjectPath(root, record.path),
+			name: record.name.trim(),
+			view,
+		});
+	}
+	const seen = new Map<string, ContextShowTarget>();
+	for (const target of targets) {
+		const key = `${target.path}\0${target.name}`;
+		const existing = seen.get(key);
+		if (existing && existing.view !== target.view)
+			throw new Error(
+				`Context show target has multiple views: ${catalogPath} [${entryName}] ${target.path} ${target.name}`,
+			);
+		if (!existing) seen.set(key, target);
+	}
+	return [...seen.values()].sort(
+		(left, right) => left.path.localeCompare(right.path) || left.name.localeCompare(right.name),
+	);
 }
 
 export async function loadContextEntries(root: string): Promise<ContextEntry[]> {
@@ -111,15 +210,17 @@ export async function loadContextEntries(root: string): Promise<ContextEntry[]> 
 	if (!(await pathExists(contextsRoot))) return [];
 	const tabs = (await readdir(contextsRoot, { withFileTypes: true }))
 		.filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
-		.sort((a, b) => a.name.localeCompare(b.name));
+		.map((entry) => parseContextTabFolder(entry.name));
+	assertContiguousTabOrders(tabs);
+	tabs.sort((left, right) => left.order - right.order);
 	const result: ContextEntry[] = [];
 	for (const tabEntry of tabs) {
-		const tab = validSlug(tabEntry.name, "Context tab");
-		const files = (await readdir(join(contextsRoot, tab), { withFileTypes: true }))
+		const tab = tabEntry.slug;
+		const files = (await readdir(join(contextsRoot, tabEntry.folder), { withFileTypes: true }))
 			.filter((entry) => entry.isFile() && extname(entry.name) === ".toml")
 			.sort((a, b) => a.name.localeCompare(b.name));
 		for (const file of files) {
-			const path = join(contextsRoot, tab, file.name);
+			const path = join(contextsRoot, tabEntry.folder, file.name);
 			const concept = validSlug(basename(file.name, ".toml"), "Context concept");
 			const raw = parse(await readFile(path, "utf8")) as Record<string, unknown>;
 			const conceptName = typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : concept;
@@ -139,18 +240,25 @@ export async function loadContextEntries(root: string): Promise<ContextEntry[]> 
 					!Array.isArray(record.outline) ||
 					record.outline.some((item) => typeof item !== "string") ||
 					!Array.isArray(record.references) ||
-					record.references.some((item) => typeof item !== "string") ||
-					(record.read.length === 0 && record.outline.length === 0 && record.references.length === 0)
+					record.references.some((item) => typeof item !== "string")
 				)
 					throw new Error(`Invalid context entry: ${path} [${name}]`);
 				const entry = validSlug(name, "Context entry");
 				const entryRead = sortedUnique((record.read as string[]).map((item) => normalizeProjectPath(root, item)));
+				const entryShow = parseShowTargets(root, path, name, record.show ?? []);
 				const entryOutline = sortedUnique(
 					(record.outline as string[]).map((item) => normalizeProjectPath(root, item)),
 				);
 				const entryReferences = sortedUnique(
 					(record.references as string[]).map((item) => normalizeProjectPath(root, item)),
 				);
+				if (
+					entryRead.length === 0 &&
+					entryShow.length === 0 &&
+					entryOutline.length === 0 &&
+					entryReferences.length === 0
+				)
+					throw new Error(`Invalid context entry: ${path} [${name}]`);
 				const classified = [...entryRead, ...entryOutline, ...entryReferences];
 				const overlap = classified.find((item, index) => classified.indexOf(item) !== index);
 				if (overlap) throw new Error(`Context path has multiple loading modes: ${path} [${name}] ${overlap}`);
@@ -163,6 +271,7 @@ export async function loadContextEntries(root: string): Promise<ContextEntry[]> 
 					name: entry,
 					description: record.description.trim(),
 					read: entryRead,
+					show: entryShow,
 					outline: entryOutline,
 					references: entryReferences,
 					path,

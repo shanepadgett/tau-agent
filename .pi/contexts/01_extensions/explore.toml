@@ -1,0 +1,358 @@
+name = "Explore"
+description = "Structural source inspection through in-process tree-sitter WASM"
+
+[extension-runtime]
+description = "Wire Explore tools, session caches, mutation invalidation, read settings, and workspace guidance"
+read = [
+  "packages/agent/extensions/explore/index.ts",
+  "packages/agent/extensions/explore/README.md",
+  "packages/agent/extensions/explore/guidance.ts",
+  "packages/agent/extensions/explore/settings.ts",
+  "packages/agent/src/ast/session.ts",
+  "packages/agent/shared/tool-row-state.ts",
+]
+show = [
+  { path = "packages/agent/shared/temporary-output-store.ts", name = "createTemporaryOutputStore" },
+  { path = "packages/agent/src/file-injection/index.ts", name = "registerFileInjection" },
+  { path = "packages/agent/src/ast/engine.ts", name = "createExploreEngine" },
+  { path = "packages/agent/src/ast/graph/file-graph.ts", name = "createFileGraph" },
+]
+outline = []
+references = [
+  "packages/agent/shared/temporary-output-store.ts",
+  "packages/agent/shared/events.ts",
+  "packages/agent/shared/settings/load.ts",
+  "packages/agent/src/file-injection/index.ts",
+  "packages/agent/src/ast/engine.ts",
+  "packages/agent/src/ast/graph/file-graph.ts",
+  "packages/agent/extensions/explore/read/hook.ts",
+  "packages/agent/extensions/explore/tools/outline.ts",
+  "packages/agent/extensions/explore/tools/show.ts",
+  "packages/agent/extensions/explore/tools/discover.ts",
+  "packages/agent/extensions/explore/tools/ast-search.ts",
+  "packages/agent/extensions/explore/tools/deps.ts",
+  "packages/agent/extensions/explore/tools/reverse-deps.ts",
+  "packages/agent/extensions/explore/tools/relationships.ts",
+  "packages/agent/extensions/explore/tools/impact.ts",
+  "packages/agent/extensions/explore/tools/context.ts",
+]
+
+[engine-lifecycle]
+description = "Maintain the shared parse engine, adapter registry, source identity, scanning, slicing, and session cache"
+read = [
+  "packages/agent/src/ast/engine.ts",
+  "packages/agent/src/ast/registry.ts",
+  "packages/agent/src/ast/session.ts",
+  "packages/agent/src/ast/adapter.ts",
+  "packages/agent/src/ast/identity.ts",
+  "packages/agent/src/ast/ir.ts",
+  "packages/agent/src/ast/query.ts",
+  "packages/agent/src/ast/scan.ts",
+  "packages/agent/src/ast/slice.ts",
+  "packages/agent/src/ast/traverse.ts",
+  "packages/agent/src/ast/markdown.ts",
+  "packages/agent/src/ast/grammars/manifest.ts",
+]
+show = [{ path = "packages/agent/src/ast/graph/file-graph.ts", name = "createFileGraph" }]
+outline = []
+references = [
+  "packages/agent/extensions/explore/index.ts",
+  "packages/agent/src/ast/graph/file-graph.ts",
+  "packages/agent/src/ast/package-surface.ts",
+  "packages/agent/src/ast/languages/tree.ts",
+  "packages/agent/test/extensions/explore/helpers.ts",
+  "packages/agent/test/extensions/explore/outline.test.ts",
+  "packages/agent/test/extensions/explore/visibility.test.ts",
+]
+
+[language-foundation]
+description = "Extend the adapter contract and shared tree, path, and dotted-import helpers used by language implementations"
+read = [
+  "packages/agent/src/ast/adapter.ts",
+  "packages/agent/src/ast/languages/tree.ts",
+  "packages/agent/src/ast/languages/file-dep-util.ts",
+  "packages/agent/src/ast/languages/dotted-index.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/src/ast/ir.ts",
+  "packages/agent/src/ast/package-surface.ts",
+  "packages/agent/src/ast/registry.ts",
+  "packages/agent/src/ast/languages/typescript.ts",
+  "packages/agent/test/extensions/explore/file-deps.test.ts",
+]
+
+[typescript-adapter]
+description = "Maintain TypeScript and TSX extraction, module resolution, and package export surface discovery"
+read = [
+  "packages/agent/src/ast/languages/typescript.ts",
+  "packages/agent/src/ast/languages/typescript-file-deps.ts",
+  "packages/agent/src/ast/languages/typescript-package-surface.ts",
+  "packages/agent/src/ast/package-surface.ts",
+  "packages/agent/src/ast/adapter.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/src/ast/ir.ts",
+  "packages/agent/src/ast/languages/dotted-index.ts",
+  "packages/agent/src/ast/languages/file-dep-util.ts",
+  "packages/agent/src/ast/languages/tree.ts",
+  "packages/agent/test/extensions/explore/discover-matching.test.ts",
+  "packages/agent/test/extensions/explore/file-deps.test.ts",
+]
+
+[jvm-adapters]
+description = "Maintain Java and Kotlin declaration extraction and JVM import-to-file resolution"
+read = [
+  "packages/agent/src/ast/languages/java.ts",
+  "packages/agent/src/ast/languages/kotlin.ts",
+  "packages/agent/src/ast/languages/jvm-file-deps.ts",
+  "packages/agent/src/ast/adapter.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/src/ast/ir.ts",
+  "packages/agent/src/ast/languages/file-dep-util.ts",
+  "packages/agent/src/ast/languages/tree.ts",
+  "packages/agent/test/extensions/explore/file-deps.test.ts",
+  "packages/agent/test/extensions/explore/visibility.test.ts",
+]
+
+[systems-adapters]
+description = "Maintain Go and Rust extraction, call and heritage edges, and module dependency resolution"
+read = [
+  "packages/agent/src/ast/languages/go.ts",
+  "packages/agent/src/ast/languages/go-file-deps.ts",
+  "packages/agent/src/ast/languages/rust.ts",
+  "packages/agent/src/ast/languages/rust-file-deps.ts",
+  "packages/agent/src/ast/adapter.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/src/ast/ir.ts",
+  "packages/agent/src/ast/languages/file-dep-util.ts",
+  "packages/agent/src/ast/languages/tree.ts",
+  "packages/agent/test/extensions/explore/file-deps.test.ts",
+  "packages/agent/test/extensions/explore/rust-impl.test.ts",
+  "packages/agent/test/extensions/explore/visibility.test.ts",
+]
+
+[dotnet-swift-adapters]
+description = "Maintain C# and Swift declaration extraction, heritage edges, and file dependency resolution"
+read = [
+  "packages/agent/src/ast/languages/csharp.ts",
+  "packages/agent/src/ast/languages/csharp-file-deps.ts",
+  "packages/agent/src/ast/languages/swift.ts",
+  "packages/agent/src/ast/languages/swift-file-deps.ts",
+  "packages/agent/src/ast/adapter.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/src/ast/ir.ts",
+  "packages/agent/src/ast/languages/file-dep-util.ts",
+  "packages/agent/src/ast/languages/tree.ts",
+  "packages/agent/test/extensions/explore/file-deps.test.ts",
+  "packages/agent/test/extensions/explore/visibility.test.ts",
+]
+
+[dependency-graph]
+description = "Resolve forward and reverse file dependencies, package edges, invalidation, and package-surface graph inputs"
+read = [
+  "packages/agent/src/ast/graph/file-graph.ts",
+  "packages/agent/src/ast/package-surface.ts",
+  "packages/agent/src/ast/languages/file-dep-util.ts",
+  "packages/agent/src/ast/adapter.ts",
+]
+show = [{ path = "packages/agent/src/ast/engine.ts", name = "ExploreEngine" }]
+outline = []
+references = [
+  "packages/agent/src/ast/engine.ts",
+  "packages/agent/src/ast/session.ts",
+  "packages/agent/src/ast/languages/typescript-package-surface.ts",
+  "packages/agent/test/extensions/explore/file-deps.test.ts",
+]
+
+[relationship-graph]
+description = "Resolve callers, callees, references, and implementations from declaration, call, import, and heritage sites"
+read = [
+  "packages/agent/src/ast/graph/relationships.ts",
+  "packages/agent/src/ast/identity.ts",
+  "packages/agent/src/ast/ir.ts",
+]
+show = [
+  { path = "packages/agent/src/ast/engine.ts", name = "ExploreEngine" },
+  { path = "packages/agent/src/ast/graph/file-graph.ts", name = "ExploreFileGraph" },
+]
+outline = []
+references = [
+  "packages/agent/src/ast/engine.ts",
+  "packages/agent/src/ast/graph/file-graph.ts",
+  "packages/agent/test/extensions/explore/relationship-sites.test.ts",
+  "packages/agent/test/extensions/explore/rust-impl.test.ts",
+]
+
+[declaration-tools]
+description = "Implement outline, show, and discover tools with declaration queries, signatures, filters, and bounded result rendering"
+read = [
+  "packages/agent/extensions/explore/tools/outline.ts",
+  "packages/agent/extensions/explore/tools/show.ts",
+  "packages/agent/extensions/explore/tools/discover.ts",
+  "packages/agent/extensions/explore/tools/render.ts",
+  "packages/agent/shared/tool-row-state.ts",
+  "packages/agent/src/ast/queries/outline.ts",
+  "packages/agent/src/ast/queries/show.ts",
+  "packages/agent/src/ast/queries/discover.ts",
+  "packages/agent/src/ast/format/outline.ts",
+  "packages/agent/src/ast/format/show.ts",
+  "packages/agent/src/ast/format/discover.ts",
+  "packages/agent/src/ast/format/targeted-result.ts",
+]
+show = [
+  { path = "packages/agent/shared/bounded-text-result.ts", name = "BoundedTextResultBuilder" },
+  { path = "packages/agent/shared/temporary-output-store.ts", name = "TemporaryOutputStore" },
+  { path = "packages/agent/src/ast/engine.ts", name = "ExploreEngine" },
+]
+outline = []
+references = [
+  "packages/agent/shared/bounded-text-result.ts",
+  "packages/agent/shared/temporary-output-store.ts",
+  "packages/agent/src/ast/engine.ts",
+  "packages/agent/src/ast/traverse.ts",
+  "packages/agent/test/extensions/explore/discover-matching.test.ts",
+  "packages/agent/test/extensions/explore/outline.test.ts",
+  "packages/agent/test/extensions/explore/visibility.test.ts",
+]
+
+[structural-search]
+description = "Implement ast_search patterns, language selection, match grouping, limits, and output rendering"
+read = [
+  "packages/agent/extensions/explore/tools/ast-search.ts",
+  "packages/agent/extensions/explore/tools/render.ts",
+  "packages/agent/shared/tool-row-state.ts",
+  "packages/agent/src/ast/queries/ast-search.ts",
+  "packages/agent/src/ast/format/ast-search.ts",
+]
+show = [
+  { path = "packages/agent/shared/bounded-text-result.ts", name = "BoundedTextResultBuilder" },
+  { path = "packages/agent/shared/temporary-output-store.ts", name = "TemporaryOutputStore" },
+  { path = "packages/agent/src/ast/engine.ts", name = "ExploreEngine" },
+]
+outline = []
+references = [
+  "packages/agent/shared/bounded-text-result.ts",
+  "packages/agent/shared/temporary-output-store.ts",
+  "packages/agent/src/ast/engine.ts",
+  "packages/agent/src/ast/traverse.ts",
+  "packages/agent/src/ast/grammars/manifest.ts",
+  "packages/agent/test/extensions/explore/ast-search-format.test.ts",
+  "packages/agent/test/extensions/explore/grammars.test.ts",
+]
+
+[dependency-tools]
+description = "Expose forward, reverse, and symbol relationship queries through dependency and relationship tools"
+read = [
+  "packages/agent/extensions/explore/tools/deps.ts",
+  "packages/agent/extensions/explore/tools/reverse-deps.ts",
+  "packages/agent/extensions/explore/tools/relationships.ts",
+  "packages/agent/extensions/explore/tools/render.ts",
+  "packages/agent/extensions/explore/tools/target-params.ts",
+  "packages/agent/shared/tool-row-state.ts",
+  "packages/agent/src/ast/format/deps.ts",
+  "packages/agent/src/ast/format/relationships.ts",
+]
+show = [
+  { path = "packages/agent/src/ast/engine.ts", name = "ExploreEngine" },
+  { path = "packages/agent/src/ast/graph/file-graph.ts", name = "ExploreFileGraph" },
+  { path = "packages/agent/src/ast/graph/relationships.ts", name = "queryRelationships" },
+]
+outline = []
+references = [
+  "packages/agent/src/ast/engine.ts",
+  "packages/agent/src/ast/graph/file-graph.ts",
+  "packages/agent/src/ast/graph/relationships.ts",
+  "packages/agent/src/ast/traverse.ts",
+  "packages/agent/test/extensions/explore/file-deps.test.ts",
+  "packages/agent/test/extensions/explore/relationship-sites.test.ts",
+]
+
+[composite-tools]
+description = "Build context packs and impact reports for one callable or type target under bounded output and file graph scope"
+read = [
+  "packages/agent/extensions/explore/tools/context.ts",
+  "packages/agent/extensions/explore/tools/impact.ts",
+  "packages/agent/extensions/explore/tools/render.ts",
+  "packages/agent/extensions/explore/tools/target-params.ts",
+  "packages/agent/extensions/explore/settings.ts",
+  "packages/agent/shared/tool-row-state.ts",
+  "packages/agent/shared/settings/load.ts",
+  "packages/agent/src/ast/queries/composite-target.ts",
+  "packages/agent/src/ast/queries/context.ts",
+  "packages/agent/src/ast/queries/impact.ts",
+  "packages/agent/src/ast/format/composite.ts",
+  "packages/agent/src/ast/format/context.ts",
+  "packages/agent/src/ast/format/impact.ts",
+  "packages/agent/src/ast/format/targeted-result.ts",
+]
+show = [
+  { path = "packages/agent/shared/bounded-text-result.ts", name = "BoundedTextResultBuilder" },
+  { path = "packages/agent/shared/temporary-output-store.ts", name = "TemporaryOutputStore" },
+  { path = "packages/agent/src/ast/engine.ts", name = "ExploreEngine" },
+  { path = "packages/agent/src/ast/graph/file-graph.ts", name = "ExploreFileGraph" },
+]
+outline = []
+references = [
+  "packages/agent/shared/bounded-text-result.ts",
+  "packages/agent/shared/temporary-output-store.ts",
+  "packages/agent/src/ast/engine.ts",
+  "packages/agent/src/ast/graph/file-graph.ts",
+  "packages/agent/src/ast/graph/relationships.ts",
+  "packages/agent/src/ast/identity.ts",
+  "packages/agent/src/ast/ir.ts",
+  "packages/agent/src/ast/slice.ts",
+  "packages/agent/src/ast/traverse.ts",
+  "packages/agent/test/extensions/explore/context-pack.test.ts",
+]
+
+[read-overlay]
+description = "Apply Explore's large-source outline policy to Pi read and autoread while preserving ranged and unsupported reads"
+read = [
+  "packages/agent/extensions/explore/read/hook.ts",
+  "packages/agent/src/ast/read-policy.ts",
+  "packages/agent/src/ast/queries/outline.ts",
+  "packages/agent/src/ast/format/outline.ts",
+  "packages/agent/extensions/explore/settings.ts",
+  "packages/agent/shared/settings/load.ts",
+]
+show = [
+  { path = "packages/agent/src/ast/engine.ts", name = "ExploreEngine" },
+  { path = "packages/agent/src/ast/traverse.ts", name = "resolveExplorePath" },
+]
+outline = []
+references = [
+  "packages/agent/src/ast/engine.ts",
+  "packages/agent/src/ast/traverse.ts",
+  "packages/agent/src/file-injection/index.ts",
+  "packages/agent/extensions/explore/index.ts",
+  "packages/agent/test/extensions/explore/outline.test.ts",
+  "packages/agent/test/src/file-injection/index.test.ts",
+]
+
+[grammar-tooling]
+description = "Pin, rebuild, validate, and ship the tree-sitter WASM grammar artifacts used by Explore"
+read = [
+  "packages/agent/src/ast/grammars/manifest.ts",
+  "packages/agent/src/ast/grammars/manifest.json",
+  "packages/agent/scripts/build-grammars.ts",
+]
+show = []
+outline = []
+references = [
+  ".github/workflows/grammars.yml",
+  "packages/agent/src/ast/registry.ts",
+  "packages/agent/test/extensions/explore/grammars.test.ts",
+]

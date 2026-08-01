@@ -1,15 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { getKeybindings } from "@earendil-works/pi-tui";
 import { createGitRunner, loadRepoStatus } from "../../shared/git.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { prepareFileInjection } from "@shanepadgett/tau-agent";
 import { ContextPanel, ContextSyncStatusPanel } from "./panel.ts";
-import { findProjectRoot, loadContextEntries, type ContextEntry } from "./definitions.ts";
-import { hideContextSyncEvidenceTool, registerContextSyncEvidenceTool } from "./evidence.ts";
+import { findProjectRoot, loadContextEntries, type ContextEntry, type ContextShowTarget } from "./definitions.ts";
 import contextSettings from "./settings.ts";
-import { runContextSync } from "./sync.ts";
+import { type ContextSyncDetails, runContextSync } from "./sync.ts";
 import { formatContextValidationFailure, validateContextCatalog } from "./validation.ts";
 
 const CONTEXT_BRIEF_TYPE = "tau.context.brief";
@@ -19,12 +17,9 @@ export default function contextExtension(pi: ExtensionAPI): void {
 	let lastValidationFailure: string | undefined;
 	let syncCommandRegistered = false;
 
-	registerContextSyncEvidenceTool(pi);
-
 	const refreshSettings = async (ctx: { cwd: string; isProjectTrusted(): boolean }) => {
 		settings = await loadTauExtensionSettings(ctx, contextSettings);
 		if (settings.sync.enabled) registerContextSyncCommand();
-		hideContextSyncEvidenceTool(pi);
 	};
 
 	const registerContextSyncCommand = () => {
@@ -42,39 +37,15 @@ export default function contextExtension(pi: ExtensionAPI): void {
 					return;
 				}
 				await ctx.waitForIdle();
-				const controller = new AbortController();
-				const widget = showContextSyncWidget(ctx);
-				const stopListening = ctx.ui.onTerminalInput((data) => {
-					if (!getKeybindings().matches(data, "tui.select.cancel")) return;
-					if (!controller.signal.aborted) widget.update("Cancelling context sync");
-					controller.abort();
-					return { consume: true };
+				const result = await runContextSyncWithEditor(pi, ctx, {
+					nudge: args.trim() || undefined,
 				});
-				try {
-					const result = await runContextSync(pi, ctx, {
-						nudge: args.trim() || undefined,
-						signal: controller.signal,
-						onStatus: (status) => {
-							widget.update(status);
-						},
-					});
-					if (controller.signal.aborted) {
-						ctx.ui.notify("Context sync cancelled", "info");
-						return;
-					}
-					const level = result.outcome === "failed" ? "error" : "info";
-					ctx.ui.notify(result.summary, level);
-				} catch (error) {
-					ctx.ui.notify(
-						controller.signal.aborted
-							? "Context sync cancelled"
-							: `Context sync failed: ${error instanceof Error ? error.message : String(error)}`,
-						controller.signal.aborted ? "info" : "error",
-					);
-				} finally {
-					stopListening();
-					widget.clear();
+				if (!result) return;
+				if (result.outcome === "cancelled") {
+					ctx.ui.notify(result.summary, "info");
+					return;
 				}
+				ctx.ui.notify(result.summary, result.outcome === "failed" ? "error" : "info");
 			},
 		});
 	};
@@ -102,8 +73,26 @@ export default function contextExtension(pi: ExtensionAPI): void {
 			);
 			if (selected === undefined || selected.length === 0) return;
 
-			// read wins over outline wins over references, so one path is injected once.
+			// read wins over show/outline/references. Same path may be both show and outline.
 			const read = new Set(selected.flatMap((entry) => entry.read));
+			const showRank = {
+				signature: 0,
+				signatureWithDocs: 1,
+				declaration: 2,
+				declarationWithImports: 3,
+			} as const;
+			const showByKey = new Map<string, ContextShowTarget>();
+			for (const entry of selected) {
+				for (const target of entry.show) {
+					if (read.has(target.path)) continue;
+					const key = `${target.path}\0${target.name}`;
+					const existing = showByKey.get(key);
+					if (!existing || showRank[target.view] > showRank[existing.view]) showByKey.set(key, target);
+				}
+			}
+			const shows = [...showByKey.values()].sort(
+				(left, right) => left.path.localeCompare(right.path) || left.name.localeCompare(right.name),
+			);
 			const outline = new Set(selected.flatMap((entry) => entry.outline).filter((path) => !read.has(path)));
 			const references = [
 				...new Set(
@@ -119,6 +108,12 @@ export default function contextExtension(pi: ExtensionAPI): void {
 					...[...read]
 						.sort((left, right) => left.localeCompare(right))
 						.map((path) => ({ path, mode: "full" as const })),
+					...shows.map((target) => ({
+						path: target.path,
+						mode: "show" as const,
+						name: target.name,
+						view: target.view,
+					})),
 					...[...outline]
 						.sort((left, right) => left.localeCompare(right))
 						.map((path) => ({ path, mode: "outline" as const })),
@@ -135,8 +130,8 @@ export default function contextExtension(pi: ExtensionAPI): void {
 					...(references.length ? references.map((path) => `- ${path}`) : ["(none)"]),
 					"",
 					failed === 0
-						? "The complete files and outlines that follow are current. Treat them as authoritative and do not read them again. Use a ranged read for bodies an outline omits, and re-read a file only after you change it."
-						: "Successful complete-file and outline rows that follow are current; failed rows contain no source context. Treat successful rows as authoritative and do not read them again. Use a ranged read for bodies an outline omits, and re-read a file only after you change it.",
+						? "The complete files, show targets, and outlines that follow are current. Treat them as authoritative and do not read them again. Show rows are declaration slices only — do not assume the rest of the file is loaded. Use a ranged read for bodies an outline omits, and re-read a file only after you change it."
+						: "Successful complete-file, show, and outline rows that follow are current; failed rows contain no source context. Treat successful rows as authoritative and do not read them again. Show rows are declaration slices only — do not assume the rest of the file is loaded. Use a ranged read for bodies an outline omits, and re-read a file only after you change it.",
 				].join("\n"),
 				display: false,
 			});
@@ -192,49 +187,68 @@ export default function contextExtension(pi: ExtensionAPI): void {
 			if (failure === lastValidationFailure) return;
 			lastValidationFailure = failure;
 			ctx.ui.notify("Context catalog validation failed; running context-sync", "error");
-			const widget = showContextSyncWidget(ctx);
-			try {
-				const result = await runContextSync(pi, ctx, {
-					onStatus: (status) => {
-						widget.update(status);
-					},
-				});
-				const afterFailure = formatContextValidationFailure(
-					await validateContextCatalog(git, root, settings.validation.ignoreGlobs),
-				);
-				if (result.outcome === "failed" || afterFailure) {
-					lastValidationFailure = afterFailure ?? `${failure}\n${result.reason}`;
-					ctx.ui.notify(
-						result.outcome === "failed" ? result.summary : "Context catalog still invalid after context-sync",
-						"error",
-					);
-					return;
-				}
-				lastValidationFailure = undefined;
-				ctx.ui.notify(result.summary, "info");
-			} finally {
-				widget.clear();
+			const result =
+				ctx.mode === "tui" ? await runContextSyncWithEditor(pi, ctx, {}) : await runContextSync(pi, ctx, {});
+			if (!result || result.outcome === "cancelled") {
+				ctx.ui.notify("Context sync cancelled", "info");
+				return;
 			}
+			const afterFailure = formatContextValidationFailure(
+				await validateContextCatalog(git, root, settings.validation.ignoreGlobs),
+			);
+			if (result.outcome === "failed" || afterFailure) {
+				lastValidationFailure = afterFailure ?? `${failure}\n${result.reason}`;
+				ctx.ui.notify(
+					result.outcome === "failed" ? result.summary : "Context catalog still invalid after context-sync",
+					"error",
+				);
+				return;
+			}
+			lastValidationFailure = undefined;
+			ctx.ui.notify(result.summary, "info");
 		} catch (error) {
 			ctx.ui.notify(`Context validation failed: ${error instanceof Error ? error.message : String(error)}`, "error");
 		}
 	});
 }
 
-function showContextSyncWidget(ctx: ExtensionContext): { update(status: string): void; clear(): void } {
-	let widget: ContextSyncStatusPanel | undefined;
-	ctx.ui.setWidget("context-sync", (tui, theme) => {
-		widget = new ContextSyncStatusPanel(tui, theme, "Synchronizing repository context");
-		return widget;
+async function runContextSyncWithEditor(
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+	options: { nudge?: string },
+): Promise<ContextSyncDetails | undefined> {
+	return ctx.ui.custom<ContextSyncDetails | undefined>((tui, theme, _keys, done) => {
+		const panel = new ContextSyncStatusPanel(tui, theme, "Synchronizing repository context");
+		void (async () => {
+			try {
+				const result = await runContextSync(pi, ctx, {
+					nudge: options.nudge,
+					signal: panel.signal,
+					onStatus: (status) => {
+						panel.update(status);
+					},
+				});
+				done(result);
+			} catch (error) {
+				if (panel.signal.aborted) {
+					done({
+						outcome: "cancelled",
+						summary: "Context sync cancelled",
+						reason: "Cancelled by user.",
+						changedContextFiles: [],
+					});
+					return;
+				}
+				done({
+					outcome: "failed",
+					summary: `Context sync failed: ${error instanceof Error ? error.message : String(error)}`,
+					reason: error instanceof Error ? error.message : String(error),
+					changedContextFiles: [],
+				});
+			} finally {
+				panel.dispose();
+			}
+		})();
+		return panel;
 	});
-	return {
-		update(status) {
-			widget?.update(status);
-		},
-		clear() {
-			widget?.dispose();
-			ctx.ui.setWidget("context-sync", undefined);
-			widget = undefined;
-		},
-	};
 }

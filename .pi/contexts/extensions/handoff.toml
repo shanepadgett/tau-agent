@@ -1,8 +1,0 @@
-name = "Handoff"
-description = "Fresh linked-session creation from a focused generated handoff prompt"
-
-[feature]
-description = "Session handoff generation, context transfer, and command flow"
-read = []
-outline = ["packages/agent/extensions/handoff/index.ts", "packages/agent/extensions/handoff/model.ts"]
-references = ["packages/agent/extensions/handoff/README.md", "packages/agent/test/extensions/handoff/model.test.ts"]
