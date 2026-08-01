@@ -4,7 +4,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { getKeybindings } from "@earendil-works/pi-tui";
 import { createGitRunner, loadRepoStatus } from "../../shared/git.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
-import { injectFiles } from "@shanepadgett/tau-agent";
+import { prepareFileInjection } from "@shanepadgett/tau-agent";
 import { ContextPanel, ContextSyncStatusPanel } from "./panel.ts";
 import { findProjectRoot, loadContextEntries, type ContextEntry } from "./definitions.ts";
 import { hideContextSyncEvidenceTool, registerContextSyncEvidenceTool } from "./evidence.ts";
@@ -111,20 +111,7 @@ export default function contextExtension(pi: ExtensionAPI): void {
 				),
 			].sort((left, right) => left.localeCompare(right));
 
-			pi.sendMessage({
-				customType: CONTEXT_BRIEF_TYPE,
-				content: [
-					"Active repository context, injected once from the current catalog:",
-					...selected.map((entry) => `- ${entry.id}: ${entry.description}`),
-					"",
-					"Unloaded references:",
-					...(references.length ? references.map((path) => `- ${path}`) : ["(none)"]),
-					"",
-					"The complete files and outlines that follow are current. Treat them as authoritative and do not read them again. Use a ranged read for bodies an outline omits, and re-read a file only after you change it.",
-				].join("\n"),
-				display: false,
-			});
-			await injectFiles(pi, {
+			const prepared = await prepareFileInjection(pi, {
 				cwd: root,
 				source: "context",
 				batchId: randomUUID(),
@@ -137,7 +124,29 @@ export default function contextExtension(pi: ExtensionAPI): void {
 						.map((path) => ({ path, mode: "outline" as const })),
 				],
 			});
-			ctx.ui.notify(`Injected ${read.size + outline.size} files from ${selected.length} context entries`, "info");
+			const failed = prepared.filter((message) => message.details.status === "failed").length;
+			pi.sendMessage({
+				customType: CONTEXT_BRIEF_TYPE,
+				content: [
+					"Active repository context, injected once from the current catalog:",
+					...selected.map((entry) => `- ${entry.id}: ${entry.description}`),
+					"",
+					"Unloaded references:",
+					...(references.length ? references.map((path) => `- ${path}`) : ["(none)"]),
+					"",
+					failed === 0
+						? "The complete files and outlines that follow are current. Treat them as authoritative and do not read them again. Use a ranged read for bodies an outline omits, and re-read a file only after you change it."
+						: "Successful complete-file and outline rows that follow are current; failed rows contain no source context. Treat successful rows as authoritative and do not read them again. Use a ranged read for bodies an outline omits, and re-read a file only after you change it.",
+				].join("\n"),
+				display: false,
+			});
+			for (const message of prepared) pi.sendMessage(message);
+			if (failed > 0) {
+				ctx.ui.notify(
+					`Injected ${prepared.length - failed} of ${prepared.length} files from ${selected.length} context entries; ${failed} failed`,
+					"warning",
+				);
+			}
 		},
 	});
 

@@ -5,4 +5,4 @@ export {
 	type ImageGenerationContext,
 	type ImageProvider,
 } from "./image-generation/index.ts";
-export { FILE_INJECTION_TYPE, injectFiles, prepareFileInjection } from "./file-injection/index.ts";
+export { FILE_INJECTION_TYPE, prepareFileInjection } from "./file-injection/index.ts";

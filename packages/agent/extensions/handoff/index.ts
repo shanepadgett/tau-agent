@@ -92,18 +92,16 @@ export default function handoffExtension(pi: ExtensionAPI): void {
 				return;
 			}
 
-			const batchId = randomUUID();
-			const cwd = ctx.cwd;
+			const fileMessages = await prepareFileInjection(pi, {
+				cwd: ctx.cwd,
+				source: "handoff",
+				batchId: randomUUID(),
+				files: draft.files.map((path) => ({ path, mode: "full" as const })),
+			});
 			const result = await ctx.newSession({
 				parentSession: currentSessionFile,
 				setup: async (sessionManager) => {
-					const messages = await prepareFileInjection({
-						cwd,
-						source: "handoff",
-						batchId,
-						files: draft.files.map((path) => ({ path, mode: "full" as const })),
-					});
-					for (const message of messages) {
+					for (const message of fileMessages) {
 						sessionManager.appendCustomMessageEntry(
 							message.customType,
 							message.content,

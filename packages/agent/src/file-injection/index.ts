@@ -5,7 +5,7 @@ import { keyText, type ExtensionAPI, type Theme } from "@earendil-works/pi-codin
 import { truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { Marker } from "@shanepadgett/tau-tui";
 import { BoundedTextResultBuilder, truncateBoundedHead } from "../../shared/bounded-text-result.ts";
-import { areContinuityRowsVisible } from "../../shared/continuity-visibility.ts";
+import { emitTauEvent, onTauEvent } from "../../shared/events.ts";
 import { createCompleteFileMeta, type ReadCacheMetaV1 } from "../../shared/full-file-knowledge.ts";
 import type { LineRange } from "../../shared/ranges.ts";
 import type { TemporaryOutputStore } from "../../shared/temporary-output-store.ts";
@@ -74,18 +74,15 @@ interface FileInjectionHost {
 	autoOutline(): { enabled: boolean; thresholdLines: number };
 }
 
-let host: FileInjectionHost | undefined;
-
-function requireHost(): FileInjectionHost {
+function requireHost(host: FileInjectionHost | undefined): FileInjectionHost {
 	if (host === undefined) throw new Error("File injection is unavailable: Explore is not loaded");
 	return host;
 }
 
 /** Explore owns the parse engine settings and temporary output store this module needs. */
 export function registerFileInjection(pi: ExtensionAPI, rowState: ToolRowStateStore, next: FileInjectionHost): void {
-	host = next;
-	pi.on("session_shutdown", () => {
-		host = undefined;
+	onTauEvent(pi, "explore.file-injection", "tau:file-injection.prepare", ({ request, accept }) => {
+		accept(prepareFileInjectionWithHost(request, next));
 	});
 	pi.registerMessageRenderer<FileInjectionDetails>(FILE_INJECTION_TYPE, (message, options, theme) => {
 		const details = parseDetails(message.details);
@@ -101,9 +98,25 @@ export function registerFileInjection(pi: ExtensionAPI, rowState: ToolRowStateSt
 }
 
 /** Builds injection messages without sending them. */
-export async function prepareFileInjection(request: FileInjectionRequest): Promise<PreparedFileInjection[]> {
+export async function prepareFileInjection(
+	pi: Pick<ExtensionAPI, "events">,
+	request: FileInjectionRequest,
+): Promise<PreparedFileInjection[]> {
+	let accepted: Promise<PreparedFileInjection[]> | undefined;
+	emitTauEvent(pi, "tau:file-injection.prepare", {
+		request,
+		accept(preparation) {
+			accepted ??= preparation;
+		},
+	});
+	return accepted ?? prepareFileInjectionWithHost(request, undefined);
+}
+
+async function prepareFileInjectionWithHost(
+	request: FileInjectionRequest,
+	host: FileInjectionHost | undefined,
+): Promise<PreparedFileInjection[]> {
 	const prepared: PreparedFileInjection[] = [];
-	const display = request.source !== "continuity" || areContinuityRowsVisible();
 	for (const [index, file] of request.files.entries()) {
 		request.signal?.throwIfAborted();
 		const path = stripLeadingAt(file.path);
@@ -119,14 +132,14 @@ export async function prepareFileInjection(request: FileInjectionRequest): Promi
 		try {
 			const ranges = file.ranges === undefined ? undefined : normalizeLineRanges(file.ranges);
 			base = { ...common, ...(ranges === undefined ? {} : { ranges }) };
-			prepared.push({ ...(await prepareOne(base, file.mode, request.signal)), display });
+			prepared.push(await prepareOne(base, file.mode, request.signal, host));
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			if (request.signal?.aborted) throw error;
 			prepared.push({
 				customType: FILE_INJECTION_TYPE,
 				content: `${path}\nInjection failed: ${message}`,
-				display,
+				display: true,
 				details: {
 					...base,
 					kind: file.mode === "outline" ? "outline" : "full",
@@ -139,30 +152,21 @@ export async function prepareFileInjection(request: FileInjectionRequest): Promi
 	return prepared;
 }
 
-/** Prepares and sends injection messages in request order. */
-export async function injectFiles(
-	pi: Pick<ExtensionAPI, "sendMessage">,
-	request: FileInjectionRequest,
-): Promise<PreparedFileInjection[]> {
-	const prepared = await prepareFileInjection(request);
-	for (const message of prepared) pi.sendMessage(message);
-	return prepared;
-}
-
 type InjectionBase = Omit<FileInjectionDetails, "kind" | "status" | "error" | "readCache">;
 
 async function prepareOne(
 	base: InjectionBase,
 	mode: FileInjectionMode,
 	signal: AbortSignal | undefined,
+	host: FileInjectionHost | undefined,
 ): Promise<PreparedFileInjection> {
 	if (base.ranges !== undefined) {
 		if (mode === "outline") throw new Error("Line ranges are supported only for file reads");
 		return prepareRangedRead(base, signal);
 	}
-	if (mode === "outline") return prepareOutline(base, signal);
+	if (mode === "outline") return prepareOutline(base, signal, requireHost(host));
 	if (mode === "full") return prepareFull(base, signal);
-	const settings = requireHost().autoOutline();
+	const settings = requireHost(host).autoOutline();
 	if (!settings.enabled) return prepareFull(base, signal);
 	const engine = astEngineFor(base.cwd);
 	const absolutePath = resolveExplorePath(base.cwd, base.path);
@@ -237,12 +241,16 @@ async function outlineFile(base: InjectionBase, signal: AbortSignal | undefined)
 	return { engine, file: result.mode === "file" ? result.file : undefined };
 }
 
-async function prepareOutline(base: InjectionBase, signal: AbortSignal | undefined): Promise<PreparedFileInjection> {
+async function prepareOutline(
+	base: InjectionBase,
+	signal: AbortSignal | undefined,
+	host: FileInjectionHost,
+): Promise<PreparedFileInjection> {
 	const { engine, file } = await outlineFile(base, signal);
 	if (!file) throw new Error("Outline injection requires a file path");
 	const body =
 		file.rows.length === 0 ? formatOutlineEmpty(OUTLINE_OPTIONS.names) : formatOutlineFile(file, engine.cwd, false);
-	const builder = new BoundedTextResultBuilder(requireHost().temporaryOutput, "completeBlocks");
+	const builder = new BoundedTextResultBuilder(host.temporaryOutput, "completeBlocks");
 	let content: string;
 	try {
 		await builder.appendBlock(file.path, formatPathForDisplay(file.path, engine.cwd), `${base.path}\n${body}`);

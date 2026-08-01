@@ -10,7 +10,7 @@
   - [x] Accept retained message IDs, work, facts, decisions, and file directives.
   - [x] Preserve selected message text in the result text without retaining thinking or tool calls.
   - [x] Render deferred files in the result text.
-  - [x] Call `injectFiles()` only for active reads and outlines.
+  - [x] Call `prepareFileInjection()` only for active reads and outlines, then commit the complete batch atomically.
   - [x] Return one tool result; do not send a separate checkpoint message.
 - [x] Add stable hidden provider-context message ID metadata through Pi's `context` event.
 

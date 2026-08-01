@@ -1,14 +1,77 @@
+import { createEventBus, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { describe, expect, test } from "vitest";
-import { prepareFileInjection } from "../../../src/file-injection/index.ts";
-import { createWorkspace } from "../../helpers.ts";
+import { createTemporaryOutputStore } from "../../../shared/temporary-output-store.ts";
+import { prepareFileInjection, registerFileInjection } from "../../../src/file-injection/index.ts";
+import { createWorkspace, testRowState } from "../../helpers.ts";
 
 describe("file injection", () => {
+	const pi = { events: createEventBus() };
+
+	test("prepares outlines through the runtime provider and detaches it on shutdown", async () => {
+		const workspace = await createWorkspace();
+		const temporaryOutput = createTemporaryOutputStore();
+		const events = createEventBus();
+		const startHandlers: Array<() => void> = [];
+		const shutdownHandlers: Array<() => void> = [];
+		const provider = {
+			events,
+			on(name: string, handler: () => void) {
+				if (name === "session_start") startHandlers.push(handler);
+				if (name === "session_shutdown") shutdownHandlers.push(handler);
+			},
+			registerMessageRenderer() {},
+		} as unknown as ExtensionAPI;
+		try {
+			await workspace.write("source.ts", "export function example(): void {}\n");
+			registerFileInjection(provider, testRowState, {
+				temporaryOutput,
+				autoOutline: () => ({ enabled: true, thresholdLines: 1 }),
+			});
+			for (const handler of startHandlers) handler();
+
+			const [outlined] = await prepareFileInjection(
+				{ events },
+				{
+					cwd: workspace.dir,
+					source: "test",
+					batchId: "provider",
+					files: [{ path: "source.ts", mode: "outline" }],
+				},
+			);
+
+			expect(outlined.details).toMatchObject({ kind: "outline", status: "injected" });
+			expect(outlined.content).toContain("example");
+
+			for (const handler of shutdownHandlers) handler();
+			const [unavailable, full] = await prepareFileInjection(
+				{ events },
+				{
+					cwd: workspace.dir,
+					source: "test",
+					batchId: "fallback",
+					files: [
+						{ path: "source.ts", mode: "outline" },
+						{ path: "source.ts", mode: "full" },
+					],
+				},
+			);
+			expect(unavailable.details).toMatchObject({
+				status: "failed",
+				error: "File injection is unavailable: Explore is not loaded",
+			});
+			expect(full.details.status).toBe("injected");
+		} finally {
+			await temporaryOutput.shutdown();
+			await workspace.cleanup();
+		}
+	});
+
 	test("injects selected line ranges without outlining large sources", async () => {
 		const workspace = await createWorkspace();
 		try {
 			await workspace.write("source.ts", "one\ntwo\nthree\nfour\nfive");
 
-			const [message] = await prepareFileInjection({
+			const [message] = await prepareFileInjection(pi, {
 				cwd: workspace.dir,
 				source: "test",
 				batchId: "batch",
@@ -33,7 +96,7 @@ describe("file injection", () => {
 		try {
 			await workspace.write("source.ts", "one\ntwo\nthree\nfour");
 
-			const [ranged, full] = await prepareFileInjection({
+			const [ranged, full] = await prepareFileInjection(pi, {
 				cwd: workspace.dir,
 				source: "test",
 				batchId: "batch",
@@ -65,7 +128,7 @@ describe("file injection", () => {
 		try {
 			await workspace.write("source.ts", "one\ntwo");
 
-			const [message] = await prepareFileInjection({
+			const [message] = await prepareFileInjection(pi, {
 				cwd: workspace.dir,
 				source: "test",
 				batchId: "batch",

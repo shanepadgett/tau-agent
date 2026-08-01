@@ -40,14 +40,14 @@ The repository remains authoritative for current files. Facts preserve conclusio
 
 - `packages/agent/extensions/explore/ast/read/hook.ts` replaces successful full reads of registered large source files with outlines. Explicit ranged reads already bypass that substitution.
 - `packages/agent/src/file-injection/index.ts` now provides the direct injection seam:
-  - `prepareFileInjection(request)` prepares file messages without sending them.
+  - `prepareFileInjection(pi, request)` prepares file messages without sending them through Explore's runtime-scoped provider.
   - `injectFiles(pi, request)` prepares and sends them in order.
   - Current modes are `full`, `outline`, and `auto`; `auto` applies the Explore size threshold.
-- `/context` uses `injectFiles()` for selected files and sends one separate hidden context brief. Handoff uses `prepareFileInjection()`.
+- `/context` uses `prepareFileInjection()` so it can inspect results before sending one hidden context brief followed by the prepared rows. Handoff also uses `prepareFileInjection()`.
 - Explicit ranges are normalized, force a current read, and omit complete-file cache metadata. `FileInjectionFile` carries optional one-based inclusive ranges.
 - Current `.pi/contexts` entries still describe durable full `read`, full `outline`, and unloaded `references`; checkpoint file directives are session-local and should remain separate.
 
-The continuity checkpoint tool returns the conversation/work state through its own tool result. It accepts exact provider-visible session-entry IDs, resolves original messages from the active branch, and keeps only user text and assistant text blocks. It calls the direct file-injection API only for active file reads and outlines, then queues one hidden continuation instruction after those file messages. The continuation is an instruction, not a second checkpoint state message.
+The continuity checkpoint tool returns the conversation/work state through its own tool result. It accepts exact provider-visible session-entry IDs, resolves original messages from the active branch, and keeps only user text and assistant text blocks. It calls the direct file-injection API only for active file reads and outlines, validates the complete batch, then queues one hidden continuation instruction after those file messages. The continuation is an instruction, not a second checkpoint state message.
 
 ## Rough interaction
 

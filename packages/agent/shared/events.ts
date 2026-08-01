@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ModelEffort } from "./model-effort.ts";
 import type { ToolRowVisualState } from "./tool-row-state.js";
+import type { FileInjectionRequest, PreparedFileInjection } from "../src/file-injection/index.ts";
 
 export type TauAgentEvents = {
 	"tau:agent.blocked": {
@@ -29,6 +30,11 @@ export type TauAgentEvents = {
 			resultingFingerprint: string | null;
 			snapshotRanges?: Array<{ startLine: number; endLine: number }>;
 		}>;
+	};
+	/** @internal Runtime-scoped request for Explore-owned file preparation. */
+	"tau:file-injection.prepare": {
+		request: FileInjectionRequest;
+		accept(preparation: Promise<PreparedFileInjection[]>): void;
 	};
 	"tau:footer-item": {
 		id: string;
