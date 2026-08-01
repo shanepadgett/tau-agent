@@ -1,0 +1,156 @@
+{
+	"languageId": "c_sharp",
+	"parseDegraded": false,
+	"imports": [
+		"System",
+		"System.Collections.Generic"
+	],
+	"decls": [
+		{
+			"kind": "namespace",
+			"qualifiedName": "Demo",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "class",
+					"qualifiedName": "Demo.Greeter",
+					"visibility": "public",
+					"exported": true,
+					"children": [
+						{
+							"kind": "field",
+							"qualifiedName": "Demo.Greeter.count",
+							"visibility": "private",
+							"exported": false,
+							"children": []
+						},
+						{
+							"kind": "property",
+							"qualifiedName": "Demo.Greeter.Name",
+							"visibility": "public",
+							"exported": true,
+							"children": []
+						},
+						{
+							"kind": "constructor",
+							"qualifiedName": "Demo.Greeter.Greeter",
+							"visibility": "public",
+							"exported": true,
+							"children": []
+						},
+						{
+							"kind": "constructor",
+							"qualifiedName": "Demo.Greeter.Greeter",
+							"visibility": "public",
+							"exported": true,
+							"children": []
+						},
+						{
+							"kind": "method",
+							"qualifiedName": "Demo.Greeter.Hello",
+							"visibility": "public",
+							"exported": true,
+							"children": []
+						},
+						{
+							"kind": "event",
+							"qualifiedName": "Demo.Greeter.Done",
+							"visibility": "public",
+							"exported": true,
+							"children": []
+						},
+						{
+							"kind": "property",
+							"qualifiedName": "Demo.Greeter.this",
+							"visibility": "public",
+							"exported": true,
+							"children": []
+						}
+					]
+				},
+				{
+					"kind": "struct",
+					"qualifiedName": "Demo.Box",
+					"visibility": "internal",
+					"exported": false,
+					"children": [
+						{
+							"kind": "field",
+							"qualifiedName": "Demo.Box.Value",
+							"visibility": "public",
+							"exported": true,
+							"children": []
+						}
+					]
+				},
+				{
+					"kind": "interface",
+					"qualifiedName": "Demo.IGreeter",
+					"visibility": "public",
+					"exported": true,
+					"children": [
+						{
+							"kind": "method",
+							"qualifiedName": "Demo.IGreeter.Hello",
+							"visibility": "public",
+							"exported": true,
+							"children": []
+						}
+					]
+				},
+				{
+					"kind": "enum",
+					"qualifiedName": "Demo.Color",
+					"visibility": "public",
+					"exported": true,
+					"children": [
+						{
+							"kind": "enumMember",
+							"qualifiedName": "Demo.Color.Red",
+							"visibility": "public",
+							"exported": true,
+							"children": []
+						},
+						{
+							"kind": "enumMember",
+							"qualifiedName": "Demo.Color.Green",
+							"visibility": "public",
+							"exported": true,
+							"children": []
+						}
+					]
+				},
+				{
+					"kind": "class",
+					"qualifiedName": "Demo.Person",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "function",
+					"qualifiedName": "Demo.Notify",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "class",
+					"qualifiedName": "Demo.Helpers",
+					"visibility": "internal",
+					"exported": false,
+					"children": [
+						{
+							"kind": "method",
+							"qualifiedName": "Demo.Helpers.Range",
+							"visibility": "public",
+							"exported": true,
+							"children": []
+						}
+					]
+				}
+			]
+		}
+	]
+}

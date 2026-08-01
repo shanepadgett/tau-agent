@@ -18,7 +18,6 @@ outline = []
 references = [
   "packages/agent/extensions/branch/panel.ts",
   "packages/agent/shared/git.ts",
-  "packages/agent/test/extensions/branch/index.test.ts",
   "packages/agent/extensions/tau-help/help.md",
 ]
 
@@ -33,7 +32,6 @@ show = [
 outline = []
 references = [
   "packages/agent/extensions/branch/index.ts",
-  "packages/agent/test/extensions/branch/panel.test.ts",
   "packages/tui/src/tool-panel.ts",
   "packages/tui/src/selectable-list.ts",
   "packages/tui/src/key-hints.ts",

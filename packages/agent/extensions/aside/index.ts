@@ -14,11 +14,7 @@ const WIDGET_KEY = "aside";
 const CURRENT_CONVERSATION = "Current conversation branch";
 const NO_CONTEXT = "No context";
 
-export function buildAsideRequest(
-	messages: readonly Message[],
-	question: string,
-	systemPrompt: string | undefined,
-): Context {
+function buildAsideRequest(messages: readonly Message[], question: string, systemPrompt: string | undefined): Context {
 	const toolResults = new Set(
 		messages.flatMap((message) => (message.role === "toolResult" ? [message.toolCallId] : [])),
 	);

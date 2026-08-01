@@ -1,0 +1,44 @@
+{
+	"languageId": "markdown",
+	"parseDegraded": false,
+	"imports": [],
+	"decls": [
+		{
+			"kind": "heading",
+			"qualifiedName": "Explore",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "heading",
+					"qualifiedName": "Explore.Outline",
+					"visibility": "public",
+					"exported": true,
+					"children": [
+						{
+							"kind": "heading",
+							"qualifiedName": "Explore.Outline.Nested heading",
+							"visibility": "public",
+							"exported": true,
+							"children": []
+						}
+					]
+				},
+				{
+					"kind": "heading",
+					"qualifiedName": "Explore.Discover",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "heading",
+					"qualifiedName": "Explore.Search",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				}
+			]
+		}
+	]
+}

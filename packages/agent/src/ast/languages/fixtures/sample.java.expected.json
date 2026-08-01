@@ -1,0 +1,126 @@
+{
+	"languageId": "java",
+	"parseDegraded": false,
+	"imports": [
+		"java.util.List",
+		"java.util.ArrayList"
+	],
+	"decls": [
+		{
+			"kind": "class",
+			"qualifiedName": "Greeter",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "field",
+					"qualifiedName": "Greeter.count",
+					"visibility": "private",
+					"exported": false,
+					"children": []
+				},
+				{
+					"kind": "constant",
+					"qualifiedName": "Greeter.MAX",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "constructor",
+					"qualifiedName": "Greeter.Greeter",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "constructor",
+					"qualifiedName": "Greeter.Greeter",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "method",
+					"qualifiedName": "Greeter.hello",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "method",
+					"qualifiedName": "Greeter.name",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "interface",
+			"qualifiedName": "Named",
+			"visibility": "internal",
+			"exported": false,
+			"children": [
+				{
+					"kind": "method",
+					"qualifiedName": "Named.name",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "enum",
+			"qualifiedName": "Color",
+			"visibility": "internal",
+			"exported": false,
+			"children": [
+				{
+					"kind": "enumMember",
+					"qualifiedName": "Color.RED",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "enumMember",
+					"qualifiedName": "Color.GREEN",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "method",
+					"qualifiedName": "Color.paint",
+					"visibility": "internal",
+					"exported": false,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "class",
+			"qualifiedName": "Point",
+			"visibility": "internal",
+			"exported": false,
+			"children": []
+		},
+		{
+			"kind": "interface",
+			"qualifiedName": "Internal",
+			"visibility": "internal",
+			"exported": false,
+			"children": [
+				{
+					"kind": "method",
+					"qualifiedName": "Internal.value",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				}
+			]
+		}
+	]
+}

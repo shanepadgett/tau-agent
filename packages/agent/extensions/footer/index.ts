@@ -307,7 +307,7 @@ function isConflict(x: string | undefined, y: string | undefined): boolean {
 	return x === "U" || y === "U" || (x === "A" && y === "A") || (x === "D" && y === "D");
 }
 
-export function sessionCost(ctx: Pick<ExtensionContext, "sessionManager">): UsageSummary {
+function sessionCost(ctx: Pick<ExtensionContext, "sessionManager">): UsageSummary {
 	let usage = zeroUsage();
 	for (const entry of ctx.sessionManager.getEntries()) {
 		if (entry.type === "message" && entry.message.role === "assistant") {
@@ -380,7 +380,7 @@ async function scanDailyCost(): Promise<number> {
 	return total;
 }
 
-export function dailyCostFromJsonl(
+function dailyCostFromJsonl(
 	raw: string,
 	range: { startMs: number; endMs: number },
 	seen: Set<string> = new Set<string>(),

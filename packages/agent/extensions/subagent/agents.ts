@@ -40,7 +40,7 @@ async function directoryExists(path: string): Promise<boolean> {
 	}
 }
 
-export async function findProjectAgentsDir(cwd: string): Promise<string | undefined> {
+async function findProjectAgentsDir(cwd: string): Promise<string | undefined> {
 	const home = resolve(homedir());
 	let current = resolve(cwd);
 	while (current !== home) {

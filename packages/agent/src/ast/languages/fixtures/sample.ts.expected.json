@@ -1,0 +1,141 @@
+{
+	"languageId": "typescript",
+	"parseDegraded": false,
+	"imports": [
+		"node:fs/promises",
+		"./types.ts"
+	],
+	"decls": [
+		{
+			"kind": "class",
+			"qualifiedName": "Queue",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "field",
+					"qualifiedName": "Queue.size",
+					"visibility": "private",
+					"exported": false,
+					"children": []
+				},
+				{
+					"kind": "constructor",
+					"qualifiedName": "Queue.constructor",
+					"visibility": "public",
+					"exported": false,
+					"children": []
+				},
+				{
+					"kind": "method",
+					"qualifiedName": "Queue.enqueue",
+					"visibility": "public",
+					"exported": false,
+					"children": []
+				},
+				{
+					"kind": "method",
+					"qualifiedName": "Queue.length",
+					"visibility": "public",
+					"exported": false,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "class",
+			"qualifiedName": "BaseStore",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "method",
+					"qualifiedName": "BaseStore.load",
+					"visibility": "public",
+					"exported": false,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "interface",
+			"qualifiedName": "Reader",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "property",
+					"qualifiedName": "Reader.length",
+					"visibility": "public",
+					"exported": false,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "typeAlias",
+			"qualifiedName": "OutlineRow",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "enum",
+			"qualifiedName": "Color",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "enumMember",
+					"qualifiedName": "Color.Red",
+					"visibility": "public",
+					"exported": false,
+					"children": []
+				},
+				{
+					"kind": "enumMember",
+					"qualifiedName": "Color.Green",
+					"visibility": "public",
+					"exported": false,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "constant",
+			"qualifiedName": "MAX",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "function",
+			"qualifiedName": "outlinePath",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "namespace",
+			"qualifiedName": "Nested",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "function",
+					"qualifiedName": "Nested.inner",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "function",
+			"qualifiedName": "hidden",
+			"visibility": "public",
+			"exported": false,
+			"children": []
+		}
+	]
+}

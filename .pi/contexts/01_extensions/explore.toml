@@ -339,7 +339,6 @@ references = [
   "packages/agent/src/file-injection/index.ts",
   "packages/agent/extensions/explore/index.ts",
   "packages/agent/test/extensions/explore/outline.test.ts",
-  "packages/agent/test/src/file-injection/index.test.ts",
 ]
 
 [grammar-tooling]
@@ -355,4 +354,5 @@ references = [
   ".github/workflows/grammars.yml",
   "packages/agent/src/ast/registry.ts",
   "packages/agent/test/extensions/explore/grammars.test.ts",
+  "packages/agent/test/extensions/explore/language-fixtures.test.ts",
 ]

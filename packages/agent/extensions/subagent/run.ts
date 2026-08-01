@@ -163,7 +163,7 @@ function capped(value: unknown, limit = VALUE_LIMIT): string {
 }
 
 /** Rolling tail so live previews keep changing after the limit. */
-export function cappedTail(value: unknown, limit = PREVIEW_LIMIT): string {
+function cappedTail(value: unknown, limit = PREVIEW_LIMIT): string {
 	let text: string;
 	try {
 		text = typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));

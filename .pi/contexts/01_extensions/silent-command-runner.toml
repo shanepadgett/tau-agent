@@ -22,7 +22,6 @@ references = [
   "packages/agent/shared/glob.ts",
   "packages/agent/shared/events.ts",
   "packages/agent/extensions/attention/index.ts",
-  "packages/agent/test/extensions/silent-command-runner/index.test.ts",
   "packages/agent/extensions/tau-help/help.md",
 ]
 

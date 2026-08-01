@@ -31,8 +31,6 @@ outline = []
 references = [
   "packages/agent/extensions/web/websearch.ts",
   "packages/agent/extensions/web/codesearch.ts",
-  "packages/agent/test/extensions/web/exa.test.ts",
-  "packages/agent/test/extensions/web/helpers.ts",
 ]
 
 [search-tools]
@@ -53,8 +51,6 @@ outline = []
 references = [
   "packages/agent/extensions/web/exa.ts",
   "packages/agent/extensions/web/index.ts",
-  "packages/agent/test/extensions/web/tools.test.ts",
-  "packages/agent/test/extensions/web/exa.test.ts",
 ]
 
 [fetch-tool]
@@ -72,6 +68,4 @@ show = [
 outline = []
 references = [
   "packages/agent/extensions/web/index.ts",
-  "packages/agent/test/extensions/web/webfetch.test.ts",
-  "packages/agent/test/extensions/web/html.test.ts",
 ]

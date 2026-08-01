@@ -6,9 +6,3 @@ description = "Public image-generation API, package exports, orchestration, and 
 read = []
 outline = ["packages/agent/src/image-generation/client.ts", "packages/agent/src/image-generation/index.ts", "packages/agent/src/index.ts"]
 references = ["packages/agent/src/image-generation/constants.ts"]
-
-[tests]
-description = "Provider transport tests"
-read = []
-outline = ["packages/agent/test/extensions/image-gen/client.test.ts"]
-references = []

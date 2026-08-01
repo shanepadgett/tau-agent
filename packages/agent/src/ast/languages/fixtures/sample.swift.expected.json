@@ -1,0 +1,147 @@
+{
+	"languageId": "swift",
+	"parseDegraded": false,
+	"imports": [
+		"Foundation"
+	],
+	"decls": [
+		{
+			"kind": "class",
+			"qualifiedName": "Greeter",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "property",
+					"qualifiedName": "Greeter.name",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "constructor",
+					"qualifiedName": "Greeter.init",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "constructor",
+					"qualifiedName": "Greeter.init",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "method",
+					"qualifiedName": "Greeter.hello",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "method",
+					"qualifiedName": "Greeter.deinit",
+					"visibility": "internal",
+					"exported": false,
+					"children": []
+				},
+				{
+					"kind": "method",
+					"qualifiedName": "Greeter.shout",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "interface",
+			"qualifiedName": "Named",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "property",
+					"qualifiedName": "Named.name",
+					"visibility": "internal",
+					"exported": false,
+					"children": []
+				},
+				{
+					"kind": "method",
+					"qualifiedName": "Named.nameLabel",
+					"visibility": "internal",
+					"exported": false,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "struct",
+			"qualifiedName": "Box",
+			"visibility": "internal",
+			"exported": false,
+			"children": [
+				{
+					"kind": "property",
+					"qualifiedName": "Box.value",
+					"visibility": "internal",
+					"exported": false,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "enum",
+			"qualifiedName": "Color",
+			"visibility": "private",
+			"exported": false,
+			"children": [
+				{
+					"kind": "enumMember",
+					"qualifiedName": "Color.red",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "enumMember",
+					"qualifiedName": "Color.green",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "typeAlias",
+			"qualifiedName": "Alias",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "enum",
+			"qualifiedName": "Result",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "enumMember",
+					"qualifiedName": "Result.ok",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "enumMember",
+					"qualifiedName": "Result.err",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				}
+			]
+		}
+	]
+}

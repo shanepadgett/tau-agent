@@ -93,7 +93,7 @@ export default function reviewExtension(pi: ExtensionAPI): void {
 	});
 }
 
-export function latestReview(entries: readonly SessionEntry[]): ReviewRecord | undefined {
+function latestReview(entries: readonly SessionEntry[]): ReviewRecord | undefined {
 	for (let index = entries.length - 1; index >= 0; index -= 1) {
 		const entry = entries[index];
 		if (entry?.type !== "custom" || entry.customType !== REVIEW_ENTRY_TYPE) continue;

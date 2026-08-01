@@ -155,21 +155,6 @@ export class SubagentRuntime {
 		return this.listThreads(cwd).map((thread) => thread.id);
 	}
 
-	/** Exposed for tests. */
-	get retainedCount(): number {
-		return this.threads.size;
-	}
-
-	/** Exposed for tests. */
-	get capacityInUse(): number {
-		return this.threads.size + this.startupReservations.size;
-	}
-
-	/** Exposed for tests. */
-	get currentGeneration(): number {
-		return this.generation;
-	}
-
 	async reset(): Promise<void> {
 		await this.drainLifecycle({ permanent: false });
 	}

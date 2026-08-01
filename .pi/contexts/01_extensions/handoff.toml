@@ -17,7 +17,6 @@ references = [
   "packages/agent/extensions/handoff/model.ts",
   "packages/agent/src/file-injection/index.ts",
   "packages/agent/shared/model-fallback/index.ts",
-  "packages/agent/test/extensions/handoff/model.test.ts",
 ]
 
 [draft-contract]
@@ -30,5 +29,4 @@ show = []
 outline = []
 references = [
   "packages/agent/extensions/handoff/index.ts",
-  "packages/agent/test/extensions/handoff/model.test.ts",
 ]

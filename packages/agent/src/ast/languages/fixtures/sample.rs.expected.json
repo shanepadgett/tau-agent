@@ -1,0 +1,178 @@
+{
+	"languageId": "rust",
+	"parseDegraded": false,
+	"imports": [
+		"std::fmt::Debug"
+	],
+	"decls": [
+		{
+			"kind": "struct",
+			"qualifiedName": "Point",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "field",
+					"qualifiedName": "Point.x",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "field",
+					"qualifiedName": "Point.y",
+					"visibility": "private",
+					"exported": false,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "interface",
+			"qualifiedName": "Draw",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "method",
+					"qualifiedName": "Draw.draw",
+					"visibility": "private",
+					"exported": false,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "class",
+			"qualifiedName": "impl Point",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "method",
+					"qualifiedName": "Point.origin",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "method",
+					"qualifiedName": "Point.translate",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "class",
+			"qualifiedName": "impl Draw for Point",
+			"visibility": "private",
+			"exported": false,
+			"children": [
+				{
+					"kind": "method",
+					"qualifiedName": "Point.draw",
+					"visibility": "private",
+					"exported": false,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "class",
+			"qualifiedName": "impl Default for Point",
+			"visibility": "private",
+			"exported": false,
+			"children": [
+				{
+					"kind": "method",
+					"qualifiedName": "Point.default",
+					"visibility": "private",
+					"exported": false,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "module",
+			"qualifiedName": "nested",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "function",
+					"qualifiedName": "nested.inner",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "enum",
+			"qualifiedName": "Color",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "enumMember",
+					"qualifiedName": "Color.Red",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "enumMember",
+					"qualifiedName": "Color.Green",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "constant",
+			"qualifiedName": "MAX",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "typeAlias",
+			"qualifiedName": "Alias",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "struct",
+			"qualifiedName": "Bits",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "field",
+					"qualifiedName": "Bits.i",
+					"visibility": "private",
+					"exported": false,
+					"children": []
+				},
+				{
+					"kind": "field",
+					"qualifiedName": "Bits.f",
+					"visibility": "private",
+					"exported": false,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "function",
+			"qualifiedName": "private_fn",
+			"visibility": "private",
+			"exported": false,
+			"children": []
+		}
+	]
+}

@@ -29,7 +29,7 @@ export function retainSubagentTurn(state: SubagentResumeState, record: RetainedT
 	};
 }
 
-export function selectRetainedTurns(
+function selectRetainedTurns(
 	state: SubagentResumeState,
 	optionalTokenBudget = RESUME_OPTIONAL_HISTORY_TOKENS,
 ): { records: readonly RetainedTurnRecord[]; omitted: number } {

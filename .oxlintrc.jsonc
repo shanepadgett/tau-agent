@@ -1,5 +1,6 @@
 {
 	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"ignorePatterns": ["packages/agent/src/ast/languages/fixtures/**"],
 	"env": {
 		"node": true,
 		"es2024": true,

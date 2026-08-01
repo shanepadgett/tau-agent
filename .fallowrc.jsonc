@@ -17,6 +17,7 @@
   "ignorePatterns": [
     "packages/agent/shared/description.ts",
     "packages/agent/shared/injected-context.ts",
+    "packages/agent/src/ast/languages/fixtures/**",
     "docs/plans/explore-archive/**"
   ],
   "ignoreDependencies": ["@vscode/tree-sitter-wasm", "tree-sitter-cli"],

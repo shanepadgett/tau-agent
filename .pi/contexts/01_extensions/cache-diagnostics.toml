@@ -10,6 +10,5 @@ read = [
 show = []
 outline = []
 references = [
-  "packages/agent/test/extensions/cache-diagnostics/index.test.ts",
   "packages/agent/extensions/tau-help/help.md",
 ]

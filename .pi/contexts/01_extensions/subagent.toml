@@ -21,8 +21,6 @@ references = [
   "packages/agent/extensions/subagent/cmux-dashboard.ts",
   "packages/agent/extensions/context/settings.ts",
   "packages/agent/shared/settings/define.ts",
-  "packages/agent/test/extensions/subagent/index.test.ts",
-  "packages/agent/test/extensions/subagent/settings.test.ts",
 ]
 
 [definitions]
@@ -38,7 +36,6 @@ references = [
   "packages/agent/extensions/subagent/agents/context-sync.md",
   "packages/agent/docs/subagents.md",
   "packages/agent/extensions/subagent/README.md",
-  "packages/agent/test/extensions/subagent/agents.test.ts",
 ]
 
 [built-in-agents]
@@ -89,9 +86,6 @@ references = [
   "packages/agent/shared/full-file-knowledge.ts",
   "packages/agent/extensions/subagent/agents.ts",
   "packages/agent/extensions/subagent/runtime.ts",
-  "packages/agent/test/extensions/subagent/run.test.ts",
-  "packages/agent/test/extensions/subagent/resume.test.ts",
-  "packages/agent/test/extensions/subagent/resume-integration.test.ts",
 ]
 
 [runtime-orchestration]
@@ -116,7 +110,6 @@ references = [
   "packages/agent/extensions/subagent/agents.ts",
   "packages/agent/extensions/subagent/index.ts",
   "packages/agent/shared/isolated-session.ts",
-  "packages/agent/test/extensions/subagent/runtime.test.ts",
 ]
 
 [agents-panel]
@@ -128,7 +121,6 @@ show = []
 outline = []
 references = [
   "packages/agent/extensions/subagent/index.ts",
-  "packages/agent/test/extensions/subagent/panel.test.ts",
 ]
 
 [tool-rendering]
@@ -158,7 +150,6 @@ outline = []
 references = [
   "packages/agent/extensions/subagent/run.ts",
   "packages/agent/extensions/subagent/index.ts",
-  "packages/agent/test/extensions/subagent/cmux-dashboard.test.ts",
 ]
 
 [documentation]

@@ -38,7 +38,6 @@ references = [
   "packages/agent/extensions/reference/settings.ts",
   "packages/agent/shared/git.ts",
   "packages/agent/shared/text.ts",
-  "packages/agent/test/extensions/reference/panel.test.ts",
   "packages/tui/src/tool-panel.ts",
   "packages/tui/src/selectable-list.ts",
 ]

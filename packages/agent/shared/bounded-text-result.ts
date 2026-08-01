@@ -63,6 +63,7 @@ export class BoundedTextResultBuilder {
 		this.strategy = strategy;
 	}
 
+	// fallow-ignore-next-line unused-class-member -- head/tail strategy API; callers use completeBlocks today
 	async append(text: string): Promise<void> {
 		if (this.strategy === "completeBlocks") throw new Error("Complete-block results require appendBlock");
 		this.requireOpen();

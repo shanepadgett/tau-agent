@@ -106,7 +106,7 @@ function dashboardState(status: SubagentInvocationSnapshot["status"]): string {
 	}
 }
 
-export function formatDashboardMarkdown(snapshots: readonly SubagentInvocationSnapshot[]): string {
+function formatDashboardMarkdown(snapshots: readonly SubagentInvocationSnapshot[]): string {
 	const ordered = [...snapshots].sort(
 		(a, b) => a.startedAt - b.startedAt || a.invocationId.localeCompare(b.invocationId),
 	);

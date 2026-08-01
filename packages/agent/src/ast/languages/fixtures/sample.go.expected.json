@@ -1,0 +1,96 @@
+{
+	"languageId": "go",
+	"parseDegraded": false,
+	"imports": [
+		"fmt",
+		"io"
+	],
+	"decls": [
+		{
+			"kind": "struct",
+			"qualifiedName": "Greeter",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "field",
+					"qualifiedName": "Greeter.Name",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "field",
+					"qualifiedName": "Greeter.count",
+					"visibility": "internal",
+					"exported": false,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "method",
+			"qualifiedName": "Greeter.Hello",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "interface",
+			"qualifiedName": "Writer",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "method",
+					"qualifiedName": "Writer.Flush",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "type",
+			"qualifiedName": "Color",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "constant",
+			"qualifiedName": "Red",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "constant",
+			"qualifiedName": "Green",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "variable",
+			"qualifiedName": "DefaultName",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "function",
+			"qualifiedName": "NewGreeter",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "function",
+			"qualifiedName": "hidden",
+			"visibility": "internal",
+			"exported": false,
+			"children": []
+		}
+	]
+}

@@ -17,7 +17,6 @@ outline = []
 references = [
   "packages/agent/extensions/aside/panel.ts",
   "packages/agent/shared/text.ts",
-  "packages/agent/test/extensions/aside/index.test.ts",
   "packages/agent/extensions/tau-help/help.md",
 ]
 
@@ -30,7 +29,6 @@ show = []
 outline = []
 references = [
   "packages/agent/extensions/aside/index.ts",
-  "packages/agent/test/extensions/aside/panel.test.ts",
   "packages/tui/src/tool-panel.ts",
   "packages/tui/src/scrollable-markdown.ts",
 ]

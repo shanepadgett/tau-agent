@@ -12,7 +12,7 @@ const REQUEST_TIMEOUT_MS = 60_000;
 const MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 500;
 
-export interface CodexAuth {
+interface CodexAuth {
 	token: string;
 	accountId: string;
 }
@@ -38,7 +38,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function resolveCodexAuth(token: string): CodexAuth {
+function resolveCodexAuth(token: string): CodexAuth {
 	const invalidCredential = () =>
 		new Error("The OpenAI Codex credential does not contain a usable ChatGPT account ID. Run /login again.");
 	const segments = token.split(".");

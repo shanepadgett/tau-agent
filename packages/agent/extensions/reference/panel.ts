@@ -871,7 +871,7 @@ function referenceNameFromUrl(url: string): string {
 	return name;
 }
 
-export function referenceDisplayName(remoteUrl: string, fallback: string): string {
+function referenceDisplayName(remoteUrl: string, fallback: string): string {
 	const remote = remoteUrl
 		.trim()
 		.replace(/[?#].*$/, "")

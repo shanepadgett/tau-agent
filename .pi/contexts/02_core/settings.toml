@@ -5,10 +5,10 @@ description = "Tau settings runtime, registration, and schema pipeline"
 description = "Settings scopes, path resolution, file reads, merging, atomic writes, and focused loading tests"
 read = []
 outline = ["packages/agent/shared/settings/files.ts", "packages/agent/shared/settings/load.ts", "packages/agent/shared/settings/paths.ts"]
-references = [".pi/tau/settings.json", "packages/agent/shared/settings/json.ts", "packages/agent/shared/settings/merge.ts", "packages/agent/test/shared/settings-load.test.ts"]
+references = [".pi/tau/settings.json", "packages/agent/shared/settings/json.ts", "packages/agent/shared/settings/merge.ts"]
 
 [schema]
 description = "Settings declarations, discovery, schema generation, synchronization, generated schema, and schema-sync documentation"
 read = []
 outline = [".pi/extensions/tau-schema-sync/index.ts", "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/schema.ts", "packages/agent/shared/settings/specs.ts"]
-references = [".pi/extensions/tau-schema-sync/README.md", "packages/agent/extensions/subagent/settings.ts", "packages/agent/schemas/tau.schema.json", "packages/agent/scripts/generate-tau-schema.ts", "packages/agent/test/extensions/subagent/settings.test.ts"]
+references = [".pi/extensions/tau-schema-sync/README.md", "packages/agent/extensions/subagent/settings.ts", "packages/agent/schemas/tau.schema.json", "packages/agent/scripts/generate-tau-schema.ts"]

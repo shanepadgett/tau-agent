@@ -5,7 +5,7 @@ description = "Reusable bounded-output, file-context, repository, prompt, text, 
 description = "Bounded model-visible text results and session-scoped temporary output"
 read = []
 outline = ["packages/agent/shared/bounded-text-result.ts", "packages/agent/shared/temporary-output-store.ts"]
-references = ["packages/agent/test/shared/bounded-text-result.test.ts"]
+references = []
 
 [isolated-session]
 description = "Shared isolated child-session model resolution, runtime setup, tool binding, and disposal"

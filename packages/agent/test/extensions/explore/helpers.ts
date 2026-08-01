@@ -1,6 +1,37 @@
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { createExploreEngine, type ExploreEngine } from "../../../src/ast/engine.ts";
 import { createFileGraph, type ExploreFileGraph } from "../../../src/ast/graph/file-graph.ts";
-import { createWorkspace, type Workspace } from "../../helpers.ts";
+
+export type Workspace = {
+	dir: string;
+	path(relativePath: string): string;
+	write(relativePath: string, content: string): Promise<void>;
+	mkdir(relativePath: string): Promise<void>;
+	cleanup(): Promise<void>;
+};
+
+export async function createWorkspace(): Promise<Workspace> {
+	const dir = await realpath(await mkdtemp(join(tmpdir(), "tau-test-")));
+	return {
+		dir,
+		path(relativePath) {
+			return join(dir, relativePath);
+		},
+		async write(relativePath, content) {
+			const path = join(dir, relativePath);
+			await mkdir(dirname(path), { recursive: true });
+			await writeFile(path, content, "utf8");
+		},
+		async mkdir(relativePath) {
+			await mkdir(join(dir, relativePath), { recursive: true });
+		},
+		async cleanup() {
+			await rm(dir, { recursive: true, force: true });
+		},
+	};
+}
 
 export type ExploreFixture = {
 	workspace: Workspace;

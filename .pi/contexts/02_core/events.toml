@@ -5,7 +5,7 @@ description = "Tau event contracts and shared event-backed coordination"
 description = "Typed shared event names and payloads"
 read = []
 outline = ["packages/agent/shared/events.ts"]
-references = ["packages/agent/docs/extending-tau-agent.md", "packages/agent/test/shared/events.test.ts"]
+references = ["packages/agent/docs/extending-tau-agent.md"]
 
 [review-context]
 description = "Hidden review injections and branch reconstruction for session naming"
@@ -23,4 +23,4 @@ references = []
 description = "Persistent tool-row expansion state and rendering integration"
 read = []
 outline = ["packages/agent/shared/tool-row-state.ts"]
-references = ["packages/agent/test/shared/tool-row-state.test.ts"]
+references = []

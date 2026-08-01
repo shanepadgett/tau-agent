@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { createExploreEngine } from "../../../src/ast/engine.ts";
 import { outlinePath } from "../../../src/ast/queries/outline.ts";
-import { createWorkspace } from "../../helpers.ts";
+import { createWorkspace } from "./helpers.ts";
 
 describe("outline", () => {
 	test("omits multiline TSX initializers and wrapped callback bodies", async () => {

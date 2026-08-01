@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { type Dirent, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -19,13 +18,6 @@ export function freezeRuntimeContext(cwd: string): RuntimeContext {
 	return { cwd: cwd.replace(/\\/g, "/"), rootSnapshot: listRootSnapshot(cwd) };
 }
 
-export function formatLocalDateKey(date: Date): string {
-	const year = date.getFullYear();
-	const month = String(date.getMonth() + 1).padStart(2, "0");
-	const day = String(date.getDate()).padStart(2, "0");
-	return `${year}-${month}-${day}`;
-}
-
 export function formatLocalDisplayDate(date: Date): string {
 	const months = [
 		"January",
@@ -42,12 +34,6 @@ export function formatLocalDisplayDate(date: Date): string {
 		"December",
 	];
 	return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
-}
-
-export function fingerprintRuntimeSnapshot(context: RuntimeContext): string {
-	return createHash("sha256")
-		.update(JSON.stringify({ version: 1, cwd: context.cwd, paths: context.rootSnapshot }))
-		.digest("hex");
 }
 
 export function formatRuntimeContextMessage(displayDate: string, rootSnapshot: readonly string[] | undefined): string {

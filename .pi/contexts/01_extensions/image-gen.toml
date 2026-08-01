@@ -20,7 +20,5 @@ references = [
   "packages/agent/src/image-generation/client.ts",
   "packages/agent/src/image-generation/constants.ts",
   ".pi/contexts/02_core/image-generation.toml",
-  "packages/agent/test/extensions/image-gen/index.test.ts",
-  "packages/agent/test/extensions/image-gen/client.test.ts",
   "packages/agent/extensions/tau-help/help.md",
 ]

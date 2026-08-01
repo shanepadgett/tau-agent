@@ -12,6 +12,5 @@ show = [
 ]
 outline = []
 references = [
-  "packages/agent/test/extensions/run-summary/index.test.ts",
   "packages/agent/extensions/tau-help/help.md",
 ]

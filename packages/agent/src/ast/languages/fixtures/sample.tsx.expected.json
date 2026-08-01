@@ -1,0 +1,59 @@
+{
+	"languageId": "tsx",
+	"parseDegraded": false,
+	"imports": [
+		"react"
+	],
+	"decls": [
+		{
+			"kind": "typeAlias",
+			"qualifiedName": "Props",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "function",
+			"qualifiedName": "CatalogLanding",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "object",
+			"qualifiedName": "STATE",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "constant",
+			"qualifiedName": "CatalogPage",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "function",
+			"qualifiedName": "DefaultPage",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		},
+		{
+			"kind": "class",
+			"qualifiedName": "PrivateWidget",
+			"visibility": "public",
+			"exported": false,
+			"children": [
+				{
+					"kind": "method",
+					"qualifiedName": "PrivateWidget.render",
+					"visibility": "public",
+					"exported": false,
+					"children": []
+				}
+			]
+		}
+	]
+}

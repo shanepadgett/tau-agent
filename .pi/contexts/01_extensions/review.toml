@@ -64,7 +64,6 @@ outline = []
 references = [
   "packages/agent/extensions/review/session.ts",
   "packages/agent/extensions/review/index.ts",
-  "packages/agent/test/extensions/review/model.test.ts",
 ]
 
 [result-ui]

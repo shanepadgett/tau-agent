@@ -1,0 +1,134 @@
+{
+	"languageId": "kotlin",
+	"parseDegraded": false,
+	"imports": [
+		"kotlin.collections.List"
+	],
+	"decls": [
+		{
+			"kind": "class",
+			"qualifiedName": "Greeter",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "property",
+					"qualifiedName": "Greeter.name",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "method",
+					"qualifiedName": "Greeter.hello",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "object",
+					"qualifiedName": "Greeter.Companion",
+					"visibility": "public",
+					"exported": true,
+					"children": [
+						{
+							"kind": "method",
+							"qualifiedName": "Greeter.Companion.create",
+							"visibility": "public",
+							"exported": true,
+							"children": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"kind": "function",
+			"qualifiedName": "top",
+			"visibility": "internal",
+			"exported": false,
+			"children": []
+		},
+		{
+			"kind": "object",
+			"qualifiedName": "Singleton",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "constant",
+					"qualifiedName": "Singleton.ID",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "enum",
+			"qualifiedName": "Color",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "enumMember",
+					"qualifiedName": "Color.RED",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "enumMember",
+					"qualifiedName": "Color.GREEN",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "interface",
+			"qualifiedName": "Named",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "method",
+					"qualifiedName": "Named.name",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "class",
+			"qualifiedName": "Point",
+			"visibility": "public",
+			"exported": true,
+			"children": [
+				{
+					"kind": "property",
+					"qualifiedName": "Point.x",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				},
+				{
+					"kind": "property",
+					"qualifiedName": "Point.y",
+					"visibility": "public",
+					"exported": true,
+					"children": []
+				}
+			]
+		},
+		{
+			"kind": "typeAlias",
+			"qualifiedName": "Alias",
+			"visibility": "public",
+			"exported": true,
+			"children": []
+		}
+	]
+}

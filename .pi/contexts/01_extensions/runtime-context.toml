@@ -16,7 +16,6 @@ show = [
 outline = []
 references = [
   "packages/agent/extensions/runtime-context/context.ts",
-  "packages/agent/test/extensions/runtime-context/index.test.ts",
   "packages/agent/extensions/tau-help/help.md",
 ]
 
@@ -29,5 +28,4 @@ show = []
 outline = []
 references = [
   "packages/agent/extensions/runtime-context/index.ts",
-  "packages/agent/test/extensions/runtime-context/context.test.ts",
 ]

@@ -126,6 +126,7 @@ export class TemporaryOutputStore {
 		return writer;
 	}
 
+	// fallow-ignore-next-line unused-class-member -- called via createTemporaryOutputStore() from explore session lifecycle
 	async shutdown(): Promise<void> {
 		if (this.shutdownPromise) return this.shutdownPromise;
 		this.shutdownPromise = this.performShutdown();

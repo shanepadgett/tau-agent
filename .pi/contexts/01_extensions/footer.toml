@@ -23,6 +23,5 @@ references = [
   "packages/agent/shared/model-effort.ts",
   "packages/agent/shared/events.ts",
   "packages/agent/shared/settings/load.ts",
-  "packages/agent/test/extensions/footer/index.test.ts",
   "packages/agent/extensions/tau-help/help.md",
 ]

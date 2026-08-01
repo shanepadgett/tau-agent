@@ -14,7 +14,7 @@ const LIST_BRANCH_REFS_ARGS = [
 	"refs/remotes",
 ];
 
-export function normalizeBranchName(name: string): string {
+function normalizeBranchName(name: string): string {
 	return name
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, "-")

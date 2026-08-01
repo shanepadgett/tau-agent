@@ -1,25 +1,45 @@
 import Foundation
 
 /// Greeter type
-public class Greeter {
-    public var name: String = ""
-    public init() {}
-    public func hello() {}
+public class Greeter: Named {
+	public var name: String = ""
+
+	public init() {}
+
+	public init(name: String) {
+		self.name = name
+	}
+
+	public func hello() {
+		print("hi \(name)")
+	}
+
+	deinit {}
 }
 
 extension Greeter {
-    public func shout() {}
+	public func shout() {
+		print(name.uppercased())
+	}
 }
 
 public protocol Named {
-    func name()
+	var name: String { get }
+	func nameLabel()
 }
 
 internal struct Box {
-    var value: Int
+	var value: Int
 }
 
 private enum Color {
-    case red
-    case green
+	case red
+	case green
+}
+
+public typealias Alias = Greeter
+
+public enum Result {
+	case ok(Int)
+	case err(String)
 }

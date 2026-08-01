@@ -11,6 +11,7 @@
 					"docs/plans/**",
 					"packages/agent/native-bin/**",
 					"packages/agent/test/extensions/patch/fixtures/**",
+					"packages/agent/src/ast/languages/fixtures/**",
 					"packages/agent/src/ast/grammars/*.wasm"
 				]
 			}

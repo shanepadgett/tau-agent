@@ -5,7 +5,7 @@ description = "Shared model selection, effort tiers, validation, retries, and co
 description = "Candidate selection, retries, validation correction, cooldown handling, and focused tests"
 read = []
 outline = ["packages/agent/shared/model-fallback/index.ts"]
-references = ["packages/agent/shared/model-fallback/types.ts", "packages/agent/test/shared/model-fallback.test.ts"]
+references = ["packages/agent/shared/model-fallback/types.ts"]
 
 [settings]
 description = "Fallback candidate configuration"
@@ -17,7 +17,7 @@ references = []
 description = "Shared workload-effort tiers resolved to ordered model and thinking-level candidates"
 read = []
 outline = ["packages/agent/shared/model-effort.ts"]
-references = ["packages/agent/test/shared/model-effort.test.ts"]
+references = []
 
 [agent-runtime-standard]
 description = "Authoritative extension policy for model selection, effort tiers, thinking levels, and fallback"

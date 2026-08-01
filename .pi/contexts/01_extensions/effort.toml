@@ -23,7 +23,6 @@ references = [
   "packages/agent/extensions/effort/state.ts",
   "packages/agent/shared/model-effort.ts",
   "packages/agent/shared/events.ts",
-  "packages/agent/test/extensions/effort/index.test.ts",
   "packages/agent/extensions/tau-help/help.md",
 ]
 
@@ -38,5 +37,4 @@ show = [
 outline = []
 references = [
   "packages/agent/extensions/effort/index.ts",
-  "packages/agent/test/extensions/effort/state.test.ts",
 ]
