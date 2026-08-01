@@ -19,7 +19,7 @@ const contextParams = Type.Object(
 		budget: Type.Optional(
 			Type.Integer({
 				minimum: 1,
-				description: "Token pack budget (default from explore.context.defaultBudgetTokens)",
+				description: "Token budget (default from settings)",
 			}),
 		),
 	},
@@ -36,14 +36,9 @@ export function createContextTool(
 		name: "context",
 		label: "context",
 		description:
-			"Budgeted pack to understand one symbol in one call: target body, nearby callees/callers or type members/implementors. Raise budget if truncated. Use impact for full blast radius.",
-		promptSnippet: "Budgeted read pack for one symbol",
-		promptGuidelines: [
-			"Use when you need bodies/signatures around one symbol under a token budget.",
-			"Raise budget if entries are signature-only or truncated.",
-			"Use impact for full dependents list; context is a sample pack.",
-			"Callable and type targets only.",
-		],
+			"Budgeted pack for one callable/type: target body/signature plus nearby related decls. Default budget explore.context.defaultBudgetTokens (8000) when omitted. Sample, not full dependents — use impact for that. Soft-errors as text.",
+		promptSnippet: "Budgeted pack around one symbol",
+		promptGuidelines: ["Raise budget if entries are signature-only or footer says truncated."],
 		parameters: contextParams,
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			const engine = engineFor(ctx.cwd);

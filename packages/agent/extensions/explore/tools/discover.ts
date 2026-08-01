@@ -43,7 +43,7 @@ const declarationKinds = [
 
 const discoverParams = Type.Object(
 	{
-		path: Type.String({ description: "Repository, package, or subtree directory" }),
+		path: Type.String({ description: "Directory scope" }),
 		query: Type.Union([
 			Type.Object(
 				{ kind: Type.Literal("exactName"), name: Type.String({ minLength: 1 }) },
@@ -84,9 +84,9 @@ const discoverParams = Type.Object(
 			),
 		]),
 		surface: StringEnum(["all", "public", "private", "sourceExport", "packageSurface"] as const, {
-			description: "Declaration or export surface to search",
+			description: "all | public | private | sourceExport | packageSurface",
 		}),
-		resultLimit: Type.Integer({ minimum: 1, maximum: 100 }),
+		resultLimit: Type.Integer({ minimum: 1, maximum: 100, description: "Max candidates (1–100)" }),
 	},
 	{ additionalProperties: false },
 );
@@ -134,13 +134,11 @@ export function createDiscoverTool(
 		name: "discover",
 		label: "discover",
 		description:
-			"Find reusable declarations across a repository, package, or subtree by name, kind, or documentation. Signatures only — no bodies. Prefer package/public surfaces when looking for imports.",
-		promptSnippet: "Find reusable declarations across a repo/package/subtree when path is unknown",
+			"Find decls by name/kind/docs when path is unknown. Signatures only. One query kind per call. surface selects visibility/export set; packageSurface needs a language with that capability (TS/TSX here) and a nearby package.",
+		promptSnippet: "Find decls by name/kind/docs across a tree",
 		promptGuidelines: [
-			"Use discover when reuse intent is known but the declaration path or exact name is not.",
-			"Choose exactly one query kind. Keep fuzzy or documentation work limits narrow.",
-			"Use packageSurface when the caller needs a supported public import path (languages with packageSurface capability).",
-			"Follow up with show using path+name(+line) when a candidate needs closer inspection.",
+			"Prefer public/packageSurface when looking for imports; follow hits with show.",
+			"Keep fuzzyName / documentation maxCandidates and maxWork tight.",
 		],
 		parameters: discoverParams,
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {

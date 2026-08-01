@@ -13,7 +13,7 @@ import { targetParams } from "./target-params.ts";
 const relationshipParams = Type.Object(
 	{
 		...targetParams,
-		resultLimit: Type.Integer({ minimum: 1, maximum: 100, description: "Max sites to return" }),
+		resultLimit: Type.Integer({ minimum: 1, maximum: 100, description: "Max sites (1–100)" }),
 	},
 	{ additionalProperties: false },
 );
@@ -90,12 +90,11 @@ export function createCallersTool(
 ) {
 	return createRelationshipTool(
 		"callers",
-		"Syntactic call sites of a declaration. For types: constructions and implementors.",
-		"Find callers of a symbol",
+		"Inbound syntactic sites for one decl (calls/constructs/implementors for types). Scope is a directory. Ambiguous name → candidate list, not sites. Soft-errors return as text.",
+		"Inbound call/construct sites",
 		[
-			"Use after selecting a change target when inbound uses affect the plan.",
-			"Disambiguate with targetPath or line when the name is common.",
-			"Treat ambiguous sites as non-actionable until tightened.",
+			"Disambiguate with targetPath or line before acting on hits.",
+			"Respect certainty: exact silent; inferred/ambiguous labeled; ambiguous not actionable.",
 		],
 		rowState,
 		engineFor,
@@ -110,9 +109,9 @@ export function createCalleesTool(
 ) {
 	return createRelationshipTool(
 		"callees",
-		"Direct callees inside a declaration body. For types: ancestor types from heritage.",
-		"Find callees of a symbol",
-		["Direct only — no depth parameter.", "Use to skim outbound dependencies before editing a body."],
+		"Direct outbound sites inside one decl body (heritage ancestors for types). One hop only. Same resolve/soft-error protocol as callers.",
+		"Direct callees / heritage",
+		[],
 		rowState,
 		engineFor,
 		graphFor,
@@ -126,12 +125,9 @@ export function createReferencesTool(
 ) {
 	return createRelationshipTool(
 		"references",
-		"Direct references: calls, constructions, imports, and heritage mentions of a declaration.",
-		"Find references to a symbol",
-		[
-			"Includes import and re-export-style bindings when classified.",
-			"Not a full IDE rename set — respect certainty labels.",
-		],
+		"Direct references: calls, constructs, imports/re-exports, heritage mentions. Not a full rename set. Same resolve/soft-error protocol as callers.",
+		"Direct references to a symbol",
+		["Certainty labels are incomplete for rename — verify before bulk edit."],
 		rowState,
 		engineFor,
 		graphFor,
@@ -145,12 +141,9 @@ export function createImplementationsTool(
 ) {
 	return createRelationshipTool(
 		"implementations",
-		"Syntactic inheritance/implementation sites and conservative same-name overrides.",
-		"Find implementations of a type or method",
-		[
-			"For types: heritage clauses naming the target.",
-			"For methods: same-name methods on types that extend/implement the owner (conservative).",
-		],
+		"Heritage implementors of a type, or same-name methods on extending types (conservative). Same resolve/soft-error protocol as callers.",
+		"Implementors / overrides",
+		["Method matches are name-based on subtype owners — not semantic override resolution."],
 		rowState,
 		engineFor,
 		graphFor,

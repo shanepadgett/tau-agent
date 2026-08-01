@@ -24,12 +24,12 @@ const impactParams = Type.Object(
 			Type.Integer({
 				minimum: 1,
 				maximum: IMPACT_DEPTH_MAX,
-				description: `File-transitive reverse depth (default ${IMPACT_DEPTH_DEFAULT}, max ${IMPACT_DEPTH_MAX}). Symbol hops are always 1.`,
+				description: `Reverse file BFS depth (default ${IMPACT_DEPTH_DEFAULT}, max ${IMPACT_DEPTH_MAX})`,
 			}),
 		),
 		mode: Type.Optional(
 			StringEnum(["all", "deps", "dependents"] as const, {
-				description: "all = both sides; deps = callees+imports; dependents = callers+importers+transitive",
+				description: "all | deps | dependents",
 			}),
 		),
 	},
@@ -46,15 +46,9 @@ export function createImpactTool(
 		name: "impact",
 		label: "impact",
 		description:
-			"One-call blast radius for a symbol: callees, callers, file imports, file importers, transitive file dependents. Narrow path scope. depth is file-transitive only.",
-		promptSnippet: "Blast radius before a non-trivial edit",
-		promptGuidelines: [
-			"Use before a non-trivial edit to see symbol and nearby file dependents.",
-			"Narrow path scope — whole-repo impact is not the goal.",
-			"depth applies only to reverse file dependents (not multi-hop symbol callers).",
-			"mode=deps for outbound only; mode=dependents for inbound only.",
-			"Callable and type targets only.",
-		],
+			"Blast radius for one callable/type: callees, callers, file imports/importers, transitive file dependents. path is narrow directory scope. depth (default 2, max 5) is file reverse-BFS only; symbol hops stay 1. mode=all|deps|dependents. Soft-errors and notes as text.",
+		promptSnippet: "Symbol + file blast radius",
+		promptGuidelines: ["Run before non-trivial edits; keep path narrow — not whole-repo."],
 		parameters: impactParams,
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			const engine = engineFor(ctx.cwd);

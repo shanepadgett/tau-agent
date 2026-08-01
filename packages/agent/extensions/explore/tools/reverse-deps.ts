@@ -11,8 +11,8 @@ import { ExploreCallComponent, renderExploreResult, type ExploreToolDetails } fr
 const reverseDepsParams = Type.Object(
 	{
 		path: Type.String({ description: "Source file" }),
-		depth: Type.Optional(Type.Integer({ minimum: 1, description: "Traversal depth (default 1)" })),
-		resultLimit: Type.Integer({ minimum: 1, maximum: 100, description: "Max importer entries to return" }),
+		depth: Type.Optional(Type.Integer({ minimum: 1, description: "BFS depth (default 1)" })),
+		resultLimit: Type.Integer({ minimum: 1, maximum: 100, description: "Max importers (1–100)" }),
 	},
 	{ additionalProperties: false },
 );
@@ -26,13 +26,9 @@ export function createReverseDepsTool(
 		name: "reverse_deps",
 		label: "reverse_deps",
 		description:
-			"File-level: who imports this file within the inferred project scope. Depth > 1 walks transitive importers (BFS).",
-		promptSnippet: "List files that import this file",
-		promptGuidelines: [
-			"Use for file-level reverse dependencies, not symbol callers.",
-			"Scope is session cwd when the file is under it, else nearest git root.",
-			"Tighten resultLimit on large packages.",
-		],
+			"File-level importers of one source file in project scope (cwd if under it, else nearest git root). depth>1 = transitive BFS. Not symbol callers.",
+		promptSnippet: "Who imports this file",
+		promptGuidelines: ["Tighten resultLimit on large packages."],
 		parameters: reverseDepsParams,
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			const engine = engineFor(ctx.cwd);

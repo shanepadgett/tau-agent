@@ -17,23 +17,17 @@ import { ExploreCallComponent, renderExploreResult, shrinkingListVariants, type 
 const outlineParams = Type.Object(
 	{
 		path: Type.String({
-			description: "Supported source file, package directory, or subtree",
+			description: "File, package dir, or subtree",
 		}),
-		includePrivate: Type.Optional(
-			Type.Boolean({ description: "Include private declarations and members (default false)" }),
-		),
-		includeDocs: Type.Optional(
-			Type.Boolean({ description: "Include attached documentation comments (default false)" }),
-		),
+		includePrivate: Type.Optional(Type.Boolean({ description: "Include non-public decls (default false)" })),
+		includeDocs: Type.Optional(Type.Boolean({ description: "Include attached docs (default false)" })),
 		names: Type.Optional(
 			Type.Array(Type.String({ minLength: 1 }), {
 				minItems: 1,
-				description: "Exact declaration name or qualifiedName filters",
+				description: "Exact name / qualifiedName filter",
 			}),
 		),
-		recursive: Type.Optional(
-			Type.Boolean({ description: "Recursively outline every supported source file below a directory" }),
-		),
+		recursive: Type.Optional(Type.Boolean({ description: "Walk whole subtree" })),
 	},
 	{ additionalProperties: false },
 );
@@ -105,13 +99,11 @@ export function createOutlineTool(
 		name: "outline",
 		label: "outline",
 		description:
-			"Inspect declarations in one supported source file, one non-recursive package directory, or a recursive mixed-language subtree without returning implementation bodies. Line ranges support follow-up show or ranged read.",
-		promptSnippet: "Inspect declarations and structure without reading implementation bodies",
+			"Declaration map for one file, one package dir, or a recursive subtree. Signatures and ranges only — no bodies. Private/docs off by default. Recursive walks every supported language under path.",
+		promptSnippet: "Declaration map without bodies",
 		promptGuidelines: [
-			"Set recursive=true to orient an unfamiliar repository or subtree across supported languages.",
-			"Leave includePrivate off for surface discovery; enable it only for targeted internal implementation work.",
-			"Leave includeDocs off when names and signatures answer the question; enable it only when documentation comments matter.",
-			"Use show with path+name (and optional line) when exact signature or declaration source is needed.",
+			"recursive=true for unfamiliar trees; single path otherwise.",
+			"includePrivate / includeDocs only when surface names are not enough.",
 		],
 		parameters: outlineParams,
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {

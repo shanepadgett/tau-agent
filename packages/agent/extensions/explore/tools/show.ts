@@ -12,9 +12,9 @@ import { ExploreCallComponent, renderExploreResult, shrinkingListVariants, type 
 
 const showTargetSchema = Type.Object(
 	{
-		path: Type.String({ description: "File containing the declaration" }),
-		name: Type.String({ minLength: 1, description: "Declaration name; may be dotted (Type.method)" }),
-		line: Type.Optional(Type.Integer({ minimum: 1, description: "1-indexed line covered by the declaration range" })),
+		path: Type.String({ description: "Defining file" }),
+		name: Type.String({ minLength: 1, description: "Decl name; dotted Type.method ok" }),
+		line: Type.Optional(Type.Integer({ minimum: 1, description: "1-based line inside decl range" })),
 	},
 	{ additionalProperties: false },
 );
@@ -23,16 +23,15 @@ const showParams = Type.Object(
 	{
 		targets: Type.Array(showTargetSchema, {
 			minItems: 1,
-			description: "One or more path+name targets (optional line to disambiguate)",
+			description: "path+name targets (optional line pin)",
 		}),
 		view: StringEnum(["signature", "signatureWithDocs", "declaration", "declarationWithImports"] as const, {
-			description:
-				"signature omits docs and bodies; signatureWithDocs adds attached docs; declaration is exact source; declarationWithImports adds import statements that mention identifiers in the declaration",
+			description: "signature | signatureWithDocs | declaration | declarationWithImports",
 		}),
 		contextLines: Type.Optional(
 			Type.Integer({
 				minimum: 0,
-				description: "Lines of source context before and after each declaration (view=declaration only)",
+				description: "Extra lines around decl (declaration only)",
 			}),
 		),
 	},
@@ -69,13 +68,11 @@ export function createShowTool(rowState: ToolRowStateStore, engineFor: (cwd: str
 		name: "show",
 		label: "show",
 		description:
-			"Return signatures, documented signatures, exact declarations, or declarations with related imports for path+name targets. Ambiguous or missing targets fail the whole batch with candidates — no partial bodies.",
-		promptSnippet: "Retrieve signatures or exact declarations for path+name targets",
+			"Exact signature or source for path+name targets. Whole batch fails on any missing/ambiguous target (candidate list, no partials). Views: signature → signatureWithDocs → declaration → declarationWithImports. Over budget throws — request fewer targets (bodies are not truncated).",
+		promptSnippet: "Signature or source for path+name targets",
 		promptGuidelines: [
-			"Prefer signature when the contract is enough; use signatureWithDocs only when attached docs matter.",
-			"Use declaration for exact implementation source; declarationWithImports when edit context needs imports.",
-			"Disambiguate with path and optional line. Do not guess among candidates.",
-			"If the batch exceeds the model-output budget, request fewer targets — show never truncates bodies.",
+			"Cheapest view that answers; declarationWithImports only when edits need imports.",
+			"Pin with path and line when names collide — do not guess.",
 		],
 		parameters: showParams,
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {

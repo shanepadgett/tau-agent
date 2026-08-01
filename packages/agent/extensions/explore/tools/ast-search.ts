@@ -18,20 +18,18 @@ const PATTERN_MAX_BYTES = 16 * 1024;
 
 const astSearchParams = Type.Object(
 	{
-		path: Type.String({ description: "File or directory to search" }),
+		path: Type.String({ description: "File or directory" }),
 		pattern: Type.String({
 			minLength: 1,
 			maxLength: PATTERN_MAX_BYTES,
-			description:
-				"ast-grep pattern (e.g. 'console.log($ARG)', 'foo($$$ARGS)', 'if ($COND) { $$$BODY }'). $NAME binds one node; $$$NAME binds a sibling sequence.",
+			description: "ast-grep pattern (max 16KiB). $NAME = node, $$$NAME = sequence, $_ = anonymous",
 		}),
 		language: Type.Optional(
 			Type.String({
-				description:
-					"Engine-registered language id (typescript, tsx, go, rust, c_sharp, java, kotlin, swift). Required for directories; must match file extension when both given.",
+				description: "Registered id: typescript, tsx, go, rust, c_sharp, java, kotlin, swift",
 			}),
 		),
-		resultLimit: Type.Integer({ minimum: 1, maximum: 100 }),
+		resultLimit: Type.Integer({ minimum: 1, maximum: 100, description: "Max matches (1–100)" }),
 	},
 	{ additionalProperties: false },
 );
@@ -64,13 +62,11 @@ export function createAstSearchTool(
 		name: "ast_search",
 		label: "ast_search",
 		description:
-			"Find code shapes with ast-grep patterns in one file or a tree. Use $NAME for one node and $$$NAME for sibling sequences (e.g. console.log($ARG), foo($$$ARGS)). Search only — no writes. Prefer over grep when structure matters.",
-		promptSnippet: "Structural pattern search with ast-grep metavariables",
+			"ast-grep structural search on one file or a directory. $NAME = node, $$$NAME = sequence, $_ = anonymous. Directory targets require language. Search only.",
+		promptSnippet: "ast-grep structural pattern search",
 		promptGuidelines: [
-			"Use ast_search for code shapes; harness grep for literal text.",
-			"Pass language for directory targets (required). On a file, language is optional when the extension maps to a registered search language.",
-			"Patterns follow ast-grep rules: $NAME one node, $$$NAME sequence, $_ anonymous. Keep resultLimit tight.",
-			"No rewrite/write path — edits go through harness patch/edit/write.",
+			"Shapes here; literal text with harness grep.",
+			"language required for directories; on a file, omit when extension maps the language.",
 		],
 		parameters: astSearchParams,
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {

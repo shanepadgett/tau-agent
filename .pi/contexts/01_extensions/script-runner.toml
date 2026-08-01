@@ -1,8 +1,8 @@
 name = "Script Runner"
-description = "Agent tool for Python 3 and TypeScript with edit-and-rerun on failure"
+description = "Agent tool for Python 3 and Node.js with edit-and-rerun on failure"
 
 [extension-shell]
-description = "Detect python3 and Node>=22.6 TypeScript runtimes; register script_runner only when at least one exists; new runs take full script and assign scriptId; failures keep up to 8 scripts in memory and return scriptId plus truncated diagnostics; retries apply exact oldText/newText edits then rerun; successes delete stored script and return truncatedTail stdout; scrub temp paths from output; clear store and temp dir on session_shutdown"
+description = "Detect python3 and Node>=22.6 runtimes; register script_runner only when at least one exists; language=node is local Node.js via --experimental-strip-types; new runs take full script and assign scriptId; failures keep up to 8 scripts in memory and return scriptId plus truncated diagnostics; retries apply exact oldText/newText edits then rerun; successes delete stored script and return truncatedTail stdout; scrub temp paths from output; clear store and temp dir on session_shutdown"
 read = [
   "packages/agent/extensions/script-runner/index.ts",
   "packages/agent/extensions/script-runner/README.md",

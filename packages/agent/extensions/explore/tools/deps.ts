@@ -11,8 +11,8 @@ import { ExploreCallComponent, renderExploreResult, type ExploreToolDetails } fr
 const depsParams = Type.Object(
 	{
 		path: Type.String({ description: "Source file" }),
-		depth: Type.Optional(Type.Integer({ minimum: 1, description: "Traversal depth (default 1)" })),
-		resultLimit: Type.Integer({ minimum: 1, maximum: 100, description: "Max dependent entries to return" }),
+		depth: Type.Optional(Type.Integer({ minimum: 1, description: "BFS depth (default 1)" })),
+		resultLimit: Type.Integer({ minimum: 1, maximum: 100, description: "Max entries (1–100)" }),
 	},
 	{ additionalProperties: false },
 );
@@ -26,13 +26,9 @@ export function createDepsTool(
 		name: "deps",
 		label: "deps",
 		description:
-			"File-level: what this file imports/depends on. Depth > 1 walks the internal import graph (BFS). External packages are listed last.",
-		promptSnippet: "List file imports and dependencies",
-		promptGuidelines: [
-			"Use for file-level dependency orientation, not symbol callees.",
-			"Increase depth only when transitive internal imports matter.",
-			"Tighten resultLimit when output is large.",
-		],
+			"File-level imports for one source file. depth>1 = BFS through internal imports. External packages listed last. Not symbol callees.",
+		promptSnippet: "File imports / dependency graph",
+		promptGuidelines: ["Raise depth only for transitive internal imports; tighten resultLimit if noisy."],
 		parameters: depsParams,
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			const engine = engineFor(ctx.cwd);

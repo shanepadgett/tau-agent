@@ -16,11 +16,12 @@ import {
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
-type Language = "python3" | "typescript";
+type Language = "python3" | "node" | "deno";
 
 interface Runtimes {
 	python3: string | undefined;
-	typescript: string | undefined;
+	node: string | undefined;
+	deno: string | undefined;
 }
 
 interface StoredScript {
@@ -40,15 +41,34 @@ function detectRuntimes(): Runtimes {
 		// runtime not installed
 	}
 	const [major, minor] = process.versions.node.split(".").map(Number);
-	let typescript: string | undefined;
+	let node: string | undefined;
 	if (major > 22 || (major === 22 && minor >= 6)) {
-		typescript = process.execPath;
+		node = process.execPath;
 	}
-	return { python3, typescript };
+	let deno: string | undefined;
+	try {
+		execFileSync("deno", ["--version"], { stdio: ["ignore", "pipe", "ignore"] });
+		deno = "deno";
+	} catch {
+		// runtime not installed
+	}
+	return { python3, node, deno };
 }
 
 function capitalize(lang: Language): string {
-	return lang === "python3" ? "Python 3" : "TypeScript";
+	if (lang === "python3") return "Python 3";
+	if (lang === "node") return "Node";
+	return "Deno";
+}
+
+function formatLangList(langs: readonly Language[]): string {
+	const names = langs.map(capitalize);
+	if (names.length <= 2) return names.join(" or ");
+	return `${names.slice(0, -1).join(", ")}, or ${names[names.length - 1]}`;
+}
+
+function languageLabel(lang: string): string {
+	return lang === "node" ? "node (Node.js)" : lang;
 }
 
 function newScriptId(): string {
@@ -65,9 +85,7 @@ function applyEdits(source: string, edits: ReadonlyArray<{ oldText: string; newT
 	for (const edit of edits) {
 		const idx = next.indexOf(edit.oldText);
 		if (idx === -1) {
-			throw new Error(
-				"An edits oldText was not found in the script. Copy the exact text from the script you wrote.",
-			);
+			throw new Error("edits oldText not found. Copy exact text from the script you wrote.");
 		}
 		next = next.slice(0, idx) + edit.newText + next.slice(idx + edit.oldText.length);
 	}
@@ -92,12 +110,12 @@ function renderEditsPreview(edits: ReadonlyArray<{ oldText: string; newText: str
 
 export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 	const runtimes = detectRuntimes();
-	const detected = (["python3", "typescript"] as const).filter(
-		(lang): lang is Language => (lang === "python3" ? runtimes.python3 : runtimes.typescript) !== undefined,
+	const detected = (["python3", "node", "deno"] as const).filter(
+		(lang): lang is Language => runtimes[lang] !== undefined,
 	);
 	if (detected.length === 0) return;
 
-	const langPhrase = detected.map(capitalize).join(" or ");
+	const langPhrase = formatLangList(detected);
 
 	const scripts = new Map<string, StoredScript>();
 	let tempDir: string | undefined;
@@ -112,14 +130,13 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 	}
 
 	function resolveCommand(language: Language): string {
-		if (language === "python3") {
-			const cmd = runtimes.python3;
-			if (!cmd) throw new Error("Python 3 is not available on this machine.");
-			return cmd;
+		const cmd = runtimes[language];
+		if (cmd) return cmd;
+		if (language === "python3") throw new Error("Python 3 is not available on this machine.");
+		if (language === "node") {
+			throw new Error("Node unavailable (needs Node >= 22.6 with --experimental-strip-types).");
 		}
-		const cmd = runtimes.typescript;
-		if (!cmd) throw new Error("TypeScript is not available (requires Node >= 22.6).");
-		return cmd;
+		throw new Error("Deno is not available on this machine.");
 	}
 
 	async function ensureTempDir(): Promise<string> {
@@ -138,7 +155,12 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 		const dir = await ensureTempDir();
 		const file = join(dir, language === "python3" ? "_run.py" : "_run.ts");
 		await writeFile(file, source, "utf8");
-		const args = language === "python3" ? [file] : ["--experimental-strip-types", file];
+		const args =
+			language === "python3"
+				? [file]
+				: language === "node"
+					? ["--experimental-strip-types", file]
+					: ["run", "-A", file];
 		const result = await pi.exec(command, args, { cwd, signal, timeout: TIMEOUT_MS });
 		return {
 			...result,
@@ -149,13 +171,13 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 
 	const paramsSchema = Type.Object(
 		{
-			language: StringEnum(detected, { description: "Execution language available on this machine." }),
+			language: StringEnum(detected, {
+				description: "Execution runtime.",
+			}),
 			script: Type.Optional(
-				Type.String({ description: "Full script source for a new run. Omit when retrying with edits." }),
+				Type.String({ description: "Full source for a new run. Omit when retrying with edits." }),
 			),
-			scriptId: Type.Optional(
-				Type.String({ description: "scriptId returned by a failed run. Required when retrying with edits." }),
-			),
+			scriptId: Type.Optional(Type.String({ description: "From a failed run. Required with edits." })),
 			edits: Type.Optional(
 				Type.Array(
 					Type.Object({
@@ -163,8 +185,7 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 						newText: Type.String({ description: "Replacement text." }),
 					}),
 					{
-						description:
-							"Targeted oldText/newText patches applied to the stored script before rerun. Prefer this over resending the whole script.",
+						description: "Patches applied to the stored script before rerun.",
 					},
 				),
 			),
@@ -172,15 +193,26 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 		{ additionalProperties: false },
 	);
 
+	const runtimeNotes = [
+		detected.includes("node")
+			? "language=node: local Node.js via node --experimental-strip-types (not tsc/ts-node)."
+			: undefined,
+		detected.includes("deno") ? "language=deno: local Deno via deno run -A." : undefined,
+	].filter((note): note is string => note !== undefined);
+
 	const tool = defineTool<typeof paramsSchema, undefined>({
 		name: "script_runner",
 		label: "Script Runner",
-		description: `Run a ${langPhrase} script in the project working directory and return its output. On a non-zero exit, returns a scriptId; retry by sending targeted {oldText,newText} edits against the script you already wrote (same language + scriptId) instead of resending the whole script. Available on this machine: ${langPhrase}.`,
-		promptSnippet: `Run ${langPhrase} scripts; fix failures with targeted edits instead of rewriting the whole script.`,
+		description: [
+			`Run a ${langPhrase} script in the project cwd and return stdout.`,
+			...runtimeNotes,
+			"On non-zero exit: result includes scriptId. Retry with same language + scriptId + edits [{oldText,newText}]; do not resend the full script unless the approach is wrong.",
+			`Available: ${langPhrase}.`,
+		].join("\n"),
+		promptSnippet: `Run ${langPhrase} scripts; on failure retry with edits + scriptId.`,
 		promptGuidelines: [
-			`Prefer script_runner over bash for ${langPhrase} when computation, data handling, or bulk file work is cleaner than chaining built-in tools.`,
-			`When script_runner fails, do not resend the full script. Call script_runner again with the same language, the returned scriptId, and an edits array of {oldText,newText} patches against the script you just wrote. Only resend a full script if the approach itself was wrong.`,
-			`script_runner never exposes the script file path, and you already know the script you sent. Never try to read it back.`,
+			`Prefer script_runner over bash for ${langPhrase} when computation, data handling, or bulk file work is cleaner than chaining tools.`,
+			"script_runner never exposes the script path; you already have the source. Never try to read it back.",
 		],
 		parameters: paramsSchema,
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
@@ -195,12 +227,10 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 			let source: string;
 
 			if (edits && edits.length > 0) {
-				if (!scriptId) throw new Error("edits require the scriptId returned by the failed run.");
+				if (!scriptId) throw new Error("edits require scriptId from the failed run.");
 				const stored = scripts.get(scriptId);
 				if (!stored) {
-					throw new Error(
-						`No stored script for scriptId ${scriptId}. It may have been evicted; resend the full script.`,
-					);
+					throw new Error(`No stored script for scriptId ${scriptId}. Evicted; resend full script.`);
 				}
 				if (stored.language !== language) {
 					throw new Error(`Language mismatch: scriptId ${scriptId} is ${stored.language}, not ${language}.`);
@@ -208,14 +238,17 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 				source = applyEdits(stored.source, edits);
 			} else {
 				if (typeof params.script !== "string" || params.script.length === 0) {
-					throw new Error("Provide a script for a new run, or edits + scriptId to retry.");
+					throw new Error("Provide script, or edits + scriptId.");
 				}
 				source = params.script;
 				if (!scriptId) scriptId = newScriptId();
 			}
 
 			remember(scriptId, { language, source });
-			await onUpdate?.({ content: [{ type: "text", text: `Running ${language}...` }], details: undefined });
+			await onUpdate?.({
+				content: [{ type: "text", text: `Running ${languageLabel(language)}...` }],
+				details: undefined,
+			});
 
 			const result = await runScript(language, command, source, ctx.cwd, signal);
 			if (result.code === 0 && !result.killed) {
@@ -240,13 +273,11 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 				? `\n\n[output truncated: kept tail ${trunc.outputLines} / ${trunc.totalLines} lines]`
 				: "";
 			const detail = trunc.content ? `${trunc.content}${note}\n\n` : "";
-			throw new Error(
-				`${detail}scriptId: ${scriptId}\nRetry with edits: [{oldText,newText}] using the same language and scriptId; do not resend the full script.`,
-			);
+			throw new Error(`${detail}scriptId: ${scriptId}`);
 		},
 		renderCall(args, theme, context) {
 			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			const header = `${theme.fg("toolTitle", theme.bold("script_runner"))} ${theme.fg("muted", args.language)}`;
+			const header = `${theme.fg("toolTitle", theme.bold("script_runner"))} ${theme.fg("muted", languageLabel(args.language))}`;
 			const edits = args.edits;
 			const body =
 				edits && edits.length > 0
