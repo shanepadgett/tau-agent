@@ -4,3 +4,4 @@
 {"id":"57445ee0-8086-4c09-a12e-d13020e98925","text":"focus feature and goal setting","createdAt":1782851050070}
 {"id":"eb5171f5-8f3a-4a75-a7cb-38ab5367eaba","text":"we need to add context percentage nudges for agent to use the checkpoint tool","createdAt":1785535763354}
 {"id":"2906c6d7-1390-4d7b-b98a-72926ec8634b","text":"give agent ability to use tree. to create task list and use that as a fork to implement and warp back and summarize to move on to next task, creating nice branches you can track for the various bits of work it did","createdAt":1785550614555}
+{"id":"8a685a5f-d4b2-4b33-b182-55a7ca05ed91","text":"prevent re-reading same file more than ones with simple hook and informing the agent its previous read is still valid","createdAt":1785588870734}
