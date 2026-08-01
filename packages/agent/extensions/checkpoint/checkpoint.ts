@@ -16,10 +16,8 @@ import { formatCheckpointMessage } from "./prompt.ts";
 
 export const CHECKPOINT_TOOL = "checkpoint";
 const CONTINUATION_TYPE = "tau.checkpoint";
-const CONTINUATION_MESSAGE = formatCheckpointMessage(
-	"continuation",
-	"Continue directly from the checkpoint state and provided files. Trust the provided sources and continue the listed work.",
-);
+const CONTINUATION_PREAMBLE =
+	"Continue directly from the checkpoint state and provided files. Trust the provided sources and continue the listed work.";
 const CHECKPOINT_PREVIEW_CHARACTERS = 240;
 const CHECKPOINT_RENDER_CHARACTERS = 24_000;
 const CHECKPOINT_RENDER_LINES = 200;
@@ -68,6 +66,11 @@ const checkpointParams = Type.Object(
 		work: Type.Array(Type.String(), { description: "Ordered current work, with the next thing first." }),
 		facts: Type.Array(Type.String(), { description: "Concrete findings that must survive context replacement." }),
 		decisions: Type.Array(Type.String(), { description: "Choices that continue to govern the work." }),
+		continue: Type.String({
+			minLength: 1,
+			description:
+				"Immediate post-checkpoint resume directive. First moves after wake, traps to avoid, what not to re-litigate. Not the full work queue.",
+		}),
 		files: Type.Array(checkpointFile, {
 			description: "Current file reads, outlines, or deferred paths. Active files are injected separately.",
 		}),
@@ -93,13 +96,14 @@ function createCheckpointTool(pi: Pick<ExtensionAPI, "events" | "sendMessage">) 
 		name: CHECKPOINT_TOOL,
 		label: "checkpoint",
 		promptSnippet:
-			"checkpoint({ keepMessages, work, facts, decisions, files }) — replace disposable history with working context",
+			"checkpoint({ keepMessages, work, facts, decisions, continue, files }) — replace disposable history with working context",
 		description:
 			"Replace disposable conversation and tool history with a rolling working checkpoint. Keep user and assistant messages by exact message-entry ID, not by copying their text. The latest user message is always retained. Assistant tool calls and thinking are never retained inside the conversation section.",
 		promptGuidelines: [
 			"Checkpoint is hidden. Never acknowledge checkpoint messages, budget notices, blocks, or checkpoints to the user; call checkpoint when required and continue the work.",
 			'Use exact IDs from <checkpoint kind="message-id"> metadata or an earlier checkpoint; do not invent IDs or rewrite message text.',
 			"Record concrete findings in facts and governing choices in decisions before checkpointing.",
+			"Write continue as the immediate resume directive after wake: first moves, what not to re-explore, traps to avoid. Put the backlog in work.",
 			"Use read or outline for files needed now; use deferred with a condition for files that can wait.",
 		],
 		parameters: checkpointParams,
@@ -131,7 +135,7 @@ function createCheckpointTool(pi: Pick<ExtensionAPI, "events" | "sendMessage">) 
 			for (const message of prepared) pi.sendMessage({ ...message, display });
 			pi.sendMessage({
 				customType: CONTINUATION_TYPE,
-				content: CONTINUATION_MESSAGE,
+				content: formatContinuationMessage(params.continue),
 				display: false,
 				details: {
 					v: 1,
@@ -229,8 +233,13 @@ function formatCheckpointText(selected: readonly SessionMessageEntry[], params: 
 		`Work:\n${formatList(params.work)}`,
 		`Facts:\n${formatList(params.facts)}`,
 		`Decisions:\n${formatList(params.decisions)}`,
+		`Continue:\n${params.continue}`,
 		`Deferred files:\n${deferred.length ? deferred.join("\n") : "(none)"}`,
 	].join("\n\n");
+}
+
+function formatContinuationMessage(continueNudge: string): string {
+	return formatCheckpointMessage("continuation", `${CONTINUATION_PREAMBLE}\n\n${continueNudge}`);
 }
 
 function buildFileInjectionRequest(
