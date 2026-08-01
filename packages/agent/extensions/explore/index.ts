@@ -57,7 +57,7 @@ export default function exploreExtension(pi: ExtensionAPI): void {
 		temporaryOutput,
 		autoOutline: () => ({ enabled: readSettings.enabled, thresholdLines: readSettings.structureThresholdLines }),
 	});
-	registerExploreGuidance(pi, engineFor);
+	registerExploreGuidance(pi);
 
 	pi.on("session_start", async (_event, ctx) => {
 		readSettings = (await loadTauExtensionSettings(ctx, exploreSettings)).read;
