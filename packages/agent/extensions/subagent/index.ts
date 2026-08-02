@@ -204,20 +204,22 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 		if (!pi.getActiveTools().includes("subagent")) return undefined;
 		const discovery = await discoverAgents(ctx.cwd, ctx.isProjectTrusted());
 		warn(discovery, ctx);
-		const lines = (await parentVisibleAgents(ctx, discovery)).map((agent) => `- ${agent.name}: ${agent.description}`);
+		const agents = await parentVisibleAgents(ctx, discovery);
+		const lines = agents.map((agent) => `- ${agent.name}: ${agent.description}`);
+		const scoutGuidance = agents.some((agent) => agent.name === "scout")
+			? "\n\nScout only for substantial multi-hop lookup that would flood parent context. Skip few known-path reads, single declaration lookups, or small digs with most evidence already in hand; use tools directly. When uncertain, dig yourself. Do not send code review, diagnosis, design, or other judgment work to scout."
+			: "";
 		const prompt = `## Subagents
-Use \`subagent\` when an available agent matches a focused part of the task.
+Use \`subagent\` only when an available agent's listed purpose matches the delegated work. Stay inside that purpose. Off-purpose calls are denied — for example, do not send code review to a lookup-only agent.
 
 Available agents for this turn:
-${lines.join("\n")}
+${lines.join("\n") || "none"}
 
 Start a fresh thread with \`agent\` and \`task\`. Continue an existing thread with \`thread\` and \`task\`. Reuse a thread when feedback or follow-up work depends on its prior reads and reasoning. Start fresh for unrelated work or when its context is stale or oversized.
 
 Pass \`files\` when exact relevant files are already known. Tau autoreads current line-numbered snapshots into that child turn before it starts.
 
-Delegate one focused task per call. Children do not inherit parent messages. Include exact absolute reference paths when a child must inspect a repository outside the current working directory.
-
-Scout only for substantial multi-hop lookup that would flood parent context. Skip few known-path reads, single declaration lookups, or small digs with most evidence already in hand; use tools directly. When uncertain, dig yourself.`;
+Delegate one focused task per call. Children do not inherit parent messages. Include exact absolute reference paths when a child must inspect a repository outside the current working directory.${scoutGuidance}`;
 		return { systemPrompt: `${event.systemPrompt}\n\n${prompt}` };
 	});
 	const resolveFreshSubagentDefinition = async (ctx: ExtensionContext, agent: string) => {
