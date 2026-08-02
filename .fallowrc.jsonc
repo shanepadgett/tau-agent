@@ -83,6 +83,13 @@
 	"health": {
 		"maxCyclomatic": 20,
 		"maxCognitive": 15,
+		// CRAP mixes branchiness with test coverage. Without an Istanbul
+		// coverage file fallow assumes ~0% covered, so anything with
+		// cyclomatic >= 5 fails the default maxCrap of 30. That is noise,
+		// not a refactor backlog. Re-enable a real ceiling when coverage
+		// is wired via health.coverage / --coverage.
+		"maxCrap": 10000,
+		"crapRefactorBand": 0,
 		"thresholdOverrides": [
 			{
 				"files": ["packages/agent/src/ast/languages/*.ts"],

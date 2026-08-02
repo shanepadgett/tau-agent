@@ -93,8 +93,15 @@ description = "Fallow dead-code + duplication (convenience aggregate)"
 depends = ["fallow:dead-code", "fallow:dupes"]
 
 [tasks.fallow]
-description = "Full fallow analysis (dead-code + dupes + health, compact)"
-run = "fallow"
+description = "Full fallow gate: dead-code + dupes hard-fail, health score >= 75"
+# fallow health --min-score still exits 1 when complexity findings exist (fallow 2.100).
+# Score-gate via JSON + report-only until that is fixed upstream.
+run = """
+fallow dead-code --fail-on-issues
+fallow dupes --fail-on-issues
+score="$(env -u FALLOW_QUIET -u FALLOW_FORMAT fallow health --score --report-only --format json --quiet | python3 -c 'import json,sys; print(json.load(sys.stdin)["health_score"]["score"])')"
+python3 -c 'import sys; score=float(sys.argv[1]); print(f"health-score:{score}"); sys.exit(0 if score >= 75 else 1)' "$score"
+"""
 
 [tasks."fallow:dead-code"]
 description = "Fallow unused code, cycles, unresolved imports (compact)"
@@ -105,8 +112,8 @@ description = "Fallow code duplication (compact)"
 run = "fallow dupes --fail-on-issues"
 
 [tasks."fallow:health"]
-description = "Fallow complexity, hotspots, refactor targets (compact)"
-run = "fallow health --hotspots --targets"
+description = "Fallow complexity debt report (advisory; exit 1 while findings remain)"
+run = "fallow health --complexity --hotspots --targets"
 
 [tasks."fallow:audit"]
 description = "Fallow changed-files gate, new-only (compact)"
