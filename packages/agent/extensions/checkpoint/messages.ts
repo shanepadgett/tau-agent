@@ -6,7 +6,6 @@ type AgentMessage = ContextEvent["messages"][number];
 type ContextPair = { entry: SessionEntry; message: AgentMessage };
 
 const CHECKPOINT_KIND = "checkpoint.checkpoint";
-const CHECKPOINT_SOURCE = "checkpoint";
 const MESSAGE_ID_METADATA_TYPE = "tau.checkpoint.message-id";
 
 type CheckpointMetadataMessage = Extract<AgentMessage, { role: "custom" }>;
@@ -16,7 +15,6 @@ type CheckpointAnchor = {
 	result: ContextPair;
 	resultIndex: number;
 	toolCallIds: Set<string>;
-	fileBatchId: string;
 };
 
 function pairsAlignWithMessages(pairs: readonly ContextPair[], messages: readonly AgentMessage[]): boolean {
@@ -68,7 +66,6 @@ function findCheckpointAnchor(pairs: readonly ContextPair[]): CheckpointAnchor |
 		result: found.result,
 		resultIndex: found.resultIndex,
 		toolCallIds: resolved.toolCallIds,
-		fileBatchId: found.fileBatchId,
 	};
 }
 
@@ -79,10 +76,8 @@ function keepCheckpointPair(
 	index: number,
 ): boolean {
 	if (checkpoint === undefined) return true;
-	const batchId = checkpointBatchId(entry);
-	if (index > checkpoint.resultIndex) return batchId === undefined || batchId === checkpoint.fileBatchId;
+	if (index > checkpoint.resultIndex) return true;
 	if (entry.id === checkpoint.call.entry.id || entry.id === checkpoint.result.entry.id) return true;
-	if (batchId === checkpoint.fileBatchId) return true;
 	return message.role === "toolResult" && checkpoint.toolCallIds.has(message.toolCallId);
 }
 
@@ -102,10 +97,10 @@ export function projectContextMessages(
 	for (const entry of entries) {
 		for (const message of sessionEntryToContextMessages(entry)) pairs.push({ entry, message });
 	}
-	if (!pairsAlignWithMessages(pairs, messages)) return [...messages];
 
 	const checkpoint = findCheckpointAnchor(pairs);
 	if (checkpoint === "misaligned") return [...messages];
+	if (checkpoint === undefined && !pairsAlignWithMessages(pairs, messages)) return [...messages];
 
 	return pairs
 		.filter(({ entry, message }, index) => keepCheckpointPair(checkpoint, entry, message, index))
@@ -141,14 +136,6 @@ function hasCheckpointToolCall(message: AgentMessage, checkpointId: string): boo
 		message.role === "assistant" &&
 		message.content.some((part) => part.type === "toolCall" && part.name === "checkpoint" && part.id === checkpointId)
 	);
-}
-
-function checkpointBatchId(entry: SessionEntry): string | undefined {
-	if (entry.type !== "custom_message") return undefined;
-	if (typeof entry.details !== "object" || entry.details === null) return undefined;
-	const details = entry.details as Record<string, unknown>;
-	if (details.source !== CHECKPOINT_SOURCE || typeof details.batchId !== "string") return undefined;
-	return details.batchId;
 }
 
 function createMessageIdMetadata(id: string, message: AgentMessage): CheckpointMetadataMessage {
