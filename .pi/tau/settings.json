@@ -25,25 +25,97 @@
 		"silentCommandRunner": {
 			"commands": [
 				{
-					"name": "ts-check",
-					"command": "mise run check:ts",
-					"details": "Runs Tau schema drift check, Oxfmt formatting, Oxlint lint fixes, TypeScript (tsgo) checks, unit tests, and Fallow dead-code/duplication checks.",
+					"name": "check:mise",
+					"command": "mise run check:mise",
+					"details": "Validates mise tasks for circular deps, missing references, and bad run entries.",
+					"includeGlobs": ["mise.toml"]
+				},
+				{
+					"name": "check:dependencies",
+					"command": "mise run check:dependencies",
+					"details": "Fails when the installed dependency tree is stale or incomplete (npm ls).",
+					"includeGlobs": ["package.json", "package-lock.json", "packages/*/package.json"]
+				},
+				{
+					"name": "check:schema",
+					"command": "mise run check:schema",
+					"details": "Fails when Tau settings schema drift is detected.",
+					"includeGlobs": [
+						"packages/agent/extensions/**/settings.ts",
+						"packages/agent/shared/settings/**/*.ts",
+						"packages/agent/scripts/generate-tau-schema.ts",
+						"packages/agent/schemas/tau.schema.json"
+					]
+				},
+				{
+					"name": "check:fmt",
+					"command": "mise run check:fmt",
+					"details": "Formats TypeScript with Oxfmt (writes fixes).",
 					"includeGlobs": [
 						"packages/**/*.ts",
 						".pi/extensions/**/*.ts",
-						"package.json",
-						"package-lock.json",
-						"tsconfig.json",
-						"mise.toml",
-						".oxfmtrc.jsonc",
+						".oxfmtrc.jsonc"
+					]
+				},
+				{
+					"name": "check:lint",
+					"command": "mise run check:lint",
+					"details": "Lints TypeScript with Oxlint (applies safe fixes).",
+					"includeGlobs": [
+						"packages/**/*.ts",
+						".pi/extensions/**/*.ts",
 						".oxlintrc.jsonc"
 					]
 				},
 				{
-					"name": "md-check",
-					"command": "mise run check:md",
-					"details": "Runs Markdown linting and fixes through markdownlint-cli2.",
-					"includeGlobs": ["**/*.md"]
+					"name": "check:types",
+					"command": "mise run check:types",
+					"details": "TypeScript project check (tsc --noEmit).",
+					"includeGlobs": [
+						"packages/**/*.ts",
+						".pi/extensions/**/*.ts",
+						"tsconfig.json",
+						"packages/*/tsconfig.json"
+					]
+				},
+				{
+					"name": "test:unit",
+					"command": "mise run test:unit",
+					"details": "Vitest unit tests with the agent reporter.",
+					"includeGlobs": [
+						"packages/**/*.ts",
+						"vitest.config.ts"
+					]
+				},
+				{
+					"name": "fallow:dead-code",
+					"command": "mise run fallow:dead-code",
+					"details": "Fallow unused files/exports/deps, unresolved imports, and cycles. Compact output via FALLOW_FORMAT.",
+					"includeGlobs": [
+						"packages/**/*.ts",
+						".pi/extensions/**/*.ts",
+						"package.json",
+						"packages/*/package.json",
+						".fallowrc.jsonc",
+						"tsconfig.json",
+						"vitest.config.ts"
+					]
+				},
+				{
+					"name": "fallow:dupes",
+					"command": "mise run fallow:dupes",
+					"details": "Fallow copy-paste / structural duplication. Compact output via FALLOW_FORMAT.",
+					"includeGlobs": [
+						"packages/**/*.ts",
+						".pi/extensions/**/*.ts",
+						".fallowrc.jsonc"
+					]
+				},
+				{
+					"name": "check:markdown",
+					"command": "mise run check:markdown",
+					"details": "Markdown linting and fixes through markdownlint-cli2.",
+					"includeGlobs": ["**/*.md", ".markdownlint-cli2.jsonc"]
 				}
 			]
 		}

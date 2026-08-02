@@ -1,52 +1,109 @@
-// lean: .pi/extensions/ are first-party consumers (per AGENTS.md). Fallow only
-// descends into that dot dir because package.json scripts reference
-// .pi/extensions/.fallow-scope.ts.
 {
-  "entry": [
-    ".pi/extensions/*/index.ts",
-    "packages/agent/extensions/*/index.ts",
-    "packages/agent/src/index.ts",
-    "packages/tui/src/index.ts",
-    "packages/agent/scripts/generate-tau-schema.ts",
-    "packages/agent/scripts/build-grammars.ts",
-    "packages/agent/scripts/check-package-sources.ts"
-  ],
-  "includeEntryExports": true,
-  // Archive is frozen prior art under docs/; not part of the live graph.
-  // Grammar wasm packages are resolved by path/bin, not static import.
-  "ignorePatterns": [
-    "packages/agent/shared/description.ts",
-    "packages/agent/shared/injected-context.ts",
-    "packages/agent/src/ast/languages/fixtures/**",
-    "docs/plans/explore-archive/**"
-  ],
-  "ignoreDependencies": ["@vscode/tree-sitter-wasm", "tree-sitter-cli"],
-  "duplicates": {
-    // Grammar adapters are parallel by design: each one maps a different
-    // tree-sitter node vocabulary through the same shape. Shared behavior lives
-    // in languages/tree.ts; the rest must stay free to diverge per grammar.
-    // Tests repeat fixtures and arrange blocks on purpose.
-    // Panel classes repeat ToolPanel construction plus render/invalidate
-    // delegation. A base class cannot absorb it: their config literals read
-    // `this`, which TypeScript forbids before `super()`.
-    "ignore": [
-      "packages/agent/src/ast/languages/*.ts",
-      "packages/agent/test/**",
-      "packages/agent/extensions/*/panel.ts"
-    ]
-  },
-  "ignoreExports": [
-    {
-      "file": "packages/agent/extensions/*/index.ts",
-      "exports": ["default"]
-    },
-    {
-      "file": ".pi/extensions/*/index.ts",
-      "exports": ["default"]
-    }
-  ],
-  "usedClassMembers": [
-    { "implements": "Component", "members": ["handleInput", "invalidate"] },
-    { "implements": "Focusable", "members": ["focused"] }
-  ]
+	"$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+	// Pi host loads extension default exports; package.json scripts pull
+	// .pi/extensions into the graph via .fallow-scope.ts.
+	"entry": [
+		".pi/extensions/*/index.ts",
+		"packages/agent/extensions/*/index.ts",
+		"packages/agent/src/index.ts",
+		"packages/tui/src/index.ts",
+		"packages/agent/scripts/*.ts"
+	],
+	"framework": [
+		{
+			"name": "tau-pi-extensions",
+			"detection": {
+				"type": "fileExists",
+				"pattern": "package.json"
+			},
+			"usedExports": [
+				{
+					"pattern": "packages/agent/extensions/*/index.ts",
+					"exports": ["default"]
+				},
+				{
+					"pattern": ".pi/extensions/*/index.ts",
+					"exports": ["default"]
+				}
+			],
+			"configPatterns": [
+				"mise.toml",
+				".fallowrc.jsonc",
+				"vitest.config.ts",
+				"packages/*/package.json",
+				".oxfmtrc.jsonc",
+				".oxlintrc.jsonc"
+			]
+		}
+	],
+	"includeEntryExports": true,
+	"ignoreExportsUsedInFile": true,
+	// Archive is frozen prior art under docs/; not part of the live graph.
+	// Grammar wasm packages are resolved by path/bin, not static import.
+	"ignorePatterns": [
+		"packages/agent/shared/description.ts",
+		"packages/agent/shared/injected-context.ts",
+		"packages/agent/src/ast/languages/fixtures/**",
+		"docs/plans/explore-archive/**",
+		"packages/agent/native-bin/**",
+		".fallow/**"
+	],
+	"ignoreDependencies": ["@vscode/tree-sitter-wasm", "tree-sitter-cli"],
+	"rules": {
+		"unused-files": "error",
+		"unused-exports": "error",
+		"unused-types": "warn",
+		"unused-dependencies": "error",
+		"unresolved-imports": "error",
+		"unlisted-dependencies": "error",
+		"circular-dependencies": "error",
+		"duplicate-exports": "warn",
+		"stale-suppressions": "warn",
+		"require-suppression-reason": "warn"
+	},
+	"duplicates": {
+		"enabled": true,
+		"mode": "mild",
+		"minTokens": 50,
+		"minLines": 5,
+		"ignoreImports": true,
+		// Grammar adapters are parallel by design: each one maps a different
+		// tree-sitter node vocabulary through the same shape. Shared behavior lives
+		// in languages/tree.ts; the rest must stay free to diverge per grammar.
+		// Tests repeat fixtures and arrange blocks on purpose.
+		// Panel classes repeat ToolPanel construction plus render/invalidate
+		// delegation. A base class cannot absorb it: their config literals read
+		// `this`, which TypeScript forbids before `super()`.
+		"ignore": [
+			"packages/agent/src/ast/languages/*.ts",
+			"packages/agent/test/**",
+			"packages/agent/extensions/*/panel.ts"
+		]
+	},
+	"health": {
+		"maxCyclomatic": 20,
+		"maxCognitive": 15,
+		"thresholdOverrides": [
+			{
+				"files": ["packages/agent/src/ast/languages/*.ts"],
+				"maxCyclomatic": 60,
+				"maxCognitive": 80,
+				"reason": "Per-grammar decl walkers; parallel by design"
+			},
+			{
+				"files": ["packages/agent/src/ast/graph/relationships.ts"],
+				"functions": ["queryRelationships"],
+				"maxCyclomatic": 90,
+				"maxCognitive": 250,
+				"reason": "Queued relationship-query split"
+			}
+		]
+	},
+	"audit": {
+		"gate": "new-only"
+	},
+	"usedClassMembers": [
+		{ "implements": "Component", "members": ["handleInput", "invalidate"] },
+		{ "implements": "Focusable", "members": ["focused"] }
+	]
 }

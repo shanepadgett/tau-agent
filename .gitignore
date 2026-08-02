@@ -50,6 +50,7 @@ lerna-debug.log*
 tmp/
 temp/
 .cache/
+.fallow/
 .parcel-cache/
 .vite/
 .turbo/

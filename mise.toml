@@ -8,6 +8,10 @@ node = "24.18.0"
 
 [env]
 NODE_USE_SYSTEM_CA = "1"
+# Agent-default fallow output: one line per finding, no progress spam.
+# Override per invocation with --format / --quiet false when needed.
+FALLOW_FORMAT = "compact"
+FALLOW_QUIET = "1"
 
 [settings]
 jobs = 1
@@ -20,11 +24,24 @@ activate_aggressive = true
 
 [tasks.check]
 description = "Run all checks"
-depends = ["check:ts", "check:md"]
+depends = ["check:ts", "check:md", "check:mise"]
+
+[tasks."check:mise"]
+description = "Validate mise tasks (cycles, missing refs, run entries)"
+run = "mise tasks validate --errors-only"
 
 [tasks."check:ts"]
 description = "TS and config checks"
-depends = ["check:dependencies", "check:schema", "check:style", "check:types", "test:unit", "check:deadcode"]
+depends = [
+	"check:dependencies",
+	"check:schema",
+	"check:fmt",
+	"check:lint",
+	"check:types",
+	"test:unit",
+	"fallow:dead-code",
+	"fallow:dupes",
+]
 
 [tasks."check:dependencies"]
 description = "Check installed dependency tree"
@@ -47,9 +64,17 @@ run = "node --experimental-strip-types packages/agent/scripts/generate-tau-schem
 description = "Check Tau settings schema drift"
 run = "node --experimental-strip-types packages/agent/scripts/generate-tau-schema.ts --check"
 
+[tasks."check:fmt"]
+description = "Format TypeScript with Oxfmt"
+run = "oxfmt --write 'packages/**/*.ts' '.pi/extensions/**/*.ts'"
+
+[tasks."check:lint"]
+description = "Lint TypeScript with Oxlint"
+run = "oxlint --fix --format=agent packages .pi/extensions"
+
 [tasks."check:style"]
-description = "Run Oxfmt and Oxlint fixes"
-run = "oxfmt --write 'packages/**/*.ts' '.pi/extensions/**/*.ts' && oxlint --fix --format=agent packages .pi/extensions"
+description = "Format and lint TypeScript"
+depends = ["check:fmt", "check:lint"]
 
 [tasks."check:markdown"]
 description = "Run Markdown checks"
@@ -64,8 +89,40 @@ description = "Run unit tests"
 run = "./node_modules/.bin/vitest --run --reporter=agent"
 
 [tasks."check:deadcode"]
-description = "Run Fallow dead-code and duplication checks"
-run = "fallow --only dead-code,dupes --fail-on-issues"
+description = "Fallow dead-code + duplication (convenience aggregate)"
+depends = ["fallow:dead-code", "fallow:dupes"]
+
+[tasks.fallow]
+description = "Full fallow analysis (dead-code + dupes + health, compact)"
+run = "fallow"
+
+[tasks."fallow:dead-code"]
+description = "Fallow unused code, cycles, unresolved imports (compact)"
+run = "fallow dead-code --fail-on-issues"
+
+[tasks."fallow:dupes"]
+description = "Fallow code duplication (compact)"
+run = "fallow dupes --fail-on-issues"
+
+[tasks."fallow:health"]
+description = "Fallow complexity, hotspots, refactor targets (compact)"
+run = "fallow health --hotspots --targets"
+
+[tasks."fallow:audit"]
+description = "Fallow changed-files gate, new-only (compact)"
+run = "fallow audit"
+
+[tasks."fallow:list"]
+description = "Fallow discovery: entries, workspaces, plugins, boundaries (compact)"
+run = "fallow list --entry-points --workspaces --plugins --boundaries"
+
+[tasks."fallow:json"]
+description = "Full fallow analysis as JSON (structured / actions)"
+run = "fallow --format json --quiet"
+
+[tasks."fallow:human"]
+description = "Full fallow analysis as human-readable terminal output"
+run = "FALLOW_FORMAT=human FALLOW_QUIET=0 fallow --format human"
 
 [tasks."grammars:build"]
 description = "Rebuild vendored tree-sitter grammar wasm artifacts"
