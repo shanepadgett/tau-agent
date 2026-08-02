@@ -7,6 +7,7 @@ import { resolveTarget } from "../identity.ts";
 import {
 	isCallableLike,
 	isTypeLike,
+	type CallKind,
 	type CallSite,
 	type Decl,
 	type DeclKind,
@@ -38,6 +39,7 @@ export type RelationshipSite = {
 	line: number;
 	kind: RelationshipSiteKind;
 	name: string;
+	target: { path: string; startLine: number } | undefined;
 	preview: string;
 	certainty: RelationshipCertainty;
 	competitors: Candidate[];
@@ -102,14 +104,18 @@ function sameDecl(a: DeclRef, b: DeclRef): boolean {
 /** Same callable name in same file — overloads bind as one symbol for edge matching. */
 function sameOverloadGroup(a: DeclRef, b: DeclRef): boolean {
 	return (
-		a.path === b.path && a.decl.name === b.decl.name && isCallableLike(a.decl.kind) && isCallableLike(b.decl.kind)
+		a.path === b.path &&
+		a.decl.name === b.decl.name &&
+		ownerName(a.decl.qualifiedName) === ownerName(b.decl.qualifiedName) &&
+		isCallableLike(a.decl.kind) &&
+		isCallableLike(b.decl.kind)
 	);
 }
 
-function allSameName(refs: readonly DeclRef[]): boolean {
+function allSameOverloadGroup(refs: readonly DeclRef[]): boolean {
 	const first = refs[0];
 	if (first === undefined) return false;
-	return refs.every((ref) => ref.decl.name === first.decl.name);
+	return refs.every((ref) => sameOverloadGroup(ref, first));
 }
 
 function toCandidate(ref: DeclRef): Candidate {
@@ -213,30 +219,34 @@ function methodSetKey(path: string, typeName: string): string {
 	return `${dirname(path)}|${typeName}`;
 }
 
+function addMethodSetRef(out: Map<string, MethodSetEntry>, ref: DeclRef): void {
+	const key = methodSetKey(ref.path, ref.decl.name);
+	const existing = out.get(key);
+	const entry = existing ?? { ref: undefined, methods: new Set<string>() };
+	if (existing === undefined) out.set(key, entry);
+	entry.ref = ref;
+	for (const child of ref.decl.children) {
+		if (isCallableLike(child.kind)) entry.methods.add(child.name);
+	}
+}
+
+function addMethodSetOwner(out: Map<string, MethodSetEntry>, ref: DeclRef): void {
+	// Go methods are file-level decls owned through qualifiedName.
+	const owner = ownerName(ref.decl.qualifiedName);
+	if (owner.length === 0) return;
+	const key = methodSetKey(ref.path, owner);
+	const existing = out.get(key);
+	const entry = existing ?? { ref: undefined, methods: new Set<string>() };
+	if (existing === undefined) out.set(key, entry);
+	entry.methods.add(ref.decl.name);
+}
+
 function buildMethodSets(bundles: readonly FileBundle[]): Map<string, MethodSetEntry> {
 	const out = new Map<string, MethodSetEntry>();
-	const entryFor = (key: string): MethodSetEntry => {
-		const existing = out.get(key);
-		if (existing !== undefined) return existing;
-		const created: MethodSetEntry = { ref: undefined, methods: new Set<string>() };
-		out.set(key, created);
-		return created;
-	};
 	for (const bundle of bundles) {
 		for (const ref of collectDeclRefs(bundle.path, bundle.ir, bundle.source)) {
-			if (isTypeLike(ref.decl.kind)) {
-				const entry = entryFor(methodSetKey(ref.path, ref.decl.name));
-				entry.ref = ref;
-				for (const child of ref.decl.children) {
-					if (isCallableLike(child.kind)) entry.methods.add(child.name);
-				}
-				continue;
-			}
-			if (!isCallableLike(ref.decl.kind)) continue;
-			// Go methods are file-level decls owned through qualifiedName.
-			const owner = ownerName(ref.decl.qualifiedName);
-			if (owner.length === 0) continue;
-			entryFor(methodSetKey(ref.path, owner)).methods.add(ref.decl.name);
+			if (isTypeLike(ref.decl.kind)) addMethodSetRef(out, ref);
+			else if (isCallableLike(ref.decl.kind)) addMethodSetOwner(out, ref);
 		}
 	}
 	return out;
@@ -275,7 +285,7 @@ function pickByDeps(
 	}
 	if (inClosure.length > 1) {
 		// Overloads of one name bind together; mixed names stay ambiguous.
-		if (allSameName(inClosure)) return { targets: [...inClosure], certainty: "exact", competitors: [] };
+		if (allSameOverloadGroup(inClosure)) return { targets: [...inClosure], certainty: "exact", competitors: [] };
 		return {
 			targets: [],
 			certainty: "ambiguous",
@@ -287,7 +297,7 @@ function pickByDeps(
 		if (only !== undefined) return { targets: [only], certainty: "inferred", competitors: [] };
 	}
 	if (candidates.length > 1) {
-		if (allSameName(candidates)) return { targets: [...candidates], certainty: "inferred", competitors: [] };
+		if (allSameOverloadGroup(candidates)) return { targets: [...candidates], certainty: "inferred", competitors: [] };
 		return {
 			targets: [],
 			certainty: "ambiguous",
@@ -297,42 +307,74 @@ function pickByDeps(
 	return { targets: [], certainty: "inferred", competitors: [] };
 }
 
+type ResolvedCall = { targets: DeclRef[]; certainty: RelationshipCertainty; competitors: Candidate[] };
+
+function exactTargets(refs: readonly DeclRef[]): ResolvedCall {
+	return { targets: [...refs], certainty: "exact", competitors: [] };
+}
+
+function ambiguousTargets(refs: readonly DeclRef[]): ResolvedCall {
+	return {
+		targets: [],
+		certainty: "ambiguous",
+		competitors: refs.slice(0, MAX_COMPETITORS).map(toCandidate),
+	};
+}
+
+function resolveLocalCall(local: readonly DeclRef[]): ResolvedCall | undefined {
+	if (local.length === 1) {
+		const only = local[0];
+		if (only !== undefined) return exactTargets([only]);
+	}
+	if (local.length > 1) {
+		if (allSameOverloadGroup(local)) return exactTargets(local);
+		return ambiguousTargets(local);
+	}
+	return undefined;
+}
+
 function resolveCallName(
 	name: string,
 	receiver: string,
+	kind: CallKind,
+	from: DeclRef,
 	caller: FileBundle,
 	globalByName: Map<string, DeclRef[]>,
 	callerDeps: ReadonlySet<string>,
-): { targets: DeclRef[]; certainty: RelationshipCertainty; competitors: Candidate[] } {
-	const local = caller.localByName.get(name);
-	if (local !== undefined && local.length === 1) {
-		const only = local[0];
-		if (only !== undefined) return { targets: [only], certainty: "exact", competitors: [] };
-	}
-	if (local !== undefined && local.length > 1) {
-		if (allSameName(local)) return { targets: [...local], certainty: "exact", competitors: [] };
-		return {
-			targets: [],
-			certainty: "ambiguous",
-			competitors: local.slice(0, MAX_COMPETITORS).map(toCandidate),
-		};
-	}
-
+): ResolvedCall {
+	const callableCandidates = (globalByName.get(name) ?? []).filter((ref) =>
+		kind === "construct" ? isTypeLike(ref.decl.kind) : isCallableLike(ref.decl.kind),
+	);
 	if (caller.importByLocal.has(name)) {
-		return pickByDeps(globalByName.get(name) ?? [], callerDeps);
+		return pickByDeps(callableCandidates, callerDeps);
 	}
 
-	const global = globalByName.get(name) ?? [];
-	// Receiver-bearing: never unique-global Exact (blocks obj.foo → random foo).
-	if (receiver.length > 0) return pickByDeps(global, callerDeps);
+	const local = caller.localByName
+		.get(name)
+		?.filter((ref) => (kind === "construct" ? isTypeLike(ref.decl.kind) : isCallableLike(ref.decl.kind)));
+	if (receiver.length === 0 && local !== undefined) {
+		const resolved = resolveLocalCall(local);
+		if (resolved !== undefined) return resolved;
+	}
+
+	const fromOwner = ownerName(from.decl.qualifiedName);
+	const global =
+		receiver.length === 0
+			? callableCandidates.filter(
+					(ref) => ref.decl.kind !== "method" || ownerName(ref.decl.qualifiedName) === fromOwner,
+				)
+			: callableCandidates;
+	if (receiver.length > 0) {
+		const receiverOwner = receiver === "self" || receiver === "this" ? fromOwner : receiver.split(/[.:]/u).at(-1);
+		const owned = global.filter((ref) => ownerName(ref.decl.qualifiedName) === receiverOwner);
+		if (owned.length > 0) return pickByDeps(owned, callerDeps);
+		return { targets: [], certainty: "inferred", competitors: [] };
+	}
 	if (global.length === 1) {
 		const only = global[0];
-		if (only !== undefined) return { targets: [only], certainty: "exact", competitors: [] };
+		if (only !== undefined) return exactTargets([only]);
 	}
-	if (global.length > 1 && allSameName(global)) {
-		// Same-name overloads across files still need dep evidence for Exact.
-		return pickByDeps(global, callerDeps);
-	}
+	// Same-name overloads across files still need dep evidence for Exact.
 	return pickByDeps(global, callerDeps);
 }
 
@@ -357,6 +399,7 @@ function makeSite(
 		line,
 		kind,
 		name,
+		target: undefined,
 		certainty,
 		competitors,
 		preview,
@@ -404,17 +447,29 @@ function edgeHitsTarget(edge: EdgeHit, target: DeclRef): boolean {
 }
 
 function pushEdge(sites: RelationshipSite[], edge: EdgeHit): void {
-	sites.push(
-		makeSite(
-			edge.from.path,
-			edge.site.line,
-			siteKindFromCall(edge.site),
-			edge.site.name,
-			edge.certainty,
-			edge.competitors,
-			linePreview(edge.from.source, edge.site.line),
-		),
+	const site = makeSite(
+		edge.from.path,
+		edge.site.line,
+		siteKindFromCall(edge.site),
+		edge.site.name,
+		edge.certainty,
+		edge.competitors,
+		linePreview(edge.from.source, edge.site.line),
 	);
+	const soleTarget = edge.targets.length === 1 ? edge.targets[0] : undefined;
+	const receiverOwner = edge.site.receiver.split(/[.:]/u).at(-1);
+	// Dependency-free same-module methods can still be pinned when syntax names
+	// their owner. Other inferred single-name matches remain visible guesses.
+	const target =
+		soleTarget !== undefined &&
+		(edge.certainty === "exact" ||
+			edge.site.receiver === "self" ||
+			edge.site.receiver === "this" ||
+			ownerName(soleTarget.decl.qualifiedName) === receiverOwner)
+			? soleTarget
+			: undefined;
+	if (target !== undefined) site.target = { path: target.path, startLine: target.decl.startLine };
+	sites.push(site);
 }
 
 export type RelationshipQueryArgs = {
@@ -510,7 +565,7 @@ export async function queryRelationships(args: RelationshipQueryArgs): Promise<R
 		const owners = [...collectDeclRefs(bundle.path, bundle.ir, bundle.source), fileScopeRef(bundle)];
 		for (const from of owners) {
 			for (const site of from.decl.calls) {
-				const resolved = resolveCallName(site.name, site.receiver, bundle, globalByName, deps);
+				const resolved = resolveCallName(site.name, site.receiver, site.kind, from, bundle, globalByName, deps);
 				edges.push({
 					from,
 					site,
@@ -524,35 +579,51 @@ export async function queryRelationships(args: RelationshipQueryArgs): Promise<R
 
 	const sites: RelationshipSite[] = [];
 
+	const heritageCertainty = (
+		ref: DeclRef,
+		deps: ReadonlySet<string>,
+		candidates: readonly DeclRef[],
+	): RelationshipCertainty => {
+		// Same file and same directory are one package: no import edge exists to
+		// prove, so label them alike rather than implying a confidence gap.
+		if (ref.path === target.path || dirname(ref.path) === dirname(target.path) || deps.has(target.path)) {
+			return "exact";
+		}
+		return candidates.length === 1 ? "inferred" : "ambiguous";
+	};
+
+	const isHeritageCandidate = (ref: DeclRef, baseName: string): boolean => {
+		if (!ref.decl.bases.includes(baseName) || !isTypeLike(ref.decl.kind)) return false;
+		// Never list the base type as its own implementor.
+		return !(sameDecl(ref, target) || (ref.decl.name === baseName && ref.path === target.path));
+	};
+
+	const pushHeritageSite = async (
+		ref: DeclRef,
+		baseName: string,
+		siteKind: RelationshipSiteKind,
+		candidates: readonly DeclRef[],
+	): Promise<void> => {
+		const certainty = heritageCertainty(ref, await depsOf(ref.path), candidates);
+		sites.push(
+			makeSite(
+				ref.path,
+				ref.decl.startLine,
+				siteKind,
+				baseName,
+				certainty,
+				certainty === "ambiguous" ? candidates.slice(0, MAX_COMPETITORS).map(toCandidate) : [],
+				// Declaration-shaped site: its own signature, not the annotation line above it.
+				compactSignature(signatureText(ref.decl, ref.source)),
+			),
+		);
+	};
+
 	const heritageSites = async (baseName: string, siteKind: RelationshipSiteKind): Promise<void> => {
+		const candidates = globalByName.get(baseName) ?? [];
 		for (const bundle of bundles) {
 			for (const ref of collectDeclRefs(bundle.path, bundle.ir, bundle.source)) {
-				if (!ref.decl.bases.includes(baseName)) continue;
-				if (!isTypeLike(ref.decl.kind)) continue;
-				// Never list the base type as its own implementor.
-				if (sameDecl(ref, target) || (ref.decl.name === baseName && ref.path === target.path)) continue;
-				const deps = await depsOf(ref.path);
-				const candidates = globalByName.get(baseName) ?? [];
-				// Same file and same directory are one package: no import edge exists to
-				// prove, so label them alike rather than implying a confidence gap.
-				const certainty =
-					ref.path === target.path || dirname(ref.path) === dirname(target.path) || deps.has(target.path)
-						? "exact"
-						: candidates.length === 1
-							? "inferred"
-							: "ambiguous";
-				sites.push(
-					makeSite(
-						ref.path,
-						ref.decl.startLine,
-						siteKind,
-						baseName,
-						certainty,
-						certainty === "ambiguous" ? candidates.slice(0, MAX_COMPETITORS).map(toCandidate) : [],
-						// Declaration-shaped site: its own signature, not the annotation line above it.
-						compactSignature(signatureText(ref.decl, ref.source)),
-					),
-				);
+				if (isHeritageCandidate(ref, baseName)) await pushHeritageSite(ref, baseName, siteKind, candidates);
 			}
 		}
 	};

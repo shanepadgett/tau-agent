@@ -26,57 +26,80 @@ export interface ContextSyncDetails {
 	validationFailure?: string;
 }
 
+type SyncStatus = (status: string) => void | Promise<void>;
+type GitRunner = ReturnType<typeof createGitRunner>;
+
 let syncQueue = Promise.resolve();
 
 export async function runContextSync(
 	pi: ExtensionAPI,
 	ctx: ExtensionContext,
-	options: { nudge?: string; signal?: AbortSignal; onStatus?: (status: string) => void | Promise<void> } = {},
+	options: { nudge?: string; signal?: AbortSignal; onStatus?: SyncStatus } = {},
 ): Promise<ContextSyncDetails> {
 	return withSyncLock(() => runContextSyncLocked(pi, ctx, options));
 }
 
-async function runContextSyncLocked(
+function noChangeResult(reason: string, agentResponse?: string): ContextSyncDetails {
+	return {
+		outcome: "no-change",
+		summary: "Existing context mappings already fit the changed scope.",
+		reason,
+		changedContextFiles: [],
+		agentResponse,
+	};
+}
+
+async function inspectSyncNeed(
 	pi: ExtensionAPI,
 	ctx: ExtensionContext,
-	options: { nudge?: string; signal?: AbortSignal; onStatus?: (status: string) => void | Promise<void> },
-): Promise<ContextSyncDetails> {
-	if (!ctx.isProjectTrusted()) throw new Error("Context sync requires a trusted project");
-	const signal = options.signal ?? ctx.signal ?? new AbortController().signal;
-	if (signal.aborted) return cancelledResult();
-
-	await options.onStatus?.("Inspecting repository context");
+	nudge: string | undefined,
+	onStatus?: SyncStatus,
+): Promise<
+	| { kind: "done"; result: ContextSyncDetails }
+	| { kind: "run"; git: GitRunner; root: string; ignoreGlobs: readonly string[] }
+> {
+	await onStatus?.("Inspecting repository context");
 	const git = createGitRunner(pi, ctx);
 	const status = await loadRepoStatus(git);
 	if (!status) throw new Error("No Git repository found");
 	const settings = await loadTauExtensionSettings(ctx, contextSettings);
-	const validation = await validateContextCatalog(git, status.root, settings.validation.ignoreGlobs);
-	const dirtyEligible = await listEligibleDirtyPaths(git, status.root, settings.validation.ignoreGlobs);
-	const force = Boolean(options.nudge?.trim());
+	const ignoreGlobs = settings.validation.ignoreGlobs;
+	const validation = await validateContextCatalog(git, status.root, ignoreGlobs);
+	const dirtyEligible = await listEligibleDirtyPaths(git, status.root, ignoreGlobs);
+	const force = Boolean(nudge?.trim());
 	if (!force && validation.stale.length === 0 && validation.uncovered.length === 0 && dirtyEligible.length === 0) {
 		return {
-			outcome: "no-change",
-			summary: "Existing context mappings already fit the changed scope.",
-			reason: "No eligible dirty files, stale catalog paths, or sync nudge.",
-			changedContextFiles: [],
+			kind: "done",
+			result: noChangeResult("No eligible dirty files, stale catalog paths, or sync nudge."),
 		};
 	}
-	if (signal.aborted) return cancelledResult();
+	return { kind: "run", git, root: status.root, ignoreGlobs };
+}
 
-	const beforeCatalog = await catalogFileSnapshot(status.root);
+async function resolveContextSyncDefinition(ctx: ExtensionContext) {
 	const discovery = await discoverAgents(ctx.cwd, ctx.isProjectTrusted());
 	const definition = discovery.agents.get(CONTEXT_SYNC_AGENT);
-	if (!definition) {
-		const reason =
-			discovery.invalid
-				.get(CONTEXT_SYNC_AGENT)
-				?.map((item) => item.reason)
-				.join("; ") ?? "unknown agent";
-		throw new Error(`Context sync agent unavailable: ${reason}`);
-	}
+	if (definition) return definition;
+	const reason =
+		discovery.invalid
+			.get(CONTEXT_SYNC_AGENT)
+			?.map((item) => item.reason)
+			.join("; ") ?? "unknown agent";
+	throw new Error(`Context sync agent unavailable: ${reason}`);
+}
 
-	const task = buildContextSyncTask(status.root, options.nudge);
-	await options.onStatus?.("Running context-sync subagent");
+async function runContextSyncAgent(
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+	root: string,
+	nudge: string | undefined,
+	signal: AbortSignal,
+	onStatus: SyncStatus | undefined,
+	beforeCatalog: Map<string, string>,
+): Promise<ContextSyncDetails | { agentResponse: string }> {
+	const definition = await resolveContextSyncDefinition(ctx);
+	const task = buildContextSyncTask(root, nudge);
+	await onStatus?.("Running context-sync subagent");
 	const thread = await createSubagentThread({
 		id: `context-sync-${Date.now()}`,
 		displayName: definition.names[0] ?? definition.name,
@@ -90,7 +113,6 @@ async function runContextSyncLocked(
 			ctx.ui.notify(`Context sync agent: ${warning}`, "warning");
 		},
 	});
-	let agentResponse = "";
 	try {
 		const result = await runSubagentTurn({
 			thread,
@@ -99,35 +121,36 @@ async function runContextSyncLocked(
 			signal,
 			onUpdate: async (details) => {
 				const activity = details.currentActivity ?? details.response;
-				if (activity) await options.onStatus?.(activity.slice(0, 160));
+				if (activity) await onStatus?.(activity.slice(0, 160));
 			},
 		});
-		agentResponse = result.content;
-		if (signal.aborted || result.details.status === "aborted") {
-			return cancelledResult(agentResponse);
-		}
+		if (signal.aborted || result.details.status === "aborted") return cancelledResult(result.content);
 		if (result.details.status !== "completed") {
 			return {
 				outcome: "failed",
 				summary: "Context sync subagent failed.",
 				reason: result.details.error ?? result.content,
-				changedContextFiles: changedCatalogPaths(beforeCatalog, await catalogFileSnapshot(status.root)),
-				agentResponse,
+				changedContextFiles: changedCatalogPaths(beforeCatalog, await catalogFileSnapshot(root)),
+				agentResponse: result.content,
 			};
 		}
+		return { agentResponse: result.content };
 	} finally {
 		await disposeSubagentThread(thread);
 	}
+}
 
-	if (signal.aborted) return cancelledResult(agentResponse);
-
-	const afterCatalog = await catalogFileSnapshot(status.root);
-	const changedContextFiles = changedCatalogPaths(beforeCatalog, afterCatalog);
-
-	await options.onStatus?.("Verifying context catalog");
-	const validationFailure = formatContextValidationFailure(
-		await validateContextCatalog(git, status.root, settings.validation.ignoreGlobs),
-	);
+async function finalizeContextSync(
+	git: GitRunner,
+	root: string,
+	ignoreGlobs: readonly string[],
+	beforeCatalog: Map<string, string>,
+	agentResponse: string,
+	onStatus?: SyncStatus,
+): Promise<ContextSyncDetails> {
+	const changedContextFiles = changedCatalogPaths(beforeCatalog, await catalogFileSnapshot(root));
+	await onStatus?.("Verifying context catalog");
+	const validationFailure = formatContextValidationFailure(await validateContextCatalog(git, root, ignoreGlobs));
 	if (validationFailure) {
 		return {
 			outcome: "failed",
@@ -139,13 +162,7 @@ async function runContextSyncLocked(
 		};
 	}
 	if (changedContextFiles.length === 0) {
-		return {
-			outcome: "no-change",
-			summary: "Existing context mappings already fit the changed scope.",
-			reason: agentResponse.trim() || "Context-sync subagent made no catalog edits.",
-			changedContextFiles: [],
-			agentResponse,
-		};
+		return noChangeResult(agentResponse.trim() || "Context-sync subagent made no catalog edits.", agentResponse);
 	}
 	return {
 		outcome: "applied",
@@ -154,6 +171,41 @@ async function runContextSyncLocked(
 		changedContextFiles,
 		agentResponse,
 	};
+}
+
+async function runContextSyncLocked(
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+	options: { nudge?: string; signal?: AbortSignal; onStatus?: SyncStatus },
+): Promise<ContextSyncDetails> {
+	if (!ctx.isProjectTrusted()) throw new Error("Context sync requires a trusted project");
+	const signal = options.signal ?? ctx.signal ?? new AbortController().signal;
+	if (signal.aborted) return cancelledResult();
+
+	const need = await inspectSyncNeed(pi, ctx, options.nudge, options.onStatus);
+	if (need.kind === "done") return need.result;
+	if (signal.aborted) return cancelledResult();
+
+	const beforeCatalog = await catalogFileSnapshot(need.root);
+	const agentResult = await runContextSyncAgent(
+		pi,
+		ctx,
+		need.root,
+		options.nudge,
+		signal,
+		options.onStatus,
+		beforeCatalog,
+	);
+	if ("outcome" in agentResult) return agentResult;
+	if (signal.aborted) return cancelledResult(agentResult.agentResponse);
+	return finalizeContextSync(
+		need.git,
+		need.root,
+		need.ignoreGlobs,
+		beforeCatalog,
+		agentResult.agentResponse,
+		options.onStatus,
+	);
 }
 
 function cancelledResult(agentResponse?: string): ContextSyncDetails {

@@ -27,12 +27,20 @@ const webFetchParams = Type.Object(
 );
 
 type WebFetchParams = Static<typeof webFetchParams>;
+type WebFetchFormat = "markdown" | "text" | "html";
 interface WebFetchDetails {
 	url: string;
-	format: "markdown" | "text" | "html";
+	format: WebFetchFormat;
 	mime: string;
 	bytes: number;
 	truncation?: TruncationResult;
+}
+
+type WebFetchContent = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
+
+interface WebFetchResult {
+	content: WebFetchContent[];
+	details: WebFetchDetails;
 }
 
 async function readResponseBody(response: FetchResponse): Promise<Uint8Array> {
@@ -61,6 +69,110 @@ function renderCallSummary(args: WebFetchParams): string {
 	return truncateCallSummary((args.url ?? "").trim());
 }
 
+function parseFetchUrl(raw: string): URL {
+	let url: URL;
+	try {
+		url = new URL(raw);
+	} catch {
+		throw new Error(`Invalid URL: ${raw}`);
+	}
+	if (url.protocol !== "http:" && url.protocol !== "https:") {
+		throw new Error("URL must use http:// or https://");
+	}
+	return url;
+}
+
+function acceptHeaderForFormat(format: WebFetchFormat): string {
+	if (format === "markdown") return "text/markdown;q=1.0, text/plain;q=0.8, text/html;q=0.7, */*;q=0.1";
+	if (format === "text") return "text/plain;q=1.0, text/markdown;q=0.9, text/html;q=0.8, */*;q=0.1";
+	return "text/html;q=1.0, application/xhtml+xml;q=0.9, */*;q=0.1";
+}
+
+async function fetchWithChallengeRetry(
+	url: string,
+	headers: Record<string, string>,
+	signal: AbortSignal,
+): Promise<FetchResponse> {
+	const first = (await fetch(url, { method: "GET", headers, signal })) as FetchResponse;
+	if (first.status !== 403 || first.headers.get("cf-mitigated")?.toLowerCase() !== "challenge") return first;
+	await first.body?.cancel().catch(() => undefined);
+	return (await fetch(url, {
+		method: "GET",
+		headers: { ...headers, "User-Agent": "pi" },
+		signal,
+	})) as FetchResponse;
+}
+
+async function assertDeclaredBodySizeOk(response: FetchResponse): Promise<void> {
+	const declaredLength = response.headers.get("content-length");
+	if (declaredLength === null) return;
+	const bytes = Number.parseInt(declaredLength, 10);
+	if (!Number.isFinite(bytes) || bytes <= MAX_RESPONSE_BYTES) return;
+	await response.body?.cancel().catch(() => undefined);
+	throw new Error("Response too large (limit is 5MB)");
+}
+
+function formatFetchedText(raw: string, format: WebFetchFormat, mime: string): string {
+	if (format === "html") return raw;
+	const isHtml = mime === "text/html" || mime === "application/xhtml+xml";
+	if (!isHtml) return raw;
+	return format === "text" ? htmlToText(raw) : htmlToMarkdown(raw);
+}
+
+function buildWebFetchResult(url: string, format: WebFetchFormat, mime: string, body: Uint8Array): WebFetchResult {
+	const details = { url, format, mime, bytes: body.byteLength } satisfies WebFetchDetails;
+	if (mime.startsWith("image/") && mime !== "image/svg+xml") {
+		return {
+			content: [
+				{ type: "text", text: `Fetched image from ${url} (${mime})` },
+				{ type: "image", data: Buffer.from(body).toString("base64"), mimeType: mime },
+			],
+			details,
+		};
+	}
+	const truncated = truncateToolOutput(formatFetchedText(new TextDecoder().decode(body), format, mime));
+	return {
+		content: [{ type: "text", text: truncated.text }],
+		details: {
+			...details,
+			...(truncated.truncation ? { truncation: truncated.truncation } : {}),
+		},
+	};
+}
+
+async function executeWebFetch(
+	params: WebFetchParams,
+	signal: AbortSignal | undefined,
+	onUpdate: ((update: { content: WebFetchContent[]; details: undefined }) => void | Promise<void>) | undefined,
+): Promise<WebFetchResult> {
+	const url = parseFetchUrl(params.url);
+	const format = params.format ?? "markdown";
+	const timeout = normalizeTimeout(params.timeout, 30);
+	await onUpdate?.({ content: [{ type: "text", text: "Fetching page..." }], details: undefined });
+	const timeoutSignal = AbortSignal.timeout(timeout * 1000);
+	const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+
+	try {
+		const headers = {
+			"User-Agent":
+				"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+			Accept: acceptHeaderForFormat(format),
+			"Accept-Language": "en-US,en;q=0.9",
+		};
+		const response = await fetchWithChallengeRetry(url.toString(), headers, requestSignal);
+		if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+		await assertDeclaredBodySizeOk(response);
+		const body = await readResponseBody(response);
+		const mime = (response.headers.get("content-type")?.split(";", 1)[0] ?? "").trim().toLowerCase();
+		return buildWebFetchResult(url.toString(), format, mime, body);
+	} catch (error) {
+		if (timeoutSignal.aborted && signal?.aborted !== true) {
+			throw new Error(`Web fetch timed out after ${timeout}s`);
+		}
+		throw error;
+	}
+}
+
 export function createWebFetchTool(rowState: ToolRowStateStore) {
 	return defineTool<typeof webFetchParams, WebFetchDetails | undefined>({
 		name: "webfetch",
@@ -69,91 +181,7 @@ export function createWebFetchTool(rowState: ToolRowStateStore) {
 			"Fetch a known HTTP(S) URL as Markdown, text, or HTML. Use webfetch when you already have a URL; use websearch for broad discovery and codesearch for implementation-oriented lookups. Use a separate research workflow when several searches, fetches, and synthesis are needed. Supports inline images, limits response bodies to 5 MB, and truncates text to 2,000 lines or 50 KB.",
 		parameters: webFetchParams,
 		async execute(_toolCallId, params, signal, onUpdate) {
-			let url: URL;
-			try {
-				url = new URL(params.url);
-			} catch {
-				throw new Error(`Invalid URL: ${params.url}`);
-			}
-			if (url.protocol !== "http:" && url.protocol !== "https:") {
-				throw new Error("URL must use http:// or https://");
-			}
-
-			const format = params.format ?? "markdown";
-			const timeout = normalizeTimeout(params.timeout, 30);
-			await onUpdate?.({ content: [{ type: "text", text: "Fetching page..." }], details: undefined });
-			const timeoutSignal = AbortSignal.timeout(timeout * 1000);
-			const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
-
-			try {
-				const accept =
-					format === "markdown"
-						? "text/markdown;q=1.0, text/plain;q=0.8, text/html;q=0.7, */*;q=0.1"
-						: format === "text"
-							? "text/plain;q=1.0, text/markdown;q=0.9, text/html;q=0.8, */*;q=0.1"
-							: "text/html;q=1.0, application/xhtml+xml;q=0.9, */*;q=0.1";
-				const headers = {
-					"User-Agent":
-						"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
-					Accept: accept,
-					"Accept-Language": "en-US,en;q=0.9",
-				};
-				const first = (await fetch(url.toString(), {
-					method: "GET",
-					headers,
-					signal: requestSignal,
-				})) as FetchResponse;
-				let response = first;
-				if (first.status === 403 && first.headers.get("cf-mitigated")?.toLowerCase() === "challenge") {
-					await first.body?.cancel().catch(() => undefined);
-					response = (await fetch(url.toString(), {
-						method: "GET",
-						headers: { ...headers, "User-Agent": "pi" },
-						signal: requestSignal,
-					})) as FetchResponse;
-				}
-				if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
-
-				const declaredLength = response.headers.get("content-length");
-				if (declaredLength !== null) {
-					const bytes = Number.parseInt(declaredLength, 10);
-					if (Number.isFinite(bytes) && bytes > MAX_RESPONSE_BYTES) {
-						await response.body?.cancel().catch(() => undefined);
-						throw new Error("Response too large (limit is 5MB)");
-					}
-				}
-
-				const body = await readResponseBody(response);
-				const mime = (response.headers.get("content-type")?.split(";", 1)[0] ?? "").trim().toLowerCase();
-				const details = { url: url.toString(), format, mime, bytes: body.byteLength } satisfies WebFetchDetails;
-				if (mime.startsWith("image/") && mime !== "image/svg+xml") {
-					return {
-						content: [
-							{ type: "text", text: `Fetched image from ${url.toString()} (${mime})` },
-							{ type: "image", data: Buffer.from(body).toString("base64"), mimeType: mime },
-						],
-						details,
-					};
-				}
-
-				const raw = new TextDecoder().decode(body);
-				const isHtml = mime === "text/html" || mime === "application/xhtml+xml";
-				const output =
-					format === "html" ? raw : isHtml ? (format === "text" ? htmlToText(raw) : htmlToMarkdown(raw)) : raw;
-				const truncated = truncateToolOutput(output);
-				return {
-					content: [{ type: "text", text: truncated.text }],
-					details: {
-						...details,
-						...(truncated.truncation ? { truncation: truncated.truncation } : {}),
-					},
-				};
-			} catch (error) {
-				if (timeoutSignal.aborted && signal?.aborted !== true) {
-					throw new Error(`Web fetch timed out after ${timeout}s`);
-				}
-				throw error;
-			}
+			return executeWebFetch(params, signal, onUpdate);
 		},
 		renderCall(args, theme, context) {
 			rowState.watch(context.toolCallId, context.invalidate);

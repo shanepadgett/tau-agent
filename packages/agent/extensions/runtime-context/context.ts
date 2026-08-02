@@ -44,42 +44,60 @@ export function formatRuntimeContextMessage(displayDate: string, rootSnapshot: r
 	return blocks.join("\n");
 }
 
-function listRootSnapshot(cwd: string): string[] {
-	const root = resolve(cwd);
+function visibleRootEntries(root: string): SnapshotEntry[] {
 	const rootEntries = listSnapshotEntries(root, ".");
 	const ignoredRootPaths = gitIgnoredPaths(
 		root,
 		rootEntries.map((entry) => entry.path),
 	);
-	const visibleRootEntries = rootEntries.filter(
+	return rootEntries.filter(
 		(entry) => !isAlwaysHiddenFromSnapshot(entry.dirent.name) && !ignoredRootPaths.has(entry.path),
 	);
-	const childEntriesByParent = new Map<string, SnapshotEntry[]>();
-	const childPaths: string[] = [];
+}
 
-	for (const entry of visibleRootEntries) {
+function childEntriesByParent(
+	root: string,
+	roots: readonly SnapshotEntry[],
+): {
+	byParent: Map<string, SnapshotEntry[]>;
+	ignoredChildPaths: Set<string>;
+} {
+	const byParent = new Map<string, SnapshotEntry[]>();
+	const childPaths: string[] = [];
+	for (const entry of roots) {
 		if (!entry.dirent.isDirectory()) continue;
 		const childEntries = listSnapshotEntries(root, entry.path).filter(
 			(childEntry) => !isAlwaysHiddenFromSnapshot(childEntry.dirent.name),
 		);
-		childEntriesByParent.set(entry.path, childEntries);
+		byParent.set(entry.path, childEntries);
 		childPaths.push(...childEntries.map((childEntry) => childEntry.path));
 	}
+	return { byParent, ignoredChildPaths: gitIgnoredPaths(root, childPaths) };
+}
 
-	const ignoredChildPaths = gitIgnoredPaths(root, childPaths);
+function collectSnapshotPaths(
+	roots: readonly SnapshotEntry[],
+	byParent: Map<string, SnapshotEntry[]>,
+	ignoredChildPaths: ReadonlySet<string>,
+): string[] {
 	const paths: string[] = [];
-
-	for (const entry of visibleRootEntries) {
+	for (const entry of roots) {
 		pushSnapshotPath(paths, entry);
 		if (paths.length >= ROOT_SNAPSHOT_MAX_PATHS) break;
-
-		for (const childEntry of childEntriesByParent.get(entry.path) ?? []) {
+		for (const childEntry of byParent.get(entry.path) ?? []) {
 			if (ignoredChildPaths.has(childEntry.path)) continue;
 			pushSnapshotPath(paths, childEntry);
 			if (paths.length >= ROOT_SNAPSHOT_MAX_PATHS) break;
 		}
 	}
+	return paths;
+}
 
+function listRootSnapshot(cwd: string): string[] {
+	const root = resolve(cwd);
+	const roots = visibleRootEntries(root);
+	const children = childEntriesByParent(root, roots);
+	const paths = collectSnapshotPaths(roots, children.byParent, children.ignoredChildPaths);
 	return paths.length === ROOT_SNAPSHOT_MAX_PATHS ? [...paths, "..."] : paths;
 }
 

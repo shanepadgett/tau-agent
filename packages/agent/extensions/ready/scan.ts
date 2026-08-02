@@ -192,13 +192,31 @@ function detectLanguages(fs: FsIndex): string[] {
 	return ids;
 }
 
-async function scanGeneral(fs: FsIndex): Promise<ReadyRow[]> {
-	const rows: ReadyRow[] = [];
-	const has = (rel: string) => fs.files.has(rel);
-	const any = (rels: readonly string[]) => rels.filter((rel) => has(rel));
+function presentPaths(fs: FsIndex, rels: readonly string[]): string[] {
+	return rels.filter((rel) => fs.files.has(rel));
+}
 
-	const coldDocs = any(COLD_START_DOCS);
-	const bootstraps = any(BOOTSTRAP_SCRIPTS);
+async function scanGeneral(fs: FsIndex): Promise<ReadyRow[]> {
+	const npmScripts = extractNpmScriptNames(fs.packageScripts);
+	const miseTasks = extractMiseTaskNames(fs.miseText);
+	const policy = presentPaths(fs, POLICY_FILES);
+	return [
+		...scanColdStart(fs),
+		...scanToolchain(fs, npmScripts),
+		...scanVerify(fs, miseTasks, npmScripts),
+		...(await scanPolicy(fs, policy)),
+		...scanStandards(fs),
+		...scanContextCatalog(fs),
+		...(await scanMarkers(fs, policy)),
+		scanHarnessGates(),
+		scanSideEffectVerbs(fs, npmScripts),
+	];
+}
+
+function scanColdStart(fs: FsIndex): ReadyRow[] {
+	const coldDocs = presentPaths(fs, COLD_START_DOCS);
+	const bootstraps = presentPaths(fs, BOOTSTRAP_SCRIPTS);
+	const rows: ReadyRow[] = [];
 	if (coldDocs.length > 0) {
 		rows.push(
 			row({
@@ -211,7 +229,7 @@ async function scanGeneral(fs: FsIndex): Promise<ReadyRow[]> {
 				next: bootstraps.length === 0 ? "Optional: add a bootstrap script that matches the doc." : undefined,
 			}),
 		);
-	} else if (has("README.md")) {
+	} else if (fs.files.has("README.md")) {
 		rows.push(
 			row({
 				id: "cold-start.doc",
@@ -247,9 +265,13 @@ async function scanGeneral(fs: FsIndex): Promise<ReadyRow[]> {
 			}),
 		);
 	}
+	return rows;
+}
 
-	const toolchain = any(TOOLCHAIN_FILES);
-	rows.push(
+function scanToolchain(fs: FsIndex, npmScripts: string[]): ReadyRow[] {
+	const toolchain = presentPaths(fs, TOOLCHAIN_FILES);
+	const taskFiles = presentPaths(fs, TASK_RUNNER_FILES);
+	const pin =
 		toolchain.length > 0
 			? row({
 					id: "toolchain.pin",
@@ -266,70 +288,36 @@ async function scanGeneral(fs: FsIndex): Promise<ReadyRow[]> {
 					status: "missing",
 					note: "No mise/devbox/asdf/nix/devcontainer pin detected.",
 					next: "Add a reproducible toolchain pin (mise.toml is a common choice).",
-				}),
-	);
+				});
+	const tasks =
+		taskFiles.length > 0 || npmScripts.length > 0
+			? row({
+					id: "toolchain.tasks",
+					area: "toolchain",
+					title: "Task runner",
+					status: "pass",
+					evidence: [...taskFiles, ...npmScripts.slice(0, 12).map((name) => `npm:${name}`)],
+					note: "Named tasks or package scripts found.",
+				})
+			: row({
+					id: "toolchain.tasks",
+					area: "toolchain",
+					title: "Task runner",
+					status: "missing",
+					note: "No mise/just/make/taskfile/npm scripts detected.",
+					next: "Add a task runner with a single verify entrypoint.",
+				});
+	return [pin, tasks];
+}
 
-	const taskFiles = any(TASK_RUNNER_FILES);
-	const npmScripts = extractNpmScriptNames(fs.packageScripts);
-	const miseTasks = extractMiseTaskNames(fs.miseText);
-	if (taskFiles.length > 0 || npmScripts.length > 0) {
-		rows.push(
-			row({
-				id: "toolchain.tasks",
-				area: "toolchain",
-				title: "Task runner",
-				status: "pass",
-				evidence: [...taskFiles, ...npmScripts.slice(0, 12).map((name) => `npm:${name}`)],
-				note: "Named tasks or package scripts found.",
-			}),
-		);
-	} else {
-		rows.push(
-			row({
-				id: "toolchain.tasks",
-				area: "toolchain",
-				title: "Task runner",
-				status: "missing",
-				note: "No mise/just/make/taskfile/npm scripts detected.",
-				next: "Add a task runner with a single verify entrypoint.",
-			}),
-		);
-	}
+function scanVerify(fs: FsIndex, miseTasks: string[], npmScripts: string[]): ReadyRow[] {
+	return [...scanVerifyEntry(fs, miseTasks, npmScripts), scanSilentRunner(fs)];
+}
 
+function scanVerifyEntry(fs: FsIndex, miseTasks: string[], npmScripts: string[]): ReadyRow[] {
 	const verifyNames = findVerifyNames(miseTasks, npmScripts, fs);
-	if (verifyNames.length > 0) {
-		const ciHits = verifyNames.filter(
-			(name) => textIncludes(fs.ciText, name) || textIncludes(fs.ciText, `mise run ${name.replace(/^mise:/, "")}`),
-		);
-		rows.push(
-			row({
-				id: "verify.entry",
-				area: "verify",
-				title: "Verify entrypoint",
-				status: "pass",
-				evidence: verifyNames,
-				note: "Conventional verify/check task or script found.",
-			}),
-		);
-		if (fs.files.has(".github/workflows") || fs.ciText.length > 0) {
-			rows.push(
-				row({
-					id: "verify.ci",
-					area: "verify",
-					title: "CI parity (heuristic)",
-					status: ciHits.length > 0 ? "pass" : "weak",
-					evidence:
-						ciHits.length > 0 ? ciHits.map((name) => `ci mentions ${name}`) : [".github/workflows present"],
-					note:
-						ciHits.length > 0
-							? "CI text appears to reference a verify task."
-							: "Workflows present but verify task name not obviously referenced.",
-					next: ciHits.length > 0 ? undefined : "Make CI run the same verify entry humans and agents use.",
-				}),
-			);
-		}
-	} else {
-		rows.push(
+	if (verifyNames.length === 0) {
+		return [
 			row({
 				id: "verify.entry",
 				area: "verify",
@@ -338,103 +326,126 @@ async function scanGeneral(fs: FsIndex): Promise<ReadyRow[]> {
 				note: "No check/verify/ci-style task name detected.",
 				next: "Add one verify task (e.g. mise run check) that aggregates format/lint/types/entropy.",
 			}),
-		);
+		];
 	}
+	const rows: ReadyRow[] = [
+		row({
+			id: "verify.entry",
+			area: "verify",
+			title: "Verify entrypoint",
+			status: "pass",
+			evidence: verifyNames,
+			note: "Conventional verify/check task or script found.",
+		}),
+	];
+	if (!(fs.files.has(".github/workflows") || fs.ciText.length > 0)) return rows;
+	const ciHits = verifyNames.filter(
+		(name) => textIncludes(fs.ciText, name) || textIncludes(fs.ciText, `mise run ${name.replace(/^mise:/, "")}`),
+	);
+	rows.push(
+		row({
+			id: "verify.ci",
+			area: "verify",
+			title: "CI parity (heuristic)",
+			status: ciHits.length > 0 ? "pass" : "weak",
+			evidence: ciHits.length > 0 ? ciHits.map((name) => `ci mentions ${name}`) : [".github/workflows present"],
+			note:
+				ciHits.length > 0
+					? "CI text appears to reference a verify task."
+					: "Workflows present but verify task name not obviously referenced.",
+			next: ciHits.length > 0 ? undefined : "Make CI run the same verify entry humans and agents use.",
+		}),
+	);
+	return rows;
+}
 
+function scanSilentRunner(fs: FsIndex): ReadyRow {
+	const hasSection = fs.files.has(".pi/tau/settings.json") && /"silentCommandRunner"\s*:/.test(fs.tauSettingsText);
+	if (!hasSection) {
+		return row({
+			id: "verify.silent",
+			area: "verify",
+			title: "Silent command runner",
+			status: "missing",
+			note: "No Tau silentCommandRunner configuration detected.",
+			next: "Wire automatic verify after edits via extensions.silentCommandRunner.",
+		});
+	}
 	const silentConfigured =
 		/"silentCommandRunner"\s*:/.test(fs.tauSettingsText) &&
 		/"commands"\s*:\s*\[/.test(fs.tauSettingsText) &&
 		!/"commands"\s*:\s*\[\s*\]/.test(fs.tauSettingsText);
-	if (fs.files.has(".pi/tau/settings.json") && /"silentCommandRunner"\s*:/.test(fs.tauSettingsText)) {
-		rows.push(
-			row({
-				id: "verify.silent",
-				area: "verify",
-				title: "Silent command runner",
-				status: silentConfigured ? "pass" : "weak",
-				evidence: [".pi/tau/settings.json"],
-				note: silentConfigured
-					? "silentCommandRunner has configured commands."
-					: "silentCommandRunner section present but commands look empty.",
-				next: silentConfigured
-					? undefined
-					: "Configure extensions.silentCommandRunner.commands for post-edit verify.",
-			}),
-		);
-	} else {
-		rows.push(
-			row({
-				id: "verify.silent",
-				area: "verify",
-				title: "Silent command runner",
-				status: "missing",
-				note: "No Tau silentCommandRunner configuration detected.",
-				next: "Wire automatic verify after edits via extensions.silentCommandRunner.",
-			}),
-		);
+	return row({
+		id: "verify.silent",
+		area: "verify",
+		title: "Silent command runner",
+		status: silentConfigured ? "pass" : "weak",
+		evidence: [".pi/tau/settings.json"],
+		note: silentConfigured
+			? "silentCommandRunner has configured commands."
+			: "silentCommandRunner section present but commands look empty.",
+		next: silentConfigured ? undefined : "Configure extensions.silentCommandRunner.commands for post-edit verify.",
+	});
+}
+
+async function scanPolicy(fs: FsIndex, policy: string[]): Promise<ReadyRow[]> {
+	return [await scanAgentsPolicy(fs, policy), scanVocabulary(fs)];
+}
+
+async function scanAgentsPolicy(fs: FsIndex, policy: string[]): Promise<ReadyRow> {
+	if (policy.length === 0) {
+		return row({
+			id: "policy.agents",
+			area: "policy",
+			title: "Agent policy file",
+			status: "missing",
+			note: "No AGENTS.md / CLAUDE.md / copilot-instructions file found.",
+			next: "Add a thin AGENTS.md with always-on rules and pointers outward.",
+		});
 	}
+	const primary = policy[0];
+	const text = primary ? await readIfExists(join(fs.root, primary)) : undefined;
+	const bytes = text === undefined ? 0 : Buffer.byteLength(text, "utf8");
+	const lines = text === undefined ? 0 : text.split(/\r?\n/).length;
+	const weakSize = text !== undefined && (bytes > AGENTS_WEAK_BYTES || lines > AGENTS_WEAK_LINES);
+	return row({
+		id: "policy.agents",
+		area: "policy",
+		title: "Agent policy file",
+		status: weakSize ? "weak" : "pass",
+		evidence: [...policy, ...(text !== undefined && primary ? [`${primary}: ${lines} lines, ${bytes} bytes`] : [])],
+		note: weakSize
+			? "Policy file is large; prefer thin always-on law and move playbooks to standards."
+			: "Always-on agent policy file present (thinness of content not fully judged).",
+		next: weakSize ? "Split work-type standards out of AGENTS.md; keep durable cross-cutting rules only." : undefined,
+	});
+}
 
-	const policy = any(POLICY_FILES);
-	if (policy.length > 0) {
-		const primary = policy[0];
-		const text = primary ? await readIfExists(join(fs.root, primary)) : undefined;
-		const bytes = text === undefined ? 0 : Buffer.byteLength(text, "utf8");
-		const lines = text === undefined ? 0 : text.split(/\r?\n/).length;
-		const weakSize = text !== undefined && (bytes > AGENTS_WEAK_BYTES || lines > AGENTS_WEAK_LINES);
-		rows.push(
-			row({
-				id: "policy.agents",
-				area: "policy",
-				title: "Agent policy file",
-				status: weakSize ? "weak" : "pass",
-				evidence: [
-					...policy,
-					...(text !== undefined && primary ? [`${primary}: ${lines} lines, ${bytes} bytes`] : []),
-				],
-				note: weakSize
-					? "Policy file is large; prefer thin always-on law and move playbooks to standards."
-					: "Always-on agent policy file present (thinness of content not fully judged).",
-				next: weakSize
-					? "Split work-type standards out of AGENTS.md; keep durable cross-cutting rules only."
-					: undefined,
-			}),
-		);
-	} else {
-		rows.push(
-			row({
-				id: "policy.agents",
-				area: "policy",
-				title: "Agent policy file",
-				status: "missing",
-				note: "No AGENTS.md / CLAUDE.md / copilot-instructions file found.",
-				next: "Add a thin AGENTS.md with always-on rules and pointers outward.",
-			}),
-		);
+function scanVocabulary(fs: FsIndex): ReadyRow {
+	const vocab = presentPaths(fs, VOCAB_FILES);
+	if (vocab.length > 0) {
+		return row({
+			id: "policy.vocabulary",
+			area: "policy",
+			title: "Vocabulary",
+			status: "pass",
+			evidence: vocab,
+			note: "Shared vocabulary doc found.",
+		});
 	}
+	return row({
+		id: "policy.vocabulary",
+		area: "policy",
+		title: "Vocabulary",
+		status: "missing",
+		note: "No VOCABULARY.md detected.",
+		next: "Add docs/VOCABULARY.md for core nouns agents and humans share.",
+	});
+}
 
-	const vocab = any(VOCAB_FILES);
-	rows.push(
-		vocab.length > 0
-			? row({
-					id: "policy.vocabulary",
-					area: "policy",
-					title: "Vocabulary",
-					status: "pass",
-					evidence: vocab,
-					note: "Shared vocabulary doc found.",
-				})
-			: row({
-					id: "policy.vocabulary",
-					area: "policy",
-					title: "Vocabulary",
-					status: "missing",
-					note: "No VOCABULARY.md detected.",
-					next: "Add docs/VOCABULARY.md for core nouns agents and humans share.",
-				}),
-	);
-
+function scanStandards(fs: FsIndex): ReadyRow[] {
 	const standardsHits = STANDARDS_DIRS.filter((dir) => fs.files.has(dir));
-	rows.push(
+	return [
 		standardsHits.length > 0
 			? row({
 					id: "standards.tree",
@@ -452,11 +463,13 @@ async function scanGeneral(fs: FsIndex): Promise<ReadyRow[]> {
 					note: "No docs/standards or .pi/standards tree detected.",
 					next: "Add work-type standards outside AGENTS.md (UI, API, extensions, …).",
 				}),
-	);
+	];
+}
 
+function scanContextCatalog(fs: FsIndex): ReadyRow[] {
 	if (fs.files.has(".pi/contexts")) {
 		const children = [...fs.files].filter((path) => path.startsWith(".pi/contexts/") && path !== ".pi/contexts");
-		rows.push(
+		return [
 			row({
 				id: "context.catalog",
 				area: "context",
@@ -469,26 +482,27 @@ async function scanGeneral(fs: FsIndex): Promise<ReadyRow[]> {
 						: "`.pi/contexts` exists but looks empty at top level.",
 				next: children.length > 0 ? undefined : "Add domain/concept work packs under .pi/contexts.",
 			}),
-		);
-	} else {
-		rows.push(
-			row({
-				id: "context.catalog",
-				area: "context",
-				title: "Context catalog",
-				status: "missing",
-				note: "No `.pi/contexts` catalog detected.",
-				next: "Create job-shaped context packs for sticky work areas.",
-			}),
-		);
+		];
 	}
+	return [
+		row({
+			id: "context.catalog",
+			area: "context",
+			title: "Context catalog",
+			status: "missing",
+			note: "No `.pi/contexts` catalog detected.",
+			next: "Create job-shaped context packs for sticky work areas.",
+		}),
+	];
+}
 
+async function scanMarkers(fs: FsIndex, policy: string[]): Promise<ReadyRow[]> {
 	const policyBlob = policy[0] ? ((await readIfExists(join(fs.root, policy[0]))) ?? "") : "";
 	const markerHit =
 		textIncludes(fs.fallowText, "@agent") ||
 		textIncludes(fs.tauSettingsText, "@agent kind") ||
 		textIncludes(policyBlob, "@agent kind=");
-	rows.push(
+	return [
 		row({
 			id: "markers.vocab",
 			area: "markers",
@@ -499,47 +513,42 @@ async function scanGeneral(fs: FsIndex): Promise<ReadyRow[]> {
 				? "Marker-related signal found; full greppable vocabulary not verified."
 				: "No marker system required; na unless the repo adopts @agent-style temp/until/invariant tags.",
 		}),
-	);
+	];
+}
 
-	rows.push(
-		row({
-			id: "harness.gates",
-			area: "harness",
-			title: "Harness gates",
-			status: "unknown",
-			note: "Scan does not verify read/write/command gates in v1.",
-			next: "Protect rail files and secrets via harness permissions when available.",
-		}),
-	);
+function scanHarnessGates(): ReadyRow {
+	return row({
+		id: "harness.gates",
+		area: "harness",
+		title: "Harness gates",
+		status: "unknown",
+		note: "Scan does not verify read/write/command gates in v1.",
+		next: "Protect rail files and secrets via harness permissions when available.",
+	});
+}
 
+function scanSideEffectVerbs(fs: FsIndex, npmScripts: string[]): ReadyRow {
 	const localExt = [...fs.files].filter((path) => path.startsWith(".pi/extensions/"));
 	const publishExt = localExt.filter((path) => /publish|release|migrate/i.test(path));
 	const publishScripts = npmScripts.filter((name) => /publish|release|migrate/i.test(name));
 	if (publishExt.length > 0 || publishScripts.length > 0) {
-		rows.push(
-			row({
-				id: "side-effect.verbs",
-				area: "side-effect-verbs",
-				title: "Side-effect verbs",
-				status: "pass",
-				evidence: [...publishExt, ...publishScripts.map((name) => `npm:${name}`)],
-				note: "Publish/release/migrate-style command or local extension name found.",
-			}),
-		);
-	} else {
-		rows.push(
-			row({
-				id: "side-effect.verbs",
-				area: "side-effect-verbs",
-				title: "Side-effect verbs",
-				status: "na",
-				note: "No publish/release/migrate verb detected; fine if the repo has no such ops.",
-				next: "Bind side-effectful ops to slash commands or scripts, not agent freestyle.",
-			}),
-		);
+		return row({
+			id: "side-effect.verbs",
+			area: "side-effect-verbs",
+			title: "Side-effect verbs",
+			status: "pass",
+			evidence: [...publishExt, ...publishScripts.map((name) => `npm:${name}`)],
+			note: "Publish/release/migrate-style command or local extension name found.",
+		});
 	}
-
-	return rows;
+	return row({
+		id: "side-effect.verbs",
+		area: "side-effect-verbs",
+		title: "Side-effect verbs",
+		status: "na",
+		note: "No publish/release/migrate verb detected; fine if the repo has no such ops.",
+		next: "Bind side-effectful ops to slash commands or scripts, not agent freestyle.",
+	});
 }
 
 function scanLintEntropy(fs: FsIndex, packs: LanguagePack[], languages: string[]): ReadyRow[] {
@@ -568,98 +577,76 @@ function scanLintEntropy(fs: FsIndex, packs: LanguagePack[], languages: string[]
 
 	for (const pack of packs) {
 		for (const capability of CAPABILITY_ORDER) {
-			const spec = pack.capabilities[capability];
-			if (!spec) continue;
-			const id = `lint-entropy.${pack.id}.${capability}`;
-			const title = `${pack.label}: ${CAPABILITY_LABELS[capability]}`;
-			if (spec.unsupportedReason && spec.tools.length === 0) {
-				rows.push(
-					row({
-						id,
-						area: "lint-entropy",
-						title,
-						status: "na",
-						note: spec.unsupportedReason,
-					}),
-				);
-				continue;
-			}
-			const hits = findToolHits(fs, spec.tools);
-			if (hits.length > 0) {
-				if (
-					capability === "complexity" &&
-					hits.every((hit) => hit.startsWith("fallow")) &&
-					!fallowHealthWired(fs)
-				) {
-					rows.push(
-						row({
-							id,
-							area: "lint-entropy",
-							title,
-							status: "weak",
-							evidence: hits,
-							note: "Fallow present but health/complexity not obviously in verify tasks.",
-							next: "Add fallow health (or another complexity gate) to verify if you want complexity budgets.",
-						}),
-					);
-					continue;
-				}
-				if (
-					capability === "boundaries" &&
-					hits.some((hit) => hit.startsWith("fallow")) &&
-					!textIncludes(fs.fallowText, "boundar") &&
-					!textIncludes(fs.miseText, "boundary")
-				) {
-					rows.push(
-						row({
-							id,
-							area: "lint-entropy",
-							title,
-							status: "weak",
-							evidence: hits,
-							note: "Fallow present but boundary zones not detected in config/tasks.",
-							next: "Configure Fallow zones or dependency-cruiser if architecture boundaries matter.",
-						}),
-					);
-					continue;
-				}
-				rows.push(
-					row({
-						id,
-						area: "lint-entropy",
-						title,
-						status: "pass",
-						evidence: hits,
-						note: "Known tool configuration or task reference detected.",
-					}),
-				);
-			} else if (spec.unsupportedReason) {
-				rows.push(
-					row({
-						id,
-						area: "lint-entropy",
-						title,
-						status: "na",
-						note: spec.unsupportedReason,
-					}),
-				);
-			} else {
-				rows.push(
-					row({
-						id,
-						area: "lint-entropy",
-						title,
-						status: "missing",
-						evidence: spec.tools.map((tool) => `looked for ${tool.name}`),
-						note: `No ${CAPABILITY_LABELS[capability].toLowerCase()} tool detected for ${pack.label}.`,
-						next: `Wire a ${pack.label} ${CAPABILITY_LABELS[capability].toLowerCase()} tool into verify.`,
-					}),
-				);
-			}
+			const scored = scoreLintCapability(fs, pack, capability);
+			if (scored) rows.push(scored);
 		}
 	}
 
 	return rows;
+}
+
+function scoreLintCapability(
+	fs: FsIndex,
+	pack: LanguagePack,
+	capability: (typeof CAPABILITY_ORDER)[number],
+): ReadyRow | undefined {
+	const spec = pack.capabilities[capability];
+	if (!spec) return undefined;
+	const id = `lint-entropy.${pack.id}.${capability}`;
+	const title = `${pack.label}: ${CAPABILITY_LABELS[capability]}`;
+	if (spec.unsupportedReason && spec.tools.length === 0) {
+		return row({ id, area: "lint-entropy", title, status: "na", note: spec.unsupportedReason });
+	}
+	const hits = findToolHits(fs, spec.tools);
+	if (hits.length === 0) {
+		if (spec.unsupportedReason) {
+			return row({ id, area: "lint-entropy", title, status: "na", note: spec.unsupportedReason });
+		}
+		return row({
+			id,
+			area: "lint-entropy",
+			title,
+			status: "missing",
+			evidence: spec.tools.map((tool) => `looked for ${tool.name}`),
+			note: `No ${CAPABILITY_LABELS[capability].toLowerCase()} tool detected for ${pack.label}.`,
+			next: `Wire a ${pack.label} ${CAPABILITY_LABELS[capability].toLowerCase()} tool into verify.`,
+		});
+	}
+	if (capability === "complexity" && hits.every((hit) => hit.startsWith("fallow")) && !fallowHealthWired(fs)) {
+		return row({
+			id,
+			area: "lint-entropy",
+			title,
+			status: "weak",
+			evidence: hits,
+			note: "Fallow present but health/complexity not obviously in verify tasks.",
+			next: "Add fallow health (or another complexity gate) to verify if you want complexity budgets.",
+		});
+	}
+	if (
+		capability === "boundaries" &&
+		hits.some((hit) => hit.startsWith("fallow")) &&
+		!textIncludes(fs.fallowText, "boundar") &&
+		!textIncludes(fs.miseText, "boundary")
+	) {
+		return row({
+			id,
+			area: "lint-entropy",
+			title,
+			status: "weak",
+			evidence: hits,
+			note: "Fallow present but boundary zones not detected in config/tasks.",
+			next: "Configure Fallow zones or dependency-cruiser if architecture boundaries matter.",
+		});
+	}
+	return row({
+		id,
+		area: "lint-entropy",
+		title,
+		status: "pass",
+		evidence: hits,
+		note: "Known tool configuration or task reference detected.",
+	});
 }
 
 function findToolHits(fs: FsIndex, tools: readonly PackTool[]): string[] {

@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { IsObject, type TSchema } from "typebox";
+import { IsObject, type TObject, type TSchema } from "typebox";
 import { Value } from "typebox/value";
 import type { JsonObject, TauExtensionSettingsSpec } from "./define.ts";
 import { asObject, readJsonStatus, writeJsonObject } from "./json.ts";
@@ -63,6 +63,47 @@ function extensionSection(root: JsonObject, key: string): JsonObject | undefined
 
 const NO_DEFAULT = Symbol("no-default");
 
+function repairKnownProperties(
+	schema: TObject,
+	valueObject: JsonObject,
+	defaultObject: JsonObject | undefined,
+): JsonObject | typeof NO_DEFAULT {
+	const repaired: JsonObject = {};
+	const required = new Set(Array.isArray(schema.required) ? schema.required : []);
+	for (const [key, propertySchema] of Object.entries(schema.properties)) {
+		if (!Object.hasOwn(valueObject, key)) {
+			if (!required.has(key)) continue;
+			const requiredDefault = propertyDefault(propertySchema, defaultObject, key);
+			if (requiredDefault === NO_DEFAULT) return NO_DEFAULT;
+			repaired[key] = Value.Clone(requiredDefault);
+			continue;
+		}
+
+		const propertyValue = replaceInvalidProperties(
+			propertySchema,
+			valueObject[key],
+			propertyDefault(propertySchema, defaultObject, key),
+		);
+		if (propertyValue !== NO_DEFAULT) repaired[key] = propertyValue;
+		else if (required.has(key)) return NO_DEFAULT;
+	}
+	return repaired;
+}
+
+function repairAdditionalProperties(schema: TObject, valueObject: JsonObject, repaired: JsonObject): void {
+	const additionalProperties = asObject(schema)?.additionalProperties;
+	if (additionalProperties === false) return;
+	for (const [key, additionalValue] of Object.entries(valueObject)) {
+		if (Object.hasOwn(schema.properties, key)) continue;
+		if (additionalProperties === undefined || additionalProperties === true) {
+			repaired[key] = additionalValue;
+			continue;
+		}
+		const repairedAdditional = replaceInvalidProperties(additionalProperties as TSchema, additionalValue, NO_DEFAULT);
+		if (repairedAdditional !== NO_DEFAULT) repaired[key] = repairedAdditional;
+	}
+}
+
 function replaceInvalidProperties(
 	schema: TSchema,
 	value: unknown,
@@ -73,43 +114,9 @@ function replaceInvalidProperties(
 	const valueObject = asObject(value);
 	if (IsObject(schema) && valueObject) {
 		const defaultObject = documentedDefault === NO_DEFAULT ? undefined : asObject(documentedDefault);
-		const repaired: JsonObject = {};
-		const required = new Set(Array.isArray(schema.required) ? schema.required : []);
-		for (const [key, propertySchema] of Object.entries(schema.properties)) {
-			if (!Object.hasOwn(valueObject, key)) {
-				if (!required.has(key)) continue;
-				const requiredDefault = propertyDefault(propertySchema, defaultObject, key);
-				if (requiredDefault === NO_DEFAULT) return validatedDefault(schema, documentedDefault);
-				repaired[key] = Value.Clone(requiredDefault);
-				continue;
-			}
-
-			const propertyValue = replaceInvalidProperties(
-				propertySchema,
-				valueObject[key],
-				propertyDefault(propertySchema, defaultObject, key),
-			);
-			if (propertyValue !== NO_DEFAULT) repaired[key] = propertyValue;
-			else if (required.has(key)) return validatedDefault(schema, documentedDefault);
-		}
-
-		const schemaObject = asObject(schema);
-		const additionalProperties = schemaObject?.additionalProperties;
-		if (additionalProperties !== false) {
-			for (const [key, additionalValue] of Object.entries(valueObject)) {
-				if (Object.hasOwn(schema.properties, key)) continue;
-				if (additionalProperties === undefined || additionalProperties === true) repaired[key] = additionalValue;
-				else {
-					const repairedAdditional = replaceInvalidProperties(
-						additionalProperties as TSchema,
-						additionalValue,
-						NO_DEFAULT,
-					);
-					if (repairedAdditional !== NO_DEFAULT) repaired[key] = repairedAdditional;
-				}
-			}
-		}
-
+		const repaired = repairKnownProperties(schema, valueObject, defaultObject);
+		if (repaired === NO_DEFAULT) return validatedDefault(schema, documentedDefault);
+		repairAdditionalProperties(schema, valueObject, repaired);
 		if (Value.Check(schema, repaired)) return repaired;
 	}
 

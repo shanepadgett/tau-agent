@@ -64,6 +64,52 @@ async function init(ctx: ExtensionCommandContext, scope: "global" | "project"): 
 	ctx.ui.notify(`tau init wrote ${path}`, "info");
 }
 
+function pushExtensionFindings(
+	findings: Finding[],
+	level: Finding["level"],
+	path: string,
+	extensions: unknown,
+	specs: Awaited<ReturnType<typeof discoverTauSettingsSpecs>>,
+): void {
+	if (extensions !== undefined && (!extensions || typeof extensions !== "object" || Array.isArray(extensions))) {
+		findings.push({ level, message: `extensions must be an object: ${path}`, startup: true });
+		return;
+	}
+	const extensionRecord = (extensions ?? {}) as Record<string, unknown>;
+	for (const spec of specs) {
+		const section = extensionRecord[spec.key];
+		if (section === undefined) continue;
+		if (!Value.Check(spec.schema, section)) {
+			findings.push({ level, message: `invalid extensions.${spec.key}: ${path}`, startup: true });
+		}
+	}
+}
+
+async function inspectPath(
+	findings: Finding[],
+	item: { level: Finding["level"]; path: string; trusted: boolean },
+	specs: Awaited<ReturnType<typeof discoverTauSettingsSpecs>>,
+): Promise<void> {
+	const status = await readJsonStatus(item.path);
+	if (!status.exists) return;
+	if (!item.trusted) {
+		findings.push({
+			level: item.level,
+			message: `project Tau settings ignored because project is not trusted: ${item.path}. Run /trust, then /reload.`,
+			startup: true,
+		});
+		return;
+	}
+	if (!status.ok) {
+		findings.push({ level: item.level, message: `malformed JSON: ${item.path}: ${status.error}`, startup: true });
+		return;
+	}
+	if (typeof status.value.$schema !== "string") {
+		findings.push({ level: item.level, message: `missing $schema: ${item.path}`, startup: false });
+	}
+	pushExtensionFindings(findings, item.level, item.path, status.value.extensions, specs);
+}
+
 async function inspect(ctx: Pick<ExtensionContext, "cwd" | "isProjectTrusted">): Promise<Finding[]> {
 	const findings: Finding[] = [];
 	const specs = await discoverTauSettingsSpecs(ctx.cwd);
@@ -71,44 +117,7 @@ async function inspect(ctx: Pick<ExtensionContext, "cwd" | "isProjectTrusted">):
 		{ level: "global" as const, path: globalTauSettingsPath(), trusted: true },
 		{ level: "project" as const, path: await projectTauSettingsPath(ctx.cwd), trusted: ctx.isProjectTrusted() },
 	];
-
-	for (const item of paths) {
-		const status = await readJsonStatus(item.path);
-		if (!status.exists) continue;
-		if (!item.trusted) {
-			findings.push({
-				level: item.level,
-				message: `project Tau settings ignored because project is not trusted: ${item.path}. Run /trust, then /reload.`,
-				startup: true,
-			});
-			continue;
-		}
-		if (!status.ok) {
-			findings.push({ level: item.level, message: `malformed JSON: ${item.path}: ${status.error}`, startup: true });
-			continue;
-		}
-		if (typeof status.value.$schema !== "string") {
-			findings.push({ level: item.level, message: `missing $schema: ${item.path}`, startup: false });
-		}
-		const extensions = status.value.extensions;
-		if (extensions !== undefined && (!extensions || typeof extensions !== "object" || Array.isArray(extensions))) {
-			findings.push({ level: item.level, message: `extensions must be an object: ${item.path}`, startup: true });
-			continue;
-		}
-		const extensionRecord = (extensions ?? {}) as Record<string, unknown>;
-		for (const spec of specs) {
-			const section = extensionRecord[spec.key];
-			if (section === undefined) continue;
-			if (!Value.Check(spec.schema, section)) {
-				findings.push({
-					level: item.level,
-					message: `invalid extensions.${spec.key}: ${item.path}`,
-					startup: true,
-				});
-			}
-		}
-	}
-
+	for (const item of paths) await inspectPath(findings, item, specs);
 	return findings;
 }
 

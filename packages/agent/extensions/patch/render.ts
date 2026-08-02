@@ -44,6 +44,34 @@ function startPreviewOp(ops: PreviewOp[], kind: PreviewOp["kind"], path: string)
 	return op;
 }
 
+function matchPreviewSectionStart(ops: PreviewOp[], value: string): PreviewOp | undefined {
+	const addPath = pathAfter(value, ADD_FILE_MARKER);
+	if (addPath !== undefined) return startPreviewOp(ops, "add", addPath);
+	const replacePath = pathAfter(value, REPLACE_FILE_MARKER);
+	if (replacePath !== undefined) return startPreviewOp(ops, "replace", replacePath);
+	const deletePath = pathAfter(value, DELETE_FILE_MARKER);
+	if (deletePath !== undefined) return startPreviewOp(ops, "delete", deletePath);
+	const updatePath = pathAfter(value, UPDATE_FILE_MARKER);
+	if (updatePath !== undefined) return startPreviewOp(ops, "update", updatePath);
+	return undefined;
+}
+
+function accumulatePreviewBodyLine(current: PreviewOp, line: string): void {
+	if (current.kind === "update") {
+		const movePath = pathAfter(updateDirective(line), MOVE_TO_MARKER);
+		if (movePath !== undefined) {
+			current.moveTo = movePath;
+			return;
+		}
+		if (line.startsWith("+")) current.linesAdded += 1;
+		else if (line.startsWith("-")) current.linesRemoved += 1;
+		return;
+	}
+	if ((current.kind === "add" || current.kind === "replace") && line.startsWith("+")) {
+		current.linesAdded += 1;
+	}
+}
+
 // Tolerant preview scan — never throws, display-oriented (partial patches during streaming).
 function scanPreview(input: string | undefined): PreviewOp[] {
 	if (typeof input !== "string" || !input) return [];
@@ -54,47 +82,12 @@ function scanPreview(input: string | undefined): PreviewOp[] {
 	for (const line of lines) {
 		const value = current?.kind === "update" ? updateDirective(line) : topLevelDirective(line);
 		if (value === END_PATCH_MARKER) break;
-
-		const addPath = pathAfter(value, ADD_FILE_MARKER);
-		if (addPath !== undefined) {
-			current = startPreviewOp(ops, "add", addPath);
+		const started = matchPreviewSectionStart(ops, value);
+		if (started) {
+			current = started;
 			continue;
 		}
-
-		const replacePath = pathAfter(value, REPLACE_FILE_MARKER);
-		if (replacePath !== undefined) {
-			current = startPreviewOp(ops, "replace", replacePath);
-			continue;
-		}
-
-		const deletePath = pathAfter(value, DELETE_FILE_MARKER);
-		if (deletePath !== undefined) {
-			current = startPreviewOp(ops, "delete", deletePath);
-			continue;
-		}
-
-		const updatePath = pathAfter(value, UPDATE_FILE_MARKER);
-		if (updatePath !== undefined) {
-			current = startPreviewOp(ops, "update", updatePath);
-			continue;
-		}
-
-		if (!current) continue;
-
-		if (current.kind === "update") {
-			const movePath = pathAfter(updateDirective(line), MOVE_TO_MARKER);
-			if (movePath !== undefined) {
-				current.moveTo = movePath;
-				continue;
-			}
-			if (line.startsWith("+")) current.linesAdded += 1;
-			else if (line.startsWith("-")) current.linesRemoved += 1;
-			continue;
-		}
-
-		if (current.kind === "add" || current.kind === "replace") {
-			if (line.startsWith("+")) current.linesAdded += 1;
-		}
+		if (current) accumulatePreviewBodyLine(current, line);
 	}
 
 	return ops;

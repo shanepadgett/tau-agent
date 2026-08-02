@@ -183,61 +183,62 @@ export class SelectableList<T extends SelectableListItem> implements Component, 
 		];
 	}
 
-	handleInput(data: string): void {
+	private handleMultiFilterKey(data: string): boolean {
+		if (this.config.selection.kind !== "multi" || !this.filterActive) return false;
 		const keybindings = getKeybindings();
-		if (this.config.selection.kind === "multi" && this.filterActive && matchesKey(data, Key.ctrl("c"))) {
+		if (matchesKey(data, Key.ctrl("c"))) {
 			this.clearFilter();
-			return;
+			return true;
 		}
-		if (
-			this.config.selection.kind === "multi" &&
-			this.filterActive &&
-			keybindings.matches(data, "tui.select.cancel")
-		) {
+		if (keybindings.matches(data, "tui.select.cancel")) {
 			this.clearFilterFocus();
-			return;
+			return true;
 		}
-		if (
-			this.config.selection.kind === "multi" &&
-			this.filterActive &&
-			keybindings.matches(data, "tui.select.confirm")
-		) {
+		if (keybindings.matches(data, "tui.select.confirm")) {
 			this.blurFilter();
-			return;
+			return true;
 		}
+		return false;
+	}
+
+	private handleMultiFilterMode(data: string): boolean {
+		if (this.config.selection.kind !== "multi") return false;
+		if (this.config.filter && !this.filterActive && matchesKey(data, Key.slash)) {
+			this.activateFilter();
+			return true;
+		}
+		if (this.filterActive) {
+			this.handleFilterInput(data);
+			return true;
+		}
+		return false;
+	}
+
+	private handleConfiguredAction(data: string): boolean {
+		for (const action of this.config.actions) {
+			if (!matchesKey(data, action.key)) continue;
+			this.runAction(action);
+			return true;
+		}
+		return false;
+	}
+
+	handleInput(data: string): void {
+		if (this.handleMultiFilterKey(data)) return;
+
+		const keybindings = getKeybindings();
 		if (keybindings.matches(data, "tui.select.cancel")) {
 			this.config.onResult({ kind: "cancel" });
 			return;
 		}
-
 		if (keybindings.matches(data, "tui.select.confirm")) {
 			this.primary();
 			return;
 		}
-
 		if (this.handleListKey(data)) return;
 		if (this.config.selection.kind === "multi" && this.handleMultiSelectKey(data)) return;
-		if (
-			this.config.selection.kind === "multi" &&
-			this.config.filter &&
-			!this.filterActive &&
-			matchesKey(data, Key.slash)
-		) {
-			this.activateFilter();
-			return;
-		}
-		if (this.config.selection.kind === "multi" && this.filterActive) {
-			this.handleFilterInput(data);
-			return;
-		}
-
-		for (const action of this.config.actions) {
-			if (matchesKey(data, action.key)) {
-				this.runAction(action);
-				return;
-			}
-		}
-
+		if (this.handleMultiFilterMode(data)) return;
+		if (this.handleConfiguredAction(data)) return;
 		if (this.config.filter && this.config.selection.kind === "single") this.handleFilterInput(data);
 	}
 

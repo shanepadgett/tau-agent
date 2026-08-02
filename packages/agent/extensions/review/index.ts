@@ -26,30 +26,11 @@ export default function reviewExtension(pi: ExtensionAPI): void {
 			await ctx.waitForIdle();
 			const requested = args.trim().toLowerCase();
 			if (requested === "show") {
-				const latest = latestReview(ctx.sessionManager.getBranch());
-				if (!latest) {
-					ctx.ui.notify("No review exists on this session branch", "warning");
-					return;
-				}
-				await showReview(pi, ctx, latest);
+				await showLatestReview(pi, ctx);
 				return;
 			}
-
-			let mode: ReviewMode | undefined;
-			if (requested) {
-				if (!isReviewMode(requested)) {
-					ctx.ui.notify("Usage: /review [simplify|architecture|correctness|show]", "warning");
-					return;
-				}
-				mode = requested;
-			} else {
-				const selected = await ctx.ui.select("Review mode", ["Simplify", "Architecture", "Correctness"]);
-				if (!selected) return;
-				const normalized = selected.toLowerCase();
-				if (!isReviewMode(normalized)) return;
-				mode = normalized;
-			}
-
+			const mode = await resolveReviewMode(requested, ctx);
+			if (!mode) return;
 			const status = await loadRepoStatus(createGitRunner(pi, ctx));
 			if (!status) {
 				ctx.ui.notify("/review requires a Git repository", "warning");
@@ -59,34 +40,8 @@ export default function reviewExtension(pi: ExtensionAPI): void {
 				ctx.ui.notify("Nothing to review: working tree is clean", "info");
 				return;
 			}
-
-			const controller = new AbortController();
-			const signal = ctx.signal ? AbortSignal.any([controller.signal, ctx.signal]) : controller.signal;
-			let failure: string | undefined;
-			const output = await ctx.ui.custom<ReviewRecord | undefined>((tui, theme, keys, done) => {
-				const panel = new ReviewProgressPanel(tui, theme, mode, keys, () => controller.abort());
-				void runReview({
-					ctx,
-					root: status.root,
-					mode,
-					parentThinkingLevel: pi.getThinkingLevel(),
-					signal,
-					onProgress: (line) => panel.update(line),
-				})
-					.then((result) => done({ ...result, mode, root: status.root, createdAt: new Date().toISOString() }))
-					.catch((error: unknown) => {
-						failure = errorText(error);
-						done(undefined);
-					});
-				return panel;
-			});
-			if (!output) {
-				ctx.ui.notify(
-					signal.aborted ? "Review cancelled" : `Review failed: ${failure ?? "unknown error"}`,
-					signal.aborted ? "info" : "error",
-				);
-				return;
-			}
+			const output = await runReviewWithPanel(pi, ctx, mode, status.root);
+			if (!output) return;
 			pi.appendEntry(REVIEW_ENTRY_TYPE, output);
 			await showReview(pi, ctx, output);
 		},
@@ -99,6 +54,63 @@ function latestReview(entries: readonly SessionEntry[]): ReviewRecord | undefine
 		if (entry?.type !== "custom" || entry.customType !== REVIEW_ENTRY_TYPE) continue;
 		if (isReviewRecord(entry.data)) return entry.data;
 	}
+	return undefined;
+}
+
+async function showLatestReview(pi: ExtensionAPI, ctx: ExtensionContext): Promise<void> {
+	const latest = latestReview(ctx.sessionManager.getBranch());
+	if (!latest) {
+		ctx.ui.notify("No review exists on this session branch", "warning");
+		return;
+	}
+	await showReview(pi, ctx, latest);
+}
+
+async function resolveReviewMode(requested: string, ctx: ExtensionContext): Promise<ReviewMode | undefined> {
+	if (requested) {
+		if (!isReviewMode(requested)) {
+			ctx.ui.notify("Usage: /review [simplify|architecture|correctness|show]", "warning");
+			return undefined;
+		}
+		return requested;
+	}
+	const selected = await ctx.ui.select("Review mode", ["Simplify", "Architecture", "Correctness"]);
+	if (!selected) return undefined;
+	const normalized = selected.toLowerCase();
+	return isReviewMode(normalized) ? normalized : undefined;
+}
+
+async function runReviewWithPanel(
+	pi: ExtensionAPI,
+	ctx: ExtensionContext,
+	mode: ReviewMode,
+	root: string,
+): Promise<ReviewRecord | undefined> {
+	const controller = new AbortController();
+	const signal = ctx.signal ? AbortSignal.any([controller.signal, ctx.signal]) : controller.signal;
+	let failure: string | undefined;
+	const output = await ctx.ui.custom<ReviewRecord | undefined>((tui, theme, keys, done) => {
+		const panel = new ReviewProgressPanel(tui, theme, mode, keys, () => controller.abort());
+		void runReview({
+			ctx,
+			root,
+			mode,
+			parentThinkingLevel: pi.getThinkingLevel(),
+			signal,
+			onProgress: (line) => panel.update(line),
+		})
+			.then((result) => done({ ...result, mode, root, createdAt: new Date().toISOString() }))
+			.catch((error: unknown) => {
+				failure = errorText(error);
+				done(undefined);
+			});
+		return panel;
+	});
+	if (output) return output;
+	ctx.ui.notify(
+		signal.aborted ? "Review cancelled" : `Review failed: ${failure ?? "unknown error"}`,
+		signal.aborted ? "info" : "error",
+	);
 	return undefined;
 }
 

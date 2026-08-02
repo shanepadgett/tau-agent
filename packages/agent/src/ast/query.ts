@@ -12,7 +12,7 @@ export function walkDecls(decls: readonly Decl[], visit: (decl: Decl, depth: num
 }
 
 function nameMatches(decl: Decl, name: string): boolean {
-	return decl.name === name || decl.qualifiedName === name;
+	return decl.name === name || decl.qualifiedName === name || decl.qualifiedName.endsWith(`.${name}`);
 }
 
 function coversLine(decl: Decl, line: number): boolean {

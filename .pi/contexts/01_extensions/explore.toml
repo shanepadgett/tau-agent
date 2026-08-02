@@ -290,6 +290,9 @@ read = [
   "packages/agent/extensions/explore/settings.ts",
   "packages/agent/shared/tool-row-state.ts",
   "packages/agent/shared/settings/load.ts",
+  "packages/agent/src/ast/identity.ts",
+  "packages/agent/src/ast/ir.ts",
+  "packages/agent/src/ast/query.ts",
   "packages/agent/src/ast/queries/composite-target.ts",
   "packages/agent/src/ast/queries/context.ts",
   "packages/agent/src/ast/queries/impact.ts",
@@ -303,6 +306,7 @@ show = [
   { path = "packages/agent/shared/temporary-output-store.ts", name = "TemporaryOutputStore" },
   { path = "packages/agent/src/ast/engine.ts", name = "ExploreEngine" },
   { path = "packages/agent/src/ast/graph/file-graph.ts", name = "ExploreFileGraph" },
+  { path = "packages/agent/src/ast/graph/relationships.ts", name = "queryRelationships" },
 ]
 outline = []
 references = [
@@ -310,9 +314,6 @@ references = [
   "packages/agent/shared/temporary-output-store.ts",
   "packages/agent/src/ast/engine.ts",
   "packages/agent/src/ast/graph/file-graph.ts",
-  "packages/agent/src/ast/graph/relationships.ts",
-  "packages/agent/src/ast/identity.ts",
-  "packages/agent/src/ast/ir.ts",
   "packages/agent/src/ast/slice.ts",
   "packages/agent/src/ast/traverse.ts",
   "packages/agent/test/extensions/explore/context-pack.test.ts",

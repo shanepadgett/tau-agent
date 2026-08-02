@@ -146,6 +146,53 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		attentionHoldId = undefined;
 	});
 
+	async function collectCommandFailures(
+		projectRoot: string,
+		changed: readonly CommandConfig[],
+		notify: (message: string, type?: "info" | "warning" | "error") => void,
+	): Promise<FailedCommandDetails[] | undefined> {
+		const failures: FailedCommandDetails[] = [];
+		const controller = new AbortController();
+		abortController = controller;
+		try {
+			for (const command of changed) {
+				if (changed.length > 1) notify(`silent-command-runner: running ${command.name}`, "info");
+				let result: FailedCommandDetails;
+				try {
+					result = await runCommand(pi, projectRoot, command, controller.signal, settings.maxOutputBytes);
+				} catch (error: unknown) {
+					if (controller.signal.aborted) return undefined;
+					throw error;
+				}
+				if (controller.signal.aborted) return undefined;
+				if (result.code !== 0 || result.killed) failures.push(result);
+			}
+		} finally {
+			if (abortController === controller) abortController = undefined;
+		}
+		return failures;
+	}
+
+	function reportCommandResults(
+		changed: readonly CommandConfig[],
+		failures: readonly FailedCommandDetails[],
+		notify: (message: string, type?: "info" | "warning" | "error") => void,
+	): void {
+		const failedNames = new Set(failures.map((failure) => failure.name));
+		const passed = changed.filter((command) => !failedNames.has(command.name));
+		if (passed.length > 0) notify(`silent-command-runner: passed ${formatCommandNames(passed)}`, "info");
+		if (failures.length === 0) return;
+		pi.sendMessage<FailureDetails>(
+			{
+				customType: MESSAGE_TYPE,
+				content: formatAgentMessage(failures),
+				display: true,
+				details: { failed: [...failures] },
+			},
+			{ deliverAs: "followUp" },
+		);
+	}
+
 	async function runChangedCommands(
 		cwd: string,
 		turnStart: number,
@@ -165,41 +212,9 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			"info",
 		);
 
-		const failures: FailedCommandDetails[] = [];
-		const controller = new AbortController();
-		abortController = controller;
-		try {
-			for (const command of changed) {
-				if (changed.length > 1) notify(`silent-command-runner: running ${command.name}`, "info");
-				let result: FailedCommandDetails;
-				try {
-					result = await runCommand(pi, projectRoot, command, controller.signal, settings.maxOutputBytes);
-				} catch (error: unknown) {
-					if (controller.signal.aborted) return;
-					throw error;
-				}
-				if (controller.signal.aborted) return;
-				if (result.code !== 0 || result.killed) failures.push(result);
-			}
-		} finally {
-			if (abortController === controller) abortController = undefined;
-		}
-		if (!sessionActive) return;
-
-		const failedNames = new Set(failures.map((failure) => failure.name));
-		const passed = changed.filter((command) => !failedNames.has(command.name));
-		if (passed.length > 0) notify(`silent-command-runner: passed ${formatCommandNames(passed)}`, "info");
-		if (failures.length === 0) return;
-
-		pi.sendMessage<FailureDetails>(
-			{
-				customType: MESSAGE_TYPE,
-				content: formatAgentMessage(failures),
-				display: true,
-				details: { failed: failures },
-			},
-			{ deliverAs: "followUp" },
-		);
+		const failures = await collectCommandFailures(projectRoot, changed, notify);
+		if (failures === undefined || !sessionActive) return;
+		reportCommandResults(changed, failures, notify);
 	}
 }
 

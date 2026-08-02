@@ -230,19 +230,32 @@ async function stageUpdate(cwd: string, op: Extract<PatchOperation, { type: "upd
 	};
 }
 
+function operationPaths(cwd: string, op: PatchOperation): string[] {
+	const paths = [resolvePath(cwd, op.path)];
+	if (op.type === "update" && op.movePath) paths.push(resolvePath(cwd, op.movePath));
+	return paths;
+}
+
+function recordPathSection(
+	pathSections: Map<string, number[]>,
+	displayPaths: Map<string, string>,
+	path: string,
+	sectionIndex: number,
+	displayPath: string,
+): void {
+	const existing = pathSections.get(path) ?? [];
+	existing.push(sectionIndex);
+	pathSections.set(path, existing);
+	if (!displayPaths.has(path)) displayPaths.set(path, displayPath);
+}
+
 function collectDupPathFailures(cwd: string, operations: PatchOperation[]): PatchFailure[] {
 	const pathSections = new Map<string, number[]>();
 	const displayPaths = new Map<string, string>();
 
 	for (const op of operations) {
-		const paths = [resolvePath(cwd, op.path)];
-		if (op.type === "update" && op.movePath) paths.push(resolvePath(cwd, op.movePath));
-
-		for (const p of paths) {
-			const existing = pathSections.get(p) ?? [];
-			existing.push(op.sectionIndex);
-			pathSections.set(p, existing);
-			if (!displayPaths.has(p)) displayPaths.set(p, op.path);
+		for (const path of operationPaths(cwd, op)) {
+			recordPathSection(pathSections, displayPaths, path, op.sectionIndex, op.path);
 		}
 	}
 
@@ -272,12 +285,77 @@ function withMutationQueuePaths<T>(paths: string[], fn: () => Promise<T>): Promi
 	return current();
 }
 
-export async function applyExactSourceMutations(
+function displayPathFor(cwd: string, absolutePath: string): string {
+	const displayPath = relative(resolve(cwd), absolutePath);
+	return displayPath.startsWith("..") || isAbsolute(displayPath) ? absolutePath : displayPath;
+}
+
+async function stageExactSourceMutation(
 	cwd: string,
-	mutations: readonly ExactSourceMutation[],
+	mutation: ExactSourceMutation,
+	sectionIndex: number,
+	signal?: AbortSignal,
+): Promise<{ mutation: ExactSourceMutation; change: ApplyPatchChange }> {
+	throwIfAborted(signal);
+	await assertExistingFile(mutation.path, mutation.path);
+	const canonical = await realpath(mutation.path);
+	if (canonical !== mutation.path) {
+		throw new Error(`Exact-source mutation path is not canonical: ${mutation.path}`);
+	}
+	const current = await readUtf8(mutation.path, mutation.path);
+	const currentFingerprint = fingerprint(current);
+	if (currentFingerprint !== mutation.expectedFingerprint) {
+		throw new Error(
+			`Source changed before exact-source mutation for ${mutation.path}; expected ${mutation.expectedFingerprint}, found ${currentFingerprint}.`,
+		);
+	}
+	const lineCount = countLogicalLines(mutation.source);
+	return {
+		mutation,
+		change: {
+			sectionIndex,
+			kind: "update",
+			path: displayPathFor(cwd, mutation.path),
+			linesAdded: lineCount,
+			linesRemoved: countLogicalLines(current),
+			resultingFingerprint: fingerprint(mutation.source),
+			snapshotRanges: lineCount > 0 ? [{ startLine: 1, endLine: Math.min(lineCount, 120) }] : undefined,
+		},
+	};
+}
+
+async function commitExactSourceMutations(
+	staged: Array<{ mutation: ExactSourceMutation; change: ApplyPatchChange }>,
 	signal?: AbortSignal,
 ): Promise<ApplyPatchSummary> {
 	throwIfAborted(signal);
+	const changes: ApplyPatchChange[] = [];
+	for (const { mutation, change } of staged) {
+		try {
+			throwIfAborted(signal);
+			await writeFile(mutation.path, mutation.source, "utf8");
+			changes.push(change);
+		} catch (error) {
+			return {
+				status: changes.length === 0 ? "failed" : "partial",
+				changes,
+				failures: [
+					{
+						phase: "apply",
+						sectionIndex: change.sectionIndex,
+						path: change.path,
+						kind: "update",
+						message: error instanceof Error ? error.message : String(error),
+					},
+				],
+				totalSections: staged.length,
+			};
+		}
+	}
+	return { status: "completed", changes, failures: [], totalSections: staged.length };
+}
+
+function orderExactSourceMutations(cwd: string, mutations: readonly ExactSourceMutation[]): ExactSourceMutation[] {
 	if (mutations.length === 0) throw new Error("Exact-source mutation requires at least one file.");
 	const byPath = new Map<string, ExactSourceMutation>();
 	for (const mutation of mutations) {
@@ -285,69 +363,113 @@ export async function applyExactSourceMutations(
 		if (byPath.has(path)) throw new Error(`Conflicting exact-source mutations for path: ${mutation.path}`);
 		byPath.set(path, { ...mutation, path });
 	}
-	const ordered = [...byPath.values()].sort((left, right) => left.path.localeCompare(right.path));
+	return [...byPath.values()].sort((left, right) => left.path.localeCompare(right.path));
+}
 
+export async function applyExactSourceMutations(
+	cwd: string,
+	mutations: readonly ExactSourceMutation[],
+	signal?: AbortSignal,
+): Promise<ApplyPatchSummary> {
+	throwIfAborted(signal);
+	const ordered = orderExactSourceMutations(cwd, mutations);
 	return withMutationQueuePaths(
 		ordered.map((mutation) => mutation.path),
 		async () => {
 			const staged: Array<{ mutation: ExactSourceMutation; change: ApplyPatchChange }> = [];
 			for (const [sectionIndex, mutation] of ordered.entries()) {
-				throwIfAborted(signal);
-				await assertExistingFile(mutation.path, mutation.path);
-				const canonical = await realpath(mutation.path);
-				if (canonical !== mutation.path) {
-					throw new Error(`Exact-source mutation path is not canonical: ${mutation.path}`);
-				}
-				const current = await readUtf8(mutation.path, mutation.path);
-				const currentFingerprint = fingerprint(current);
-				if (currentFingerprint !== mutation.expectedFingerprint) {
-					throw new Error(
-						`Source changed before exact-source mutation for ${mutation.path}; expected ${mutation.expectedFingerprint}, found ${currentFingerprint}.`,
-					);
-				}
-				const displayPath = relative(resolve(cwd), mutation.path);
-				const lineCount = countLogicalLines(mutation.source);
-				staged.push({
-					mutation,
-					change: {
-						sectionIndex,
-						kind: "update",
-						path: displayPath.startsWith("..") || isAbsolute(displayPath) ? mutation.path : displayPath,
-						linesAdded: lineCount,
-						linesRemoved: countLogicalLines(current),
-						resultingFingerprint: fingerprint(mutation.source),
-						snapshotRanges: lineCount > 0 ? [{ startLine: 1, endLine: Math.min(lineCount, 120) }] : undefined,
-					},
-				});
+				staged.push(await stageExactSourceMutation(cwd, mutation, sectionIndex, signal));
 			}
-
-			throwIfAborted(signal);
-			const changes: ApplyPatchChange[] = [];
-			for (const { mutation, change } of staged) {
-				try {
-					throwIfAborted(signal);
-					await writeFile(mutation.path, mutation.source, "utf8");
-					changes.push(change);
-				} catch (error) {
-					return {
-						status: changes.length === 0 ? "failed" : "partial",
-						changes,
-						failures: [
-							{
-								phase: "apply",
-								sectionIndex: change.sectionIndex,
-								path: change.path,
-								kind: "update",
-								message: error instanceof Error ? error.message : String(error),
-							},
-						],
-						totalSections: staged.length,
-					};
-				}
-			}
-			return { status: "completed", changes, failures: [], totalSections: staged.length };
+			return commitExactSourceMutations(staged, signal);
 		},
 	);
+}
+
+function toApplyFailure(op: PatchOperation, error: unknown): PatchFailure {
+	const failure: PatchFailure = {
+		phase: "apply",
+		sectionIndex: op.sectionIndex,
+		path: op.path,
+		kind: op.type,
+		message: error instanceof Error ? error.message : String(error),
+	};
+	if (error instanceof UpdateChunkApplyError) {
+		failure.chunkIndex = error.chunkIndex;
+		failure.totalChunks = error.totalChunks;
+		failure.contextHint = error.contextHint;
+	}
+	return failure;
+}
+
+async function stageOperation(cwd: string, op: PatchOperation): Promise<StagedMutation> {
+	if (op.type === "add" || op.type === "replace") return stageWholeFile(cwd, op);
+	if (op.type === "delete") return stageDelete(cwd, op);
+	return stageUpdate(cwd, op);
+}
+
+async function stageRunnableOperations(
+	cwd: string,
+	operations: PatchOperation[],
+	initialFailures: PatchFailure[],
+): Promise<{ staged: StagedMutation[]; failures: PatchFailure[] }> {
+	const staged: StagedMutation[] = [];
+	const failures: PatchFailure[] = [...initialFailures];
+	for (const op of operations) {
+		try {
+			staged.push(await stageOperation(cwd, op));
+		} catch (error) {
+			if (error instanceof Error && error.message === "Operation aborted") throw error;
+			failures.push(toApplyFailure(op, error));
+		}
+	}
+	return { staged, failures };
+}
+
+async function commitStagedMutations(
+	staged: StagedMutation[],
+	failures: PatchFailure[],
+	totalSections: number,
+	signal: AbortSignal | undefined,
+	onProgress?: (summary: ApplyPatchSummary) => void | Promise<void>,
+): Promise<ApplyPatchSummary> {
+	if (staged.length === 0) {
+		const summary: ApplyPatchSummary = { status: "failed", changes: [], failures, totalSections };
+		await onProgress?.(summary);
+		return summary;
+	}
+
+	throwIfAborted(signal);
+	const changes: ApplyPatchChange[] = [];
+	for (const mutation of staged) {
+		try {
+			await mutation.commit();
+			changes.push(mutation.change);
+			await onProgress?.({ status: "partial", changes: [...changes], failures: [...failures], totalSections });
+		} catch (error) {
+			failures.push({
+				phase: "apply",
+				sectionIndex: mutation.change.sectionIndex,
+				path: mutation.change.path,
+				kind: mutation.change.kind,
+				message: error instanceof Error ? error.message : String(error),
+			});
+			const summary: ApplyPatchSummary = {
+				status: changes.length === 0 ? "failed" : "partial",
+				changes: [...changes],
+				failures: [...failures],
+				totalSections,
+			};
+			await onProgress?.(summary);
+			return summary;
+		}
+	}
+
+	return {
+		status: failures.length > 0 ? "partial" : "completed",
+		changes,
+		failures,
+		totalSections,
+	};
 }
 
 export async function applyPatch(
@@ -370,80 +492,13 @@ export async function applyPatch(
 		return summary;
 	}
 
-	const dupFailures = collectDupPathFailures(cwd, operations);
-	const initialFailures = [...parseFailures, ...dupFailures];
+	const initialFailures = [...parseFailures, ...collectDupPathFailures(cwd, operations)];
 	const blockedSections = new Set(initialFailures.map((failure) => failure.sectionIndex));
 	const runnableOperations = operations.filter((op) => !blockedSections.has(op.sectionIndex));
-
-	const queuePaths = runnableOperations.flatMap((op) => {
-		const paths = [resolvePath(cwd, op.path)];
-		if (op.type === "update" && op.movePath) paths.push(resolvePath(cwd, op.movePath));
-		return paths;
-	});
+	const queuePaths = runnableOperations.flatMap((op) => operationPaths(cwd, op));
 
 	return withMutationQueuePaths(queuePaths, async () => {
-		const staged: StagedMutation[] = [];
-		const failures: PatchFailure[] = [...initialFailures];
-
-		for (const op of runnableOperations) {
-			try {
-				if (op.type === "add" || op.type === "replace") staged.push(await stageWholeFile(cwd, op));
-				else if (op.type === "delete") staged.push(await stageDelete(cwd, op));
-				else staged.push(await stageUpdate(cwd, op));
-			} catch (error) {
-				if (error instanceof Error && error.message === "Operation aborted") throw error;
-				const failure: PatchFailure = {
-					phase: "apply",
-					sectionIndex: op.sectionIndex,
-					path: op.path,
-					kind: op.type,
-					message: error instanceof Error ? error.message : String(error),
-				};
-				if (error instanceof UpdateChunkApplyError) {
-					failure.chunkIndex = error.chunkIndex;
-					failure.totalChunks = error.totalChunks;
-					failure.contextHint = error.contextHint;
-				}
-				failures.push(failure);
-			}
-		}
-
-		if (staged.length === 0) {
-			const summary: ApplyPatchSummary = { status: "failed", changes: [], failures, totalSections };
-			await onProgress?.(summary);
-			return summary;
-		}
-
-		throwIfAborted(signal);
-
-		const changes: ApplyPatchChange[] = [];
-		for (const mutation of staged) {
-			try {
-				await mutation.commit();
-				changes.push(mutation.change);
-				await onProgress?.({ status: "partial", changes: [...changes], failures: [...failures], totalSections });
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				failures.push({
-					phase: "apply",
-					sectionIndex: mutation.change.sectionIndex,
-					path: mutation.change.path,
-					kind: mutation.change.kind,
-					message,
-				});
-				const status = changes.length === 0 ? "failed" : "partial";
-				const summary: ApplyPatchSummary = {
-					status,
-					changes: [...changes],
-					failures: [...failures],
-					totalSections,
-				};
-				await onProgress?.(summary);
-				return summary;
-			}
-		}
-
-		const status: ApplyPatchSummary["status"] = failures.length > 0 ? "partial" : "completed";
-		return { status, changes, failures, totalSections };
+		const { staged, failures } = await stageRunnableOperations(cwd, runnableOperations, initialFailures);
+		return commitStagedMutations(staged, failures, totalSections, signal, onProgress);
 	});
 }

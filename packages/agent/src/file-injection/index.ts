@@ -121,6 +121,44 @@ export async function prepareFileInjection(
 	return accepted ?? prepareFileInjectionWithHost(request, undefined);
 }
 
+type InjectionBase = Omit<FileInjectionDetails, "kind" | "status" | "error" | "readCache">;
+type InjectionKind = FileInjectionDetails["kind"];
+
+function injectionKind(mode: FileInjectionMode): InjectionKind {
+	if (mode === "outline") return "outline";
+	if (mode === "show") return "show";
+	return "full";
+}
+
+function buildInjectionBase(request: FileInjectionRequest, index: number, file: FileInjectionFile): InjectionBase {
+	const ranges = file.ranges === undefined ? undefined : normalizeLineRanges(file.ranges);
+	return {
+		v: 1,
+		rowId: `${request.batchId}:${index}`,
+		path: stripLeadingAt(file.path),
+		cwd: request.cwd,
+		source: request.source,
+		batchId: request.batchId,
+		...(ranges === undefined ? {} : { ranges }),
+		...(file.mode === "show" && file.name !== undefined ? { showName: file.name } : {}),
+		...(file.mode === "show" ? { showView: file.view ?? "declaration" } : {}),
+	};
+}
+
+function failedPreparedInjection(base: InjectionBase, kind: InjectionKind, message: string): PreparedFileInjection {
+	return {
+		customType: FILE_INJECTION_TYPE,
+		content: `${base.path}\nInjection failed: ${message}`,
+		display: true,
+		details: {
+			...base,
+			kind,
+			status: "failed",
+			error: message,
+		},
+	};
+}
+
 async function prepareFileInjectionWithHost(
 	request: FileInjectionRequest,
 	host: FileInjectionHost | undefined,
@@ -128,45 +166,25 @@ async function prepareFileInjectionWithHost(
 	const prepared: PreparedFileInjection[] = [];
 	for (const [index, file] of request.files.entries()) {
 		request.signal?.throwIfAborted();
-		const path = stripLeadingAt(file.path);
-		const common = {
-			v: 1 as const,
+		let base: InjectionBase = {
+			v: 1,
 			rowId: `${request.batchId}:${index}`,
-			path,
+			path: stripLeadingAt(file.path),
 			cwd: request.cwd,
 			source: request.source,
 			batchId: request.batchId,
 		};
-		let base: InjectionBase = common;
 		try {
-			const ranges = file.ranges === undefined ? undefined : normalizeLineRanges(file.ranges);
-			base = {
-				...common,
-				...(ranges === undefined ? {} : { ranges }),
-				...(file.mode === "show" && file.name !== undefined ? { showName: file.name } : {}),
-				...(file.mode === "show" ? { showView: file.view ?? "declaration" } : {}),
-			};
+			base = buildInjectionBase(request, index, file);
 			prepared.push(await prepareOne(base, file, request.signal, host));
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
 			if (request.signal?.aborted) throw error;
-			prepared.push({
-				customType: FILE_INJECTION_TYPE,
-				content: `${path}\nInjection failed: ${message}`,
-				display: true,
-				details: {
-					...base,
-					kind: file.mode === "outline" ? "outline" : file.mode === "show" ? "show" : "full",
-					status: "failed",
-					error: message,
-				},
-			});
+			const message = error instanceof Error ? error.message : String(error);
+			prepared.push(failedPreparedInjection(base, injectionKind(file.mode), message));
 		}
 	}
 	return prepared;
 }
-
-type InjectionBase = Omit<FileInjectionDetails, "kind" | "status" | "error" | "readCache">;
 
 async function prepareOne(
 	base: InjectionBase,
@@ -356,34 +374,36 @@ async function prepareLargeSourceOutline(
 	};
 }
 
-function parseDetails(value: unknown): FileInjectionDetails | undefined {
-	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-	const details = value as Record<string, unknown>;
+function isInjectionKind(value: unknown): value is InjectionKind {
+	return value === "full" || value === "outline" || value === "show";
+}
+
+function isInjectionStatus(value: unknown): value is FileInjectionDetails["status"] {
+	return value === "injected" || value === "failed";
+}
+
+function isShowView(value: unknown): value is ShowView {
+	return (
+		value === "signature" ||
+		value === "signatureWithDocs" ||
+		value === "declaration" ||
+		value === "declarationWithImports"
+	);
+}
+
+function parseRequiredBase(details: Record<string, unknown>): InjectionBase | undefined {
 	if (
 		details.v !== 1 ||
 		typeof details.rowId !== "string" ||
 		typeof details.path !== "string" ||
 		typeof details.cwd !== "string" ||
 		typeof details.source !== "string" ||
-		typeof details.batchId !== "string" ||
-		(details.kind !== "full" && details.kind !== "outline" && details.kind !== "show") ||
-		(details.status !== "injected" && details.status !== "failed")
-	)
+		typeof details.batchId !== "string"
+	) {
 		return undefined;
+	}
 	const ranges = details.ranges === undefined ? undefined : parseRanges(details.ranges);
 	if (details.ranges !== undefined && ranges === undefined) return undefined;
-	const showName = details.showName;
-	const showView = details.showView;
-	if (details.kind === "show") {
-		if (typeof showName !== "string" || showName.length === 0) return undefined;
-		if (
-			showView !== "signature" &&
-			showView !== "signatureWithDocs" &&
-			showView !== "declaration" &&
-			showView !== "declarationWithImports"
-		)
-			return undefined;
-	}
 	return {
 		v: 1,
 		rowId: details.rowId,
@@ -392,7 +412,28 @@ function parseDetails(value: unknown): FileInjectionDetails | undefined {
 		source: details.source,
 		batchId: details.batchId,
 		...(ranges === undefined ? {} : { ranges }),
-		...(details.kind === "show" ? { showName: showName as string, showView: showView as ShowView } : {}),
+	};
+}
+
+function parseDetails(value: unknown): FileInjectionDetails | undefined {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+	const details = value as Record<string, unknown>;
+	const base = parseRequiredBase(details);
+	if (!base || !isInjectionKind(details.kind) || !isInjectionStatus(details.status)) return undefined;
+	if (details.kind === "show") {
+		if (typeof details.showName !== "string" || details.showName.length === 0) return undefined;
+		if (!isShowView(details.showView)) return undefined;
+		return {
+			...base,
+			showName: details.showName,
+			showView: details.showView,
+			kind: "show",
+			status: details.status,
+			...(typeof details.error === "string" ? { error: details.error } : {}),
+		};
+	}
+	return {
+		...base,
 		kind: details.kind,
 		status: details.status,
 		...(typeof details.error === "string" ? { error: details.error } : {}),

@@ -70,38 +70,41 @@ export class ContextPanel implements Component {
 		this.panel = new ToolPanel(theme, this.config);
 	}
 
+	private handlePanelChromeKey(data: string): boolean {
+		const keys = getKeybindings();
+		const paths = this.currentPaths();
+		const pageSize = this.pathPageSize();
+		if (paths.length > pageSize && matchesKey(data, Key.alt("up"))) {
+			this.fileOffset = Math.max(0, this.fileOffset - pageSize);
+			return true;
+		}
+		if (paths.length > pageSize && matchesKey(data, Key.alt("down"))) {
+			this.fileOffset = Math.min(paths.length - pageSize, this.fileOffset + pageSize);
+			return true;
+		}
+		if (matchesKey(data, Key.ctrl("c"))) {
+			for (const [tab, tabList] of this.lists) {
+				tabList.setSelectedIds([]);
+				this.selected.set(tab, []);
+			}
+			return true;
+		}
+		if (keys.matches(data, "tui.select.confirm")) {
+			this.done([...this.selected.values()].flatMap((items) => [...items]));
+			return true;
+		}
+		if (keys.matches(data, "tui.select.cancel")) {
+			this.done(undefined);
+			return true;
+		}
+		return false;
+	}
+
 	handleInput(data: string): void {
 		const list = this.activeList();
-		if (!list?.isFilterFocused()) {
-			const keys = getKeybindings();
-			const paths = this.currentPaths();
-			const pageSize = this.pathPageSize();
-			if (paths.length > pageSize && matchesKey(data, Key.alt("up"))) {
-				this.fileOffset = Math.max(0, this.fileOffset - pageSize);
-				this.sync();
-				return;
-			}
-			if (paths.length > pageSize && matchesKey(data, Key.alt("down"))) {
-				this.fileOffset = Math.min(paths.length - pageSize, this.fileOffset + pageSize);
-				this.sync();
-				return;
-			}
-			if (matchesKey(data, Key.ctrl("c"))) {
-				for (const [tab, tabList] of this.lists) {
-					tabList.setSelectedIds([]);
-					this.selected.set(tab, []);
-				}
-				this.sync();
-				return;
-			}
-			if (keys.matches(data, "tui.select.confirm")) {
-				this.done([...this.selected.values()].flatMap((items) => [...items]));
-				return;
-			}
-			if (keys.matches(data, "tui.select.cancel")) {
-				this.done(undefined);
-				return;
-			}
+		if (!list?.isFilterFocused() && this.handlePanelChromeKey(data)) {
+			this.sync();
+			return;
 		}
 		this.tabs.handleInput(data);
 		const current = this.activeList()?.getCurrentItem() ?? this.current;

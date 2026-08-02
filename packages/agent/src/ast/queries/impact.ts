@@ -111,6 +111,46 @@ function fileRowsFromHits(hits: readonly FileDepHit[]): ImpactFileRow[] {
 	});
 }
 
+function noteFromError(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+function maybeFileSection(
+	id: ImpactSectionId,
+	label: string,
+	rows: ImpactFileRow[],
+	totalCount: number,
+	limitReached = false,
+): ImpactSection | undefined {
+	if (rows.length === 0) return undefined;
+	return {
+		id,
+		label,
+		rows,
+		limit: IMPACT_FILE_LIMIT,
+		omitted: totalCount > IMPACT_FILE_LIMIT || limitReached,
+	};
+}
+
+type SectionBatch = {
+	sections: ImpactSection[];
+	parseDegraded: boolean;
+	notes: string[];
+};
+
+function emptyBatch(): SectionBatch {
+	return { sections: [], parseDegraded: false, notes: [] };
+}
+
+function absorbRelationship(
+	batch: SectionBatch,
+	part: { section: ImpactSection | undefined; parseDegraded: boolean; note: string | undefined },
+): void {
+	if (part.section !== undefined) batch.sections.push(part.section);
+	if (part.parseDegraded) batch.parseDegraded = true;
+	if (part.note !== undefined) batch.notes.push(part.note);
+}
+
 async function relationshipSection(
 	args: ImpactQueryArgs,
 	op: "callees" | "callers",
@@ -150,12 +190,66 @@ async function relationshipSection(
 	return { section: undefined, parseDegraded: false, note: undefined };
 }
 
+async function collectDepsSections(args: ImpactQueryArgs, target: ImpactTarget): Promise<SectionBatch> {
+	const batch = emptyBatch();
+	absorbRelationship(batch, await relationshipSection(args, "callees", "callees", "callees", target));
+	try {
+		const edges = await args.graph.forwardEdges(target.path, args.signal);
+		const section = maybeFileSection("fileImports", "file imports", fileRowsFromEdges(edges), edges.length);
+		if (section !== undefined) batch.sections.push(section);
+	} catch (error) {
+		batch.notes.push(noteFromError(error));
+	}
+	return batch;
+}
+
+async function collectDependentsSections(
+	args: ImpactQueryArgs,
+	target: ImpactTarget,
+	depth: number,
+): Promise<SectionBatch> {
+	const batch = emptyBatch();
+	absorbRelationship(batch, await relationshipSection(args, "callers", "callers", "callers", target));
+	try {
+		const reverseLimit = IMPACT_SECTION_LIMIT * Math.max(depth, 1);
+		const reverse = await args.graph.reverseDeps(target.path, depth, reverseLimit, args.signal);
+		const importerHits = reverse.hits.filter((hit) => hit.depth === 1);
+		const importers = maybeFileSection(
+			"fileImporters",
+			"file importers",
+			fileRowsFromHits(importerHits),
+			importerHits.length,
+		);
+		if (importers !== undefined) batch.sections.push(importers);
+
+		if (depth >= 2) {
+			const transitiveHits = reverse.hits.filter((hit) => hit.depth >= 2 && hit.depth <= depth);
+			const transitive = maybeFileSection(
+				"transitiveDependents",
+				"transitive dependents",
+				fileRowsFromHits(transitiveHits),
+				transitiveHits.length,
+				reverse.resultLimitReached,
+			);
+			if (transitive !== undefined) batch.sections.push(transitive);
+		}
+	} catch (error) {
+		batch.notes.push(noteFromError(error));
+	}
+	return batch;
+}
+
+function mergeBatch(into: SectionBatch, part: SectionBatch): void {
+	into.sections.push(...part.sections);
+	if (part.parseDegraded) into.parseDegraded = true;
+	into.notes.push(...part.notes);
+}
+
 /**
  * Blast radius composite: symbol callees/callers + file imports/importers + transitive file dependents.
  * Symbol hops are depth 1 only; `depth` applies to reverse file BFS only.
  */
 export async function queryImpact(args: ImpactQueryArgs): Promise<ImpactResult> {
-	const { graph, signal } = args;
 	if (args.depth < 1) {
 		return { kind: "error", message: "depth must be >= 1" };
 	}
@@ -168,85 +262,30 @@ export async function queryImpact(args: ImpactQueryArgs): Promise<ImpactResult> 
 		args.name,
 		args.line,
 		"impact",
-		signal,
+		args.signal,
 	);
 	if (resolved.kind !== "resolved") return resolved;
 
 	const target = resolved.value.target;
 	const mode = args.mode;
-	const wantDeps = mode === "all" || mode === "deps";
-	const wantDependents = mode === "all" || mode === "dependents";
-	const sections: ImpactSection[] = [];
-	const notes: string[] = [];
-	let parseDegraded = resolved.value.parseDegraded;
+	const batch: SectionBatch = {
+		sections: [],
+		parseDegraded: resolved.value.parseDegraded,
+		notes: [],
+	};
 
-	if (wantDeps) {
-		const callees = await relationshipSection(args, "callees", "callees", "callees", target);
-		if (callees.section !== undefined) sections.push(callees.section);
-		if (callees.parseDegraded) parseDegraded = true;
-		if (callees.note !== undefined) notes.push(callees.note);
-
-		try {
-			const edges = await graph.forwardEdges(target.path, signal);
-			const rows = fileRowsFromEdges(edges);
-			if (rows.length > 0) {
-				sections.push({
-					id: "fileImports",
-					label: "file imports",
-					rows,
-					limit: IMPACT_FILE_LIMIT,
-					omitted: edges.length > IMPACT_FILE_LIMIT,
-				});
-			}
-		} catch (error) {
-			notes.push(error instanceof Error ? error.message : String(error));
-		}
+	if (mode === "all" || mode === "deps") {
+		mergeBatch(batch, await collectDepsSections(args, target));
 	}
-
-	if (wantDependents) {
-		const callers = await relationshipSection(args, "callers", "callers", "callers", target);
-		if (callers.section !== undefined) sections.push(callers.section);
-		if (callers.parseDegraded) parseDegraded = true;
-		if (callers.note !== undefined) notes.push(callers.note);
-
-		try {
-			const reverseLimit = IMPACT_SECTION_LIMIT * Math.max(depth, 1);
-			const reverse = await graph.reverseDeps(target.path, depth, reverseLimit, signal);
-			const importerHits = reverse.hits.filter((hit) => hit.depth === 1);
-			const importers = fileRowsFromHits(importerHits);
-			if (importers.length > 0) {
-				sections.push({
-					id: "fileImporters",
-					label: "file importers",
-					rows: importers,
-					limit: IMPACT_FILE_LIMIT,
-					omitted: importerHits.length > IMPACT_FILE_LIMIT,
-				});
-			}
-
-			if (depth >= 2) {
-				const transitiveHits = reverse.hits.filter((hit) => hit.depth >= 2 && hit.depth <= depth);
-				const transitive = fileRowsFromHits(transitiveHits);
-				if (transitive.length > 0) {
-					sections.push({
-						id: "transitiveDependents",
-						label: "transitive dependents",
-						rows: transitive,
-						limit: IMPACT_FILE_LIMIT,
-						omitted: transitiveHits.length > IMPACT_FILE_LIMIT || reverse.resultLimitReached,
-					});
-				}
-			}
-		} catch (error) {
-			notes.push(error instanceof Error ? error.message : String(error));
-		}
+	if (mode === "all" || mode === "dependents") {
+		mergeBatch(batch, await collectDependentsSections(args, target, depth));
 	}
 
 	return {
 		kind: "resolved",
 		target,
-		sections,
-		parseDegraded,
-		notes: [...new Set(notes)],
+		sections: batch.sections,
+		parseDegraded: batch.parseDegraded,
+		notes: [...new Set(batch.notes)],
 	};
 }

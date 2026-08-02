@@ -220,6 +220,68 @@ Delegate one focused task per call. Children do not inherit parent messages. Inc
 Scout only for substantial multi-hop lookup that would flood parent context. Skip few known-path reads, single declaration lookups, or small digs with most evidence already in hand; use tools directly. When uncertain, dig yourself.`;
 		return { systemPrompt: `${event.systemPrompt}\n\n${prompt}` };
 	});
+	const resolveFreshSubagentDefinition = async (ctx: ExtensionContext, agent: string) => {
+		const discovery = await discoverAgents(ctx.cwd, ctx.isProjectTrusted());
+		warn(discovery, ctx);
+		const definition = discovery.agents.get(agent);
+		const invalid = discovery.invalid.get(agent);
+		if (!definition) {
+			const reason = invalid?.map((item) => item.reason).join("; ") ?? "unknown agent";
+			const names = (await parentVisibleAgents(ctx, discovery)).map((item) => item.name).join(", ") || "none";
+			return {
+				ok: false as const,
+				phase: "discovery" as const,
+				error: `Agent ${agent} discovery failed: ${reason}. Runnable agents: ${names}`,
+			};
+		}
+		const disabled = await disabledAgentNames(ctx);
+		if (disabled.effective.has(definition.name)) {
+			const source = disabled.configured.has(definition.name) ? "in Tau settings" : "for this session";
+			return {
+				ok: false as const,
+				phase: "discovery" as const,
+				error: `Agent ${definition.name} is disabled ${source}.`,
+			};
+		}
+		if (definition.name === "context-sync") {
+			const sync = (await loadTauExtensionSettings(ctx, contextSettings)).sync;
+			if (!sync.enabled) {
+				return { ok: false as const, phase: "discovery" as const, error: "Context sync is disabled in settings." };
+			}
+			if (!sync.automation) {
+				return {
+					ok: false as const,
+					phase: "discovery" as const,
+					error: "Context-sync automation is disabled. Use /context-sync or enable extensions.context.sync.automation.",
+				};
+			}
+		}
+		return { ok: true as const, definition };
+	};
+
+	const disabledContinuationResult = async (
+		ctx: ExtensionContext,
+		threadKey: string | undefined,
+		task: string,
+		parentModel: string,
+		parentThinking: ReturnType<ExtensionAPI["getThinkingLevel"]>,
+	) => {
+		const thread = runtime.listThreads(ctx.cwd).find((item) => item.id === threadKey);
+		if (!thread) return undefined;
+		const disabled = await disabledAgentNames(ctx);
+		if (!disabled.effective.has(thread.definition.name)) return undefined;
+		const source = disabled.configured.has(thread.definition.name) ? "in Tau settings" : "for this session";
+		return failedToolResult(
+			thread.definition.name,
+			task,
+			"discovery",
+			parentModel,
+			parentThinking,
+			`Agent ${thread.definition.name} is disabled ${source}.`,
+			threadKey,
+		);
+	};
+
 	pi.registerTool(
 		defineTool<typeof params, SubagentDetails>({
 			name: "subagent",
@@ -251,24 +313,14 @@ Scout only for substantial multi-hop lookup that would flood parent context. Ski
 				}
 
 				if (continuing) {
-					const thread = runtime.listThreads(ctx.cwd).find((item) => item.id === threadKey);
-					if (thread) {
-						const disabled = await disabledAgentNames(ctx);
-						if (disabled.effective.has(thread.definition.name)) {
-							const source = disabled.configured.has(thread.definition.name)
-								? "in Tau settings"
-								: "for this session";
-							return failedToolResult(
-								thread.definition.name,
-								task,
-								"discovery",
-								parentModel,
-								parentThinking,
-								`Agent ${thread.definition.name} is disabled ${source}.`,
-								threadKey,
-							);
-						}
-					}
+					const disabledContinuation = await disabledContinuationResult(
+						ctx,
+						threadKey,
+						task,
+						parentModel,
+						parentThinking,
+					);
+					if (disabledContinuation) return disabledContinuation;
 				}
 
 				return runtime.execute({
@@ -291,41 +343,7 @@ Scout only for substantial multi-hop lookup that would flood parent context. Ski
 							],
 							details,
 						}),
-					resolveFreshDefinition: async () => {
-						const discovery = await discoverAgents(ctx.cwd, ctx.isProjectTrusted());
-						warn(discovery, ctx);
-						const definition = discovery.agents.get(agent);
-						const invalid = discovery.invalid.get(agent);
-						if (!definition) {
-							const reason = invalid?.map((item) => item.reason).join("; ") ?? "unknown agent";
-							const names =
-								(await parentVisibleAgents(ctx, discovery)).map((item) => item.name).join(", ") || "none";
-							return {
-								ok: false,
-								phase: "discovery",
-								error: `Agent ${agent} discovery failed: ${reason}. Runnable agents: ${names}`,
-							};
-						}
-						const disabled = await disabledAgentNames(ctx);
-						if (disabled.effective.has(definition.name)) {
-							const source = disabled.configured.has(definition.name) ? "in Tau settings" : "for this session";
-							return { ok: false, phase: "discovery", error: `Agent ${definition.name} is disabled ${source}.` };
-						}
-						if (definition.name === "context-sync") {
-							const sync = (await loadTauExtensionSettings(ctx, contextSettings)).sync;
-							if (!sync.enabled) {
-								return { ok: false, phase: "discovery", error: "Context sync is disabled in settings." };
-							}
-							if (!sync.automation) {
-								return {
-									ok: false,
-									phase: "discovery",
-									error: "Context-sync automation is disabled. Use /context-sync or enable extensions.context.sync.automation.",
-								};
-							}
-						}
-						return { ok: true, definition };
-					},
+					resolveFreshDefinition: () => resolveFreshSubagentDefinition(ctx, agent),
 				});
 			},
 			renderCall(args, theme, context) {

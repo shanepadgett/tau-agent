@@ -32,6 +32,61 @@ export interface IsolatedSessionResource {
 	dispose(): Promise<void>;
 }
 
+type ModelAuth = Awaited<ReturnType<ExtensionContext["modelRegistry"]["getApiKeyAndHeaders"]>>;
+
+async function tryPreferredModel(
+	ctx: ExtensionContext,
+	preferredModel: string,
+	onWarning?: (warning: string) => void,
+): Promise<{ model: SelectedModel; auth: ModelAuth } | undefined> {
+	const separator = preferredModel.indexOf("/");
+	const configured = ctx.modelRegistry.find(preferredModel.slice(0, separator), preferredModel.slice(separator + 1));
+	if (!configured) {
+		onWarning?.(`model ${preferredModel} is unavailable; using parent model`);
+		return undefined;
+	}
+	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(configured);
+	if (!auth.ok) {
+		onWarning?.(`model ${preferredModel} is unavailable: ${auth.error}; using parent model`);
+		return undefined;
+	}
+	return { model: configured, auth };
+}
+
+function thinkingSupported(
+	model: SelectedModel | undefined,
+	preferred: IsolatedSessionThinkingLevel,
+): preferred is IsolatedSessionThinkingLevel {
+	const mapped = model?.thinkingLevelMap?.[preferred];
+	if (!model?.reasoning || mapped === null) return false;
+	if ((preferred === "xhigh" || preferred === "max") && mapped === undefined) return false;
+	return true;
+}
+
+function resolveThinkingLevel(
+	model: SelectedModel | undefined,
+	parentThinkingLevel: IsolatedSessionThinkingLevel,
+	preferredThinkingLevel: IsolatedSessionThinkingLevel | undefined,
+	allowPreferred: boolean,
+	onWarning?: (warning: string) => void,
+): IsolatedSessionThinkingLevel {
+	if (!preferredThinkingLevel || !allowPreferred) return parentThinkingLevel;
+	if (thinkingSupported(model, preferredThinkingLevel)) return preferredThinkingLevel;
+	onWarning?.(`thinking ${preferredThinkingLevel} is unavailable for the selected model; using parent thinking`);
+	return parentThinkingLevel;
+}
+
+function runtimeApiKeyFor(
+	ctx: ExtensionContext,
+	model: SelectedModel,
+	provider: SelectedProvider,
+	auth: ModelAuth,
+): string | undefined {
+	if (!auth.ok) return undefined;
+	if (!(auth.apiKey && provider.auth.apiKey && !ctx.modelRegistry.isUsingOAuth(model))) return undefined;
+	return auth.apiKey;
+}
+
 export async function resolveIsolatedSessionModel(options: {
 	label: string;
 	preferredModel: string | undefined;
@@ -44,37 +99,25 @@ export async function resolveIsolatedSessionModel(options: {
 }): Promise<Pick<IsolatedSessionInputs, "model" | "provider" | "runtimeApiKey" | "thinkingLevel">> {
 	const { ctx, signal, onWarning } = options;
 	let model = ctx.model;
-	let thinkingLevel = options.parentThinkingLevel;
+	let selectedAuth: ModelAuth | undefined;
 	let preferredModelSelected = false;
-	let selectedAuth: Awaited<ReturnType<ExtensionContext["modelRegistry"]["getApiKeyAndHeaders"]>> | undefined;
+
 	if (options.preferredModel) {
-		const separator = options.preferredModel.indexOf("/");
-		const configured = ctx.modelRegistry.find(
-			options.preferredModel.slice(0, separator),
-			options.preferredModel.slice(separator + 1),
-		);
-		if (!configured) onWarning?.(`model ${options.preferredModel} is unavailable; using parent model`);
-		else {
-			const auth = await ctx.modelRegistry.getApiKeyAndHeaders(configured);
-			if (!auth.ok) onWarning?.(`model ${options.preferredModel} is unavailable: ${auth.error}; using parent model`);
-			else {
-				model = configured;
-				selectedAuth = auth;
-				preferredModelSelected = true;
-			}
+		const preferred = await tryPreferredModel(ctx, options.preferredModel, onWarning);
+		if (preferred) {
+			model = preferred.model;
+			selectedAuth = preferred.auth;
+			preferredModelSelected = true;
 		}
 	}
-	if (options.preferredThinkingLevel && (preferredModelSelected || options.usePreferredThinkingAfterModelFallback)) {
-		const preferred = options.preferredThinkingLevel;
-		const mapped = model?.thinkingLevelMap?.[preferred];
-		const unsupported =
-			!model?.reasoning ||
-			mapped === null ||
-			((preferred === "xhigh" || preferred === "max") && mapped === undefined);
-		if (unsupported)
-			onWarning?.(`thinking ${preferred} is unavailable for the selected model; using parent thinking`);
-		else thinkingLevel = preferred;
-	}
+
+	const thinkingLevel = resolveThinkingLevel(
+		model,
+		options.parentThinkingLevel,
+		options.preferredThinkingLevel,
+		preferredModelSelected || options.usePreferredThinkingAfterModelFallback,
+		onWarning,
+	);
 	if (!model) throw new Error(`${options.label} startup failed: parent has no model`);
 	const auth = selectedAuth ?? (await ctx.modelRegistry.getApiKeyAndHeaders(model));
 	if (!auth.ok) throw new Error(`${options.label} startup failed: ${auth.error}`);
@@ -84,8 +127,7 @@ export async function resolveIsolatedSessionModel(options: {
 	return {
 		model,
 		provider,
-		runtimeApiKey:
-			auth.apiKey && provider.auth.apiKey && !ctx.modelRegistry.isUsingOAuth(model) ? auth.apiKey : undefined,
+		runtimeApiKey: runtimeApiKeyFor(ctx, model, provider, auth),
 		thinkingLevel,
 	};
 }

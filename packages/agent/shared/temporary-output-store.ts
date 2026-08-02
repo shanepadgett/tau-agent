@@ -178,6 +178,20 @@ export class TemporaryOutputStore {
 		this.active.delete(writer);
 	}
 
+	private async isRemovableOrphan(path: string): Promise<boolean> {
+		const metadata = await stat(path);
+		if (Date.now() - metadata.mtimeMs < this.orphanLifetimeMs) return false;
+		const marker = JSON.parse(await readFile(join(path, OWNER_FILE), "utf8")) as Partial<OwnerMarker>;
+		if (marker.kind !== "tau-tool-output" || marker.version !== 1 || typeof marker.pid !== "number") return false;
+		try {
+			process.kill(marker.pid, 0);
+			return false;
+		} catch (error) {
+			if (!isErrorCode(error, "ESRCH")) return false;
+		}
+		return true;
+	}
+
 	private async removeStaleOrphans(): Promise<void> {
 		let directory;
 		try {
@@ -189,16 +203,7 @@ export class TemporaryOutputStore {
 			if (!entry.isDirectory() || !entry.name.startsWith(DIRECTORY_PREFIX)) continue;
 			const path = join(this.baseDirectory, entry.name);
 			try {
-				const metadata = await stat(path);
-				if (Date.now() - metadata.mtimeMs < this.orphanLifetimeMs) continue;
-				const marker = JSON.parse(await readFile(join(path, OWNER_FILE), "utf8")) as Partial<OwnerMarker>;
-				if (marker.kind !== "tau-tool-output" || marker.version !== 1 || typeof marker.pid !== "number") continue;
-				try {
-					process.kill(marker.pid, 0);
-					continue;
-				} catch (error) {
-					if (!isErrorCode(error, "ESRCH")) continue;
-				}
+				if (!(await this.isRemovableOrphan(path))) continue;
 				await rm(path, { recursive: true, force: true });
 			} catch {
 				// An untrusted or concurrently changing directory is not ours to remove.

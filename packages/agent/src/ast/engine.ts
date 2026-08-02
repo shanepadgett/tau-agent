@@ -95,6 +95,40 @@ function pinById(id: string): GrammarPin {
 	return pin;
 }
 
+function isMetaVarStart(c: string): boolean {
+	return (c >= "A" && c <= "Z") || c === "_";
+}
+
+function isMetaVarContinue(c: string): boolean {
+	return isMetaVarStart(c) || (c >= "0" && c <= "9");
+}
+
+function pushUniqueName(list: string[], name: string): void {
+	if (!list.includes(name)) list.push(name);
+}
+
+/** Read `$NAME` / `$$$NAME` starting at `start` (must point at `$`). */
+function readMetaVarAt(pattern: string, start: number): { dollars: number; name: string; next: number } {
+	let i = start;
+	let dollars = 0;
+	while (i < pattern.length && pattern[i] === "$") {
+		dollars += 1;
+		i += 1;
+	}
+	let name = "";
+	while (i < pattern.length) {
+		const c = pattern[i];
+		if (c === undefined) break;
+		if ((name.length === 0 && isMetaVarStart(c)) || (name.length > 0 && isMetaVarContinue(c))) {
+			name += c;
+			i += 1;
+			continue;
+		}
+		break;
+	}
+	return { dollars, name, next: i };
+}
+
 /** ast-grep metavars: `$NAME` one node, `$$$NAME` sibling sequence. Skip `$_`. */
 function metaVarNames(pattern: string): { singles: string[]; multis: string[] } {
 	const singles: string[] = [];
@@ -105,30 +139,11 @@ function metaVarNames(pattern: string): { singles: string[]; multis: string[] } 
 			i += 1;
 			continue;
 		}
-		let dollars = 0;
-		while (i < pattern.length && pattern[i] === "$") {
-			dollars += 1;
-			i += 1;
-		}
-		let name = "";
-		while (i < pattern.length) {
-			const c = pattern[i];
-			if (c === undefined) break;
-			const isAlpha = (c >= "A" && c <= "Z") || c === "_";
-			const isAlnum = isAlpha || (c >= "0" && c <= "9");
-			if ((name.length === 0 && isAlpha) || (name.length > 0 && isAlnum)) {
-				name += c;
-				i += 1;
-				continue;
-			}
-			break;
-		}
+		const { dollars, name, next } = readMetaVarAt(pattern, i);
+		i = next;
 		if (name.length === 0 || name === "_") continue;
-		if (dollars >= 3) {
-			if (!multis.includes(name)) multis.push(name);
-		} else if (dollars === 1) {
-			if (!singles.includes(name)) singles.push(name);
-		}
+		if (dollars >= 3) pushUniqueName(multis, name);
+		else if (dollars === 1) pushUniqueName(singles, name);
 	}
 	return { singles, multis };
 }

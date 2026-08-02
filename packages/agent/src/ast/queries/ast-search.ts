@@ -1,5 +1,5 @@
 import { lstat, readFile } from "node:fs/promises";
-import type { AstSearchHit, ExploreEngine } from "../engine.ts";
+import type { AstSearchHit, ExploreEngine, FileSource } from "../engine.ts";
 import type { Decl, DeclKind, FileIr } from "../ir.ts";
 import { walkDecls } from "../query.ts";
 import { scanSources, type ScanOutcome } from "../scan.ts";
@@ -32,32 +32,39 @@ function assertPattern(pattern: string): void {
 	}
 }
 
+function requireSearchSupport(supportsSearch: boolean, label: string): void {
+	if (!supportsSearch) {
+		throw new Error(`Language does not support structural search: ${label}`);
+	}
+}
+
+function pathLanguageId(engine: ExploreEngine, absolutePath: string): string {
+	const byPath = engine.registry.adapterForPath(absolutePath);
+	if (byPath === undefined) {
+		throw new Error(`Unsupported language for path: ${formatPathForDisplay(absolutePath, engine.cwd)}`);
+	}
+	return byPath.id;
+}
+
 function resolveLanguageId(
 	engine: ExploreEngine,
 	language: string | undefined,
 	absolutePath: string | undefined,
 	isDirectory: boolean,
 ): string {
-	if (isDirectory) {
-		if (language === undefined || language.length === 0) {
-			throw new Error("language is required for directory targets");
-		}
+	if (isDirectory && (language === undefined || language.length === 0)) {
+		throw new Error("language is required for directory targets");
 	}
 	if (language !== undefined && language.length > 0) {
 		const adapter = engine.registry.adapterForId(language);
 		if (adapter === undefined) {
 			throw new Error(`Unregistered language: ${language}`);
 		}
-		if (!adapter.capabilities.search) {
-			throw new Error(`Language does not support structural search: ${language}`);
-		}
+		requireSearchSupport(adapter.capabilities.search, language);
 		if (absolutePath !== undefined && !isDirectory) {
-			const byPath = engine.registry.adapterForPath(absolutePath);
-			if (byPath === undefined) {
-				throw new Error(`Unsupported language for path: ${formatPathForDisplay(absolutePath, engine.cwd)}`);
-			}
-			if (byPath.id !== language) {
-				throw new Error(`language mismatch: path is ${byPath.id}, requested ${language}`);
+			const pathId = pathLanguageId(engine, absolutePath);
+			if (pathId !== language) {
+				throw new Error(`language mismatch: path is ${pathId}, requested ${language}`);
 			}
 		}
 		return language;
@@ -65,14 +72,10 @@ function resolveLanguageId(
 	if (absolutePath === undefined) {
 		throw new Error("language is required");
 	}
-	const byPath = engine.registry.adapterForPath(absolutePath);
-	if (byPath === undefined) {
-		throw new Error(`Unsupported language for path: ${formatPathForDisplay(absolutePath, engine.cwd)}`);
-	}
-	if (!byPath.capabilities.search) {
-		throw new Error(`Language does not support structural search: ${byPath.id}`);
-	}
-	return byPath.id;
+	const pathId = pathLanguageId(engine, absolutePath);
+	const adapter = engine.registry.adapterForId(pathId);
+	requireSearchSupport(adapter?.capabilities.search === true, pathId);
+	return pathId;
 }
 
 function innermostEnclosing(
@@ -116,6 +119,40 @@ function attachEnclosing(
 	}));
 }
 
+async function loadHitMeta(
+	engine: ExploreEngine,
+	absolutePath: string,
+	hitCount: number,
+): Promise<{ ir: FileIr | undefined; parseDegraded: boolean }> {
+	if (hitCount === 0) return { ir: undefined, parseDegraded: false };
+	try {
+		const file = await engine.sourceForFile(absolutePath);
+		// Multi-hit files get enclosing scopes; single hits only need parseDegraded.
+		return {
+			ir: hitCount > 1 ? file.ir : undefined,
+			parseDegraded: file.ir.parseDegraded,
+		};
+	} catch {
+		return { ir: undefined, parseDegraded: false };
+	}
+}
+
+async function searchHitsInSource(
+	engine: ExploreEngine,
+	languageId: string,
+	source: string,
+	pattern: string,
+): Promise<{ hits: AstSearchHit[]; error: string | undefined }> {
+	try {
+		return { hits: await engine.searchInSource(languageId, source, pattern), error: undefined };
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		// Invalid pattern is global — rethrow.
+		if (message.startsWith("Invalid pattern:")) throw error;
+		return { hits: [], error: message };
+	}
+}
+
 async function searchOneFile(
 	engine: ExploreEngine,
 	absolutePath: string,
@@ -133,43 +170,106 @@ async function searchOneFile(
 	}
 	signal.throwIfAborted();
 
-	let hits: AstSearchHit[];
-	try {
-		hits = await engine.searchInSource(languageId, source, pattern);
-	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
-		// Invalid pattern is global — rethrow.
-		if (message.startsWith("Invalid pattern:")) throw error;
-		return { matches: [], error: message };
-	}
+	const searched = await searchHitsInSource(engine, languageId, source, pattern);
+	if (searched.error !== undefined) return { matches: [], error: searched.error };
 
-	let ir: FileIr | undefined;
-	let parseDegraded = false;
-	if (hits.length > 1) {
-		try {
-			const file = await engine.sourceForFile(absolutePath);
-			ir = file.ir;
-			parseDegraded = file.ir.parseDegraded;
-		} catch {
-			// Enclosing scope is best-effort.
-		}
-	} else if (hits.length === 1) {
-		// Still surface parse uncertainty when IR is cheap via cache after sourceForFile.
-		try {
-			const file = await engine.sourceForFile(absolutePath);
-			parseDegraded = file.ir.parseDegraded;
-			// Single hit: only attach enclosing when degraded parse needs trust signal? Spec:
-			// enclosing when disambiguating — single hit does not need it.
-			ir = undefined;
-		} catch {
-			// ignore
-		}
-	}
-
+	const meta = await loadHitMeta(engine, absolutePath, searched.hits.length);
 	return {
-		matches: attachEnclosing(absolutePath, hits, ir, parseDegraded, hits.length > 1),
+		matches: attachEnclosing(absolutePath, searched.hits, meta.ir, meta.parseDegraded, searched.hits.length > 1),
 		error: undefined,
 	};
+}
+
+type DirectorySearchState = {
+	matches: AstSearchMatch[];
+	fileErrors: { path: string; message: string }[];
+	resultLimitReached: boolean;
+	scan: ScanOutcome | undefined;
+};
+
+/** `stop` means the walk should end after this file. */
+function absorbDirectoryHits(
+	state: DirectorySearchState,
+	path: string,
+	hits: readonly AstSearchHit[],
+	ir: FileIr,
+	resultLimit: number,
+): "continue" | "stop" {
+	const room = resultLimit - state.matches.length;
+	if (room <= 0) {
+		if (hits.length > 0) state.resultLimitReached = true;
+		return "stop";
+	}
+	const limited = hits.length > room ? hits.slice(0, room) : hits;
+	if (hits.length > room) state.resultLimitReached = true;
+	state.matches.push(
+		...attachEnclosing(path, limited, hits.length > 1 ? ir : undefined, ir.parseDegraded, hits.length > 1),
+	);
+	if (state.matches.length >= resultLimit) {
+		state.resultLimitReached = true;
+		return "stop";
+	}
+	return "continue";
+}
+
+function scanOutcomeFromStep(step: IteratorResult<FileSource, ScanOutcome>, matchCount: number): ScanOutcome {
+	if (step.done) return step.value;
+	return {
+		limit: undefined,
+		filesVisited: 0,
+		sourceBytes: 0,
+		elapsedMs: 0,
+		filesEmitted: matchCount > 0 ? 1 : 0,
+	};
+}
+
+async function searchDirectory(
+	engine: ExploreEngine,
+	absolutePath: string,
+	languageId: string,
+	pattern: string,
+	resultLimit: number,
+	signal: AbortSignal,
+): Promise<DirectorySearchState> {
+	const state: DirectorySearchState = {
+		matches: [],
+		fileErrors: [],
+		resultLimitReached: false,
+		scan: undefined,
+	};
+
+	const generator = scanSources({
+		engine,
+		cwd: engine.cwd,
+		root: absolutePath,
+		signal,
+	});
+
+	let step = await generator.next();
+	while (!step.done) {
+		signal.throwIfAborted();
+		const file = step.value;
+		if (file.ir.languageId !== languageId) {
+			step = await generator.next();
+			continue;
+		}
+
+		const searched = await searchHitsInSource(engine, languageId, file.source, pattern);
+		if (searched.error !== undefined) {
+			state.fileErrors.push({ path: file.ir.path, message: searched.error });
+			step = await generator.next();
+			continue;
+		}
+
+		if (absorbDirectoryHits(state, file.ir.path, searched.hits, file.ir, resultLimit) === "stop") break;
+		step = await generator.next();
+	}
+
+	if (signal.aborted) throw new Error("ast_search cancelled");
+	const scan = scanOutcomeFromStep(step, state.matches.length);
+	if (scan.limit === "cancelled") throw new Error("ast_search cancelled");
+	state.scan = scan;
+	return state;
 }
 
 /**
@@ -198,109 +298,27 @@ export async function astSearch(
 	const isDirectory = stats.isDirectory();
 	const languageId = resolveLanguageId(engine, language, isDirectory ? undefined : absolutePath, isDirectory);
 
-	const matches: AstSearchMatch[] = [];
-	const fileErrors: { path: string; message: string }[] = [];
-	let resultLimitReached = false;
-	let scan: ScanOutcome | undefined;
-
 	if (!isDirectory) {
 		const one = await searchOneFile(engine, absolutePath, languageId, pattern, signal);
-		if (one.error !== undefined) {
-			throw new Error(one.error);
-		}
-		if (one.matches.length > resultLimit) {
-			resultLimitReached = true;
-			matches.push(...one.matches.slice(0, resultLimit));
-		} else {
-			matches.push(...one.matches);
-		}
+		if (one.error !== undefined) throw new Error(one.error);
+		const truncated = one.matches.length > resultLimit;
 		return {
-			matches,
+			matches: truncated ? one.matches.slice(0, resultLimit) : one.matches,
 			resultLimit,
-			resultLimitReached,
+			resultLimitReached: truncated,
 			languageId,
 			scan: undefined,
-			fileErrors,
+			fileErrors: [],
 		};
 	}
 
-	// Directory: walk supported files; keep only the requested language.
-	const generator = scanSources({
-		engine,
-		cwd: engine.cwd,
-		root: absolutePath,
-		signal,
-		// scanSources already filters to registered languages; further filter below.
-	});
-
-	let step = await generator.next();
-	while (!step.done) {
-		signal.throwIfAborted();
-		const file = step.value;
-		if (file.ir.languageId !== languageId) {
-			step = await generator.next();
-			continue;
-		}
-
-		// Prefer source already loaded by scan (avoids second read for IR).
-		let hits: AstSearchHit[];
-		try {
-			hits = await engine.searchInSource(languageId, file.source, pattern);
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			if (message.startsWith("Invalid pattern:")) throw error;
-			fileErrors.push({ path: file.ir.path, message });
-			step = await generator.next();
-			continue;
-		}
-
-		const room = resultLimit - matches.length;
-		if (room <= 0) {
-			if (hits.length > 0) resultLimitReached = true;
-			// Still drain walk for budget outcome? Stop early for latency.
-			break;
-		}
-
-		const limited = hits.length > room ? hits.slice(0, room) : hits;
-		if (hits.length > room) resultLimitReached = true;
-
-		const withScope = attachEnclosing(
-			file.ir.path,
-			limited,
-			hits.length > 1 ? file.ir : undefined,
-			file.ir.parseDegraded,
-			hits.length > 1,
-		);
-		matches.push(...withScope);
-
-		if (matches.length >= resultLimit) {
-			resultLimitReached = true;
-			break;
-		}
-		step = await generator.next();
-	}
-
-	if (signal.aborted) throw new Error("ast_search cancelled");
-
-	if (step.done) {
-		scan = step.value;
-	} else {
-		scan = {
-			limit: undefined,
-			filesVisited: 0,
-			sourceBytes: 0,
-			elapsedMs: 0,
-			filesEmitted: matches.length > 0 ? 1 : 0,
-		};
-	}
-	if (scan.limit === "cancelled") throw new Error("ast_search cancelled");
-
+	const directory = await searchDirectory(engine, absolutePath, languageId, pattern, resultLimit, signal);
 	return {
-		matches,
+		matches: directory.matches,
 		resultLimit,
-		resultLimitReached,
+		resultLimitReached: directory.resultLimitReached,
 		languageId,
-		scan,
-		fileErrors,
+		scan: directory.scan,
+		fileErrors: directory.fileErrors,
 	};
 }

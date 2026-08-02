@@ -2,7 +2,7 @@ import type { Usage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { createIsolatedSessionResource, type IsolatedSessionResource } from "../../shared/isolated-session.ts";
 import type { AgentDefinition } from "./agents.ts";
-import { buildColdResumePrompt, retainSubagentTurn } from "./resume.ts";
+import { buildColdResumePrompt, retainSubagentTurn, type RetainedTurnOutcome } from "./resume.ts";
 import {
 	cloneInvocationSnapshot,
 	createSubagentThread,
@@ -44,6 +44,43 @@ interface ActiveInvocation {
 interface TrackedThread extends SubagentThread {
 	disposed: boolean;
 	disposePromise?: Promise<void>;
+}
+
+type ResolveFreshDefinition = () => Promise<
+	{ ok: true; definition: AgentDefinition } | { ok: false; error: string; phase: SubagentPhase }
+>;
+
+interface ExecuteBag {
+	agent: string;
+	displayName: string;
+	definition: AgentDefinition | undefined;
+	thread: TrackedThread | undefined;
+	threadId: string | undefined;
+	releaseThread: (() => void) | undefined;
+	releaseGlobal: (() => void) | undefined;
+	reservedThread: TrackedThread | undefined;
+	provisionalThread: TrackedThread | undefined;
+	provisionalResource: IsolatedSessionResource | undefined;
+	reservationToken: symbol | undefined;
+	admitAdvanced: boolean;
+	phase: SubagentPhase;
+	lastPublishedStatus: SubagentLifecycle | undefined;
+	combined: AbortSignal;
+	task: string;
+	continuing: boolean;
+	threadKey: string | undefined;
+	files: readonly string[] | undefined;
+	ctx: ExtensionContext;
+	parentModel: string;
+	parentThinking: NonNullable<ExtensionContext["thinkingLevel"]>;
+	onUpdate: ((details: SubagentDetails) => void | Promise<void>) | undefined;
+	resolveFreshDefinition: ResolveFreshDefinition;
+	generation: number;
+	invocationId: string;
+	controller: AbortController;
+	startedAt: number;
+	active: ActiveInvocation;
+	admitTicket: number;
 }
 
 function emptyUsage(): SubagentDetails["usage"] {
@@ -275,9 +312,7 @@ export class SubagentRuntime {
 			definition?: AgentDefinition;
 			signal?: AbortSignal;
 			onUpdate?: (details: SubagentDetails) => void | Promise<void>;
-			resolveFreshDefinition: () => Promise<
-				{ ok: true; definition: AgentDefinition } | { ok: false; error: string; phase: SubagentPhase }
-			>;
+			resolveFreshDefinition: ResolveFreshDefinition;
 		},
 		state: {
 			generation: number;
@@ -288,359 +323,777 @@ export class SubagentRuntime {
 			admitTicket: number;
 		},
 	): Promise<SubagentToolResult> {
-		const { task, continuing, ctx, parentModel, parentThinking, signal, onUpdate, resolveFreshDefinition } = options;
-		const { generation, invocationId, controller, startedAt, active, admitTicket } = state;
-		let agent = options.agent;
-		let displayName = options.agent;
-		let definition = options.definition;
-		let thread: TrackedThread | undefined;
-		let threadId = continuing ? options.threadKey : undefined;
-		const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
+		const bag = this.createExecuteBag(options, state);
+		const fanOut = (details: SubagentDetails, force = false) => this.fanOutInvocation(bag, details, force);
+		try {
+			return await this.driveExecute(bag, fanOut);
+		} catch (error) {
+			const handled = await this.handleExecuteError({
+				error,
+				agent: bag.agent,
+				displayName: bag.displayName,
+				task: bag.task,
+				phase: bag.phase,
+				parentModel: bag.parentModel,
+				parentThinking: bag.parentThinking,
+				thread: bag.thread,
+				threadId: bag.threadId,
+				invocationId: bag.invocationId,
+				combined: bag.combined,
+				continuing: bag.continuing,
+				provisionalResource: bag.provisionalResource,
+				provisionalThread: bag.provisionalThread,
+				fanOut,
+			});
+			bag.provisionalResource = undefined;
+			bag.provisionalThread = undefined;
+			return handled;
+		} finally {
+			await this.cleanupExecuteBag(bag);
+		}
+	}
+
+	private createExecuteBag(
+		options: {
+			agent: string;
+			task: string;
+			files?: readonly string[];
+			continuing: boolean;
+			threadKey?: string;
+			ctx: ExtensionContext;
+			parentModel: string;
+			parentThinking: NonNullable<ExtensionContext["thinkingLevel"]>;
+			definition?: AgentDefinition;
+			signal?: AbortSignal;
+			onUpdate?: (details: SubagentDetails) => void | Promise<void>;
+			resolveFreshDefinition: ResolveFreshDefinition;
+		},
+		state: {
+			generation: number;
+			invocationId: string;
+			controller: AbortController;
+			startedAt: number;
+			active: ActiveInvocation;
+			admitTicket: number;
+		},
+	): ExecuteBag {
+		return {
+			agent: options.agent,
+			displayName: options.agent,
+			definition: options.definition,
+			thread: undefined,
+			threadId: options.continuing ? options.threadKey : undefined,
+			releaseThread: undefined,
+			releaseGlobal: undefined,
+			reservedThread: undefined,
+			provisionalThread: undefined,
+			provisionalResource: undefined,
+			reservationToken: undefined,
+			admitAdvanced: false,
+			phase: "queue",
+			lastPublishedStatus: "waiting",
+			combined: AbortSignal.any([state.controller.signal, ...(options.signal ? [options.signal] : [])]),
+			task: options.task,
+			continuing: options.continuing,
+			threadKey: options.threadKey,
+			files: options.files,
+			ctx: options.ctx,
+			parentModel: options.parentModel,
+			parentThinking: options.parentThinking,
+			onUpdate: options.onUpdate,
+			resolveFreshDefinition: options.resolveFreshDefinition,
+			generation: state.generation,
+			invocationId: state.invocationId,
+			controller: state.controller,
+			startedAt: state.startedAt,
+			active: state.active,
+			admitTicket: state.admitTicket,
+		};
+	}
+
+	private fanOutInvocation(bag: ExecuteBag, details: SubagentDetails, force = false): void {
+		const current = this.invocations.get(bag.invocationId);
+		if (!current || current.generation !== this.generation) return;
+		if (!force && details.status === bag.lastPublishedStatus && details.status !== "running") return;
+		bag.lastPublishedStatus = details.status;
+		const next: SubagentInvocationSnapshot = {
+			...details,
+			invocationId: bag.invocationId,
+			startedAt: bag.startedAt,
+			files: current.snapshot.files,
+			threadId: details.threadId ?? bag.threadId,
+			agent: details.agent || bag.agent,
+			displayName: details.displayName || bag.displayName,
+		};
+		current.snapshot = next;
+		this.publish(next);
+		if (!bag.onUpdate) return;
+		// Detached: presentation latency must not block admission or child turns.
+		void Promise.resolve()
+			.then(() => bag.onUpdate?.(cloneInvocationSnapshot(next)))
+			.catch(() => undefined);
+	}
+
+	private finishInvocation(bag: ExecuteBag, details: SubagentDetails, text?: string): SubagentToolResult {
+		this.fanOutInvocation(bag, details, true);
+		return { content: [{ type: "text", text: text ?? details.error ?? details.response ?? "" }], details };
+	}
+
+	private failInvocation(
+		bag: ExecuteBag,
+		error: string,
+		failPhase: SubagentPhase,
+		overrides: Partial<SubagentDetails> = {},
+	): SubagentToolResult {
+		return this.finishInvocation(
+			bag,
+			baseDetails({
+				agent: overrides.agent ?? bag.agent,
+				displayName: overrides.displayName ?? bag.thread?.displayName ?? bag.displayName,
+				task: bag.task,
+				status: overrides.status === "aborted" ? "aborted" : "failed",
+				phase: failPhase,
+				model: overrides.model ?? bag.thread?.model ?? bag.parentModel,
+				thinkingLevel: overrides.thinkingLevel ?? bag.thread?.thinkingLevel ?? bag.parentThinking,
+				threadId: overrides.threadId ?? bag.thread?.id ?? bag.threadId,
+				invocationId: bag.invocationId,
+				error,
+			}),
+			error,
+		);
+	}
+
+	private abortInvocation(
+		bag: ExecuteBag,
+		failPhase: SubagentPhase = bag.phase,
+		markAdmit = false,
+	): SubagentToolResult {
+		if (markAdmit && !bag.admitAdvanced) {
+			this.advanceAdmitTicket(bag.admitTicket);
+			bag.admitAdvanced = true;
+		}
+		return this.finishInvocation(
+			bag,
+			this.terminalFromAbort(
+				bag.agent,
+				bag.displayName,
+				bag.task,
+				failPhase,
+				bag.thread?.model ?? bag.parentModel,
+				bag.thread?.thinkingLevel ?? bag.parentThinking,
+				bag.threadId,
+				bag.invocationId,
+			),
+		);
+	}
+
+	private async driveExecute(
+		bag: ExecuteBag,
+		fanOut: (details: SubagentDetails, force?: boolean) => void,
+	): Promise<SubagentToolResult> {
+		if (this.lifecycleFence || this.disposed || bag.generation !== this.generation) {
+			return this.abortInvocation(bag);
+		}
+
+		const admitted = await this.admitExecuteTarget(bag, fanOut);
+		if (admitted) return admitted;
+
+		const gated = await this.gateExecute(bag);
+		if (gated) return gated;
+
+		return await this.runExecuteTurn(bag, fanOut);
+	}
+
+	private async admitExecuteTarget(
+		bag: ExecuteBag,
+		fanOut: (details: SubagentDetails, force?: boolean) => void,
+	): Promise<SubagentToolResult | undefined> {
+		if (bag.continuing) {
+			const bound = this.bindContinuingThread({
+				threadKey: bag.threadKey ?? "",
+				cwd: bag.ctx.cwd,
+				parentModel: bag.parentModel,
+				parentThinking: bag.parentThinking,
+				active: bag.active,
+				fanOut,
+			});
+			if (!bound.ok) return this.failInvocation(bag, bound.error, "discovery", bound.overrides);
+			bag.reservedThread = bound.thread;
+			bag.thread = bound.thread;
+			bag.agent = bound.agent;
+			bag.displayName = bound.displayName;
+			bag.threadId = bound.threadId;
+			bag.definition = bound.definition;
+			return undefined;
+		}
+
+		bag.phase = "discovery";
+		const prepared = await this.prepareFreshDiscovery({
+			generation: bag.generation,
+			combined: bag.combined,
+			active: bag.active,
+			resolveFreshDefinition: bag.resolveFreshDefinition,
+			fanOut,
+		});
+		if (prepared.kind === "aborted") return this.abortInvocation(bag);
+		if (prepared.kind === "failed") return this.failInvocation(bag, prepared.error, prepared.phase);
+		bag.definition = prepared.definition;
+		bag.agent = prepared.agent;
+		bag.displayName = prepared.displayName;
+		bag.threadId = prepared.threadId;
+		bag.reservationToken = prepared.reservationToken;
+		return undefined;
+	}
+
+	private async gateExecute(bag: ExecuteBag): Promise<SubagentToolResult | undefined> {
+		const gates = await this.acquireExecutionGates({
+			thread: bag.thread,
+			admitTicket: bag.admitTicket,
+			combined: bag.combined,
+			generation: bag.generation,
+			phase: bag.phase,
+		});
+		if (gates.kind === "aborted") {
+			bag.admitAdvanced = gates.admitAdvanced;
+			return this.abortInvocation(bag, gates.phase, gates.markAdmit);
+		}
+		if (gates.kind === "failed") {
+			bag.admitAdvanced = gates.admitAdvanced;
+			return this.failInvocation(bag, gates.error, "queue", gates.overrides);
+		}
+		bag.releaseThread = gates.releaseThread;
+		bag.releaseGlobal = gates.releaseGlobal;
+		bag.admitAdvanced = true;
+		return undefined;
+	}
+
+	private async runExecuteTurn(
+		bag: ExecuteBag,
+		fanOut: (details: SubagentDetails, force?: boolean) => void,
+	): Promise<SubagentToolResult> {
+		if (!bag.thread) {
+			bag.phase = "startup";
+			if (!bag.threadId || !bag.definition) throw new Error("Subagent startup state is incomplete");
+			const started = await this.startFreshThread({
+				threadId: bag.threadId,
+				displayName: bag.displayName,
+				definition: bag.definition,
+				task: bag.task,
+				ctx: bag.ctx,
+				parentThinking: bag.parentThinking,
+				combined: bag.combined,
+				generation: bag.generation,
+				agent: bag.agent,
+				active: bag.active,
+				fanOut,
+			});
+			if (started.kind === "aborted") {
+				bag.thread = started.thread;
+				return this.abortInvocation(bag, "startup");
+			}
+			bag.provisionalThread = started.thread;
+			bag.thread = started.thread;
+			bag.reservedThread = bag.thread;
+		}
+
+		const thread = bag.thread;
+		const cold = await this.coldResumeIfNeeded({
+			continuing: bag.continuing,
+			thread,
+			generation: bag.generation,
+			combined: bag.combined,
+			task: bag.task,
+			files: bag.files,
+			agent: bag.agent,
+			active: bag.active,
+			fanOut,
+		});
+		if (cold.kind === "aborted") {
+			bag.provisionalResource = cold.provisionalResource;
+			return this.abortInvocation(bag, "startup");
+		}
+		bag.phase = cold.phase ?? bag.phase;
+		bag.provisionalResource = cold.provisionalResource;
+		const resumePrompt = cold.resumePrompt;
+
+		const result = await runSubagentTurn({
+			thread,
+			task: bag.task,
+			files: bag.files,
+			invocationId: bag.invocationId,
+			initial: thread.turns === 0 || resumePrompt !== undefined,
+			...(resumePrompt === undefined ? {} : { resumePrompt }),
+			signal: bag.combined,
+			onUpdate: (details) => {
+				fanOut({ ...details, invocationId: bag.invocationId, threadId: bag.thread?.id ?? bag.threadId });
+			},
+		});
+
+		if (!this.isLive(bag.generation, bag.combined)) {
+			const aborted = await this.abortAfterTurn({
+				result,
+				invocationId: bag.invocationId,
+				fanOut,
+				reservationToken: bag.reservationToken,
+				provisionalThread: bag.provisionalThread,
+				thread,
+			});
+			bag.reservationToken = undefined;
+			bag.provisionalThread = undefined;
+			return aborted;
+		}
+
+		bag.lastPublishedStatus = result.details.status;
+		// Drop reservation before publish so capacity never reads above 16.
+		this.releaseReservation(bag.reservationToken);
+		bag.reservationToken = undefined;
+		const finished = await this.retainAndFinishTurn({
+			result,
+			thread,
+			task: bag.task,
+			files: bag.files,
+			generation: bag.generation,
+			continuing: bag.continuing,
+			provisionalThread: bag.provisionalThread,
+			invocationId: bag.invocationId,
+		});
+		bag.provisionalThread = undefined;
+		return finished;
+	}
+
+	private async cleanupExecuteBag(bag: ExecuteBag): Promise<void> {
+		if (!bag.admitAdvanced) this.advanceAdmitTicket(bag.admitTicket);
+		this.releaseReservation(bag.reservationToken);
+		if (bag.provisionalThread && this.threads.get(bag.provisionalThread.id) !== bag.provisionalThread) {
+			await this.disposeThread(bag.provisionalThread).catch(() => undefined);
+		}
+		if (bag.provisionalResource) await bag.provisionalResource.dispose().catch(() => undefined);
+		if (bag.reservedThread) bag.reservedThread.pendingTurns = Math.max(0, bag.reservedThread.pendingTurns - 1);
+		bag.releaseGlobal?.();
+		bag.releaseThread?.();
+		this.controllers.delete(bag.controller);
+		this.invocations.delete(bag.invocationId);
+	}
+
+	private bindContinuingThread(options: {
+		threadKey: string;
+		cwd: string;
+		parentModel: string;
+		parentThinking: string;
+		active: ActiveInvocation;
+		fanOut: (details: SubagentDetails, force?: boolean) => void;
+	}):
+		| {
+				ok: true;
+				thread: TrackedThread;
+				agent: string;
+				displayName: string;
+				threadId: string;
+				definition: AgentDefinition;
+		  }
+		| { ok: false; error: string; overrides: Partial<SubagentDetails> } {
+		const { threadKey, cwd, parentModel, parentThinking, active, fanOut } = options;
+		const existing = this.threads.get(threadKey);
+		if (!existing || existing.cwd !== cwd || existing.disposed) {
+			const names = this.threadIds(cwd).join(", ") || "none";
+			return {
+				ok: false,
+				error: `Subagent thread ${threadKey} is unavailable. Active threads: ${names}`,
+				overrides: {
+					agent: threadKey,
+					threadId: threadKey,
+					model: parentModel,
+					thinkingLevel: parentThinking,
+				},
+			};
+		}
+		existing.pendingTurns += 1;
+		const agent = existing.definition.name;
+		const displayName = existing.displayName;
+		const threadId = existing.id;
+		fanOut(
+			{
+				...active.snapshot,
+				agent,
+				displayName,
+				threadId,
+				model: existing.model,
+				thinkingLevel: existing.thinkingLevel,
+			},
+			true,
+		);
+		return {
+			ok: true,
+			thread: existing,
+			agent,
+			displayName,
+			threadId,
+			definition: existing.definition,
+		};
+	}
+
+	private async prepareFreshDiscovery(options: {
+		generation: number;
+		combined: AbortSignal;
+		active: ActiveInvocation;
+		resolveFreshDefinition: () => Promise<
+			{ ok: true; definition: AgentDefinition } | { ok: false; error: string; phase: SubagentPhase }
+		>;
+		fanOut: (details: SubagentDetails, force?: boolean) => void;
+	}): Promise<
+		| {
+				kind: "ok";
+				definition: AgentDefinition;
+				agent: string;
+				displayName: string;
+				threadId: string;
+				reservationToken: symbol;
+		  }
+		| { kind: "aborted" }
+		| { kind: "failed"; error: string; phase: SubagentPhase }
+	> {
+		const { generation, combined, active, resolveFreshDefinition, fanOut } = options;
+		const resolved = await resolveFreshDefinition();
+		if (!this.isLive(generation, combined)) return { kind: "aborted" };
+		if (!resolved.ok) return { kind: "failed", error: resolved.error, phase: resolved.phase };
+		const definition = resolved.definition;
+		const agent = definition.name;
+		const displayName = this.assignDisplayName(definition);
+		const threadId = `thread-${this.nextThreadId++}`;
+		fanOut({ ...active.snapshot, agent, displayName, threadId }, true);
+		const reserved = this.reserveFreshCapacity();
+		if (!reserved.ok) return { kind: "failed", error: reserved.error, phase: "queue" };
+		if (reserved.evicted) await this.disposeThread(reserved.evicted);
+		return {
+			kind: "ok",
+			definition,
+			agent,
+			displayName,
+			threadId,
+			reservationToken: reserved.token,
+		};
+	}
+
+	private async acquireExecutionGates(options: {
+		thread: TrackedThread | undefined;
+		admitTicket: number;
+		combined: AbortSignal;
+		generation: number;
+		phase: SubagentPhase;
+	}): Promise<
+		| {
+				kind: "ok";
+				releaseThread: (() => void) | undefined;
+				releaseGlobal: () => void;
+		  }
+		| { kind: "aborted"; phase: SubagentPhase; markAdmit: boolean; admitAdvanced: boolean }
+		| {
+				kind: "failed";
+				error: string;
+				admitAdvanced: boolean;
+				overrides: Partial<SubagentDetails>;
+		  }
+	> {
+		const { thread, admitTicket, combined, generation, phase } = options;
+		// FIFO barrier assigned at execute() entry — earlier tickets go first regardless of discovery speed.
+		const admitted = await this.waitAdmitTicket(admitTicket, combined, generation);
+		if (!admitted) return { kind: "aborted", phase, markAdmit: true, admitAdvanced: false };
 
 		let releaseThread: (() => void) | undefined;
-		let releaseGlobal: (() => void) | undefined;
-		let reservedThread: TrackedThread | undefined;
-		let provisionalThread: TrackedThread | undefined;
-		let provisionalResource: IsolatedSessionResource | undefined;
-		let reservationToken: symbol | undefined;
-		let admitAdvanced = false;
-		let phase: SubagentPhase = "queue";
-		let lastPublishedStatus: SubagentLifecycle | undefined = "waiting";
-
-		const fanOut = (details: SubagentDetails, force = false) => {
-			const current = this.invocations.get(invocationId);
-			if (!current || current.generation !== this.generation) return;
-			if (!force && details.status === lastPublishedStatus && details.status !== "running") return;
-			lastPublishedStatus = details.status;
-			const next: SubagentInvocationSnapshot = {
-				...details,
-				invocationId,
-				startedAt,
-				files: current.snapshot.files,
-				threadId: details.threadId ?? threadId,
-				agent: details.agent || agent,
-				displayName: details.displayName || displayName,
-			};
-			current.snapshot = next;
-			this.publish(next);
-			if (!onUpdate) return;
-			// Detached: presentation latency must not block admission or child turns.
-			void Promise.resolve()
-				.then(() => onUpdate(cloneInvocationSnapshot(next)))
-				.catch(() => undefined);
-		};
-
-		const finish = (details: SubagentDetails, text?: string): SubagentToolResult => {
-			fanOut(details, true);
-			return { content: [{ type: "text", text: text ?? details.error ?? details.response ?? "" }], details };
-		};
-
-		const fail = (
-			error: string,
-			failPhase: SubagentPhase,
-			overrides: Partial<SubagentDetails> = {},
-		): SubagentToolResult =>
-			finish(
-				baseDetails({
-					agent: overrides.agent ?? agent,
-					displayName: overrides.displayName ?? thread?.displayName ?? displayName,
-					task,
-					status: overrides.status === "aborted" ? "aborted" : "failed",
-					phase: failPhase,
-					model: overrides.model ?? thread?.model ?? parentModel,
-					thinkingLevel: overrides.thinkingLevel ?? thread?.thinkingLevel ?? parentThinking,
-					threadId: overrides.threadId ?? thread?.id ?? threadId,
-					invocationId,
-					error,
-				}),
-				error,
-			);
-
-		const abortNow = (failPhase: SubagentPhase = phase, markAdmit = false): SubagentToolResult => {
-			if (markAdmit && !admitAdvanced) {
+		if (thread) {
+			releaseThread = await thread.turnGate.acquire(combined);
+			if (thread.disposed || this.threads.get(thread.id) !== thread) {
 				this.advanceAdmitTicket(admitTicket);
-				admitAdvanced = true;
-			}
-			return finish(
-				this.terminalFromAbort(
-					agent,
-					displayName,
-					task,
-					failPhase,
-					thread?.model ?? parentModel,
-					thread?.thinkingLevel ?? parentThinking,
-					threadId,
-					invocationId,
-				),
-			);
-		};
-
-		try {
-			if (this.lifecycleFence || this.disposed || generation !== this.generation) return abortNow();
-
-			if (continuing) {
-				const key = options.threadKey ?? "";
-				const existing = this.threads.get(key);
-				if (!existing || existing.cwd !== ctx.cwd || existing.disposed) {
-					const names = this.threadIds(ctx.cwd).join(", ") || "none";
-					return fail(`Subagent thread ${key} is unavailable. Active threads: ${names}`, "discovery", {
-						agent: key,
-						threadId: key,
-						model: parentModel,
-						thinkingLevel: parentThinking,
-					});
-				}
-				existing.pendingTurns += 1;
-				reservedThread = existing;
-				thread = existing;
-				agent = existing.definition.name;
-				displayName = existing.displayName;
-				threadId = existing.id;
-				definition = existing.definition;
-				fanOut(
-					{
-						...active.snapshot,
-						agent,
-						displayName,
-						threadId,
-						model: existing.model,
-						thinkingLevel: existing.thinkingLevel,
-					},
-					true,
-				);
-			} else {
-				phase = "discovery";
-				const resolved = await resolveFreshDefinition();
-				if (!this.isLive(generation, combined)) return abortNow();
-				if (!resolved.ok) return fail(resolved.error, resolved.phase);
-				definition = resolved.definition;
-				agent = definition.name;
-				displayName = this.assignDisplayName(definition);
-				threadId = `thread-${this.nextThreadId++}`;
-				fanOut({ ...active.snapshot, agent, displayName, threadId }, true);
-
-				const reserved = this.reserveFreshCapacity();
-				if (!reserved.ok) return fail(reserved.error, "queue");
-				reservationToken = reserved.token;
-				if (reserved.evicted) await this.disposeThread(reserved.evicted);
-			}
-
-			// FIFO barrier assigned at execute() entry — earlier tickets go first regardless of discovery speed.
-			const admitted = await this.waitAdmitTicket(admitTicket, combined, generation);
-			if (!admitted) return abortNow(phase, true);
-
-			if (thread) {
-				releaseThread = await thread.turnGate.acquire(combined);
-				if (thread.disposed || this.threads.get(thread.id) !== thread) {
-					this.advanceAdmitTicket(admitTicket);
-					admitAdvanced = true;
-					return fail(`Subagent thread ${thread.id} is unavailable after queueing`, "queue", {
+				releaseThread();
+				return {
+					kind: "failed",
+					error: `Subagent thread ${thread.id} is unavailable after queueing`,
+					admitAdvanced: true,
+					overrides: {
 						status: combined.aborted ? "aborted" : "failed",
 						model: thread.model,
 						thinkingLevel: thread.thinkingLevel,
 						threadId: thread.id,
-					});
-				}
-			}
-			if (!this.isLive(generation, combined)) return abortNow(phase, true);
-
-			try {
-				releaseGlobal = await this.globalGate.acquire(combined);
-			} catch {
-				return abortNow(phase, true);
-			}
-			// Next ticket may compete for remaining global slots.
-			this.advanceAdmitTicket(admitTicket);
-			admitAdvanced = true;
-			if (!this.isLive(generation, combined)) return abortNow();
-
-			if (!thread) {
-				phase = "startup";
-				if (!threadId || !definition) throw new Error("Subagent startup state is incomplete");
-				const selectedDefinition = definition;
-				fanOut({ ...active.snapshot, status: "starting", phase: "startup", agent, threadId }, true);
-				const created = asTracked(
-					await createSubagentThread({
-						id: threadId,
-						displayName,
-						definition: selectedDefinition,
-						extensionPaths: extensionPathsForTools(this.pi, selectedDefinition.tools),
-						initialTask: task,
-						ctx,
-						thinkingLevel: parentThinking,
-						signal: combined,
-						onWarning: (warning) => {
-							const message = `Subagent definition ${selectedDefinition.path}: ${warning}`;
-							if (this.runtimeWarnings.has(message)) return;
-							this.runtimeWarnings.add(message);
-							ctx.ui.notify(message, "warning");
-						},
-					}),
-				);
-				if (!this.isLive(generation, combined)) {
-					await this.disposeThread(created);
-					thread = created;
-					return abortNow("startup");
-				}
-				provisionalThread = created;
-				thread = created;
-				thread.pendingTurns += 1;
-				reservedThread = thread;
-			}
-
-			let resumePrompt: string | undefined;
-			if (
-				continuing &&
-				thread &&
-				(thread.lastAssistantMessageAt === undefined ||
-					this.now() - thread.lastAssistantMessageAt >= SUBAGENT_HOT_WINDOW_MS)
-			) {
-				phase = "startup";
-				fanOut({ ...active.snapshot, status: "starting", phase: "startup", agent, threadId: thread.id }, true);
-				const oldResource = thread.resource;
-				provisionalResource = await createIsolatedSessionResource(thread.sessionInputs, combined);
-				if (!this.isLive(generation, combined) || thread.disposed || this.threads.get(thread.id) !== thread) {
-					await provisionalResource.dispose();
-					provisionalResource = undefined;
-					if (this.threads.get(thread.id) === thread) this.threads.delete(thread.id);
-					await this.disposeThread(thread);
-					return abortNow("startup");
-				}
-				thread.resource = provisionalResource;
-				provisionalResource = undefined;
-				await oldResource.dispose();
-				if (!this.isLive(generation, combined)) {
-					if (this.threads.get(thread.id) === thread) this.threads.delete(thread.id);
-					await this.disposeThread(thread);
-					return abortNow("startup");
-				}
-				resumePrompt = buildColdResumePrompt({
-					definition: thread.definition,
-					state: thread.resumeState,
-					followUp: task,
-					hasAutoreadFiles: (options.files?.length ?? 0) > 0,
-				});
-			}
-
-			const result = await runSubagentTurn({
-				thread,
-				task,
-				files: options.files,
-				invocationId,
-				initial: thread.turns === 0 || resumePrompt !== undefined,
-				...(resumePrompt === undefined ? {} : { resumePrompt }),
-				signal: combined,
-				onUpdate: (details) => {
-					fanOut({ ...details, invocationId, threadId: thread?.id ?? threadId });
-				},
-			});
-
-			if (!this.isLive(generation, combined)) {
-				const details = {
-					...result.details,
-					status: "aborted" as const,
-					invocationId,
-					error: result.details.error ?? "Subagent session reset",
-				};
-				fanOut(details, true);
-				this.releaseReservation(reservationToken);
-				reservationToken = undefined;
-				if (provisionalThread) {
-					await this.disposeThread(provisionalThread);
-					provisionalThread = undefined;
-				} else if (thread && this.threads.get(thread.id) === thread) {
-					this.threads.delete(thread.id);
-					await this.disposeThread(thread);
-				}
-				return {
-					content: [{ type: "text", text: details.error ?? "aborted" }],
-					details,
-					...(result.usage === undefined ? {} : { usage: result.usage }),
-				};
-			}
-
-			lastPublishedStatus = result.details.status;
-			if (result.retainable) {
-				thread.resumeState = retainSubagentTurn(thread.resumeState, {
-					task,
-					outcome: result.terminalOutcome,
-					terminalText: result.content,
-					files: options.files ?? [],
-				});
-				thread.lastAssistantMessageAt = result.assistantMessageEndAt.at(-1);
-			}
-
-			// Drop reservation before publish so capacity never reads above 16.
-			this.releaseReservation(reservationToken);
-			reservationToken = undefined;
-			const retained = await this.finalizeThreadRetention({
-				generation,
-				continuing,
-				thread,
-				provisional: provisionalThread === thread,
-				result,
-			});
-			provisionalThread = undefined;
-
-			if (!retained) {
-				return {
-					content: [{ type: "text", text: result.content }],
-					details: { ...result.details, displayName: thread.displayName, invocationId, threadId: thread.id },
-					...(result.usage === undefined ? {} : { usage: result.usage }),
-				};
-			}
-
-			return {
-				content: [
-					{
-						type: "text",
-						text: `Thread: ${thread.id}\nReuse with subagent({ thread: "${thread.id}", task: "..." })\n\n${result.content}`,
 					},
-				],
-				details: { ...result.details, displayName: thread.displayName, invocationId, threadId: thread.id },
-				...(result.usage === undefined ? {} : { usage: result.usage }),
-			};
-		} catch (error) {
-			const message = error instanceof Error ? error.message : `Agent ${agent} ${phase} failed`;
-			const status: SubagentLifecycle = combined.aborted ? "aborted" : "failed";
-			const details = baseDetails({
-				agent,
-				task,
-				status,
-				phase,
-				model: thread?.model ?? parentModel,
-				thinkingLevel: thread?.thinkingLevel ?? parentThinking,
-				displayName: thread?.displayName ?? displayName,
-				threadId: thread?.id ?? threadId,
-				invocationId,
-				error: message,
-			});
-			fanOut(details, true);
-			if (provisionalResource) {
-				await provisionalResource.dispose().catch(() => undefined);
-				provisionalResource = undefined;
+				};
 			}
-			if (provisionalThread) {
-				await this.disposeThread(provisionalThread);
-				provisionalThread = undefined;
-			} else if (thread && continuing && this.threads.get(thread.id) === thread) {
-				this.threads.delete(thread.id);
-				await this.disposeThread(thread);
-			}
-			return { content: [{ type: "text", text: message }], details };
-		} finally {
-			if (!admitAdvanced) this.advanceAdmitTicket(admitTicket);
-			this.releaseReservation(reservationToken);
-			if (provisionalThread && this.threads.get(provisionalThread.id) !== provisionalThread) {
-				await this.disposeThread(provisionalThread).catch(() => undefined);
-			}
-			if (provisionalResource) await provisionalResource.dispose().catch(() => undefined);
-			if (reservedThread) reservedThread.pendingTurns = Math.max(0, reservedThread.pendingTurns - 1);
-			releaseGlobal?.();
-			releaseThread?.();
-			this.controllers.delete(controller);
-			this.invocations.delete(invocationId);
 		}
+		if (!this.isLive(generation, combined)) {
+			releaseThread?.();
+			return { kind: "aborted", phase, markAdmit: true, admitAdvanced: false };
+		}
+
+		let releaseGlobal: () => void;
+		try {
+			releaseGlobal = await this.globalGate.acquire(combined);
+		} catch {
+			releaseThread?.();
+			return { kind: "aborted", phase, markAdmit: true, admitAdvanced: false };
+		}
+		// Next ticket may compete for remaining global slots.
+		this.advanceAdmitTicket(admitTicket);
+		if (!this.isLive(generation, combined)) {
+			// Caller keeps releaseThread/releaseGlobal unset; free them here before abort return.
+			releaseGlobal();
+			releaseThread?.();
+			return { kind: "aborted", phase, markAdmit: false, admitAdvanced: true };
+		}
+		return { kind: "ok", releaseThread, releaseGlobal };
+	}
+
+	private async startFreshThread(options: {
+		threadId: string;
+		displayName: string;
+		definition: AgentDefinition;
+		task: string;
+		ctx: ExtensionContext;
+		parentThinking: NonNullable<ExtensionContext["thinkingLevel"]>;
+		combined: AbortSignal;
+		generation: number;
+		agent: string;
+		active: ActiveInvocation;
+		fanOut: (details: SubagentDetails, force?: boolean) => void;
+	}): Promise<{ kind: "ok"; thread: TrackedThread } | { kind: "aborted"; thread: TrackedThread }> {
+		const {
+			threadId,
+			displayName,
+			definition,
+			task,
+			ctx,
+			parentThinking,
+			combined,
+			generation,
+			agent,
+			active,
+			fanOut,
+		} = options;
+		fanOut({ ...active.snapshot, status: "starting", phase: "startup", agent, threadId }, true);
+		const created = asTracked(
+			await createSubagentThread({
+				id: threadId,
+				displayName,
+				definition,
+				extensionPaths: extensionPathsForTools(this.pi, definition.tools),
+				initialTask: task,
+				ctx,
+				thinkingLevel: parentThinking,
+				signal: combined,
+				onWarning: (warning) => {
+					const message = `Subagent definition ${definition.path}: ${warning}`;
+					if (this.runtimeWarnings.has(message)) return;
+					this.runtimeWarnings.add(message);
+					ctx.ui.notify(message, "warning");
+				},
+			}),
+		);
+		if (!this.isLive(generation, combined)) {
+			await this.disposeThread(created);
+			return { kind: "aborted", thread: created };
+		}
+		created.pendingTurns += 1;
+		return { kind: "ok", thread: created };
+	}
+
+	private async coldResumeIfNeeded(options: {
+		continuing: boolean;
+		thread: TrackedThread;
+		generation: number;
+		combined: AbortSignal;
+		task: string;
+		files: readonly string[] | undefined;
+		agent: string;
+		active: ActiveInvocation;
+		fanOut: (details: SubagentDetails, force?: boolean) => void;
+	}): Promise<
+		| { kind: "ok"; resumePrompt?: string; phase?: SubagentPhase; provisionalResource?: IsolatedSessionResource }
+		| { kind: "aborted"; provisionalResource?: IsolatedSessionResource }
+	> {
+		const { continuing, thread, generation, combined, task, files, agent, active, fanOut } = options;
+		const needsCold =
+			continuing &&
+			(thread.lastAssistantMessageAt === undefined ||
+				this.now() - thread.lastAssistantMessageAt >= SUBAGENT_HOT_WINDOW_MS);
+		if (!needsCold) return { kind: "ok" };
+
+		fanOut({ ...active.snapshot, status: "starting", phase: "startup", agent, threadId: thread.id }, true);
+		const oldResource = thread.resource;
+		const provisionalResource = await createIsolatedSessionResource(thread.sessionInputs, combined);
+		if (!this.isLive(generation, combined) || thread.disposed || this.threads.get(thread.id) !== thread) {
+			await provisionalResource.dispose();
+			if (this.threads.get(thread.id) === thread) this.threads.delete(thread.id);
+			await this.disposeThread(thread);
+			return { kind: "aborted" };
+		}
+		thread.resource = provisionalResource;
+		await oldResource.dispose();
+		if (!this.isLive(generation, combined)) {
+			if (this.threads.get(thread.id) === thread) this.threads.delete(thread.id);
+			await this.disposeThread(thread);
+			return { kind: "aborted" };
+		}
+		return {
+			kind: "ok",
+			phase: "startup",
+			resumePrompt: buildColdResumePrompt({
+				definition: thread.definition,
+				state: thread.resumeState,
+				followUp: task,
+				hasAutoreadFiles: (files?.length ?? 0) > 0,
+			}),
+		};
+	}
+
+	private async abortAfterTurn(options: {
+		result: {
+			details: SubagentDetails;
+			usage?: Usage;
+		};
+		invocationId: string;
+		fanOut: (details: SubagentDetails, force?: boolean) => void;
+		reservationToken: symbol | undefined;
+		provisionalThread: TrackedThread | undefined;
+		thread: TrackedThread;
+	}): Promise<SubagentToolResult> {
+		const { result, invocationId, fanOut, reservationToken, provisionalThread, thread } = options;
+		const details = {
+			...result.details,
+			status: "aborted" as const,
+			invocationId,
+			error: result.details.error ?? "Subagent session reset",
+		};
+		fanOut(details, true);
+		this.releaseReservation(reservationToken);
+		if (provisionalThread) await this.disposeThread(provisionalThread);
+		else if (this.threads.get(thread.id) === thread) {
+			this.threads.delete(thread.id);
+			await this.disposeThread(thread);
+		}
+		return {
+			content: [{ type: "text", text: details.error ?? "aborted" }],
+			details,
+			...(result.usage === undefined ? {} : { usage: result.usage }),
+		};
+	}
+
+	private toolResultFromTurn(
+		result: {
+			content: string;
+			details: SubagentDetails;
+			usage?: Usage;
+		},
+		thread: TrackedThread,
+		invocationId: string,
+		retained: boolean,
+	): SubagentToolResult {
+		const details = {
+			...result.details,
+			displayName: thread.displayName,
+			invocationId,
+			threadId: thread.id,
+		};
+		const text = retained
+			? `Thread: ${thread.id}\nReuse with subagent({ thread: "${thread.id}", task: "..." })\n\n${result.content}`
+			: result.content;
+		return {
+			content: [{ type: "text", text }],
+			details,
+			...(result.usage === undefined ? {} : { usage: result.usage }),
+		};
+	}
+
+	private async retainAndFinishTurn(options: {
+		result: {
+			content: string;
+			details: SubagentDetails;
+			retainable: boolean;
+			terminalOutcome: RetainedTurnOutcome;
+			assistantMessageEndAt: readonly number[];
+			usage?: Usage;
+		};
+		thread: TrackedThread;
+		task: string;
+		files: readonly string[] | undefined;
+		generation: number;
+		continuing: boolean;
+		provisionalThread: TrackedThread | undefined;
+		invocationId: string;
+	}): Promise<SubagentToolResult> {
+		const { result, thread, task, files, generation, continuing, provisionalThread, invocationId } = options;
+		if (result.retainable) {
+			thread.resumeState = retainSubagentTurn(thread.resumeState, {
+				task,
+				outcome: result.terminalOutcome,
+				terminalText: result.content,
+				files: files ?? [],
+			});
+			thread.lastAssistantMessageAt = result.assistantMessageEndAt.at(-1);
+		}
+		const retained = await this.finalizeThreadRetention({
+			generation,
+			continuing,
+			thread,
+			provisional: provisionalThread === thread,
+			result,
+		});
+		return this.toolResultFromTurn(result, thread, invocationId, retained);
+	}
+
+	private async handleExecuteError(options: {
+		error: unknown;
+		agent: string;
+		displayName: string;
+		task: string;
+		phase: SubagentPhase;
+		parentModel: string;
+		parentThinking: string;
+		thread: TrackedThread | undefined;
+		threadId: string | undefined;
+		invocationId: string;
+		combined: AbortSignal;
+		continuing: boolean;
+		provisionalResource: IsolatedSessionResource | undefined;
+		provisionalThread: TrackedThread | undefined;
+		fanOut: (details: SubagentDetails, force?: boolean) => void;
+	}): Promise<SubagentToolResult> {
+		const {
+			error,
+			agent,
+			displayName,
+			task,
+			phase,
+			parentModel,
+			parentThinking,
+			thread,
+			threadId,
+			invocationId,
+			combined,
+			continuing,
+			provisionalResource,
+			provisionalThread,
+			fanOut,
+		} = options;
+		const message = error instanceof Error ? error.message : `Agent ${agent} ${phase} failed`;
+		const status: SubagentLifecycle = combined.aborted ? "aborted" : "failed";
+		const details = baseDetails({
+			agent,
+			task,
+			status,
+			phase,
+			model: thread?.model ?? parentModel,
+			thinkingLevel: thread?.thinkingLevel ?? parentThinking,
+			displayName: thread?.displayName ?? displayName,
+			threadId: thread?.id ?? threadId,
+			invocationId,
+			error: message,
+		});
+		fanOut(details, true);
+		if (provisionalResource) await provisionalResource.dispose().catch(() => undefined);
+		if (provisionalThread) await this.disposeThread(provisionalThread);
+		else if (thread && continuing && this.threads.get(thread.id) === thread) {
+			this.threads.delete(thread.id);
+			await this.disposeThread(thread);
+		}
+		return { content: [{ type: "text", text: message }], details };
 	}
 
 	private async waitAdmitTicket(ticket: number, signal: AbortSignal, generation: number): Promise<boolean> {

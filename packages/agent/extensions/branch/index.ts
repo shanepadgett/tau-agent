@@ -108,38 +108,55 @@ async function loadBranchChoices(git: GitRunner, root: string): Promise<BranchCh
 	return parseBranchChoices(await git.run(LIST_BRANCH_REFS_ARGS, { cwd: root }));
 }
 
-function parseBranchChoices(output: string): BranchChoice[] {
-	const refs = output
+interface ParsedRef {
+	ref: string;
+	updatedAt: number;
+	current: boolean;
+	symbolic: boolean;
+}
+
+function parseRefLines(output: string): ParsedRef[] {
+	return output
 		.split("\n")
 		.filter(Boolean)
 		.map((line) => {
 			const [ref = "", seconds = "0", head = "", symref = ""] = line.split("\0");
 			return { ref, updatedAt: Number(seconds) * 1000, current: head.trim() === "*", symbolic: Boolean(symref) };
 		});
-	const localPrefix = "refs/heads/";
-	const remotePrefix = "refs/remotes/";
+}
+
+function localChoice(ref: ParsedRef): BranchChoice | undefined {
+	const name = ref.ref.slice("refs/heads/".length);
+	if (!name || ref.current) return undefined;
+	return { id: `local:${name}`, kind: "local", label: name, name, updatedAt: ref.updatedAt };
+}
+
+function remoteChoice(ref: ParsedRef, localNames: ReadonlySet<string>): BranchChoice | undefined {
+	if (ref.symbolic) return undefined;
+	const upstream = ref.ref.slice("refs/remotes/".length);
+	const separator = upstream.indexOf("/");
+	if (separator < 1) return undefined;
+	const name = upstream.slice(separator + 1);
+	if (!name || name === "HEAD" || localNames.has(name)) return undefined;
+	const label = localNames.has(upstream) ? `${upstream} (remote)` : upstream;
+	return { id: `remote:${upstream}`, kind: "remote", label, name, upstream, updatedAt: ref.updatedAt };
+}
+
+function parseBranchChoices(output: string): BranchChoice[] {
+	const refs = parseRefLines(output);
 	const localNames = new Set(
-		refs.filter(({ ref }) => ref.startsWith(localPrefix)).map(({ ref }) => ref.slice(localPrefix.length)),
+		refs.filter(({ ref }) => ref.startsWith("refs/heads/")).map(({ ref }) => ref.slice("refs/heads/".length)),
 	);
 	const choices: BranchChoice[] = [];
-
 	for (const ref of refs) {
-		if (ref.ref.startsWith(localPrefix)) {
-			const name = ref.ref.slice(localPrefix.length);
-			if (name && !ref.current)
-				choices.push({ id: `local:${name}`, kind: "local", label: name, name, updatedAt: ref.updatedAt });
+		if (ref.ref.startsWith("refs/heads/")) {
+			const choice = localChoice(ref);
+			if (choice) choices.push(choice);
 			continue;
 		}
-		if (!ref.ref.startsWith(remotePrefix) || ref.symbolic) continue;
-
-		const upstream = ref.ref.slice(remotePrefix.length);
-		const separator = upstream.indexOf("/");
-		if (separator < 1) continue;
-		const name = upstream.slice(separator + 1);
-		if (!name || name === "HEAD" || localNames.has(name)) continue;
-		const label = localNames.has(upstream) ? `${upstream} (remote)` : upstream;
-		choices.push({ id: `remote:${upstream}`, kind: "remote", label, name, upstream, updatedAt: ref.updatedAt });
+		if (!ref.ref.startsWith("refs/remotes/")) continue;
+		const choice = remoteChoice(ref, localNames);
+		if (choice) choices.push(choice);
 	}
-
 	return choices.sort((left, right) => right.updatedAt - left.updatedAt || left.label.localeCompare(right.label));
 }

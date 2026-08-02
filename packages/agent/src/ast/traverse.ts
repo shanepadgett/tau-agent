@@ -350,17 +350,15 @@ export async function walkPaths(options: WalkOptions): Promise<TraversalResult> 
 		return { entries, limit, filesVisited, sourceBytes, elapsedMs: elapsed() };
 	}
 
-	async function walkDir(directory: string, depth: number, rules: readonly IgnoreRule[]): Promise<void> {
-		if (stopIfNeeded()) return;
-		if (depth >= budgets.maxDepth) {
-			limit = limit ?? "maxDepth";
-			return;
-		}
-
+	async function listChildren(
+		directory: string,
+		depth: number,
+		rules: readonly IgnoreRule[],
+	): Promise<TraversalHit[] | undefined> {
 		const names = await listNames(directory, options.cwd);
 		const children: TraversalHit[] = [];
 		for (const name of names) {
-			if (stopIfNeeded()) return;
+			if (stopIfNeeded()) return undefined;
 			const childPath = join(directory, name);
 			let stats: Stats;
 			try {
@@ -378,20 +376,34 @@ export async function walkPaths(options: WalkOptions): Promise<TraversalResult> 
 				depth: depth + 1,
 			});
 		}
+		return sortHits(children);
+	}
 
-		for (const child of sortHits(children)) {
+	async function visitChild(child: TraversalHit, rules: readonly IgnoreRule[]): Promise<boolean> {
+		if (child.type === "file") return pushFile(child);
+		if (!filesOnly) entries.push(child);
+		if (child.depth >= budgets.maxDepth) {
+			limit = limit ?? "maxDepth";
+			return true;
+		}
+		const childRules = includeIgnored ? rules : await appendIgnoreRules(child.absolutePath, rules);
+		await walkDir(child.absolutePath, child.depth, childRules);
+		return true;
+	}
+
+	async function walkDir(directory: string, depth: number, rules: readonly IgnoreRule[]): Promise<void> {
+		if (stopIfNeeded()) return;
+		if (depth >= budgets.maxDepth) {
+			limit = limit ?? "maxDepth";
+			return;
+		}
+
+		const children = await listChildren(directory, depth, rules);
+		if (children === undefined) return;
+
+		for (const child of children) {
 			if (stopIfNeeded()) return;
-			if (child.type === "file") {
-				if (!(await pushFile(child))) return;
-				continue;
-			}
-			if (!filesOnly) entries.push(child);
-			if (child.depth >= budgets.maxDepth) {
-				limit = limit ?? "maxDepth";
-				continue;
-			}
-			const childRules = includeIgnored ? rules : await appendIgnoreRules(child.absolutePath, rules);
-			await walkDir(child.absolutePath, child.depth, childRules);
+			if (!(await visitChild(child, rules))) return;
 		}
 	}
 

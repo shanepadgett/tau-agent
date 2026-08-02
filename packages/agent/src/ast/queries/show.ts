@@ -199,6 +199,48 @@ function formatCandidateError(label: string, candidates: readonly Candidate[], c
 	return lines.join("\n");
 }
 
+function targetLabel(target: ShowTargetInput): string {
+	return target.line === undefined
+		? `${target.name} @ ${target.path}`
+		: `${target.name} @ ${target.path}:${target.line}`;
+}
+
+async function resolveShowBlock(
+	engine: ExploreEngine,
+	target: ShowTargetInput,
+	view: ShowView,
+	context: number,
+	signal: AbortSignal,
+): Promise<ShowBlock> {
+	const resolutionTarget: Target = {
+		path: target.path,
+		name: target.name,
+		...(target.line === undefined ? {} : { line: target.line }),
+	};
+	const resolution = await resolveTarget(engine, engine.cwd, resolutionTarget, signal);
+	const label = targetLabel(target);
+	if (resolution.kind === "notFound") {
+		throw new Error(`No declaration matched ${label}`);
+	}
+	if (resolution.kind === "candidates") {
+		throw new Error(formatCandidateError(label, resolution.candidates, engine.cwd));
+	}
+	const adapter = engine.registry.adapterForPath(resolution.path);
+	const importNoise = adapter?.importNoiseIdentifiers ?? NO_IMPORT_NOISE;
+	return buildBlock(resolution.decl, resolution.path, resolution.ir, resolution.source, view, context, importNoise);
+}
+
+function dedupeDocWarnings(blocks: ShowBlock[]): void {
+	let docsWarningEmitted = false;
+	for (const block of blocks) {
+		if (docsWarningEmitted) {
+			block.warnings = block.warnings.filter((warning) => warning !== "no attached documentation");
+		} else if (block.warnings.includes("no attached documentation")) {
+			docsWarningEmitted = true;
+		}
+	}
+}
+
 /**
  * Resolve every target before emitting. Any missing/ambiguous target fails the whole batch.
  * `contextLines` must be omitted (undefined) unless view is declaration.
@@ -214,49 +256,11 @@ export async function showTargets(
 		throw new Error("contextLines is supported only with view=declaration");
 	}
 	const context = contextLines ?? 0;
-
-	const unique = dedupeShowTargets(targets);
 	const blocks: ShowBlock[] = [];
-	let docsWarningEmitted = false;
-
-	for (const target of unique) {
+	for (const target of dedupeShowTargets(targets)) {
 		signal.throwIfAborted();
-		const resolutionTarget: Target = {
-			path: target.path,
-			name: target.name,
-			...(target.line === undefined ? {} : { line: target.line }),
-		};
-		const resolution = await resolveTarget(engine, engine.cwd, resolutionTarget, signal);
-		const label =
-			target.line === undefined
-				? `${target.name} @ ${target.path}`
-				: `${target.name} @ ${target.path}:${target.line}`;
-
-		if (resolution.kind === "notFound") {
-			throw new Error(`No declaration matched ${label}`);
-		}
-		if (resolution.kind === "candidates") {
-			throw new Error(formatCandidateError(label, resolution.candidates, engine.cwd));
-		}
-
-		const adapter = engine.registry.adapterForPath(resolution.path);
-		const importNoise = adapter?.importNoiseIdentifiers ?? NO_IMPORT_NOISE;
-		const block = buildBlock(
-			resolution.decl,
-			resolution.path,
-			resolution.ir,
-			resolution.source,
-			view,
-			context,
-			importNoise,
-		);
-		if (docsWarningEmitted) {
-			block.warnings = block.warnings.filter((warning) => warning !== "no attached documentation");
-		} else if (block.warnings.includes("no attached documentation")) {
-			docsWarningEmitted = true;
-		}
-		blocks.push(block);
+		blocks.push(await resolveShowBlock(engine, target, view, context, signal));
 	}
-
+	dedupeDocWarnings(blocks);
 	return { blocks };
 }

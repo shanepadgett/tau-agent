@@ -106,10 +106,7 @@ function dashboardState(status: SubagentInvocationSnapshot["status"]): string {
 	}
 }
 
-function formatDashboardMarkdown(snapshots: readonly SubagentInvocationSnapshot[]): string {
-	const ordered = [...snapshots].sort(
-		(a, b) => a.startedAt - b.startedAt || a.invocationId.localeCompare(b.invocationId),
-	);
+function dashboardCounts(ordered: readonly SubagentInvocationSnapshot[]): string {
 	const activeCount = ordered.filter((snapshot) =>
 		["waiting", "starting", "running"].includes(snapshot.status),
 	).length;
@@ -119,7 +116,39 @@ function formatDashboardMarkdown(snapshots: readonly SubagentInvocationSnapshot[
 	const counts = [`${activeCount} active`, `${doneCount} done`];
 	if (failedCount > 0) counts.push(`${failedCount} failed`);
 	if (stoppedCount > 0) counts.push(`${stoppedCount} stopped`);
-	const lines = ["# Subagents", "", counts.join(" · "), ""];
+	return counts.join(" · ");
+}
+
+function dashboardTableRow(details: SubagentInvocationSnapshot): string {
+	const latest = details.actions.at(-1);
+	const currentTool = details.currentActivity?.match(/^\S+/)?.[0];
+	const lastTool = currentTool ?? latest?.tool ?? "";
+	const ctx = typeof details.contextPercent === "number" ? `${details.contextPercent.toFixed(1)}%` : "—";
+	return `| ${tableCell(`${details.displayName} (${details.agent})`, 48)} | ${dashboardState(details.status)} | ${tableCell(lastTool, 32) || "—"} | ${details.toolCalls} | $${details.usage.cost.toFixed(4)} | ${ctx} | ${elapsed(details.durationMs)} |`;
+}
+
+function dashboardInputSection(details: SubagentInvocationSnapshot): string[] {
+	const lines = [
+		`### ${tableCell(details.displayName, 80)}`,
+		"",
+		tableCell(details.agent, 80),
+		"",
+		quote(details.task) || "> _(empty)_",
+	];
+	if (details.files.length > 0) {
+		lines.push("", "**Files**", "");
+		for (const file of details.files) lines.push(`- ${tableCell(file, 300)}`);
+	}
+	if (details.error) lines.push("", "**Error**", "", quote(details.error));
+	lines.push("");
+	return lines;
+}
+
+function formatDashboardMarkdown(snapshots: readonly SubagentInvocationSnapshot[]): string {
+	const ordered = [...snapshots].sort(
+		(a, b) => a.startedAt - b.startedAt || a.invocationId.localeCompare(b.invocationId),
+	);
+	const lines = ["# Subagents", "", dashboardCounts(ordered), ""];
 	if (ordered.length === 0) {
 		lines.push("_No subagents._", "");
 		return lines.join("\n");
@@ -127,32 +156,12 @@ function formatDashboardMarkdown(snapshots: readonly SubagentInvocationSnapshot[
 	lines.push(
 		"| Agent | State | Last tool | Calls | Cost | Ctx | Time |",
 		"| --- | --- | --- | ---: | ---: | ---: | ---: |",
+		...ordered.map(dashboardTableRow),
+		"",
+		"## Inputs",
+		"",
 	);
-	for (const details of ordered) {
-		const latest = details.actions.at(-1);
-		const currentTool = details.currentActivity?.match(/^\S+/)?.[0];
-		const lastTool = currentTool ?? latest?.tool ?? "";
-		const ctx = typeof details.contextPercent === "number" ? `${details.contextPercent.toFixed(1)}%` : "—";
-		lines.push(
-			`| ${tableCell(`${details.displayName} (${details.agent})`, 48)} | ${dashboardState(details.status)} | ${tableCell(lastTool, 32) || "—"} | ${details.toolCalls} | $${details.usage.cost.toFixed(4)} | ${ctx} | ${elapsed(details.durationMs)} |`,
-		);
-	}
-	lines.push("", "## Inputs", "");
-	for (const details of ordered) {
-		lines.push(
-			`### ${tableCell(details.displayName, 80)}`,
-			"",
-			tableCell(details.agent, 80),
-			"",
-			quote(details.task) || "> _(empty)_",
-		);
-		if (details.files.length > 0) {
-			lines.push("", "**Files**", "");
-			for (const file of details.files) lines.push(`- ${tableCell(file, 300)}`);
-		}
-		if (details.error) lines.push("", "**Error**", "", quote(details.error));
-		lines.push("");
-	}
+	for (const details of ordered) lines.push(...dashboardInputSection(details));
 	return lines.join("\n");
 }
 

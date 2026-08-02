@@ -1,6 +1,6 @@
 import { lstat, opendir } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import type { FileDepHost, LanguageAdapter } from "../adapter.ts";
+import type { FileDepHost, FileDepResolution, LanguageAdapter } from "../adapter.ts";
 import type { ExploreEngine } from "../engine.ts";
 import { scanSources } from "../scan.ts";
 import { formatPathForDisplay, pathResolutionError, resolveExplorePath } from "../traverse.ts";
@@ -119,6 +119,124 @@ function sortUnique(paths: readonly string[]): string[] {
 	return [...new Set(paths.map((path) => resolve(path)))].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
+type EdgeSeen = {
+	internal: Set<string>;
+	package: Set<string>;
+	external: Set<string>;
+};
+
+function emptyEdgeSeen(): EdgeSeen {
+	return { internal: new Set(), package: new Set(), external: new Set() };
+}
+
+function appendInternalPaths(
+	edges: FileGraphEdge[],
+	from: string,
+	paths: readonly string[],
+	scopeRoot: string,
+	ownsPath: (path: string) => boolean,
+	seen: Set<string>,
+): void {
+	for (const target of sortUnique(paths)) {
+		if (!isWithin(scopeRoot, target)) continue;
+		if (!ownsPath(target)) continue;
+		if (target === from) continue;
+		if (seen.has(target)) continue;
+		seen.add(target);
+		edges.push({ kind: "internal", from, to: target });
+	}
+}
+
+function appendResolution(
+	edges: FileGraphEdge[],
+	from: string,
+	resolution: FileDepResolution,
+	scopeRoot: string,
+	ownsPath: (path: string) => boolean,
+	seen: EdgeSeen,
+): void {
+	if (resolution.kind === "unresolved") return;
+	if (resolution.kind === "external") {
+		if (seen.external.has(resolution.id)) return;
+		seen.external.add(resolution.id);
+		edges.push({ kind: "external", from, id: resolution.id });
+		return;
+	}
+	if (resolution.kind === "package") {
+		if (!isWithin(scopeRoot, resolution.dir) || seen.package.has(resolution.dir)) return;
+		seen.package.add(resolution.dir);
+		edges.push({
+			kind: "package",
+			from,
+			id: resolution.id,
+			dir: resolution.dir,
+			fileCount: resolution.fileCount,
+		});
+		return;
+	}
+	appendInternalPaths(edges, from, resolution.paths, scopeRoot, ownsPath, seen.internal);
+}
+
+function recordImporter(byTarget: Map<string, string[]>, target: string, from: string): void {
+	const list = byTarget.get(target);
+	if (list === undefined) byTarget.set(target, [from]);
+	else if (!list.includes(from)) list.push(from);
+}
+
+type ForwardHitState = {
+	hits: FileDepHit[];
+	resultLimitReached: boolean;
+	externalOmitted: number;
+	inRepoCount: number;
+	externalCount: number;
+	listedInternal: Set<string>;
+	listedPackage: Set<string>;
+	listedExternal: Set<string>;
+};
+
+function pushForwardEdge(
+	state: ForwardHitState,
+	edge: FileGraphEdge,
+	nextDepth: number,
+	resultLimit: number,
+	enqueue: (next: string) => void,
+): boolean {
+	if (edge.kind === "external") {
+		if (state.listedExternal.has(edge.id)) return true;
+		state.listedExternal.add(edge.id);
+		if (state.externalCount >= EXTERNAL_HIT_LIMIT) {
+			state.externalOmitted += 1;
+			return true;
+		}
+		state.externalCount += 1;
+		state.hits.push({ depth: nextDepth, kind: "external", id: edge.id });
+		return true;
+	}
+	if (state.inRepoCount >= resultLimit) {
+		state.resultLimitReached = true;
+		return false;
+	}
+	if (edge.kind === "package") {
+		if (state.listedPackage.has(edge.dir)) return true;
+		state.listedPackage.add(edge.dir);
+		state.inRepoCount += 1;
+		state.hits.push({
+			depth: nextDepth,
+			kind: "package",
+			id: edge.id,
+			dir: edge.dir,
+			fileCount: edge.fileCount,
+		});
+		return true;
+	}
+	if (state.listedInternal.has(edge.to)) return true;
+	state.listedInternal.add(edge.to);
+	state.inRepoCount += 1;
+	state.hits.push({ depth: nextDepth, kind: "internal", path: edge.to });
+	enqueue(edge.to);
+	return true;
+}
+
 /** Breadth-first walk bounded by depth. `expand` returns false to stop the walk. */
 async function walkDepth(
 	seedPath: string,
@@ -183,45 +301,33 @@ export function createFileGraph(engine: ExploreEngine): ExploreFileGraph {
 
 		const host = makeHost(scopeRoot);
 		const edges: FileGraphEdge[] = [];
-		const seenInternal = new Set<string>();
-		const seenPackage = new Set<string>();
-		const seenExternal = new Set<string>();
-
+		const seen = emptyEdgeSeen();
 		for (const imp of ir.imports) {
 			signal.throwIfAborted();
 			const resolution = await resolveFileDep(absolutePath, imp.specifier, host, signal);
-			if (resolution.kind === "unresolved") continue;
-			if (resolution.kind === "external") {
-				if (seenExternal.has(resolution.id)) continue;
-				seenExternal.add(resolution.id);
-				edges.push({ kind: "external", from: absolutePath, id: resolution.id });
-				continue;
-			}
-			if (resolution.kind === "package") {
-				if (!isWithin(scopeRoot, resolution.dir)) continue;
-				if (seenPackage.has(resolution.dir)) continue;
-				seenPackage.add(resolution.dir);
-				edges.push({
-					kind: "package",
-					from: absolutePath,
-					id: resolution.id,
-					dir: resolution.dir,
-					fileCount: resolution.fileCount,
-				});
-				continue;
-			}
-			for (const target of sortUnique(resolution.paths)) {
-				if (!isWithin(scopeRoot, target)) continue;
-				if (!host.ownsPath(target)) continue;
-				if (target === absolutePath) continue;
-				if (seenInternal.has(target)) continue;
-				seenInternal.add(target);
-				edges.push({ kind: "internal", from: absolutePath, to: target });
-			}
+			appendResolution(edges, absolutePath, resolution, scopeRoot, host.ownsPath, seen);
 		}
 
 		forwardCache.set(absolutePath, { contentHash: ir.contentHash, edges });
 		return edges;
+	};
+
+	const indexForwardImporters = async (
+		filePath: string,
+		scopeRoot: string,
+		byTarget: Map<string, string[]>,
+		signal: AbortSignal,
+	): Promise<void> => {
+		const adapter = engine.registry.adapterForPath(filePath);
+		if (adapter?.capabilities.fileDeps !== true || adapter.resolveFileDep === undefined) return;
+		try {
+			const edges = await loadForward(filePath, scopeRoot, signal);
+			for (const edge of edges) {
+				if (edge.kind === "internal") recordImporter(byTarget, edge.to, edge.from);
+			}
+		} catch {
+			// Skip files that fail resolve/parse during reverse build; keep scanning.
+		}
 	};
 
 	const ensureReverse = async (scopeRoot: string, signal: AbortSignal): Promise<ReverseIndex> => {
@@ -238,21 +344,7 @@ export function createFileGraph(engine: ExploreEngine): ExploreFileGraph {
 		let step = await scan.next();
 		while (!step.done) {
 			signal.throwIfAborted();
-			const filePath = step.value.ir.path;
-			const adapter = engine.registry.adapterForPath(filePath);
-			if (adapter?.capabilities.fileDeps === true && adapter.resolveFileDep !== undefined) {
-				try {
-					const edges = await loadForward(filePath, scopeRoot, signal);
-					for (const edge of edges) {
-						if (edge.kind !== "internal") continue;
-						const list = byTarget.get(edge.to);
-						if (list === undefined) byTarget.set(edge.to, [edge.from]);
-						else if (!list.includes(edge.from)) list.push(edge.from);
-					}
-				} catch {
-					// Skip files that fail resolve/parse during reverse build; keep scanning.
-				}
-			}
+			await indexForwardImporters(step.value.ir.path, scopeRoot, byTarget, signal);
 			step = await scan.next();
 		}
 
@@ -272,56 +364,33 @@ export function createFileGraph(engine: ExploreEngine): ExploreFileGraph {
 		signal: AbortSignal,
 	): Promise<FileDepQueryResult> => {
 		const scopeRoot = await scopeRootFor(seedPath, engine.cwd);
-		const hits: FileDepHit[] = [];
-		let resultLimitReached = false;
-		let externalOmitted = 0;
-		let inRepoCount = 0;
-		let externalCount = 0;
-		const listedInternal = new Set<string>();
-		const listedPackage = new Set<string>();
-		const listedExternal = new Set<string>();
+		const state: ForwardHitState = {
+			hits: [],
+			resultLimitReached: false,
+			externalOmitted: 0,
+			inRepoCount: 0,
+			externalCount: 0,
+			listedInternal: new Set(),
+			listedPackage: new Set(),
+			listedExternal: new Set(),
+		};
 
 		await walkDepth(seedPath, depth, signal, async (path, nextDepth, enqueue) => {
 			const edges = await loadForward(path, scopeRoot, signal);
 			for (const edge of edges) {
-				if (edge.kind === "external") {
-					if (listedExternal.has(edge.id)) continue;
-					listedExternal.add(edge.id);
-					if (externalCount >= EXTERNAL_HIT_LIMIT) {
-						externalOmitted += 1;
-						continue;
-					}
-					externalCount += 1;
-					hits.push({ depth: nextDepth, kind: "external", id: edge.id });
-					continue;
-				}
-				if (inRepoCount >= resultLimit) {
-					resultLimitReached = true;
-					break;
-				}
-				if (edge.kind === "package") {
-					if (listedPackage.has(edge.dir)) continue;
-					listedPackage.add(edge.dir);
-					inRepoCount += 1;
-					hits.push({
-						depth: nextDepth,
-						kind: "package",
-						id: edge.id,
-						dir: edge.dir,
-						fileCount: edge.fileCount,
-					});
-					continue;
-				}
-				if (listedInternal.has(edge.to)) continue;
-				listedInternal.add(edge.to);
-				inRepoCount += 1;
-				hits.push({ depth: nextDepth, kind: "internal", path: edge.to });
-				enqueue(edge.to);
+				if (!pushForwardEdge(state, edge, nextDepth, resultLimit, enqueue)) break;
 			}
-			return !resultLimitReached;
+			return !state.resultLimitReached;
 		});
 
-		return { seedPath, depth, hits, resultLimit, resultLimitReached, externalOmitted };
+		return {
+			seedPath,
+			depth,
+			hits: state.hits,
+			resultLimit,
+			resultLimitReached: state.resultLimitReached,
+			externalOmitted: state.externalOmitted,
+		};
 	};
 
 	const collectReverseHits = async (

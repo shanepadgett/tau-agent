@@ -53,6 +53,71 @@ async function findProjectAgentsDir(cwd: string): Promise<string | undefined> {
 	return undefined;
 }
 
+const ALLOWED_FRONTMATTER_FIELDS = new Set(["name", "description", "tools", "names", "model", "thinking"]);
+const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+function validateStringList(raw: unknown, field: string, reasons: string[]): string[] | undefined {
+	if (!Array.isArray(raw) || raw.length === 0) {
+		reasons.push(`${field} must be a non-empty array`);
+		return undefined;
+	}
+	const values = raw
+		.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+		.map((item) => item.trim());
+	if (values.length !== raw.length) reasons.push(`${field} must contain non-empty strings`);
+	if (new Set(values).size !== values.length) reasons.push(`${field} must be unique`);
+	return values;
+}
+
+function requireNonEmptyString(raw: unknown, field: string, reasons: string[]): void {
+	if (typeof raw !== "string" || !raw.trim()) reasons.push(`${field} must be a non-empty string`);
+}
+
+function validateModelField(rawModel: unknown, reasons: string[]): void {
+	if (rawModel === undefined) return;
+	if (typeof rawModel !== "string" || !/^[^/\s]+\/[^/\s]+$/.test(rawModel.trim()))
+		reasons.push("model must be a provider/model string");
+}
+
+function validateThinkingField(rawThinking: unknown, reasons: string[]): void {
+	if (rawThinking === undefined) return;
+	if (!THINKING_LEVELS.includes(rawThinking as ThinkingLevel))
+		reasons.push(`thinking must be one of ${THINKING_LEVELS.join(", ")}`);
+}
+
+function collectDefinitionReasons(
+	parsed: ReturnType<typeof parseFrontmatter>,
+	fallbackName: string,
+): {
+	reasons: string[];
+	name: string;
+	tools: string[] | undefined;
+	names: string[] | undefined;
+	rawDescription: unknown;
+	rawModel: unknown;
+	rawThinking: unknown;
+} {
+	const rawName = parsed.frontmatter.name;
+	const name = typeof rawName === "string" && rawName.trim() ? rawName.trim() : fallbackName;
+	const reasons: string[] = [];
+	for (const field of Object.keys(parsed.frontmatter)) {
+		if (!ALLOWED_FRONTMATTER_FIELDS.has(field)) reasons.push(`unsupported field "${field}"`);
+	}
+	requireNonEmptyString(rawName, "name", reasons);
+	const rawDescription = parsed.frontmatter.description;
+	requireNonEmptyString(rawDescription, "description", reasons);
+	const tools = validateStringList(parsed.frontmatter.tools, "tools", reasons);
+	if (tools?.includes("subagent")) reasons.push("tool subagent is forbidden");
+	const rawNames = parsed.frontmatter.names;
+	const names = rawNames === undefined ? undefined : validateStringList(rawNames, "names", reasons);
+	if (!parsed.body.trim()) reasons.push("prompt body must be non-empty");
+	const rawModel = parsed.frontmatter.model;
+	validateModelField(rawModel, reasons);
+	const rawThinking = parsed.frontmatter.thinking;
+	validateThinkingField(rawThinking, reasons);
+	return { reasons, name, tools, names, rawDescription, rawModel, rawThinking };
+}
+
 function parseDefinition(
 	path: string,
 	content: string,
@@ -60,54 +125,17 @@ function parseDefinition(
 	const fallbackName = basename(path, extname(path));
 	try {
 		const parsed = parseFrontmatter(content);
-		const fields = Object.keys(parsed.frontmatter);
-		const rawName = parsed.frontmatter.name;
-		const name = typeof rawName === "string" && rawName.trim() ? rawName.trim() : fallbackName;
-		const reasons: string[] = [];
-		for (const field of fields) {
-			if (!new Set(["name", "description", "tools", "names", "model", "thinking"]).has(field))
-				reasons.push(`unsupported field "${field}"`);
-		}
-		if (typeof rawName !== "string" || !rawName.trim()) reasons.push("name must be a non-empty string");
-		const rawDescription = parsed.frontmatter.description;
-		if (typeof rawDescription !== "string" || !rawDescription.trim())
-			reasons.push("description must be a non-empty string");
-		const rawTools = parsed.frontmatter.tools;
-		if (!Array.isArray(rawTools) || rawTools.length === 0) reasons.push("tools must be a non-empty array");
-		else {
-			const tools = rawTools
-				.filter((tool): tool is string => typeof tool === "string" && tool.trim().length > 0)
-				.map((tool) => tool.trim());
-			if (tools.length !== rawTools.length) reasons.push("tools must contain non-empty strings");
-			if (new Set(tools).size !== tools.length) reasons.push("tools must be unique");
-			if (tools.includes("subagent")) reasons.push("tool subagent is forbidden");
-		}
-		const rawNames = parsed.frontmatter.names;
-		if (rawNames !== undefined) {
-			if (!Array.isArray(rawNames) || rawNames.length === 0) reasons.push("names must be a non-empty array");
-			else {
-				const names = rawNames
-					.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-					.map((item) => item.trim());
-				if (names.length !== rawNames.length) reasons.push("names must contain non-empty strings");
-				if (new Set(names).size !== names.length) reasons.push("names must be unique");
-			}
-		}
-		if (!parsed.body.trim()) reasons.push("prompt body must be non-empty");
-		const rawModel = parsed.frontmatter.model;
-		if (rawModel !== undefined && (typeof rawModel !== "string" || !/^[^/\s]+\/[^/\s]+$/.test(rawModel.trim())))
-			reasons.push("model must be a provider/model string");
-		const rawThinking = parsed.frontmatter.thinking;
-		const thinkingLevels: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
-		if (rawThinking !== undefined && !thinkingLevels.includes(rawThinking as ThinkingLevel))
-			reasons.push(`thinking must be one of ${thinkingLevels.join(", ")}`);
+		const { reasons, name, tools, names, rawDescription, rawModel, rawThinking } = collectDefinitionReasons(
+			parsed,
+			fallbackName,
+		);
 		if (reasons.length > 0) return { diagnostic: { path, name, reason: reasons.join("; ") } };
 		return {
 			definition: {
 				name,
 				description: (rawDescription as string).trim(),
-				tools: (rawTools as string[]).map((tool) => tool.trim()),
-				names: Array.isArray(rawNames) ? (rawNames as string[]).map((item) => item.trim()) : [name],
+				tools: tools ?? [],
+				names: names ?? [name],
 				model: typeof rawModel === "string" ? rawModel.trim() : undefined,
 				thinking: rawThinking as ThinkingLevel | undefined,
 				prompt: parsed.body.trim(),
@@ -125,60 +153,85 @@ function parseDefinition(
 	}
 }
 
+function finalizeScopeGroup(
+	name: string,
+	values: Array<AgentDefinition | AgentDiagnostic>,
+): AgentDefinition | AgentDiagnostic[] {
+	if (values.length === 1 && "prompt" in values[0]) return values[0];
+	const diagnostics = values.map((value) =>
+		"reason" in value ? value : { path: value.path, name, reason: `duplicate name "${name}" in this scope` },
+	);
+	if (values.length > 1) {
+		for (const value of values) if ("reason" in value) value.reason += `; duplicate name "${name}" in this scope`;
+	}
+	return diagnostics;
+}
+
+async function readAgentDirectoryEntries(
+	directory: string,
+	required: boolean,
+): Promise<
+	| { kind: "entries"; entries: Array<{ name: string }> }
+	| { kind: "empty" }
+	| { kind: "error"; scope: Map<string, AgentDefinition | AgentDiagnostic[]> }
+> {
+	try {
+		const entries = (await readdir(directory, { withFileTypes: true }))
+			.filter((entry) => entry.isFile() && extname(entry.name) === ".md")
+			.sort((a, b) => a.name.localeCompare(b.name));
+		return { kind: "entries", entries };
+	} catch (error) {
+		if (!required) return { kind: "empty" };
+		const reason = error instanceof Error ? error.message : "directory unavailable";
+		return {
+			kind: "error",
+			scope: new Map([
+				[
+					"web-research",
+					[{ path: directory, name: "web-research", reason: `packaged agents unavailable: ${reason}` }],
+				],
+			]),
+		};
+	}
+}
+
+async function parseScopeFile(directory: string, entryName: string): Promise<AgentDefinition | AgentDiagnostic> {
+	const path = join(directory, entryName);
+	try {
+		const parsed = parseDefinition(path, await readFile(path, "utf8"));
+		return (
+			parsed.definition ??
+			parsed.diagnostic ?? {
+				path,
+				name: parse(entryName).name,
+				reason: "empty definition",
+			}
+		);
+	} catch (error) {
+		return {
+			path,
+			name: parse(entryName).name,
+			reason: error instanceof Error ? error.message : "file unreadable",
+		};
+	}
+}
+
 async function loadScope(
 	directory: string,
 	required: boolean,
 ): Promise<Map<string, AgentDefinition | AgentDiagnostic[]>> {
-	let entries;
-	try {
-		entries = (await readdir(directory, { withFileTypes: true }))
-			.filter((entry) => entry.isFile() && extname(entry.name) === ".md")
-			.sort((a, b) => a.name.localeCompare(b.name));
-	} catch (error) {
-		if (!required) return new Map();
-		const reason = error instanceof Error ? error.message : "directory unavailable";
-		return new Map([
-			[
-				"web-research",
-				[{ path: directory, name: "web-research", reason: `packaged agents unavailable: ${reason}` }],
-			],
-		]);
-	}
+	const listed = await readAgentDirectoryEntries(directory, required);
+	if (listed.kind === "empty") return new Map();
+	if (listed.kind === "error") return listed.scope;
 	const grouped = new Map<string, Array<AgentDefinition | AgentDiagnostic>>();
-	for (const entry of entries) {
-		const path = join(directory, entry.name);
-		let parsed;
-		try {
-			parsed = parseDefinition(path, await readFile(path, "utf8"));
-		} catch (error) {
-			parsed = {
-				diagnostic: {
-					path,
-					name: parse(entry.name).name,
-					reason: error instanceof Error ? error.message : "file unreadable",
-				},
-			};
-		}
-		const value = parsed.definition ?? parsed.diagnostic;
-		if (!value) continue;
+	for (const entry of listed.entries) {
+		const value = await parseScopeFile(directory, entry.name);
 		const values = grouped.get(value.name) ?? [];
 		values.push(value);
 		grouped.set(value.name, values);
 	}
 	const scope = new Map<string, AgentDefinition | AgentDiagnostic[]>();
-	for (const [name, values] of grouped) {
-		if (values.length === 1 && "prompt" in values[0]) scope.set(name, values[0]);
-		else {
-			const diagnostics = values.map((value) =>
-				"reason" in value ? value : { path: value.path, name, reason: `duplicate name "${name}" in this scope` },
-			);
-			if (values.length > 1) {
-				for (const value of values)
-					if ("reason" in value) value.reason += `; duplicate name "${name}" in this scope`;
-			}
-			scope.set(name, diagnostics);
-		}
-	}
+	for (const [name, values] of grouped) scope.set(name, finalizeScopeGroup(name, values));
 	return scope;
 }
 

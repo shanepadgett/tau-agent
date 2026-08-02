@@ -34,6 +34,22 @@ function rowsByArea(report: ReadyReport): Map<string, ReadyRow[]> {
 	return map;
 }
 
+function renderMarkdownItem(item: ReadyRow): string[] {
+	const lines = [
+		`### ${statusGlyph(item.status)} ${item.title}`,
+		"",
+		`- Status: **${item.status}** (${item.how})`,
+		`- ${item.note}`,
+	];
+	if (item.evidence.length > 0) {
+		lines.push("- Evidence:");
+		for (const evidence of item.evidence) lines.push(`  - \`${evidence}\``);
+	}
+	if (item.next) lines.push(`- Next: ${item.next}`);
+	lines.push("");
+	return lines;
+}
+
 function renderMarkdown(report: ReadyReport): string {
 	const lines: string[] = [
 		"# Agent readiness report",
@@ -52,17 +68,7 @@ function renderMarkdown(report: ReadyReport): string {
 		const rows = byArea.get(area) ?? [];
 		if (rows.length === 0) continue;
 		lines.push(`## ${AREA_LABELS[area]}`, "");
-		for (const item of rows) {
-			lines.push(`### ${statusGlyph(item.status)} ${item.title}`, "");
-			lines.push(`- Status: **${item.status}** (${item.how})`);
-			lines.push(`- ${item.note}`);
-			if (item.evidence.length > 0) {
-				lines.push("- Evidence:");
-				for (const evidence of item.evidence) lines.push(`  - \`${evidence}\``);
-			}
-			if (item.next) lines.push(`- Next: ${item.next}`);
-			lines.push("");
-		}
+		for (const item of rows) lines.push(...renderMarkdownItem(item));
 	}
 
 	return `${lines.join("\n").trimEnd()}\n`;

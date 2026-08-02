@@ -182,13 +182,19 @@ async function snapsFromCalleeSites(
 ): Promise<DeclSnap[]> {
 	const out: DeclSnap[] = [];
 	const seen = new Set<string>();
-	const seenNames = new Set<string>();
 	for (const site of sites) {
 		signal.throwIfAborted();
-		if (site.name.length === 0 || seenNames.has(site.name)) continue;
-		seenNames.add(site.name);
-		const resolution = await resolveTarget(engine, scopeDir, { name: site.name }, signal);
+		if (site.target === undefined) continue;
+		const resolution = await resolveTarget(
+			engine,
+			scopeDir,
+			{ path: site.target.path, name: site.name, line: site.target.startLine },
+			signal,
+		);
 		if (resolution.kind !== "resolved") continue;
+		if (site.kind === "construct" ? !isTypeLike(resolution.decl.kind) : !isCallableLike(resolution.decl.kind)) {
+			continue;
+		}
 		const item: DeclSnap = {
 			path: resolution.path,
 			decl: resolution.decl,
@@ -293,6 +299,102 @@ function packTarget(state: PackState, snap: DeclSnap, targetKind: DeclKind): voi
  * Budgeted symbol pack. Bodies/signatures via show view extraction.
  * Depth-2 is a capped second resolve+query pass — no relationship depth param.
  */
+async function collectDepth2(
+	args: ContextQueryArgs,
+	state: PackState,
+	snaps: DeclSnap[],
+	mode: "callees" | "callers",
+	scopeDir: string,
+	followUps: { count: number },
+): Promise<DeclSnap[]> {
+	const { engine, signal } = args;
+	const out: DeclSnap[] = [];
+	for (const snap of snaps) {
+		if (followUps.count >= CONTEXT_FOLLOWUP_N || state.used >= state.budget) break;
+		signal.throwIfAborted();
+		followUps.count += 1;
+		const sites = await relSites(args, mode, {
+			path: snap.path,
+			name: snap.decl.name,
+			qualifiedName: snap.decl.qualifiedName,
+			kind: snap.decl.kind,
+			startLine: snap.decl.startLine,
+		});
+		const items =
+			mode === "callees"
+				? await snapsFromCalleeSites(engine, scopeDir, sites, signal)
+				: await snapsFromSites(engine, sites, signal, (d) => isCallableLike(d.kind));
+		for (const item of items) {
+			if (!state.seen.has(snapKey(item))) out.push(item);
+		}
+	}
+	return out;
+}
+
+async function packCallableContext(
+	args: ContextQueryArgs,
+	state: PackState,
+	target: CompositeTarget,
+	scopeDir: string,
+): Promise<void> {
+	const { engine, signal } = args;
+	const calleeSites = await relSites(args, "callees", target);
+	const calleeSnaps = await snapsFromCalleeSites(engine, scopeDir, calleeSites, signal);
+	packInto(state, "callees", "direct callees", calleeSnaps, true);
+
+	const callerSites = await relSites(args, "callers", target);
+	const callerSnaps = await snapsFromSites(engine, callerSites, signal, (d) => isCallableLike(d.kind));
+	packInto(state, "callers", "direct callers", callerSnaps, false);
+
+	const followUps = { count: 0 };
+	const depth2Callees = await collectDepth2(args, state, calleeSnaps, "callees", scopeDir, followUps);
+	packInto(state, "calleesDepth2", "depth-2 callees", depth2Callees, false);
+	const depth2Callers = await collectDepth2(args, state, callerSnaps, "callers", scopeDir, followUps);
+	packInto(state, "callersDepth2", "depth-2 callers", depth2Callers, false);
+}
+
+async function packTypeContext(
+	args: ContextQueryArgs,
+	state: PackState,
+	target: CompositeTarget,
+	decl: Decl,
+	ir: FileIr,
+	source: string,
+): Promise<void> {
+	const { engine, signal } = args;
+	const implSites = await relSites(args, "implementations", target);
+	const implSnaps = await snapsFromSites(engine, implSites, signal, (d) => isTypeLike(d.kind));
+	packInto(state, "implementors", "implementors", implSnaps, true);
+
+	const methods: DeclSnap[] = [];
+	for (const child of decl.children) {
+		if (!isCallableLike(child.kind)) continue;
+		if (methods.length >= CONTEXT_METHOD_CAP) break;
+		methods.push({ path: target.path, decl: child, ir, source });
+	}
+	packInto(state, "methods", "methods", methods, true);
+
+	const dependents: DeclSnap[] = [];
+	for (const method of methods) {
+		if (state.used >= state.budget) break;
+		signal.throwIfAborted();
+		const sites = await relSites(args, "callers", {
+			path: method.path,
+			name: method.decl.name,
+			qualifiedName: method.decl.qualifiedName,
+			kind: method.decl.kind,
+			startLine: method.decl.startLine,
+		});
+		// Method-name matching collects unrelated same-name callers; ambiguous
+		// entries would spend budget correct ones need.
+		const certain = sites.filter((site) => site.certainty !== "ambiguous");
+		for (const item of await snapsFromSites(engine, certain, signal, (d) => isCallableLike(d.kind))) {
+			if (!state.seen.has(snapKey(item))) dependents.push(item);
+		}
+	}
+	packInto(state, "dependents", "dependents", dependents, false);
+}
+
 export async function queryContext(args: ContextQueryArgs): Promise<ContextResult> {
 	const { engine, signal } = args;
 	if (args.budget < 1) {
@@ -324,82 +426,9 @@ export async function queryContext(args: ContextQueryArgs): Promise<ContextResul
 	packTarget(state, targetSnap, kind);
 
 	if (isCallableLike(kind)) {
-		const calleeSites = await relSites(args, "callees", target);
-		const calleeSnaps = await snapsFromCalleeSites(engine, scopeDir, calleeSites, signal);
-		packInto(state, "callees", "direct callees", calleeSnaps, true);
-
-		const callerSites = await relSites(args, "callers", target);
-		const callerSnaps = await snapsFromSites(engine, callerSites, signal, (d) => isCallableLike(d.kind));
-		packInto(state, "callers", "direct callers", callerSnaps, false);
-
-		let followUps = 0;
-		const depth2Callees: DeclSnap[] = [];
-		for (const snap of calleeSnaps) {
-			if (followUps >= CONTEXT_FOLLOWUP_N || state.used >= state.budget) break;
-			signal.throwIfAborted();
-			followUps += 1;
-			const sites = await relSites(args, "callees", {
-				path: snap.path,
-				name: snap.decl.name,
-				qualifiedName: snap.decl.qualifiedName,
-				kind: snap.decl.kind,
-				startLine: snap.decl.startLine,
-			});
-			for (const item of await snapsFromCalleeSites(engine, scopeDir, sites, signal)) {
-				if (!state.seen.has(snapKey(item))) depth2Callees.push(item);
-			}
-		}
-		packInto(state, "calleesDepth2", "depth-2 callees", depth2Callees, false);
-
-		const depth2Callers: DeclSnap[] = [];
-		for (const snap of callerSnaps) {
-			if (followUps >= CONTEXT_FOLLOWUP_N || state.used >= state.budget) break;
-			signal.throwIfAborted();
-			followUps += 1;
-			const sites = await relSites(args, "callers", {
-				path: snap.path,
-				name: snap.decl.name,
-				qualifiedName: snap.decl.qualifiedName,
-				kind: snap.decl.kind,
-				startLine: snap.decl.startLine,
-			});
-			for (const item of await snapsFromSites(engine, sites, signal, (d) => isCallableLike(d.kind))) {
-				if (!state.seen.has(snapKey(item))) depth2Callers.push(item);
-			}
-		}
-		packInto(state, "callersDepth2", "depth-2 callers", depth2Callers, false);
+		await packCallableContext(args, state, target, scopeDir);
 	} else {
-		const implSites = await relSites(args, "implementations", target);
-		const implSnaps = await snapsFromSites(engine, implSites, signal, (d) => isTypeLike(d.kind));
-		packInto(state, "implementors", "implementors", implSnaps, true);
-
-		const methods: DeclSnap[] = [];
-		for (const child of decl.children) {
-			if (!isCallableLike(child.kind)) continue;
-			if (methods.length >= CONTEXT_METHOD_CAP) break;
-			methods.push({ path: target.path, decl: child, ir, source });
-		}
-		packInto(state, "methods", "methods", methods, true);
-
-		const dependents: DeclSnap[] = [];
-		for (const method of methods) {
-			if (state.used >= state.budget) break;
-			signal.throwIfAborted();
-			const sites = await relSites(args, "callers", {
-				path: method.path,
-				name: method.decl.name,
-				qualifiedName: method.decl.qualifiedName,
-				kind: method.decl.kind,
-				startLine: method.decl.startLine,
-			});
-			// Method-name matching collects unrelated same-name callers; ambiguous
-			// entries would spend budget correct ones need.
-			const certain = sites.filter((site) => site.certainty !== "ambiguous");
-			for (const item of await snapsFromSites(engine, certain, signal, (d) => isCallableLike(d.kind))) {
-				if (!state.seen.has(snapKey(item))) dependents.push(item);
-			}
-		}
-		packInto(state, "dependents", "dependents", dependents, false);
+		await packTypeContext(args, state, target, decl, ir, source);
 	}
 
 	return {

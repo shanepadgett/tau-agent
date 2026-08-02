@@ -5,23 +5,26 @@ function depthPrefix(depth: number, showDepth: boolean): string {
 	return showDepth ? `d${depth} ` : "";
 }
 
+function commonDirPrefixLength(split: readonly string[][]): number {
+	const first = split[0];
+	if (first === undefined || split.length <= 1) return 0;
+	let common = 0;
+	while (common < first.length - 1) {
+		const part = first[common];
+		if (part === undefined) break;
+		if (!split.every((parts) => parts[common] === part)) break;
+		common += 1;
+	}
+	return common;
+}
+
 /** Factor shared directory prefixes into a small indent tree. */
 function formatInternalTree(rows: readonly { depth: number; display: string }[], showDepth: boolean): string[] {
 	if (rows.length === 0) return [];
 
-	// Common directory prefix across displays (posix-ish split on /).
 	const split = rows.map((row) => row.display.split("/"));
-	let common = 0;
+	const common = commonDirPrefixLength(split);
 	const first = split[0];
-	if (first !== undefined && split.length > 1) {
-		while (common < first.length - 1) {
-			const part = first[common];
-			if (part === undefined) break;
-			if (!split.every((parts) => parts[common] === part)) break;
-			common += 1;
-		}
-	}
-
 	const lines: string[] = [];
 	if (common > 0 && first !== undefined) {
 		lines.push(first.slice(0, common).join("/"));

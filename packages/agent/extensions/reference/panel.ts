@@ -257,6 +257,25 @@ class ReferencePanel implements Component {
 		];
 	}
 
+	private branchSuffix(branch: { isCurrent: boolean; updatedAt?: number }): string {
+		if (branch.isCurrent) return "current";
+		if (branch.updatedAt === undefined) return "remote";
+		return formatAge(branch.updatedAt);
+	}
+
+	private renderBranchRow(
+		branch: { name: string; isCurrent: boolean; updatedAt?: number },
+		active: boolean,
+		renderWidth: number,
+	): string {
+		const pointer = active ? this.theme.fg("accent", "› ") : "  ";
+		const labelText = `${branch.name}  ${this.branchSuffix(branch)}`;
+		const label = active
+			? this.theme.fg("accent", labelText)
+			: this.theme.fg(branch.isCurrent ? "accent" : "text", labelText);
+		return truncateToWidth(`${pointer}${label}`, renderWidth, "");
+	}
+
 	private renderBranchPicker(width: number): string[] {
 		const picker = this.branchPicker;
 		if (!picker) return [];
@@ -279,18 +298,7 @@ class ReferencePanel implements Component {
 		for (let index = window.start; index < window.end; index++) {
 			const branch = picker.branches[index];
 			if (!branch) continue;
-			const active = index === picker.cursor;
-			const pointer = active ? this.theme.fg("accent", "› ") : "  ";
-			const suffix = branch.isCurrent
-				? "current"
-				: branch.updatedAt === undefined
-					? "remote"
-					: formatAge(branch.updatedAt);
-			const labelText = `${branch.name}  ${suffix}`;
-			const label = active
-				? this.theme.fg("accent", labelText)
-				: this.theme.fg(branch.isCurrent ? "accent" : "text", labelText);
-			lines.push(truncateToWidth(`${pointer}${label}`, renderWidth, ""));
+			lines.push(this.renderBranchRow(branch, index === picker.cursor, renderWidth));
 		}
 		if (window.start > 0 || window.end < picker.branches.length) {
 			lines.push(
@@ -303,6 +311,12 @@ class ReferencePanel implements Component {
 		return lines;
 	}
 
+	private referenceStatusMark(state: NonNullable<ReferenceListItem["state"]>): string {
+		if (state === "failed") return this.theme.fg("error", "!");
+		if (state === "updated") return this.theme.fg("success", "✓");
+		return this.theme.fg("muted", "…");
+	}
+
 	private renderReferenceRow(item: ReferenceListItem, active: boolean, width: number): string[] {
 		const separator = item.displayName.lastIndexOf("/");
 		const repository = separator < 0 ? item.displayName : item.displayName.slice(separator + 1);
@@ -310,9 +324,7 @@ class ReferencePanel implements Component {
 		const name = item.dirty ? `${repository} *` : repository;
 		const label = active ? this.theme.fg("accent", name) : this.theme.fg(item.dirty ? "warning" : "text", name);
 		const branch = item.branch ? this.theme.fg("muted", ` (${item.branch})`) : "";
-		const status = item.state
-			? ` ${this.theme.fg(item.state === "failed" ? "error" : item.state === "updated" ? "success" : "muted", item.state === "failed" ? "!" : item.state === "updated" ? "✓" : "…")}`
-			: "";
+		const status = item.state ? ` ${this.referenceStatusMark(item.state)}` : "";
 		return [truncateToWidth(`${label}${owner}${branch}${status}`, width, "")];
 	}
 

@@ -108,6 +108,56 @@ function renderEditsPreview(edits: ReadonlyArray<{ oldText: string; newText: str
 		.join("\n");
 }
 
+function resolveScriptSource(
+	scripts: Map<string, StoredScript>,
+	language: Language,
+	params: {
+		script?: string;
+		scriptId?: string;
+		edits?: ReadonlyArray<{ oldText: string; newText: string }>;
+	},
+): { scriptId: string; source: string } {
+	const edits = params.edits;
+	if (edits && edits.length > 0) {
+		const scriptId = params.scriptId;
+		if (!scriptId) throw new Error("edits require scriptId from the failed run.");
+		const stored = scripts.get(scriptId);
+		if (!stored) throw new Error(`No stored script for scriptId ${scriptId}. Evicted; resend full script.`);
+		if (stored.language !== language) {
+			throw new Error(`Language mismatch: scriptId ${scriptId} is ${stored.language}, not ${language}.`);
+		}
+		return { scriptId, source: applyEdits(stored.source, edits) };
+	}
+	if (typeof params.script !== "string" || params.script.length === 0) {
+		throw new Error("Provide script, or edits + scriptId.");
+	}
+	return { scriptId: params.scriptId ?? newScriptId(), source: params.script };
+}
+
+function formatTruncatedTail(text: string): { body: string; note: string } {
+	const trunc = truncateTail(text, { maxLines: DEFAULT_MAX_LINES, maxBytes: DEFAULT_MAX_BYTES });
+	const note = trunc.truncated
+		? `\n\n[output truncated: kept tail ${trunc.outputLines} / ${trunc.totalLines} lines]`
+		: "";
+	return { body: trunc.content, note };
+}
+
+function successScriptResult(stdout: string): { content: [{ type: "text"; text: string }]; details: undefined } {
+	const { body, note } = formatTruncatedTail(stdout.trim());
+	const out = body.trim();
+	return {
+		content: [{ type: "text", text: out ? `${out}${note}` : `(no output)${note}` }],
+		details: undefined,
+	};
+}
+
+function throwScriptFailure(scriptId: string, result: { stdout: string; stderr: string }): never {
+	const diag = result.stderr.trim() || result.stdout.trim();
+	const { body, note } = formatTruncatedTail(diag);
+	const detail = body ? `${body}${note}\n\n` : "";
+	throw new Error(`${detail}scriptId: ${scriptId}`);
+}
+
 export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 	const runtimes = detectRuntimes();
 	const detected = (["python3", "node", "deno"] as const).filter(
@@ -220,60 +270,19 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 			if (signal?.aborted) {
 				return { content: [{ type: "text", text: "Cancelled." }], details: undefined };
 			}
-
 			const command = resolveCommand(language);
-			const edits = params.edits;
-			let scriptId: string | undefined = params.scriptId;
-			let source: string;
-
-			if (edits && edits.length > 0) {
-				if (!scriptId) throw new Error("edits require scriptId from the failed run.");
-				const stored = scripts.get(scriptId);
-				if (!stored) {
-					throw new Error(`No stored script for scriptId ${scriptId}. Evicted; resend full script.`);
-				}
-				if (stored.language !== language) {
-					throw new Error(`Language mismatch: scriptId ${scriptId} is ${stored.language}, not ${language}.`);
-				}
-				source = applyEdits(stored.source, edits);
-			} else {
-				if (typeof params.script !== "string" || params.script.length === 0) {
-					throw new Error("Provide script, or edits + scriptId.");
-				}
-				source = params.script;
-				if (!scriptId) scriptId = newScriptId();
-			}
-
+			const { scriptId, source } = resolveScriptSource(scripts, language, params);
 			remember(scriptId, { language, source });
 			await onUpdate?.({
 				content: [{ type: "text", text: `Running ${languageLabel(language)}...` }],
 				details: undefined,
 			});
-
 			const result = await runScript(language, command, source, ctx.cwd, signal);
 			if (result.code === 0 && !result.killed) {
 				scripts.delete(scriptId);
-				const trunc = truncateTail(result.stdout.trim(), {
-					maxLines: DEFAULT_MAX_LINES,
-					maxBytes: DEFAULT_MAX_BYTES,
-				});
-				const out = trunc.content.trim();
-				const note = trunc.truncated
-					? `\n\n[output truncated: kept tail ${trunc.outputLines} / ${trunc.totalLines} lines]`
-					: "";
-				return {
-					content: [{ type: "text", text: out ? `${out}${note}` : `(no output)${note}` }],
-					details: undefined,
-				};
+				return successScriptResult(result.stdout);
 			}
-
-			const diag = result.stderr.trim() || result.stdout.trim();
-			const trunc = truncateTail(diag, { maxLines: DEFAULT_MAX_LINES, maxBytes: DEFAULT_MAX_BYTES });
-			const note = trunc.truncated
-				? `\n\n[output truncated: kept tail ${trunc.outputLines} / ${trunc.totalLines} lines]`
-				: "";
-			const detail = trunc.content ? `${trunc.content}${note}\n\n` : "";
-			throw new Error(`${detail}scriptId: ${scriptId}`);
+			throwScriptFailure(scriptId, result);
 		},
 		renderCall(args, theme, context) {
 			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);

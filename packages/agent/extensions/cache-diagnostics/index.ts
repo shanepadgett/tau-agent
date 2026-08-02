@@ -179,6 +179,72 @@ export default function cacheDiagnosticsExtension(pi: ExtensionAPI): void {
 		cacheActivitySeen = false;
 	};
 
+	const purgeExpiredFiles = async (): Promise<void> => {
+		const cutoff = Date.now() - RETENTION_MS;
+		for (const parent of [directory, reportsDirectory]) {
+			for (const entry of await readdir(parent, { withFileTypes: true })) {
+				if (
+					!entry.isFile() ||
+					(!entry.name.endsWith(".jsonl") && !entry.name.endsWith(".json") && !entry.name.endsWith(".tmp"))
+				)
+					continue;
+				const path = join(parent, entry.name);
+				if ((await stat(path)).mtimeMs < cutoff) await unlink(path);
+			}
+		}
+	};
+
+	const restoreRecordsFromLog = async (path: string): Promise<Array<Record<string, unknown>>> => {
+		const persisted = await readRecentLogRecords(path);
+		requests = keepRecent(
+			persisted
+				.filter((record) => record.kind === "request" && record.version === 2)
+				.map((record) => record as unknown as RequestRecord),
+		);
+		responses = keepRecent(
+			persisted
+				.filter((record) => record.kind === "response" && record.version === 2)
+				.map((record) => record as unknown as ResponseRecord),
+		);
+		results = keepRecent(
+			persisted
+				.filter((record) => record.kind === "result" && record.version === 2)
+				.map((record) => record as unknown as ResultRecord),
+		);
+		markers = keepRecent(
+			persisted
+				.filter((record) => record.kind === "marker" && record.version === 2)
+				.map((record) => record as unknown as MarkerRecord),
+		);
+		return persisted;
+	};
+
+	const restoreComparisonBaseline = (persisted: Array<Record<string, unknown>>): void => {
+		let latestModelSelectIndex = -1;
+		for (let index = persisted.length - 1; index >= 0; index -= 1) {
+			const record = persisted[index];
+			if (record?.kind !== "marker" || record.version !== 2 || record.name !== "model-select") continue;
+			latestModelSelectIndex = index;
+			break;
+		}
+		const comparisonResults = persisted
+			.slice(latestModelSelectIndex + 1)
+			.filter((record) => record.kind === "result" && record.version === 2)
+			.map((record) => record as unknown as ResultRecord);
+		const latestPromotedResult = [...comparisonResults].reverse().find((result) => result.baselinePromoted);
+		const latestRequest = latestPromotedResult
+			? requests.find((request) => request.id === latestPromotedResult.id)
+			: undefined;
+		if (!latestPromotedResult || !latestRequest) return;
+		previousFingerprint = payloadFingerprintFromRequest(latestRequest);
+		previousRequestId = latestRequest.id;
+		previousPromptState = latestRequest.promptState;
+		previousPromptTokens = latestPromotedResult.usage.promptTokens;
+		cacheActivitySeen = comparisonResults.some(
+			(result) => result.baselinePromoted && result.usage.cacheRead + result.usage.cacheWrite > 0,
+		);
+	};
+
 	pi.registerCommand("cache-debug", {
 		description: "Write a bounded prompt-cache diagnostic report for this session",
 		async handler(_args, ctx) {
@@ -246,63 +312,9 @@ export default function cacheDiagnosticsExtension(pi: ExtensionAPI): void {
 		resetComparison();
 		await mkdir(reportsDirectory, { recursive: true });
 		logFile = join(directory, `${sessionId.replaceAll(/[^a-zA-Z0-9_-]/g, "_")}.jsonl`);
-		const cutoff = Date.now() - RETENTION_MS;
-		for (const parent of [directory, reportsDirectory]) {
-			for (const entry of await readdir(parent, { withFileTypes: true })) {
-				if (
-					!entry.isFile() ||
-					(!entry.name.endsWith(".jsonl") && !entry.name.endsWith(".json") && !entry.name.endsWith(".tmp"))
-				)
-					continue;
-				const path = join(parent, entry.name);
-				if ((await stat(path)).mtimeMs < cutoff) await unlink(path);
-			}
-		}
-		const persisted = await readRecentLogRecords(logFile);
-		requests = keepRecent(
-			persisted
-				.filter((record) => record.kind === "request" && record.version === 2)
-				.map((record) => record as unknown as RequestRecord),
-		);
-		responses = keepRecent(
-			persisted
-				.filter((record) => record.kind === "response" && record.version === 2)
-				.map((record) => record as unknown as ResponseRecord),
-		);
-		results = keepRecent(
-			persisted
-				.filter((record) => record.kind === "result" && record.version === 2)
-				.map((record) => record as unknown as ResultRecord),
-		);
-		markers = keepRecent(
-			persisted
-				.filter((record) => record.kind === "marker" && record.version === 2)
-				.map((record) => record as unknown as MarkerRecord),
-		);
-		let latestModelSelectIndex = -1;
-		for (let index = persisted.length - 1; index >= 0; index -= 1) {
-			const record = persisted[index];
-			if (record?.kind !== "marker" || record.version !== 2 || record.name !== "model-select") continue;
-			latestModelSelectIndex = index;
-			break;
-		}
-		const comparisonRecords = persisted.slice(latestModelSelectIndex + 1);
-		const comparisonResults = comparisonRecords
-			.filter((record) => record.kind === "result" && record.version === 2)
-			.map((record) => record as unknown as ResultRecord);
-		const latestPromotedResult = [...comparisonResults].reverse().find((result) => result.baselinePromoted);
-		const latestRequest = latestPromotedResult
-			? requests.find((request) => request.id === latestPromotedResult.id)
-			: undefined;
-		if (latestPromotedResult && latestRequest) {
-			previousFingerprint = payloadFingerprintFromRequest(latestRequest);
-			previousRequestId = latestRequest.id;
-			previousPromptState = latestRequest.promptState;
-			previousPromptTokens = latestPromotedResult.usage.promptTokens;
-			cacheActivitySeen = comparisonResults.some(
-				(result) => result.baselinePromoted && result.usage.cacheRead + result.usage.cacheWrite > 0,
-			);
-		}
+		await purgeExpiredFiles();
+		const persisted = await restoreRecordsFromLog(logFile);
+		restoreComparisonBaseline(persisted);
 		await appendRecord({
 			kind: "runtime",
 			version: 2,

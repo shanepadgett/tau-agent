@@ -91,6 +91,20 @@ function fuzzyScore(query: string, text: string): number | undefined {
 	return dist === undefined ? undefined : 1000 + dist;
 }
 
+function levenshteinRow(prev: number[], cur: number[], b: string, ca: number, maxDist: number): number {
+	let rowMin = cur[0] ?? maxDist + 1;
+	for (let j = 1; j <= b.length; j += 1) {
+		const cost = ca === b.charCodeAt(j - 1) ? 0 : 1;
+		const del = (prev[j] ?? maxDist + 1) + 1;
+		const ins = (cur[j - 1] ?? maxDist + 1) + 1;
+		const sub = (prev[j - 1] ?? maxDist + 1) + cost;
+		const v = Math.min(del, ins, sub);
+		cur[j] = v;
+		if (v < rowMin) rowMin = v;
+	}
+	return rowMin;
+}
+
 function boundedLevenshtein(a: string, b: string, maxDist: number): number | undefined {
 	if (Math.abs(a.length - b.length) > maxDist) return undefined;
 	const prev = Array.from({ length: b.length + 1 }, () => 0);
@@ -98,17 +112,7 @@ function boundedLevenshtein(a: string, b: string, maxDist: number): number | und
 	for (let j = 0; j <= b.length; j += 1) prev[j] = j;
 	for (let i = 1; i <= a.length; i += 1) {
 		cur[0] = i;
-		let rowMin = cur[0] ?? i;
-		const ca = a.charCodeAt(i - 1);
-		for (let j = 1; j <= b.length; j += 1) {
-			const cost = ca === b.charCodeAt(j - 1) ? 0 : 1;
-			const del = (prev[j] ?? maxDist + 1) + 1;
-			const ins = (cur[j - 1] ?? maxDist + 1) + 1;
-			const sub = (prev[j - 1] ?? maxDist + 1) + cost;
-			const v = Math.min(del, ins, sub);
-			cur[j] = v;
-			if (v < rowMin) rowMin = v;
-		}
+		const rowMin = levenshteinRow(prev, cur, b, a.charCodeAt(i - 1), maxDist);
 		if (rowMin > maxDist) return undefined;
 		for (let j = 0; j <= b.length; j += 1) prev[j] = cur[j] ?? 0;
 	}
@@ -208,6 +212,57 @@ function newBucket(query: DiscoverQuery): MatchBucket {
 	};
 }
 
+function consumeWork(bucket: MatchBucket, maxWork: number): boolean {
+	bucket.workUsed += 1;
+	if (bucket.workUsed <= maxWork) return true;
+	bucket.workLimitReached = true;
+	return false;
+}
+
+function considerFuzzy(
+	bucket: MatchBucket,
+	query: Extract<DiscoverQuery, { kind: "fuzzyName" }>,
+	path: string,
+	decl: Decl,
+	source: string,
+	access: string | undefined,
+): void {
+	if (!consumeWork(bucket, query.maxWork)) return;
+	const score = bestFuzzyScore(query.name, decl);
+	if (score === undefined) return;
+	const candidate = toCandidate(path, decl, source, access);
+	const worst = bucket.scored[bucket.scored.length - 1];
+	if (bucket.scored.length >= query.maxCandidates && worst !== undefined && score >= worst.score) {
+		bucket.candidateLimitReached = true;
+		return;
+	}
+	const before = bucket.scored.length;
+	insertScored(bucket.scored, { score, candidate }, query.maxCandidates);
+	if (before === query.maxCandidates) bucket.candidateLimitReached = true;
+}
+
+function considerDocumentation(
+	bucket: MatchBucket,
+	query: Extract<DiscoverQuery, { kind: "documentation" }>,
+	path: string,
+	decl: Decl,
+	source: string,
+	access: string | undefined,
+): void {
+	if (decl.docStartOffset === undefined || decl.docEndOffset === undefined) return;
+	if (!consumeWork(bucket, query.maxWork)) return;
+	const docs = docsText(decl, source);
+	if (docs === undefined) return;
+	const foldedDocs = docs.toLowerCase();
+	if (!query.terms.every((term) => foldedDocs.includes(term.toLowerCase()))) return;
+	if (bucket.scored.length >= query.maxCandidates) {
+		bucket.candidateLimitReached = true;
+		return;
+	}
+	bucket.scored.push({ score: bucket.scored.length, candidate: toCandidate(path, decl, source, access) });
+	if (bucket.scored.length >= query.maxCandidates) bucket.candidateLimitReached = true;
+}
+
 function considerDecl(
 	bucket: MatchBucket,
 	query: DiscoverQuery,
@@ -238,43 +293,11 @@ function considerDecl(
 			bucket.plain.push(toCandidate(path, decl, source, access));
 			return;
 		}
-		case "fuzzyName": {
-			bucket.workUsed += 1;
-			if (bucket.workUsed > query.maxWork) {
-				bucket.workLimitReached = true;
-				return;
-			}
-			const score = bestFuzzyScore(query.name, decl);
-			if (score === undefined) return;
-			const candidate = toCandidate(path, decl, source, access);
-			const worst = bucket.scored[bucket.scored.length - 1];
-			if (bucket.scored.length >= query.maxCandidates && worst !== undefined && score >= worst.score) {
-				bucket.candidateLimitReached = true;
-				return;
-			}
-			const before = bucket.scored.length;
-			insertScored(bucket.scored, { score, candidate }, query.maxCandidates);
-			if (before === query.maxCandidates) bucket.candidateLimitReached = true;
+		case "fuzzyName":
+			considerFuzzy(bucket, query, path, decl, source, access);
 			return;
-		}
-		case "documentation": {
-			if (decl.docStartOffset === undefined || decl.docEndOffset === undefined) return;
-			bucket.workUsed += 1;
-			if (bucket.workUsed > query.maxWork) {
-				bucket.workLimitReached = true;
-				return;
-			}
-			const docs = docsText(decl, source);
-			if (docs === undefined) return;
-			const foldedDocs = docs.toLowerCase();
-			if (!query.terms.every((term) => foldedDocs.includes(term.toLowerCase()))) return;
-			if (bucket.scored.length >= query.maxCandidates) {
-				bucket.candidateLimitReached = true;
-				return;
-			}
-			bucket.scored.push({ score: bucket.scored.length, candidate: toCandidate(path, decl, source, access) });
-			if (bucket.scored.length >= query.maxCandidates) bucket.candidateLimitReached = true;
-		}
+		case "documentation":
+			considerDocumentation(bucket, query, path, decl, source, access);
 	}
 }
 
@@ -347,68 +370,68 @@ function packageSurfaceHost(engine: ExploreEngine): PackageSurfaceHost {
 	};
 }
 
-/** Directory-scoped declaration discovery. Language rules stay on adapters. */
-export async function discover(
+async function discoverPackageSurface(
 	engine: ExploreEngine,
-	pathInput: string,
+	absolutePath: string,
+	query: DiscoverQuery,
+	resultLimit: number,
+	signal: AbortSignal,
+): Promise<DiscoverResult> {
+	const resolvers = engine.registry.packageSurfaceResolvers();
+	if (resolvers.length === 0) {
+		throw new Error("packageSurface capability is not available");
+	}
+	const host = packageSurfaceHost(engine);
+	const packageKeys = new Set<string>();
+	const packageAccess = new Map<string, string>();
+	const paths = new Set<string>();
+	let filesVisited = 0;
+	let anyPackage = false;
+
+	for (const resolve of resolvers) {
+		signal.throwIfAborted();
+		const graph = await resolve(absolutePath, host, signal);
+		if (graph === undefined) continue;
+		anyPackage = true;
+		filesVisited += graph.filesVisited;
+		for (const key of graph.declKeys) packageKeys.add(key);
+		for (const [key, access] of graph.accessByDecl) packageAccess.set(key, access);
+		for (const path of graph.paths) paths.add(path);
+	}
+
+	if (!anyPackage) {
+		throw new Error("packageSurface: no package found for a supporting language near the scope path");
+	}
+
+	const bucket = newBucket(query);
+	for (const path of paths) {
+		signal.throwIfAborted();
+		if (bucket.workLimitReached) break;
+		const file = await engine.sourceForFile(path);
+		walkFileDecls(bucket, query, file, "packageSurface", packageKeys, packageAccess);
+	}
+
+	return {
+		...finalizeBucket(bucket, resultLimit),
+		scan: {
+			limit: undefined,
+			filesVisited,
+			sourceBytes: 0,
+			elapsedMs: 0,
+			filesEmitted: paths.size,
+		},
+	};
+}
+
+async function discoverViaScan(
+	engine: ExploreEngine,
+	absolutePath: string,
 	query: DiscoverQuery,
 	surface: DiscoverSurface,
 	resultLimit: number,
 	signal: AbortSignal,
 ): Promise<DiscoverResult> {
-	signal.throwIfAborted();
-	const absolutePath = resolveExplorePath(engine.cwd, pathInput);
-	await pathIsDirectory(absolutePath, pathInput);
-
 	const bucket = newBucket(query);
-
-	if (surface === "packageSurface") {
-		const resolvers = engine.registry.packageSurfaceResolvers();
-		if (resolvers.length === 0) {
-			throw new Error("packageSurface capability is not available");
-		}
-		const host = packageSurfaceHost(engine);
-		const packageKeys = new Set<string>();
-		const packageAccess = new Map<string, string>();
-		const paths = new Set<string>();
-		let filesVisited = 0;
-		let anyPackage = false;
-
-		for (const resolve of resolvers) {
-			signal.throwIfAborted();
-			const graph = await resolve(absolutePath, host, signal);
-			if (graph === undefined) continue;
-			anyPackage = true;
-			filesVisited += graph.filesVisited;
-			for (const key of graph.declKeys) packageKeys.add(key);
-			for (const [key, access] of graph.accessByDecl) packageAccess.set(key, access);
-			for (const path of graph.paths) paths.add(path);
-		}
-
-		if (!anyPackage) {
-			throw new Error("packageSurface: no package found for a supporting language near the scope path");
-		}
-
-		for (const path of paths) {
-			signal.throwIfAborted();
-			if (bucket.workLimitReached) break;
-			const file = await engine.sourceForFile(path);
-			walkFileDecls(bucket, query, file, "packageSurface", packageKeys, packageAccess);
-		}
-
-		const finalized = finalizeBucket(bucket, resultLimit);
-		return {
-			...finalized,
-			scan: {
-				limit: undefined,
-				filesVisited,
-				sourceBytes: 0,
-				elapsedMs: 0,
-				filesEmitted: paths.size,
-			},
-		};
-	}
-
 	const scan = scanSources({ engine, cwd: engine.cwd, root: absolutePath, signal });
 	let step = await scan.next();
 	let filesEmitted = 0;
@@ -430,7 +453,24 @@ export async function discover(
 				filesEmitted,
 			};
 	if (outcome.limit === "cancelled") throw new Error("discover cancelled");
+	return { ...finalizeBucket(bucket, resultLimit), scan: outcome };
+}
 
-	const finalized = finalizeBucket(bucket, resultLimit);
-	return { ...finalized, scan: outcome };
+/** Directory-scoped declaration discovery. Language rules stay on adapters. */
+export async function discover(
+	engine: ExploreEngine,
+	pathInput: string,
+	query: DiscoverQuery,
+	surface: DiscoverSurface,
+	resultLimit: number,
+	signal: AbortSignal,
+): Promise<DiscoverResult> {
+	signal.throwIfAborted();
+	const absolutePath = resolveExplorePath(engine.cwd, pathInput);
+	await pathIsDirectory(absolutePath, pathInput);
+
+	if (surface === "packageSurface") {
+		return discoverPackageSurface(engine, absolutePath, query, resultLimit, signal);
+	}
+	return discoverViaScan(engine, absolutePath, query, surface, resultLimit, signal);
 }

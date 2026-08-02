@@ -204,6 +204,51 @@ async function delay(milliseconds: number, signal?: AbortSignal): Promise<void> 
 	});
 }
 
+async function postXaiImage(
+	route: string,
+	body: Record<string, unknown>,
+	token: string,
+	signal?: AbortSignal,
+): Promise<HttpResponse> {
+	const requestSignal = signal
+		? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
+		: AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+	return (await fetch(`${XAI_API_BASE_URL}/images/${route}`, {
+		method: "POST",
+		headers: {
+			Accept: "application/json",
+			Authorization: `Bearer ${token}`,
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify(body),
+		signal: requestSignal,
+	})) as HttpResponse;
+}
+
+async function decodeOkXaiImage(response: HttpResponse): Promise<GeneratedImage> {
+	let value: unknown;
+	try {
+		value = await response.json();
+	} catch {
+		throw new Error("xAI returned a non-JSON image response");
+	}
+	return decodeImageResponse(value, "xAI", false);
+}
+
+async function throwOrRetryXaiFailure(
+	operation: "generation" | "edit",
+	response: HttpResponse,
+	token: string,
+	attempt: number,
+	signal?: AbortSignal,
+): Promise<void> {
+	const message = serverErrorMessage(await boundedError(response), [token]);
+	if (!retryable(response.status) || attempt === MAX_ATTEMPTS) {
+		throw new Error(`xAI image ${operation} failed with status ${response.status}${message ? `: ${message}` : ""}`);
+	}
+	await delay(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), signal);
+}
+
 async function requestXaiImage(
 	operation: "generation" | "edit",
 	body: Record<string, unknown>,
@@ -212,43 +257,17 @@ async function requestXaiImage(
 ): Promise<GeneratedImage> {
 	const route = operation === "generation" ? "generations" : "edits";
 	for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-		const requestSignal = signal
-			? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
-			: AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 		let response: HttpResponse;
 		try {
-			response = (await fetch(`${XAI_API_BASE_URL}/images/${route}`, {
-				method: "POST",
-				headers: {
-					Accept: "application/json",
-					Authorization: `Bearer ${token}`,
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify(body),
-				signal: requestSignal,
-			})) as HttpResponse;
+			response = await postXaiImage(route, body, token, signal);
 		} catch (error) {
 			if (signal?.aborted) throw signal.reason;
 			if (attempt === MAX_ATTEMPTS) throw error;
 			await delay(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), signal);
 			continue;
 		}
-		if (response.ok) {
-			let value: unknown;
-			try {
-				value = await response.json();
-			} catch {
-				throw new Error("xAI returned a non-JSON image response");
-			}
-			return decodeImageResponse(value, "xAI", false);
-		}
-		const message = serverErrorMessage(await boundedError(response), [token]);
-		if (!retryable(response.status) || attempt === MAX_ATTEMPTS) {
-			throw new Error(
-				`xAI image ${operation} failed with status ${response.status}${message ? `: ${message}` : ""}`,
-			);
-		}
-		await delay(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), signal);
+		if (response.ok) return decodeOkXaiImage(response);
+		await throwOrRetryXaiFailure(operation, response, token, attempt, signal);
 	}
 	throw new Error(`xAI image ${operation} failed`);
 }

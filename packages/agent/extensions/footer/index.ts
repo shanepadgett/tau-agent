@@ -260,12 +260,37 @@ async function saveEnabled(ctx: ExtensionContext, enabled: boolean): Promise<voi
 	await updateTauExtensionSettings("global", ctx, footerSettings, (current) => ({ ...current, enabled }));
 }
 
+function countGitLine(
+	line: string,
+	counts: { staged: number; modified: number; untracked: number; conflicts: number },
+): void {
+	const x = line[0];
+	const y = line[1];
+	if (x === "?" && y === "?") {
+		counts.untracked += 1;
+		return;
+	}
+	if (isConflict(x, y)) {
+		counts.conflicts += 1;
+		return;
+	}
+	if (x && x !== " ") counts.staged += 1;
+	if (y && y !== " ") counts.modified += 1;
+}
+
+function formatGitCounts(counts: { staged: number; modified: number; untracked: number; conflicts: number }): string {
+	const parts = [
+		counts.staged ? `+${counts.staged}` : "",
+		counts.modified ? `~${counts.modified}` : "",
+		counts.untracked ? `?${counts.untracked}` : "",
+		counts.conflicts ? `!${counts.conflicts}` : "",
+	].filter(Boolean);
+	return parts.length ? parts.join(" ") : "clean";
+}
+
 function parseGitStatus(stdout: string): GitSummary | undefined {
 	let branch = "";
-	let staged = 0;
-	let modified = 0;
-	let untracked = 0;
-	let conflicts = 0;
+	const counts = { staged: 0, modified: 0, untracked: 0, conflicts: 0 };
 
 	for (const line of stdout.split("\n")) {
 		if (!line) continue;
@@ -273,29 +298,11 @@ function parseGitStatus(stdout: string): GitSummary | undefined {
 			branch = line.slice(3).split("...")[0]?.trim() ?? "";
 			continue;
 		}
-
-		const x = line[0];
-		const y = line[1];
-		if (x === "?" && y === "?") {
-			untracked += 1;
-			continue;
-		}
-		if (isConflict(x, y)) {
-			conflicts += 1;
-			continue;
-		}
-		if (x && x !== " ") staged += 1;
-		if (y && y !== " ") modified += 1;
+		countGitLine(line, counts);
 	}
 
 	if (!branch) return undefined;
-	const parts = [
-		staged ? `+${staged}` : "",
-		modified ? `~${modified}` : "",
-		untracked ? `?${untracked}` : "",
-		conflicts ? `!${conflicts}` : "",
-	].filter(Boolean);
-	return { branch, text: parts.length ? parts.join(" ") : "clean" };
+	return { branch, text: formatGitCounts(counts) };
 }
 
 function gitText(git: GitSummary | undefined): string {
@@ -380,6 +387,43 @@ async function scanDailyCost(): Promise<number> {
 	return total;
 }
 
+function usageIdentityFromEntry(
+	entry: Record<string, unknown>,
+): { usageValue: unknown; timestamp: number; identity: unknown[] } | undefined {
+	if (entry.type === "message") {
+		const message = asRecord(entry.message);
+		if (!message) return undefined;
+		const timestamp = timestampMs(message.timestamp, entry.timestamp);
+		if (message.role === "assistant" && asRecord(message.usage)) {
+			return {
+				usageValue: message.usage,
+				timestamp,
+				identity: ["assistant", message.provider, message.model],
+			};
+		}
+		if (message.role === "toolResult" && asRecord(message.usage)) {
+			return {
+				usageValue: message.usage,
+				timestamp,
+				identity: ["toolResult", message.toolName, message.toolCallId],
+			};
+		}
+		return undefined;
+	}
+	if ((entry.type === "compaction" || entry.type === "branch_summary") && asRecord(entry.usage)) {
+		return {
+			usageValue: entry.usage,
+			timestamp: timestampMs(undefined, entry.timestamp),
+			identity: [entry.type, entry.id],
+		};
+	}
+	return undefined;
+}
+
+function usageDedupeKey(identity: readonly unknown[], timestamp: number, usage: UsageSummary): string {
+	return [...identity, timestamp, usage.input, usage.output, usage.cacheRead, usage.cacheWrite, usage.cost].join(":");
+}
+
 function dailyCostFromJsonl(
 	raw: string,
 	range: { startMs: number; endMs: number },
@@ -389,36 +433,11 @@ function dailyCostFromJsonl(
 	for (const line of raw.split("\n")) {
 		const entry = parseRecord(line);
 		if (!entry) continue;
-		let usageValue: unknown;
-		let timestamp: number;
-		let identity: unknown[];
-		if (entry.type === "message") {
-			const message = asRecord(entry.message);
-			if (!message) continue;
-			timestamp = timestampMs(message.timestamp, entry.timestamp);
-			if (message.role === "assistant" && asRecord(message.usage)) {
-				usageValue = message.usage;
-				identity = ["assistant", message.provider, message.model];
-			} else if (message.role === "toolResult" && asRecord(message.usage)) {
-				usageValue = message.usage;
-				identity = ["toolResult", message.toolName, message.toolCallId];
-			} else continue;
-		} else if ((entry.type === "compaction" || entry.type === "branch_summary") && asRecord(entry.usage)) {
-			usageValue = entry.usage;
-			timestamp = timestampMs(undefined, entry.timestamp);
-			identity = [entry.type, entry.id];
-		} else continue;
-		if (timestamp < range.startMs || timestamp >= range.endMs) continue;
-		const usage = normalizeUsage(usageValue);
-		const key = [
-			...identity,
-			timestamp,
-			usage.input,
-			usage.output,
-			usage.cacheRead,
-			usage.cacheWrite,
-			usage.cost,
-		].join(":");
+		const parsed = usageIdentityFromEntry(entry);
+		if (!parsed) continue;
+		if (parsed.timestamp < range.startMs || parsed.timestamp >= range.endMs) continue;
+		const usage = normalizeUsage(parsed.usageValue);
+		const key = usageDedupeKey(parsed.identity, parsed.timestamp, usage);
 		if (seen.has(key)) continue;
 		seen.add(key);
 		total += usage.cost;

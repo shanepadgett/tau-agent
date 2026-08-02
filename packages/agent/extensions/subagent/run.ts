@@ -248,6 +248,285 @@ export async function disposeSubagentThread(thread: SubagentThread): Promise<voi
 	await thread.resource.dispose();
 }
 
+function emptyTurnUsage(): { usage: SubagentUsage; toolUsage: Usage } {
+	return {
+		usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 0 },
+		toolUsage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+	};
+}
+
+function accumulateAssistantUsage(usage: SubagentUsage, toolUsage: Usage, message: AssistantMessage): void {
+	usage.input += message.usage.input;
+	usage.output += message.usage.output;
+	usage.cacheRead += message.usage.cacheRead;
+	usage.cacheWrite += message.usage.cacheWrite;
+	usage.cost += message.usage.cost.total;
+	usage.turns += 1;
+	toolUsage.input += message.usage.input;
+	toolUsage.output += message.usage.output;
+	toolUsage.cacheRead += message.usage.cacheRead;
+	toolUsage.cacheWrite += message.usage.cacheWrite;
+	toolUsage.totalTokens += message.usage.totalTokens;
+	toolUsage.cost.input += message.usage.cost.input;
+	toolUsage.cost.output += message.usage.cost.output;
+	toolUsage.cost.cacheRead += message.usage.cost.cacheRead;
+	toolUsage.cost.cacheWrite += message.usage.cost.cacheWrite;
+	toolUsage.cost.total += message.usage.cost.total;
+	if (message.usage.cacheWrite1h !== undefined)
+		toolUsage.cacheWrite1h = (toolUsage.cacheWrite1h ?? 0) + message.usage.cacheWrite1h;
+	if (message.usage.reasoning !== undefined)
+		toolUsage.reasoning = (toolUsage.reasoning ?? 0) + message.usage.reasoning;
+}
+
+function pushBoundedAction(details: SubagentDetails, action: SubagentAction): void {
+	details.actions.push(action);
+	if (details.actions.length <= 20) return;
+	const removable = details.actions.findIndex((item) => !item.error);
+	const [removed] = details.actions.splice(removable >= 0 ? removable : 0, 1);
+	details.omittedActions += 1;
+	if (removed?.error) details.omittedErrors += 1;
+}
+
+function subscribeTurnEvents(options: {
+	session: SubagentThread["resource"]["session"];
+	details: SubagentDetails;
+	usage: SubagentUsage;
+	toolUsage: Usage;
+	turnMessages: AssistantMessage[];
+	assistantMessageEndAt: number[];
+	publish: (force?: boolean) => void;
+}): () => void {
+	const { session, details, usage, toolUsage, turnMessages, assistantMessageEndAt, publish } = options;
+	const actionById = new Map<string, string>();
+	return session.subscribe((event: AgentSessionEvent) => {
+		if (event.type === "message_update" && event.message.role === "assistant") {
+			details.response = cappedTail(textOf(event.message), PREVIEW_LIMIT);
+			publish();
+			return;
+		}
+		if (event.type === "message_end" && event.message.role === "assistant") {
+			turnMessages.push(event.message);
+			assistantMessageEndAt.push(Date.now());
+			accumulateAssistantUsage(usage, toolUsage, event.message);
+			details.response = cappedTail(textOf(event.message), PREVIEW_LIMIT);
+			details.currentActivity = undefined;
+			publish(true);
+			return;
+		}
+		if (event.type === "tool_execution_start") {
+			details.toolCalls += 1;
+			const summary = `${event.toolName} ${capped(event.args)}`.trim();
+			actionById.set(event.toolCallId, summary);
+			details.currentActivity = summary;
+			publish(true);
+			return;
+		}
+		if (event.type === "tool_execution_end") {
+			pushBoundedAction(details, {
+				tool: event.toolName,
+				summary: actionById.get(event.toolCallId) ?? event.toolName,
+				error: event.isError,
+			});
+			details.currentActivity = undefined;
+			publish(true);
+		}
+	});
+}
+
+async function buildAutoreadMessages(options: { files: readonly string[]; cwd: string; invocationId: string }): Promise<
+	Array<{
+		customType: typeof FILE_INJECTION_TYPE;
+		content: string;
+		display: false;
+		details: Record<string, unknown>;
+	}>
+> {
+	const { files, cwd, invocationId } = options;
+	return Promise.all(
+		files.map(async (file, index) => {
+			const pathKey = resolve(cwd, file);
+			const common = {
+				v: 1 as const,
+				rowId: `${invocationId}:${index}`,
+				path: file,
+				cwd,
+				source: "subagent",
+				batchId: invocationId,
+			};
+			try {
+				const bytes = await readFile(pathKey);
+				const content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+				const lines = content.split("\n");
+				const numbered = lines.map((line, lineIndex) => `${lineIndex + 1}: ${line}`).join("\n");
+				return {
+					customType: FILE_INJECTION_TYPE,
+					content: `${file}\n${numbered}`,
+					display: false as const,
+					details: {
+						...common,
+						kind: "full",
+						status: "injected",
+						readCache: createCompleteFileMeta({
+							pathKey,
+							presentation: "line-numbered",
+							servedHash: createHash("sha256").update(bytes).digest("hex"),
+							mode: "baseline",
+							sourceText: content,
+							returnedText: `${file}\n${numbered}`,
+							totalLines: lines.length,
+							summary: `${lines.length} lines`,
+						}),
+					},
+				};
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				return {
+					customType: FILE_INJECTION_TYPE,
+					content: `${file}\nInjection failed: ${message}`,
+					display: false as const,
+					details: { ...common, kind: "full", status: "failed", error: message },
+				};
+			}
+		}),
+	);
+}
+
+function buildTurnPrompt(options: {
+	definition: AgentDefinition;
+	task: string;
+	files: readonly string[];
+	initial: boolean;
+	resumePrompt: string | undefined;
+}): string {
+	const { definition, task, files, initial, resumePrompt } = options;
+	if (resumePrompt !== undefined) return resumePrompt;
+	const fileNote = files.length
+		? " Parent-supplied autoread files are included as line-numbered context for this turn."
+		: "";
+	if (initial) {
+		return `You are an isolated delegated child agent. Stay within the delegated task and return only the requested result.${fileNote}\n\n## Agent instructions\n${definition.prompt}\n\n## Delegated task\n${task}`;
+	}
+	return `Continue the existing delegated work using the context already in this thread. Return only the requested result.${fileNote}\n\n## Parent follow-up\n${task}`;
+}
+
+async function applyTerminalOutcome(
+	details: SubagentDetails,
+	terminal: AssistantMessage,
+	definitionName: string,
+): Promise<void> {
+	const response = textOf(terminal);
+	if (terminal.stopReason === "aborted") {
+		details.status = "aborted";
+		details.completionState = "aborted";
+		details.error = capped(terminal.errorMessage ?? "Child aborted");
+		return;
+	}
+	if (terminal.stopReason === "error") {
+		details.status = "failed";
+		details.completionState = "error";
+		details.error = capped(terminal.errorMessage ?? "Child terminal error");
+		return;
+	}
+	if ((terminal.stopReason === "stop" || terminal.stopReason === "length") && response.trim()) {
+		details.status = "completed";
+		details.completionState = terminal.stopReason;
+		details.phase = "output";
+		const truncation = truncateHead(response, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
+		let returned = truncation.content;
+		let path: string | undefined;
+		if (truncation.truncated) {
+			const directory = await mkdtemp(join(tmpdir(), "tau-subagent-"));
+			path = join(directory, "output.md");
+			await writeFile(path, response, { encoding: "utf8", mode: 0o600 });
+			returned += `\n\n[Output truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines (${formatSize(truncation.outputBytes)} of ${formatSize(truncation.totalBytes)}). Full output saved to: ${path}]`;
+		}
+		details.response = returned;
+		details.truncation = {
+			truncated: truncation.truncated,
+			path,
+			outputLines: truncation.outputLines,
+			totalLines: truncation.totalLines,
+			outputBytes: truncation.outputBytes,
+			totalBytes: truncation.totalBytes,
+		};
+		return;
+	}
+	details.status = "failed";
+	details.completionState = terminal.stopReason;
+	details.error = `Agent ${definitionName} run failed: empty or non-terminal response`;
+}
+
+async function deliverTurnPrompt(options: {
+	session: SubagentThread["resource"]["session"];
+	thread: SubagentThread;
+	task: string;
+	files: readonly string[];
+	invocationId: string;
+	initial: boolean;
+	resumePrompt: string | undefined;
+	signal: AbortSignal;
+}): Promise<void> {
+	const { session, thread, task, files, invocationId, initial, resumePrompt, signal } = options;
+	const abort = () => {
+		void session.abort().catch(() => undefined);
+	};
+	signal.addEventListener("abort", abort, { once: true });
+	try {
+		const autoreadMessages = await buildAutoreadMessages({
+			files,
+			cwd: thread.cwd,
+			invocationId,
+		});
+		if (signal.aborted) throw new Error("Subagent call aborted before prompt");
+		for (const message of autoreadMessages) {
+			if (signal.aborted) throw new Error("Subagent call aborted during autoread delivery");
+			await session.sendCustomMessage<unknown>(message, { deliverAs: "nextTurn" });
+		}
+		if (signal.aborted) throw new Error("Subagent call aborted before prompt");
+		await session.prompt(buildTurnPrompt({ definition: thread.definition, task, files, initial, resumePrompt }), {
+			expandPromptTemplates: false,
+		});
+	} finally {
+		signal.removeEventListener("abort", abort);
+	}
+}
+
+function turnResult(
+	details: SubagentDetails,
+	retainable: boolean,
+	assistantMessageEndAt: readonly number[],
+	usage: SubagentUsage,
+	toolUsage: Usage,
+	definitionName: string,
+): {
+	content: string;
+	details: SubagentDetails;
+	retainable: boolean;
+	terminalOutcome: RetainedTurnOutcome;
+	assistantMessageEndAt: readonly number[];
+	usage?: Usage;
+} {
+	return {
+		content:
+			details.status === "completed"
+				? (details.response ?? "")
+				: (details.error ?? `Agent ${definitionName} failed`),
+		details,
+		retainable,
+		terminalOutcome:
+			details.status === "completed" ? "completed" : details.status === "aborted" ? "aborted" : "failed",
+		assistantMessageEndAt,
+		...(usage.turns === 0 ? {} : { usage: toolUsage }),
+	};
+}
+
 export async function runSubagentTurn(options: {
 	thread: SubagentThread;
 	task: string;
@@ -269,15 +548,7 @@ export async function runSubagentTurn(options: {
 	const { definition } = thread;
 	const { session } = thread.resource;
 	const started = Date.now();
-	const usage: SubagentUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 0 };
-	const toolUsage: Usage = {
-		input: 0,
-		output: 0,
-		cacheRead: 0,
-		cacheWrite: 0,
-		totalTokens: 0,
-		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-	};
+	const { usage, toolUsage } = emptyTurnUsage();
 	const details: SubagentDetails = {
 		agent: definition.name,
 		displayName: thread.displayName,
@@ -320,190 +591,35 @@ export async function runSubagentTurn(options: {
 			details.error = "Subagent call aborted before prompt";
 			details.durationMs = Date.now() - started;
 			publish(true);
-			return {
-				content: details.error,
-				details,
-				retainable: false,
-				terminalOutcome: "aborted",
-				assistantMessageEndAt,
-			};
+			return turnResult(details, false, assistantMessageEndAt, usage, toolUsage, definition.name);
 		}
-		const actionById = new Map<string, string>();
-		unsubscribe = session.subscribe((event: AgentSessionEvent) => {
-			if (event.type === "message_update" && event.message.role === "assistant") {
-				details.response = cappedTail(textOf(event.message), PREVIEW_LIMIT);
-				publish();
-			} else if (event.type === "message_end" && event.message.role === "assistant") {
-				turnMessages.push(event.message);
-				assistantMessageEndAt.push(Date.now());
-				usage.input += event.message.usage.input;
-				usage.output += event.message.usage.output;
-				usage.cacheRead += event.message.usage.cacheRead;
-				usage.cacheWrite += event.message.usage.cacheWrite;
-				usage.cost += event.message.usage.cost.total;
-				usage.turns += 1;
-				toolUsage.input += event.message.usage.input;
-				toolUsage.output += event.message.usage.output;
-				toolUsage.cacheRead += event.message.usage.cacheRead;
-				toolUsage.cacheWrite += event.message.usage.cacheWrite;
-				toolUsage.totalTokens += event.message.usage.totalTokens;
-				toolUsage.cost.input += event.message.usage.cost.input;
-				toolUsage.cost.output += event.message.usage.cost.output;
-				toolUsage.cost.cacheRead += event.message.usage.cost.cacheRead;
-				toolUsage.cost.cacheWrite += event.message.usage.cost.cacheWrite;
-				toolUsage.cost.total += event.message.usage.cost.total;
-				if (event.message.usage.cacheWrite1h !== undefined)
-					toolUsage.cacheWrite1h = (toolUsage.cacheWrite1h ?? 0) + event.message.usage.cacheWrite1h;
-				if (event.message.usage.reasoning !== undefined)
-					toolUsage.reasoning = (toolUsage.reasoning ?? 0) + event.message.usage.reasoning;
-				details.response = cappedTail(textOf(event.message), PREVIEW_LIMIT);
-				details.currentActivity = undefined;
-				publish(true);
-			} else if (event.type === "tool_execution_start") {
-				details.toolCalls += 1;
-				const summary = `${event.toolName} ${capped(event.args)}`.trim();
-				actionById.set(event.toolCallId, summary);
-				details.currentActivity = summary;
-				publish(true);
-			} else if (event.type === "tool_execution_end") {
-				const action = {
-					tool: event.toolName,
-					summary: actionById.get(event.toolCallId) ?? event.toolName,
-					error: event.isError,
-				};
-				details.actions.push(action);
-				if (details.actions.length > 20) {
-					const removable = details.actions.findIndex((item) => !item.error);
-					const [removed] = details.actions.splice(removable >= 0 ? removable : 0, 1);
-					details.omittedActions += 1;
-					if (removed?.error) details.omittedErrors += 1;
-				}
-				details.currentActivity = undefined;
-				publish(true);
-			}
+		unsubscribe = subscribeTurnEvents({
+			session,
+			details,
+			usage,
+			toolUsage,
+			turnMessages,
+			assistantMessageEndAt,
+			publish,
 		});
-		const abort = () => {
-			void session.abort().catch(() => undefined);
-		};
-		signal.addEventListener("abort", abort, { once: true });
-		try {
-			const autoreadMessages = await Promise.all(
-				files.map(async (file, index) => {
-					const pathKey = resolve(thread.cwd, file);
-					const common = {
-						v: 1 as const,
-						rowId: `${invocationId}:${index}`,
-						path: file,
-						cwd: thread.cwd,
-						source: "subagent",
-						batchId: invocationId,
-					};
-					try {
-						const bytes = await readFile(pathKey);
-						const content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
-						const lines = content.split("\n");
-						const numbered = lines.map((line, lineIndex) => `${lineIndex + 1}: ${line}`).join("\n");
-						return {
-							customType: FILE_INJECTION_TYPE,
-							content: `${file}\n${numbered}`,
-							display: false,
-							details: {
-								...common,
-								kind: "full",
-								status: "injected",
-								readCache: createCompleteFileMeta({
-									pathKey,
-									presentation: "line-numbered",
-									servedHash: createHash("sha256").update(bytes).digest("hex"),
-									mode: "baseline",
-									sourceText: content,
-									returnedText: `${file}\n${numbered}`,
-									totalLines: lines.length,
-									summary: `${lines.length} lines`,
-								}),
-							},
-						};
-					} catch (error) {
-						const message = error instanceof Error ? error.message : String(error);
-						return {
-							customType: FILE_INJECTION_TYPE,
-							content: `${file}\nInjection failed: ${message}`,
-							display: false,
-							details: { ...common, kind: "full", status: "failed", error: message },
-						};
-					}
-				}),
-			);
-			if (signal.aborted) throw new Error("Subagent call aborted before prompt");
-			for (const message of autoreadMessages) {
-				if (signal.aborted) throw new Error("Subagent call aborted during autoread delivery");
-				await session.sendCustomMessage<unknown>(message, { deliverAs: "nextTurn" });
-			}
-			if (signal.aborted) throw new Error("Subagent call aborted before prompt");
-			await session.prompt(
-				resumePrompt ??
-					(initial
-						? `You are an isolated delegated child agent. Stay within the delegated task and return only the requested result.${files.length ? " Parent-supplied autoread files are included as line-numbered context for this turn." : ""}\n\n## Agent instructions\n${definition.prompt}\n\n## Delegated task\n${task}`
-						: `Continue the existing delegated work using the context already in this thread. Return only the requested result.${files.length ? " Parent-supplied autoread files are included as line-numbered context for this turn." : ""}\n\n## Parent follow-up\n${task}`),
-				{ expandPromptTemplates: false },
-			);
-		} finally {
-			signal.removeEventListener("abort", abort);
-		}
+		await deliverTurnPrompt({
+			session,
+			thread,
+			task,
+			files,
+			invocationId,
+			initial,
+			resumePrompt,
+			signal,
+		});
 		// Prompt returned without throw — session remains usable for retention decisions.
 		retainable = true;
 		const terminal = turnMessages.at(-1);
 		if (!terminal) throw new Error(`Agent ${definition.name} run failed: no terminal assistant response`);
-		const response = textOf(terminal);
-		if (terminal.stopReason === "aborted") {
-			details.status = "aborted";
-			details.completionState = "aborted";
-			details.error = capped(terminal.errorMessage ?? "Child aborted");
-		} else if (terminal.stopReason === "error") {
-			details.status = "failed";
-			details.completionState = "error";
-			details.error = capped(terminal.errorMessage ?? "Child terminal error");
-		} else if ((terminal.stopReason === "stop" || terminal.stopReason === "length") && response.trim()) {
-			details.status = "completed";
-			details.completionState = terminal.stopReason;
-			details.phase = "output";
-			const truncation = truncateHead(response, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
-			let returned = truncation.content;
-			let path: string | undefined;
-			if (truncation.truncated) {
-				const directory = await mkdtemp(join(tmpdir(), "tau-subagent-"));
-				path = join(directory, "output.md");
-				await writeFile(path, response, { encoding: "utf8", mode: 0o600 });
-				returned += `\n\n[Output truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines (${formatSize(truncation.outputBytes)} of ${formatSize(truncation.totalBytes)}). Full output saved to: ${path}]`;
-			}
-			details.response = returned;
-			details.truncation = {
-				truncated: truncation.truncated,
-				path,
-				outputLines: truncation.outputLines,
-				totalLines: truncation.totalLines,
-				outputBytes: truncation.outputBytes,
-				totalBytes: truncation.totalBytes,
-			};
-		} else {
-			details.status = "failed";
-			details.completionState = terminal.stopReason;
-			details.error = `Agent ${definition.name} run failed: empty or non-terminal response`;
-		}
+		await applyTerminalOutcome(details, terminal, definition.name);
 		details.durationMs = Date.now() - started;
 		publish(true);
-		return {
-			content:
-				details.status === "completed"
-					? (details.response ?? "")
-					: (details.error ?? `Agent ${definition.name} failed`),
-			details,
-			retainable,
-			terminalOutcome:
-				details.status === "completed" ? "completed" : details.status === "aborted" ? "aborted" : "failed",
-			assistantMessageEndAt,
-			...(usage.turns === 0 ? {} : { usage: toolUsage }),
-		};
+		return turnResult(details, retainable, assistantMessageEndAt, usage, toolUsage, definition.name);
 	} catch (error) {
 		details.status = signal.aborted ? "aborted" : "failed";
 		details.error = capped(error instanceof Error ? error.message : "Subagent failed");
@@ -511,14 +627,7 @@ export async function runSubagentTurn(options: {
 		// Prompt/session failures leave the child unsafe for reuse.
 		retainable = false;
 		publish(true);
-		return {
-			content: details.error,
-			details,
-			retainable,
-			terminalOutcome: details.status === "aborted" ? "aborted" : "failed",
-			assistantMessageEndAt,
-			...(usage.turns === 0 ? {} : { usage: toolUsage }),
-		};
+		return turnResult(details, retainable, assistantMessageEndAt, usage, toolUsage, definition.name);
 	} finally {
 		unsubscribe?.();
 		thread.turns += 1;

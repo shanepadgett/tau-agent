@@ -98,6 +98,20 @@ export async function generateToolValidated<T>(
 	);
 }
 
+async function noteCandidateFailure(
+	ctx: GenerationContext,
+	options: ModelFallbackOptions | undefined,
+	label: string,
+	message: string,
+	hasMore: boolean,
+): Promise<void> {
+	if (!hasMore) return;
+	await options?.onStatus?.(`Model failed (${label}); trying next model`);
+	if (options?.notifyOnFallback ?? false) {
+		ctx.ui.notify(`Model failed (${label}): ${message}\nTrying next model.`, "info");
+	}
+}
+
 async function withModelFallback<T>(
 	ctx: GenerationContext,
 	candidates: readonly ModelCandidate[],
@@ -106,13 +120,11 @@ async function withModelFallback<T>(
 ): Promise<T> {
 	const failures: string[] = [];
 	const statusKey = options?.statusKey;
-	const notifyOnFallback = options?.notifyOnFallback ?? false;
 
 	for (const [index, candidate] of candidates.entries()) {
 		const label = `${candidate.model.provider}/${candidate.model.id}`;
 		if (statusKey) ctx.ui.setStatus(statusKey, `generating (${label})`);
 		await options?.onStatus?.(`Generating with ${label}`);
-
 		try {
 			return await request(candidate);
 		} catch (error) {
@@ -120,14 +132,40 @@ async function withModelFallback<T>(
 			if (shouldCooldownProvider(error)) await markProviderUnavailable(candidate.model.provider);
 			const message = errorText(error);
 			failures.push(`- ${label}: ${message}`);
-			if (index < candidates.length - 1) await options?.onStatus?.(`Model failed (${label}); trying next model`);
-			if (index < candidates.length - 1 && notifyOnFallback) {
-				ctx.ui.notify(`Model failed (${label}): ${message}\nTrying next model.`, "info");
-			}
+			await noteCandidateFailure(ctx, options, label, message, index < candidates.length - 1);
 		}
 	}
 
 	throw new Error(["Model generation failed for all candidates:", ...failures].join("\n"));
+}
+
+function throwUnlessRetryableStopError(response: AssistantMessage, attempt: number, maxAttempts: number): void {
+	if (response.stopReason !== "error") return;
+	const error = new Error(response.errorMessage || "model returned an error");
+	if (attempt < maxAttempts && !shouldCooldownProvider(error)) return;
+	throw error;
+}
+
+function pushCorrection(
+	messages: Message[],
+	error: Error,
+	output: string,
+	correctionPrompt: (error: Error, output: string) => string,
+): void {
+	messages.push({
+		role: "user",
+		content: [{ type: "text", text: correctionPrompt(error, truncAt(output, 4_000)) }],
+		timestamp: Date.now(),
+	});
+}
+
+function shouldRetryValidation(
+	error: unknown,
+	attempt: number,
+	maxAttempts: number,
+	correctionPrompt: ((error: Error, output: string) => string) | undefined,
+): error is Error {
+	return error instanceof Error && attempt < maxAttempts && correctionPrompt !== undefined;
 }
 
 async function requestValidated<T>(
@@ -137,35 +175,34 @@ async function requestValidated<T>(
 	validate: (text: string) => T,
 	correctionPrompt?: (error: Error, text: string) => string,
 ): Promise<T> {
-	const userMessage: Message = { role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() };
-	const messages: Message[] = [userMessage];
+	const messages: Message[] = [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }];
 	const sessionId = randomUUID();
 
 	for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
 		const response = await completeCandidate(ctx, candidate, messages, sessionId);
 		const text = responseText(response);
-		if (response.stopReason === "error") {
-			const error = new Error(response.errorMessage || "model returned an error");
-			if (attempt < MAX_ATTEMPTS && !shouldCooldownProvider(error)) continue;
-			throw error;
-		}
-
 		try {
+			throwUnlessRetryableStopError(response, attempt, MAX_ATTEMPTS);
+			if (response.stopReason === "error") continue;
 			return validate(text);
 		} catch (error) {
-			if (!(error instanceof Error) || attempt >= MAX_ATTEMPTS) throw error;
-			if (!correctionPrompt) throw error;
-
+			if (!shouldRetryValidation(error, attempt, MAX_ATTEMPTS, correctionPrompt) || !correctionPrompt) {
+				throw error;
+			}
 			if (text) messages.push({ ...response, content: [{ type: "text", text }] });
-			messages.push({
-				role: "user",
-				content: [{ type: "text", text: correctionPrompt(error, truncAt(text, 4_000)) }],
-				timestamp: Date.now(),
-			});
+			pushCorrection(messages, error, text, correctionPrompt);
 		}
 	}
 
 	throw new Error("Model generation failed.");
+}
+
+function validateSingleToolCall(tool: Tool, toolCalls: readonly { name: string; arguments: unknown }[]): unknown {
+	if (toolCalls.length !== 1) throw new Error(`Model must call ${tool.name} exactly once.`);
+	const toolCall = toolCalls[0];
+	if (!toolCall) throw new Error(`Model must call ${tool.name}.`);
+	if (toolCall.name !== tool.name) throw new Error(`Model called ${toolCall.name}; expected ${tool.name}.`);
+	return toolCall.arguments;
 }
 
 async function requestToolValidated<T>(
@@ -185,27 +222,15 @@ async function requestToolValidated<T>(
 		const text = responseText(response);
 		const toolCalls = response.content.flatMap((part) => (part.type === "toolCall" ? [part] : []));
 		const output = text || formatToolCalls(toolCalls);
-		if (response.stopReason === "error") {
-			const error = new Error(response.errorMessage || "model returned an error");
-			if (attempt < maxAttempts && !shouldCooldownProvider(error)) continue;
-			throw error;
-		}
-
 		try {
-			if (toolCalls.length !== 1) throw new Error(`Model must call ${tool.name} exactly once.`);
-			const [toolCall] = toolCalls;
-			if (!toolCall) throw new Error(`Model must call ${tool.name}.`);
-			if (toolCall.name !== tool.name) throw new Error(`Model called ${toolCall.name}; expected ${tool.name}.`);
-			return validate(toolCall.arguments);
+			throwUnlessRetryableStopError(response, attempt, maxAttempts);
+			if (response.stopReason === "error") continue;
+			return validate(validateSingleToolCall(tool, toolCalls));
 		} catch (error) {
-			if (!(error instanceof Error) || attempt >= maxAttempts) throw error;
-			if (!correctionPrompt) throw error;
-
-			messages.push({
-				role: "user",
-				content: [{ type: "text", text: correctionPrompt(error, truncAt(output, 4_000)) }],
-				timestamp: Date.now(),
-			});
+			if (!shouldRetryValidation(error, attempt, maxAttempts, correctionPrompt) || !correctionPrompt) {
+				throw error;
+			}
+			pushCorrection(messages, error, output, correctionPrompt);
 		}
 	}
 

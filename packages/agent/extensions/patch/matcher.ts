@@ -125,10 +125,86 @@ function buildReplacement(chunk: UpdateFileChunk, fileLines: string[], matchInde
 	return result;
 }
 
+interface ChunkReplacement {
+	index: number;
+	deleteCount: number;
+	insert: string[];
+	order: number;
+}
+
+function seekChunkContext(
+	lines: string[],
+	chunk: UpdateFileChunk,
+	lineIndex: number,
+	chunkNumber: number,
+	total: number,
+): number {
+	if (!chunk.changeContext) return lineIndex;
+	const contextIndex = seekSequence(lines, [chunk.changeContext], lineIndex);
+	if (contextIndex < 0) {
+		throw new UpdateChunkApplyError(chunkNumber, total, formatContextHint(chunk), "could not find update context");
+	}
+	return contextIndex + 1;
+}
+
+function matchChunkIndex(
+	lines: string[],
+	chunk: UpdateFileChunk,
+	oldLines: string[],
+	lineIndex: number,
+	chunkNumber: number,
+	total: number,
+): number {
+	if (oldLines.length === 0) return lines.length;
+	if (chunk.isEndOfFile) {
+		const eofIndex = lines.length - oldLines.length;
+		if (eofIndex >= lineIndex && seekSequence(lines, oldLines, eofIndex) === eofIndex) return eofIndex;
+	}
+	const matchIndex = seekSequence(lines, oldLines, lineIndex);
+	if (matchIndex < 0) {
+		throw new UpdateChunkApplyError(chunkNumber, total, formatContextHint(chunk), "could not match");
+	}
+	return matchIndex;
+}
+
+function planChunkReplacement(
+	lines: string[],
+	chunk: UpdateFileChunk,
+	lineIndex: number,
+	order: number,
+	chunkNumber: number,
+	total: number,
+): {
+	replacement: ChunkReplacement;
+	nextLineIndex: number;
+	rawRange: { index: number; deleteCount: number; insertCount: number };
+} {
+	const searchFrom = seekChunkContext(lines, chunk, lineIndex, chunkNumber, total);
+	const oldLines = chunk.lines.filter((l) => l.prefix !== "+").map((l) => l.text);
+	const matchIndex = matchChunkIndex(lines, chunk, oldLines, searchFrom, chunkNumber, total);
+	const insert = oldLines.length === 0 ? chunk.lines.map((l) => l.text) : buildReplacement(chunk, lines, matchIndex);
+	const deleteCount = oldLines.length;
+	return {
+		replacement: { index: matchIndex, deleteCount, insert, order },
+		nextLineIndex: oldLines.length === 0 ? searchFrom : matchIndex + oldLines.length,
+		rawRange: { index: matchIndex, deleteCount, insertCount: insert.length },
+	};
+}
+
+function applyPlannedReplacements(lines: string[], replacements: ChunkReplacement[]): string[] {
+	const output = [...lines];
+	replacements
+		.sort((a, b) => b.index - a.index || b.order - a.order)
+		.forEach((r) => {
+			output.splice(r.index, r.deleteCount, ...r.insert);
+		});
+	return output;
+}
+
 export function applyChunksWithRanges(currentContent: string, chunks: UpdateFileChunk[]): ApplyChunksResult {
 	const parts = splitText(currentContent);
 	const lines = splitLogicalLines(parts.text);
-	const replacements: Array<{ index: number; deleteCount: number; insert: string[]; order: number }> = [];
+	const replacements: ChunkReplacement[] = [];
 	const rawRanges: Array<{ index: number; deleteCount: number; insertCount: number }> = [];
 	let lineIndex = 0;
 	let order = 0;
@@ -136,56 +212,14 @@ export function applyChunksWithRanges(currentContent: string, chunks: UpdateFile
 	for (let ci = 0; ci < chunks.length; ci += 1) {
 		const chunk = chunks[ci];
 		if (chunk === undefined) continue;
-		const oldLines = chunk.lines.filter((l) => l.prefix !== "+").map((l) => l.text);
-
-		if (chunk.changeContext) {
-			const contextIndex = seekSequence(lines, [chunk.changeContext], lineIndex);
-			if (contextIndex < 0) {
-				throw new UpdateChunkApplyError(
-					ci + 1,
-					chunks.length,
-					formatContextHint(chunk),
-					"could not find update context",
-				);
-			}
-			lineIndex = contextIndex + 1;
-		}
-
-		if (oldLines.length === 0) {
-			const insertIndex = lines.length;
-			const insert = chunk.lines.map((l) => l.text);
-			replacements.push({ index: insertIndex, deleteCount: 0, insert, order });
-			order += 1;
-			rawRanges.push({ index: insertIndex, deleteCount: 0, insertCount: insert.length });
-			continue;
-		}
-
-		let matchIndex = -1;
-		if (chunk.isEndOfFile) {
-			const eofIndex = lines.length - oldLines.length;
-			if (eofIndex >= lineIndex && seekSequence(lines, oldLines, eofIndex) === eofIndex) {
-				matchIndex = eofIndex;
-			}
-		}
-		if (matchIndex < 0) matchIndex = seekSequence(lines, oldLines, lineIndex);
-		if (matchIndex < 0) {
-			throw new UpdateChunkApplyError(ci + 1, chunks.length, formatContextHint(chunk), "could not match");
-		}
-
-		const replacement = buildReplacement(chunk, lines, matchIndex);
-		replacements.push({ index: matchIndex, deleteCount: oldLines.length, insert: replacement, order });
+		const planned = planChunkReplacement(lines, chunk, lineIndex, order, ci + 1, chunks.length);
+		replacements.push(planned.replacement);
+		rawRanges.push(planned.rawRange);
+		lineIndex = planned.nextLineIndex;
 		order += 1;
-		rawRanges.push({ index: matchIndex, deleteCount: oldLines.length, insertCount: replacement.length });
-		lineIndex = matchIndex + oldLines.length;
 	}
 
-	const output = [...lines];
-	replacements
-		.sort((a, b) => b.index - a.index || b.order - a.order)
-		.forEach((r) => {
-			output.splice(r.index, r.deleteCount, ...r.insert);
-		});
-
+	const output = applyPlannedReplacements(lines, replacements);
 	const joined = output.join("\n");
 	const normalized = joined === "" ? "" : `${joined}\n`;
 	const next = parts.bom + restoreLineEndings(normalized, parts.lineEnding);

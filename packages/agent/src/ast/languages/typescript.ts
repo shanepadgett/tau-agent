@@ -154,10 +154,7 @@ const EXPORT_SPECIFIER = "export_specifier";
 
 const NESTED_CALLABLE = new Set([
 	FUNCTION_DECLARATION,
-	FUNCTION_EXPRESSION,
 	GENERATOR_FUNCTION_DECLARATION,
-	ARROW_FUNCTION,
-	METHOD_DEFINITION,
 	CLASS_DECLARATION,
 	ABSTRACT_CLASS_DECLARATION,
 	CLASS,
@@ -549,7 +546,7 @@ function variableDecls(node: Node, owner: string, exported: boolean, doc: DocSpa
 				endOffset: spanNode.endIndex,
 				visibility: "public",
 				exported,
-				calls: isFn ? extractCalls(body) : [],
+				calls: isFn ? extractCalls(body) : value === null ? [] : extractCalls(value),
 			},
 			body,
 		);

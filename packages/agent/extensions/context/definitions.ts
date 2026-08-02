@@ -163,33 +163,26 @@ export function contextEntryPaths(entry: Pick<ContextEntry, "read" | "show" | "o
 	]);
 }
 
-function parseShowTargets(root: string, catalogPath: string, entryName: string, raw: unknown): ContextShowTarget[] {
-	if (!Array.isArray(raw) || raw.some((item) => !item || typeof item !== "object" || Array.isArray(item)))
-		throw new Error(`Invalid context entry show list: ${catalogPath} [${entryName}]`);
-	const targets: ContextShowTarget[] = [];
-	for (const item of raw) {
-		const record = item as Record<string, unknown>;
-		const unknownField = Object.keys(record).find((field) => !CONTEXT_SHOW_TARGET_FIELDS.has(field));
-		if (unknownField) throw new Error(`Invalid context show field: ${catalogPath} [${entryName}] ${unknownField}`);
-		if (
-			typeof record.path !== "string" ||
-			!record.path.trim() ||
-			typeof record.name !== "string" ||
-			!record.name.trim()
-		)
-			throw new Error(`Invalid context show target: ${catalogPath} [${entryName}]`);
-		let view: ContextShowView = "declaration";
-		if (record.view !== undefined) {
-			if (typeof record.view !== "string" || !CONTEXT_SHOW_VIEWS.has(record.view as ContextShowView))
-				throw new Error(`Invalid context show view: ${catalogPath} [${entryName}] ${String(record.view)}`);
-			view = record.view as ContextShowView;
-		}
-		targets.push({
-			path: normalizeProjectPath(root, record.path),
-			name: record.name.trim(),
-			view,
-		});
+function parseOneShowTarget(root: string, catalogPath: string, entryName: string, item: unknown): ContextShowTarget {
+	const record = item as Record<string, unknown>;
+	const unknownField = Object.keys(record).find((field) => !CONTEXT_SHOW_TARGET_FIELDS.has(field));
+	if (unknownField) throw new Error(`Invalid context show field: ${catalogPath} [${entryName}] ${unknownField}`);
+	if (typeof record.path !== "string" || !record.path.trim() || typeof record.name !== "string" || !record.name.trim())
+		throw new Error(`Invalid context show target: ${catalogPath} [${entryName}]`);
+	let view: ContextShowView = "declaration";
+	if (record.view !== undefined) {
+		if (typeof record.view !== "string" || !CONTEXT_SHOW_VIEWS.has(record.view as ContextShowView))
+			throw new Error(`Invalid context show view: ${catalogPath} [${entryName}] ${String(record.view)}`);
+		view = record.view as ContextShowView;
 	}
+	return {
+		path: normalizeProjectPath(root, record.path),
+		name: record.name.trim(),
+		view,
+	};
+}
+
+function dedupeShowTargets(catalogPath: string, entryName: string, targets: ContextShowTarget[]): ContextShowTarget[] {
 	const seen = new Map<string, ContextShowTarget>();
 	for (const target of targets) {
 		const key = `${target.path}\0${target.name}`;
@@ -205,6 +198,84 @@ function parseShowTargets(root: string, catalogPath: string, entryName: string, 
 	);
 }
 
+function parseShowTargets(root: string, catalogPath: string, entryName: string, raw: unknown): ContextShowTarget[] {
+	if (!Array.isArray(raw) || raw.some((item) => !item || typeof item !== "object" || Array.isArray(item)))
+		throw new Error(`Invalid context entry show list: ${catalogPath} [${entryName}]`);
+	return dedupeShowTargets(
+		catalogPath,
+		entryName,
+		raw.map((item) => parseOneShowTarget(root, catalogPath, entryName, item)),
+	);
+}
+
+function parseContextEntryRecord(
+	root: string,
+	path: string,
+	tab: string,
+	concept: string,
+	conceptName: string,
+	conceptDescription: string,
+	name: string,
+	value: unknown,
+): ContextEntry {
+	if (!value || typeof value !== "object" || Array.isArray(value))
+		throw new Error(`Invalid context entry: ${path} [${name}]`);
+	const record = value as Record<string, unknown>;
+	const unknownField = Object.keys(record).find((field) => !CONTEXT_ENTRY_FIELDS.has(field));
+	if (unknownField) throw new Error(`Invalid context entry field: ${path} [${name}] ${unknownField}`);
+	if (
+		typeof record.description !== "string" ||
+		!record.description.trim() ||
+		!Array.isArray(record.read) ||
+		record.read.some((item) => typeof item !== "string") ||
+		!Array.isArray(record.outline) ||
+		record.outline.some((item) => typeof item !== "string") ||
+		!Array.isArray(record.references) ||
+		record.references.some((item) => typeof item !== "string")
+	)
+		throw new Error(`Invalid context entry: ${path} [${name}]`);
+	const entry = validSlug(name, "Context entry");
+	const entryRead = sortedUnique((record.read as string[]).map((item) => normalizeProjectPath(root, item)));
+	const entryShow = parseShowTargets(root, path, name, record.show ?? []);
+	const entryOutline = sortedUnique((record.outline as string[]).map((item) => normalizeProjectPath(root, item)));
+	const entryReferences = sortedUnique(
+		(record.references as string[]).map((item) => normalizeProjectPath(root, item)),
+	);
+	if (entryRead.length === 0 && entryShow.length === 0 && entryOutline.length === 0 && entryReferences.length === 0)
+		throw new Error(`Invalid context entry: ${path} [${name}]`);
+	const classified = [...entryRead, ...entryOutline, ...entryReferences];
+	const overlap = classified.find((item, index) => classified.indexOf(item) !== index);
+	if (overlap) throw new Error(`Context path has multiple loading modes: ${path} [${name}] ${overlap}`);
+	return {
+		id: `${tab}/${concept}/${entry}`,
+		tab,
+		concept,
+		conceptName,
+		conceptDescription,
+		name: entry,
+		description: record.description.trim(),
+		read: entryRead,
+		show: entryShow,
+		outline: entryOutline,
+		references: entryReferences,
+		path,
+	};
+}
+
+async function loadConceptFile(root: string, tab: string, folder: string, fileName: string): Promise<ContextEntry[]> {
+	const path = join(root, ".pi", "contexts", folder, fileName);
+	const concept = validSlug(basename(fileName, ".toml"), "Context concept");
+	const raw = parse(await readFile(path, "utf8")) as Record<string, unknown>;
+	const conceptName = typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : concept;
+	const conceptDescription = typeof raw.description === "string" ? raw.description.trim() : "";
+	const entries: ContextEntry[] = [];
+	for (const [name, value] of Object.entries(raw)) {
+		if (name === "name" || name === "description") continue;
+		entries.push(parseContextEntryRecord(root, path, tab, concept, conceptName, conceptDescription, name, value));
+	}
+	return entries;
+}
+
 export async function loadContextEntries(root: string): Promise<ContextEntry[]> {
 	const contextsRoot = join(root, ".pi", "contexts");
 	if (!(await pathExists(contextsRoot))) return [];
@@ -215,68 +286,11 @@ export async function loadContextEntries(root: string): Promise<ContextEntry[]> 
 	tabs.sort((left, right) => left.order - right.order);
 	const result: ContextEntry[] = [];
 	for (const tabEntry of tabs) {
-		const tab = tabEntry.slug;
 		const files = (await readdir(join(contextsRoot, tabEntry.folder), { withFileTypes: true }))
 			.filter((entry) => entry.isFile() && extname(entry.name) === ".toml")
 			.sort((a, b) => a.name.localeCompare(b.name));
 		for (const file of files) {
-			const path = join(contextsRoot, tabEntry.folder, file.name);
-			const concept = validSlug(basename(file.name, ".toml"), "Context concept");
-			const raw = parse(await readFile(path, "utf8")) as Record<string, unknown>;
-			const conceptName = typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : concept;
-			const conceptDescription = typeof raw.description === "string" ? raw.description.trim() : "";
-			for (const [name, value] of Object.entries(raw)) {
-				if (name === "name" || name === "description") continue;
-				if (!value || typeof value !== "object" || Array.isArray(value))
-					throw new Error(`Invalid context entry: ${path} [${name}]`);
-				const record = value as Record<string, unknown>;
-				const unknownField = Object.keys(record).find((field) => !CONTEXT_ENTRY_FIELDS.has(field));
-				if (unknownField) throw new Error(`Invalid context entry field: ${path} [${name}] ${unknownField}`);
-				if (
-					typeof record.description !== "string" ||
-					!record.description.trim() ||
-					!Array.isArray(record.read) ||
-					record.read.some((item) => typeof item !== "string") ||
-					!Array.isArray(record.outline) ||
-					record.outline.some((item) => typeof item !== "string") ||
-					!Array.isArray(record.references) ||
-					record.references.some((item) => typeof item !== "string")
-				)
-					throw new Error(`Invalid context entry: ${path} [${name}]`);
-				const entry = validSlug(name, "Context entry");
-				const entryRead = sortedUnique((record.read as string[]).map((item) => normalizeProjectPath(root, item)));
-				const entryShow = parseShowTargets(root, path, name, record.show ?? []);
-				const entryOutline = sortedUnique(
-					(record.outline as string[]).map((item) => normalizeProjectPath(root, item)),
-				);
-				const entryReferences = sortedUnique(
-					(record.references as string[]).map((item) => normalizeProjectPath(root, item)),
-				);
-				if (
-					entryRead.length === 0 &&
-					entryShow.length === 0 &&
-					entryOutline.length === 0 &&
-					entryReferences.length === 0
-				)
-					throw new Error(`Invalid context entry: ${path} [${name}]`);
-				const classified = [...entryRead, ...entryOutline, ...entryReferences];
-				const overlap = classified.find((item, index) => classified.indexOf(item) !== index);
-				if (overlap) throw new Error(`Context path has multiple loading modes: ${path} [${name}] ${overlap}`);
-				result.push({
-					id: `${tab}/${concept}/${entry}`,
-					tab,
-					concept,
-					conceptName,
-					conceptDescription,
-					name: entry,
-					description: record.description.trim(),
-					read: entryRead,
-					show: entryShow,
-					outline: entryOutline,
-					references: entryReferences,
-					path,
-				});
-			}
+			result.push(...(await loadConceptFile(root, tabEntry.slug, tabEntry.folder, file.name)));
 		}
 	}
 	return result;

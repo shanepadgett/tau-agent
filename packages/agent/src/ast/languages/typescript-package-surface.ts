@@ -40,6 +40,7 @@ async function fileExists(path: string): Promise<boolean> {
 async function findPackageJson(startDir: string, stopDir: string): Promise<string | undefined> {
 	let dir = resolve(startDir);
 	const stop = resolve(stopDir);
+	const bounded = isWithin(stop, dir);
 	for (;;) {
 		const candidate = join(dir, "package.json");
 		try {
@@ -47,10 +48,10 @@ async function findPackageJson(startDir: string, stopDir: string): Promise<strin
 		} catch {
 			// walk up
 		}
-		if (dir === stop) return undefined;
+		if (bounded && dir === stop) return undefined;
 		const parent = dirname(dir);
 		if (parent === dir) return undefined;
-		if (!isWithin(stop, parent) && parent !== stop) return undefined;
+		if (bounded && !isWithin(stop, parent) && parent !== stop) return undefined;
 		dir = parent;
 	}
 }
