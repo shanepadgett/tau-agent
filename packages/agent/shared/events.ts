@@ -31,6 +31,10 @@ export type TauAgentEvents = {
 			snapshotRanges?: Array<{ startLine: number; endLine: number }>;
 		}>;
 	};
+	/** @internal Runtime-scoped discovery for deferred tool groups. */
+	"tau:deferred-tool-group.request": {
+		accept(group: { id: string; description: string; toolNames: readonly string[] }): void;
+	};
 	/** @internal Runtime-scoped request for Explore-owned file preparation. */
 	"tau:file-injection.prepare": {
 		request: FileInjectionRequest;
@@ -100,6 +104,25 @@ export function onTauEvent<Name extends keyof TauAgentEvents>(
 	name: Name,
 	handler: TauEventHandler<Name>,
 ): () => void {
+	return subscribeToTauEvent(pi, owner, name, handler, false);
+}
+
+export function onTauEventImmediately<Name extends keyof TauAgentEvents>(
+	pi: TauEventAPI,
+	owner: string,
+	name: Name,
+	handler: TauEventHandler<Name>,
+): () => void {
+	return subscribeToTauEvent(pi, owner, name, handler, true);
+}
+
+function subscribeToTauEvent<Name extends keyof TauAgentEvents>(
+	pi: TauEventAPI,
+	owner: string,
+	name: Name,
+	handler: TauEventHandler<Name>,
+	attachImmediately: boolean,
+): () => void {
 	if (owner.length === 0) throw new Error("Tau event owner is required.");
 
 	const subscriptions = getOwnerSubscriptions(pi.events, owner);
@@ -129,6 +152,7 @@ export function onTauEvent<Name extends keyof TauAgentEvents>(
 	}
 
 	subscriptions.set(name, subscription);
+	if (attachImmediately) attach();
 	pi.on("session_start", attach);
 	pi.on("session_shutdown", detach);
 	return subscription.stop;

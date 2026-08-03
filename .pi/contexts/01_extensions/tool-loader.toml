@@ -2,10 +2,11 @@ name = "Tool Loader"
 description = "Progressive session loading of specialist tool groups for prompt-cache-friendly tool schemas"
 
 [extension-runtime]
-description = "Register load_tools for web, image, and appshot groups; capture allowed specialist names at session_start; activate registered tools for a capability; restore loaded capabilities from branch load_tools toolResult details on start and session_tree when the session began with load_tools plus all specialists active"
+description = "Register load_tools for every registered specialist group; capture allowed tool names at session_start; activate a requested group; restore loaded capabilities from branch load_tools toolResult details on start and session_tree when the session began with load_tools"
 read = [
   "packages/agent/extensions/tool-loader/index.ts",
   "packages/agent/extensions/tool-loader/README.md",
+  "packages/agent/src/tool-loading/index.ts",
 ]
 show = []
 outline = []

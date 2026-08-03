@@ -2,10 +2,11 @@ name = "Web"
 description = "Web search, code search, and page fetch tools backed by Exa with bounded tool output"
 
 [extension-shell]
-description = "Register webfetch, websearch, and codesearch; create shared tool-row state; clear row state on session_start"
+description = "Register webfetch, websearch, and codesearch as the deferred web group; create shared tool-row state; clear row state on session_start"
 read = [
   "packages/agent/extensions/web/index.ts",
   "packages/agent/extensions/web/README.md",
+  "packages/agent/src/tool-loading/index.ts",
 ]
 show = [
   { path = "packages/agent/shared/tool-row-state.ts", name = "createToolRowStateStore" },

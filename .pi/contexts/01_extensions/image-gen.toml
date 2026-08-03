@@ -2,10 +2,12 @@ name = "Image Gen"
 description = "Agent tool for OpenAI GPT Image and xAI Grok Imagine generate and edit"
 
 [extension-shell]
-description = "Register image_gen tool: prompt plus optional provider openai|xai, path, and up to three referenced_image_paths; call generateImage; return path text and inline image when under 12 MiB attachment cap"
+description = "Register image_gen in the deferred image group: prompt plus optional provider openai|xai, path, and up to three referenced_image_paths; call generateImage; return path text and inline image when under 12 MiB attachment cap"
 read = [
   "packages/agent/extensions/image-gen/index.ts",
   "packages/agent/extensions/image-gen/README.md",
+  "packages/agent/src/tool-loading/index.ts",
+  "packages/agent/src/index.ts",
 ]
 show = [
   { path = "packages/agent/src/image-generation/index.ts", name = "generateImage" },

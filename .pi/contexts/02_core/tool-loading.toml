@@ -1,0 +1,18 @@
+name = "Tool Loading"
+description = "Public deferred specialist tool-group SDK and package export"
+
+[registry-api]
+description = "Register validated deferred tool groups, discover group metadata across isolated extension modules through Pi's shared runtime event bus, and document the package-root API"
+read = [
+  "packages/agent/src/tool-loading/index.ts",
+  "packages/agent/src/index.ts",
+  "packages/agent/docs/extending-tau-agent.md",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/tool-loader/index.ts",
+  "packages/agent/extensions/web/index.ts",
+  "packages/agent/extensions/image-gen/index.ts",
+  "packages/agent/extensions/appshot/index.ts",
+]

@@ -1,21 +1,12 @@
-import { StringEnum } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
-
-const CAPABILITIES = ["web", "image", "appshot"] as const;
-type Capability = (typeof CAPABILITIES)[number];
-
-const CAPABILITY_TOOLS: Record<Capability, readonly string[]> = {
-	web: ["webfetch", "websearch", "codesearch"],
-	image: ["image_gen"],
-	appshot: ["list_windows", "screenshot_window", "activate_app"],
-};
-const SPECIALIST_TOOLS = CAPABILITIES.flatMap((capability) => CAPABILITY_TOOLS[capability]);
+import { registeredDeferredToolGroups, type DeferredToolGroupInfo } from "../../src/tool-loading/index.ts";
 
 const loadToolsSchema = Type.Object(
 	{
-		capability: StringEnum(CAPABILITIES, {
-			description: "Specialist group to load: web, image, or appshot",
+		capability: Type.String({
+			minLength: 1,
+			description: "Registered specialist group ID, such as web, image, appshot, or a package-provided group",
 		}),
 	},
 	{ additionalProperties: false },
@@ -25,50 +16,85 @@ type LoadToolsParams = Static<typeof loadToolsSchema>;
 
 interface LoadToolsDetails {
 	version: 1;
-	capability: Capability;
+	capability: string;
 	requestedToolNames: string[];
 	addedToolNames: string[];
 }
 
 export default function toolLoaderExtension(pi: ExtensionAPI): void {
 	let managed = false;
-	let allowedSpecialistNames = new Set<string>();
+	let allowedToolNames = new Map<string, ReadonlySet<string>>();
+	let managedToolNames = new Set<string>();
 
-	pi.registerTool(
-		defineTool<typeof loadToolsSchema, LoadToolsDetails>({
+	pi.registerTool(createLoadToolsTool(pi, []));
+
+	pi.on("session_start", (_event, ctx) => {
+		const groups = registeredDeferredToolGroups(pi);
+		pi.registerTool(createLoadToolsTool(pi, groups));
+
+		const initial = pi.getActiveTools();
+		const initialSet = new Set(initial);
+		allowedToolNames = new Map(
+			groups.map((group) => [group.id, new Set(group.toolNames.filter((name) => initialSet.has(name)))]),
+		);
+		managedToolNames = new Set(groups.flatMap((group) => group.toolNames));
+		managed = initialSet.has("load_tools") && groups.length > 0;
+		if (managed) restoreActiveTools(pi, initial, loadedCapabilities(ctx.sessionManager.getBranch()), groups);
+	});
+
+	pi.on("session_tree", (_event, ctx) => {
+		if (managed) {
+			restoreActiveTools(
+				pi,
+				pi.getActiveTools(),
+				loadedCapabilities(ctx.sessionManager.getBranch()),
+				registeredDeferredToolGroups(pi),
+			);
+		}
+	});
+
+	function createLoadToolsTool(pi: ExtensionAPI, groups: readonly DeferredToolGroupInfo[]) {
+		return defineTool<typeof loadToolsSchema, LoadToolsDetails>({
 			name: "load_tools",
 			label: "Load Tools",
-			description:
-				"Load one Tau specialist tool group for the current session. Groups: web for public web and implementation research; image for raster generation and editing; appshot for macOS window discovery, capture, and activation.",
-			promptSnippet: "Load a specialist Tau tool group for web research, image generation, or macOS app inspection",
+			description: `Load one registered Tau specialist tool group for the current session.${formatGroupCatalog(groups)}`,
+			promptSnippet: "Load a registered specialist tool group when the current tools cannot perform the task",
 			promptGuidelines: [
-				"Use load_tools before attempting a specialist capability whose tools are not currently available.",
+				"Use load_tools before attempting a registered specialist capability whose tools are not currently available.",
 			],
 			parameters: loadToolsSchema,
 			async execute(_toolCallId, params: LoadToolsParams) {
+				const group = registeredDeferredToolGroups(pi).find((candidate) => candidate.id === params.capability);
+				if (group === undefined) {
+					throw new Error(
+						`Unknown specialist tool group: ${params.capability}.${formatGroupCatalog(registeredDeferredToolGroups(pi))}`,
+					);
+				}
+
 				const before = pi.getActiveTools();
-				const requested = [...CAPABILITY_TOOLS[params.capability]];
+				const requested = [...group.toolNames];
 				const registered = new Set(pi.getAllTools().map((tool) => tool.name));
-				const loadable = requested.filter((name) => registered.has(name) && allowedSpecialistNames.has(name));
+				const allowed = allowedToolNames.get(group.id) ?? new Set<string>();
+				const loadable = requested.filter((name) => registered.has(name) && allowed.has(name));
 				if (loadable.length === 0) {
 					throw new Error(`No ${params.capability} tools are available in this session's tool configuration.`);
 				}
+
 				const beforeSet = new Set(before);
-				const next = [...before, ...loadable.filter((name) => !beforeSet.has(name))];
-				pi.setActiveTools(next);
+				pi.setActiveTools([...before, ...loadable.filter((name) => !beforeSet.has(name))]);
 				const after = pi.getActiveTools();
-				const addedToolNames = after.filter((name) => !beforeSet.has(name));
+				const addedToolNames = requested.filter((name) => !beforeSet.has(name) && after.includes(name));
 				const available = requested.filter((name) => after.includes(name));
 				const unavailable = requested.filter((name) => !after.includes(name));
-				const label = `${params.capability[0]?.toUpperCase()}${params.capability.slice(1)}`;
 				const text =
 					addedToolNames.length > 0
 						? `Loaded ${params.capability} tools: ${addedToolNames.join(", ")}.`
-						: `${label} tools are already loaded: ${available.join(", ")}.`;
+						: `${params.capability} tools are already loaded: ${available.join(", ")}.`;
+
 				return {
 					content: [
 						{
-							type: "text",
+							type: "text" as const,
 							text: unavailable.length ? `${text} Unavailable: ${unavailable.join(", ")}.` : text,
 						},
 					],
@@ -80,33 +106,33 @@ export default function toolLoaderExtension(pi: ExtensionAPI): void {
 					},
 				};
 			},
-		}),
-	);
-
-	pi.on("session_start", (_event, ctx) => {
-		const initial = pi.getActiveTools();
-		const initialSet = new Set(initial);
-		allowedSpecialistNames = new Set(SPECIALIST_TOOLS.filter((name) => initialSet.has(name)));
-		managed = initialSet.has("load_tools") && SPECIALIST_TOOLS.every((name) => initialSet.has(name));
-		if (managed) restoreActiveTools(pi, initial, loadedCapabilities(ctx.sessionManager.getBranch()));
-	});
-
-	pi.on("session_tree", (_event, ctx) => {
-		if (managed) restoreActiveTools(pi, pi.getActiveTools(), loadedCapabilities(ctx.sessionManager.getBranch()));
-	});
-}
-
-function restoreActiveTools(pi: ExtensionAPI, current: readonly string[], loaded: ReadonlySet<Capability>): void {
-	const specialist = new Set(SPECIALIST_TOOLS);
-	const next = current.filter((name) => !specialist.has(name));
-	for (const capability of CAPABILITIES) {
-		if (loaded.has(capability)) next.push(...CAPABILITY_TOOLS[capability]);
+		});
 	}
-	pi.setActiveTools([...new Set(next)]);
+
+	function restoreActiveTools(
+		pi: ExtensionAPI,
+		current: readonly string[],
+		loaded: ReadonlySet<string>,
+		groups: readonly DeferredToolGroupInfo[],
+	): void {
+		const next = current.filter((name) => !managedToolNames.has(name));
+		for (const group of groups) {
+			if (!loaded.has(group.id)) continue;
+			const allowed = allowedToolNames.get(group.id) ?? new Set<string>();
+			next.push(...group.toolNames.filter((name) => allowed.has(name)));
+		}
+		pi.setActiveTools([...new Set(next)]);
+	}
 }
 
-function loadedCapabilities(entries: readonly unknown[]): Set<Capability> {
-	const loaded = new Set<Capability>();
+function formatGroupCatalog(groups: readonly DeferredToolGroupInfo[]): string {
+	if (groups.length === 0) return " No specialist groups are registered.";
+	const catalog = groups.map((group) => `${group.id}: ${group.description}`).join("; ");
+	return ` Registered groups: ${catalog}.`;
+}
+
+function loadedCapabilities(entries: readonly unknown[]): Set<string> {
+	const loaded = new Set<string>();
 	for (const value of entries) {
 		if (!value || typeof value !== "object") continue;
 		const entry = value as Record<string, unknown>;
@@ -125,7 +151,6 @@ function isLoadToolsDetails(value: unknown): value is LoadToolsDetails {
 	return (
 		details.version === 1 &&
 		typeof details.capability === "string" &&
-		CAPABILITIES.includes(details.capability as Capability) &&
 		Array.isArray(details.requestedToolNames) &&
 		details.requestedToolNames.every((name) => typeof name === "string") &&
 		Array.isArray(details.addedToolNames) &&

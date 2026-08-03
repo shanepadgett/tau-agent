@@ -65,6 +65,41 @@ Behavior:
 - Missing, unreadable, or oversized files produce visible failed rows instead of rejecting.
 - Outlining requires Tau's Explore extension to be loaded.
 
+## Deferred tool groups
+
+Extensions can register tools with Tau's `load_tools` registry while keeping their schemas out of the active tool set until the agent needs them. The extension and Tau must run in the same Pi runtime.
+
+```ts
+import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { registerDeferredToolGroup } from "@shanepadgett/tau-agent";
+import { Type } from "typebox";
+
+const confluenceSearch = defineTool({
+    name: "confluence_search",
+    label: "Confluence Search",
+    description: "Search and read Confluence pages.",
+    parameters: Type.Object({ query: Type.String() }),
+    async execute(_toolCallId, params) {
+        return {
+            content: [{ type: "text", text: await searchConfluence(params.query) }],
+            details: {},
+        };
+    },
+});
+
+export default function confluenceExtension(pi: ExtensionAPI): void {
+    registerDeferredToolGroup(pi, {
+        id: "confluence",
+        description: "Search and read Confluence pages",
+        tools: [confluenceSearch],
+    });
+}
+```
+
+`registerDeferredToolGroup()` registers tool definitions with Pi and exposes the group through `load_tools`. Call it during extension initialization. Project-local and global package extensions use the same API. `id` must be unique in the runtime, and tool names must be unique within the group.
+
+Deferred loading affects model-visible tool schemas, not JavaScript package loading. Initialize expensive clients, authentication, and network connections inside tool execution when possible. Pi handles provider-specific deferred-tool behavior after Tau additively activates the group.
+
 ## Events
 
 External event integration uses Pi's native `pi.events` bus. The caller and Tau Agent must be loaded in the same Pi runtime. Event callers use string channel names and documented payloads. They do not import Tau Agent internals.

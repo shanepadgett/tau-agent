@@ -128,7 +128,7 @@ Adds `/tau`, `/tau init [--global|--project]`, and `/tau doctor` for Tau setup a
 
 ## tool-loader
 
-Progressively exposes specialist tools through `load_tools`. Tau normally loads the fixed `web`, `image`, and `appshot` groups itself when needed; supported providers can preserve more prompt-cache reuse.
+Progressively exposes registered specialist tool groups through `load_tools`. Tau registers `web`, `image`, and `appshot`; project or global package extensions can add groups with `registerDeferredToolGroup()` from `@shanepadgett/tau-agent`. Supported providers can preserve more prompt-cache reuse.
 
 ## web
 

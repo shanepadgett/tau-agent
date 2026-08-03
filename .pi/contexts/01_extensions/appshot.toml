@@ -2,10 +2,11 @@ name = "Appshot"
 description = "macOS window discovery, PNG capture, and app activation tools"
 
 [extension-shell]
-description = "Register list_windows, screenshot_window, and activate_app on darwin only; tool-row state for list_windows title and expanded JSON; bound window-list JSON via DEFAULT_MAX_BYTES/LINES binary search; screenshot writes PNG under mutation queue with 12 MiB and PNG signature checks then returns inline image; activate_app foregrounds PID from list; clear row state on session_start"
+description = "Register list_windows, screenshot_window, and activate_app in the deferred appshot group; macOS-only execution; tool-row state for list_windows title and expanded JSON; bound window-list JSON via DEFAULT_MAX_BYTES/LINES binary search; screenshot writes PNG under mutation queue with 12 MiB and PNG signature checks then returns inline image; activate_app foregrounds PID from list; clear row state on session_start"
 read = [
   "packages/agent/extensions/appshot/index.ts",
   "packages/agent/extensions/appshot/README.md",
+  "packages/agent/src/tool-loading/index.ts",
 ]
 show = [
   { path = "packages/agent/extensions/appshot/native-helper.ts", name = "createNativeHelper" },
