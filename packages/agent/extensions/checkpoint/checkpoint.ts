@@ -105,6 +105,8 @@ function createCheckpointTool(pi: Pick<ExtensionAPI, "events" | "sendMessage">) 
 			"Record concrete findings in facts and governing choices in decisions before checkpointing.",
 			"Write continue as the immediate resume directive after wake: first moves, what not to re-explore, traps to avoid. Put the backlog in work.",
 			"Use read or outline for files needed now; use deferred with a condition for files that can wait.",
+			"Preserve important discovery output before it leaves tool context. When shell or other command output is large, expensive to reproduce, or part of unfinished investigation, capture stdout and stderr in a private session-scoped temporary file; report its path, exit status, and a bounded summary instead of relying on the transcript.",
+			"Query preserved output with targeted search or ranged reads. Include artifacts needed after pruning in files, usually with read ranges or deferred with a condition, and record the artifact path and purpose in facts or continue. Do not persist routine bounded output, secrets, or whole large logs unnecessarily.",
 		],
 		parameters: checkpointParams,
 		renderShell: "self",

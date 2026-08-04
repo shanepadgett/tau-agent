@@ -15,14 +15,12 @@ export function createCheckpointBudget(initialLimit = DEFAULT_CHECKPOINT_TOKEN_L
 	let limit = validateLimit(initialLimit);
 	let highestNoticed: CheckpointBudgetLevel = 0;
 	let forced = false;
-	let baselineTokens: number | null = 0;
 
 	return {
 		configure(nextLimit: number): void {
 			limit = validateLimit(nextLimit);
 			highestNoticed = 0;
 			forced = false;
-			baselineTokens = 0;
 		},
 
 		beginTurn(tokens: number | null): CheckpointBudgetNoticeLevel | undefined {
@@ -40,23 +38,12 @@ export function createCheckpointBudget(initialLimit = DEFAULT_CHECKPOINT_TOKEN_L
 		reset(): void {
 			highestNoticed = 0;
 			forced = false;
-			baselineTokens = null;
 		},
 	};
 
 	function observe(tokens: number | null): CheckpointBudgetNoticeLevel | undefined {
 		if (tokens === null) return undefined;
-		if (baselineTokens === null) {
-			baselineTokens = tokens;
-			return undefined;
-		}
-		if (tokens < baselineTokens) {
-			baselineTokens = tokens;
-			highestNoticed = 0;
-			forced = false;
-			return undefined;
-		}
-		const level = levelFor(tokens - baselineTokens, limit);
+		const level = levelFor(tokens, limit);
 		if (level === 100) forced = true;
 		if (level <= highestNoticed) return undefined;
 		highestNoticed = level;
