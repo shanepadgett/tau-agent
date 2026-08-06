@@ -50,7 +50,7 @@ export default function checkpointExtension(pi: ExtensionAPI): void {
 		if (event.toolName === CHECKPOINT_TOOL && !event.isError) checkpointSucceeded = true;
 	});
 	pi.on("tool_call", (event) => {
-		if (!budget.shouldBlockTool(event.toolName, CHECKPOINT_TOOL)) return;
+		if (checkpointSucceeded || !budget.shouldBlockTool(event.toolName, CHECKPOINT_TOOL)) return;
 		return {
 			block: true,
 			reason: formatCheckpointMessage(
