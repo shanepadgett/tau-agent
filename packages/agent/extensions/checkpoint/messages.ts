@@ -83,6 +83,7 @@ function keepCheckpointPair(
 
 function expandPairMessages(entry: SessionEntry, message: AgentMessage): AgentMessage[] {
 	if (entry.type === "message" && (entry.message.role === "user" || entry.message.role === "assistant")) {
+		if (message.role === "assistant" && extractConversationText(message) === "") return [message];
 		return [createMessageIdMetadata(entry.id, message), message];
 	}
 	return [message];
