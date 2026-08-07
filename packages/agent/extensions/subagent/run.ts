@@ -306,8 +306,12 @@ function subscribeTurnEvents(options: {
 	const { session, details, usage, toolUsage, turnMessages, assistantMessageEndAt, publish } = options;
 	const actionById = new Map<string, string>();
 	return session.subscribe((event: AgentSessionEvent) => {
-		if (event.type === "message_update" && event.message.role === "assistant") {
-			details.response = cappedTail(textOf(event.message), PREVIEW_LIMIT);
+		if (event.type === "message_start" && event.message.role === "assistant") {
+			details.response = "";
+			return;
+		}
+		if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+			details.response = cappedTail(details.response + event.assistantMessageEvent.delta, PREVIEW_LIMIT);
 			publish();
 			return;
 		}

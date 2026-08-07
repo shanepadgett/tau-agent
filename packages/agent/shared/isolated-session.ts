@@ -142,7 +142,7 @@ export async function createIsolatedSessionResource(
 		const modelRuntime = await ModelRuntime.create();
 		modelRuntime.registerNativeProvider(inputs.provider);
 		if (inputs.runtimeApiKey !== undefined)
-			await modelRuntime.setRuntimeApiKey(inputs.model.provider, inputs.runtimeApiKey, { allowNetwork: false });
+			await modelRuntime.setRuntimeApiKey(inputs.model.provider, inputs.runtimeApiKey, { signal });
 		if (signal.aborted) throw new Error(`${inputs.label} startup aborted`);
 		const resourceLoader = new DefaultResourceLoader({
 			cwd: inputs.cwd,

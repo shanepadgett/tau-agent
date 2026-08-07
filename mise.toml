@@ -1,7 +1,7 @@
 [tools]
 node = "24.18.0"
-"npm:oxfmt" = "0.61.0"
-"npm:oxlint" = "1.76.0"
+"npm:oxfmt" = "0.62.0"
+"npm:oxlint" = "1.77.0"
 "npm:markdownlint-cli2" = "0.22.1"
 "npm:fallow" = "2.100.0"
 "npm:tree-sitter-cli" = "0.26.11"
