@@ -54,7 +54,7 @@ export async function generatePlan(
 	const prompt = buildPlanPrompt(evidence, previousPlan, regenerationNote);
 	return generateToolValidated(
 		ctx,
-		await resolveEffortCandidates(ctx, commitEffort(evidence.files), true),
+		await resolveEffortCandidates(ctx, commitEffort(evidence.files), { includeParentModel: true }),
 		prompt,
 		COMMIT_PLAN_TOOL,
 		(input) => commitGroupsFromToolInput(input, evidence.files),
@@ -84,7 +84,7 @@ export async function regenerateMessage(
 	const prompt = buildMessagePrompt(evidence, selected, previousPlan, selectedGroupId, regenerationNote);
 	return generateValidated(
 		ctx,
-		await resolveEffortCandidates(ctx, commitEffort(selected), true),
+		await resolveEffortCandidates(ctx, commitEffort(selected), { includeParentModel: true }),
 		prompt,
 		requireCommitMessage,
 		undefined,

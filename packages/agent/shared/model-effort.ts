@@ -24,6 +24,11 @@ export interface EffortProviderCandidates {
 	}>;
 }
 
+export interface EffortCandidateOptions {
+	includeParentModel: boolean;
+	preferredProvider?: string;
+}
+
 const MODEL_PREFERENCES: Record<ModelEffort, readonly ProviderPreference[]> = {
 	quick: [
 		{
@@ -94,13 +99,19 @@ export function resolveEffortProviders(
 export function resolveEffortCandidates(
 	ctx: Pick<ExtensionContext, "modelRegistry" | "model" | "cwd" | "isProjectTrusted">,
 	effort: ModelEffort,
-	includeParentModel: boolean,
+	options: EffortCandidateOptions,
 ): Promise<ModelCandidate[]> {
+	const preferences = options.preferredProvider
+		? [
+				...MODEL_PREFERENCES[effort].filter(({ provider }) => provider === options.preferredProvider),
+				...MODEL_PREFERENCES[effort].filter(({ provider }) => provider !== options.preferredProvider),
+			]
+		: MODEL_PREFERENCES[effort];
 	return resolveCandidates(
 		ctx,
-		MODEL_PREFERENCES[effort].flatMap((preference) =>
+		preferences.flatMap((preference) =>
 			preference.models.map((model) => ({ provider: preference.provider, ...model })),
 		),
-		includeParentModel,
+		options.includeParentModel,
 	);
 }

@@ -175,7 +175,10 @@ export default function bashApprovalExtension(pi: ExtensionAPI): void {
 }
 
 async function reviewCommand(ctx: ExtensionContext, command: string): Promise<BashReview> {
-	const candidates = await resolveEffortCandidates(ctx, "quick", false);
+	const candidates = await resolveEffortCandidates(ctx, "quick", {
+		includeParentModel: false,
+		preferredProvider: "xai",
+	});
 	return generateToolValidated(
 		ctx,
 		candidates,
