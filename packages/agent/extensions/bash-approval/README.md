@@ -1,10 +1,10 @@
 # Bash Approval
 
-Reviews every agent `bash` call with a quick-effort model before execution. The reviewer submits a validated decision that breaks the command into steps and reports risks and unknowns.
+Reviews every agent `bash` call with a quick-effort model before execution. The reviewer returns a validated decision and one concise paragraph that explains the command.
 
-Trivially recognized read-only commands can run without a human prompt after a valid approval. With `autoApprove` enabled, recognized direct commands with plain arguments can also run when the reviewer approves them. Quoted, composed, piped, redirected, opaque, or unrecognized shell input always requires human confirmation. Otherwise, Tau shows the review and asks for confirmation.
+Trivially recognized read-only commands can run without a human prompt after a valid approval. With `autoApprove` enabled, every reviewer-approved command runs without another confirmation. Routine local development commands should be approved, including commands that modify project files or use shell composition. The reviewer asks for human approval only when it finds a concrete destructive, system, production, privileged, or security-sensitive effect.
 
-If the reviewer fails or returns a malformed decision, Tau shows the complete command and asks for direct human approval instead of running it automatically. Tau also sends an attention notification when the approval window opens.
+When approval is required, Tau shows one paragraph that explains the effect and risk without repeating the command. If the reviewer fails or returns a malformed decision, Tau asks for direct human approval instead of running it automatically. Tau also sends an attention notification when the approval window opens.
 
 Configure under `extensions.bashApproval`:
 
@@ -13,7 +13,7 @@ Configure under `extensions.bashApproval`:
   "extensions": {
     "bashApproval": {
       "enabled": true,
-      "autoApprove": false
+      "autoApprove": true
     }
   }
 }

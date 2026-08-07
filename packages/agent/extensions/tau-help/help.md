@@ -24,7 +24,7 @@ Adds `/branch` to create and switch Git branches from the TUI.
 
 ## bash-approval
 
-Reviews every agent `bash` call with a quick-effort model before execution. Trivially recognized read-only commands can run after a valid review. Set `extensions.bashApproval.autoApprove` to also run recognized direct commands with plain arguments when the reviewer approves them. Nontrivial or unrecognized shell input still needs confirmation. If the reviewer fails or returns malformed output, Tau shows the complete command for human approval and sends an attention notification.
+Reviews every agent `bash` call with a quick-effort model before execution. Set `extensions.bashApproval.autoApprove` to run every reviewer-approved command without another confirmation. The reviewer approves routine local development work. Concrete destructive, system, production, privileged, or security-sensitive effects require human approval with one explanatory paragraph. Reviewer failures fall back to human approval and send an attention notification.
 
 ## cache-diagnostics
 

@@ -2,7 +2,7 @@ name = "Bash Approval"
 description = "Quick model review and human approval policy for agent bash commands"
 
 [review-gate]
-description = "Gate eligible agent bash calls: deny malformed, empty, or overlong commands immediately; run a structured quick-effort reviewer with schema retries; reject denials and unknowns; auto-approve only conservative direct forms; signal tau:agent.blocked before confirmation; fall back to human approval on reviewer or schema failure; clear status on shutdown"
+description = "Gate agent bash calls: block malformed, empty, or overlong commands; obtain a schema-validated discriminated quick-effort review with approved or requires_user_approval and a one-paragraph summary, omitting reason on approval; auto-run every approved command when autoApprove is enabled or when it is trivially read-only; escalate only concrete high-impact destructive, system, privileged, production/shared external, or security-sensitive effects; show every approval as one flattened explanatory paragraph without repeating the command or rendering separate sections; use one fixed paragraph for reviewer or schema failures while still requiring human approval; signal tau:agent.blocked before confirmation; clear status on shutdown"
 read = [
   "packages/agent/extensions/bash-approval/index.ts",
   "packages/agent/extensions/bash-approval/settings.ts",

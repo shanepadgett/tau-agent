@@ -5,7 +5,7 @@ export default defineTauExtensionSettings({
 	key: "bashApproval",
 	defaults: {
 		enabled: true as boolean,
-		autoApprove: false as boolean,
+		autoApprove: true as boolean,
 	},
 	schema: Type.Object(
 		{
@@ -14,8 +14,8 @@ export default defineTauExtensionSettings({
 			),
 			autoApprove: Type.Optional(
 				Type.Boolean({
-					default: false,
-					description: "Run recognized direct commands when the quick reviewer approves them.",
+					default: true,
+					description: "Run reviewer-approved commands without human confirmation.",
 				}),
 			),
 		},

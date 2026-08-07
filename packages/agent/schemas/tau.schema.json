@@ -22,8 +22,8 @@
 						},
 						"autoApprove": {
 							"type": "boolean",
-							"default": false,
-							"description": "Run recognized direct commands when the quick reviewer approves them."
+							"default": true,
+							"description": "Run reviewer-approved commands without human confirmation."
 						}
 					},
 					"additionalProperties": false
