@@ -34,7 +34,12 @@ export interface ReferenceItem {
 }
 
 interface ReferenceListItem extends ReferenceItem, SelectableListItem {
-	state?: "updating" | "updated" | "failed" | "switching";
+	state?: "loading" | "updating" | "updated" | "failed" | "switching";
+}
+
+interface ReferenceLocation {
+	name: string;
+	path: string;
 }
 
 interface CloneProgress {
@@ -71,9 +76,9 @@ export async function showReferencePanel(
 	editor: ReferenceEditor,
 	branchChoices: number,
 ): Promise<ReferenceItem[] | undefined> {
-	let initial: ReferenceItem[];
+	let initial: ReferenceLocation[];
 	try {
-		initial = await loadReferences(git);
+		initial = await loadReferenceLocations();
 	} catch (error) {
 		ctx.ui.notify(`Reference load failed: ${errorText(error)}`, "error");
 		initial = [];
@@ -134,7 +139,7 @@ class ReferencePanel implements Component {
 		ctx: ExtensionCommandContext,
 		editor: ReferenceEditor,
 		branchChoices: number,
-		initial: readonly ReferenceItem[],
+		initial: readonly ReferenceLocation[],
 		done: (result: ReferenceItem[] | undefined) => void,
 	) {
 		this.tui = tui;
@@ -144,7 +149,9 @@ class ReferencePanel implements Component {
 		this.editor = editor;
 		this.branchChoices = branchChoices;
 		this.done = done;
-		this.refs = initial.map((item) => toListItem(item));
+		this.refs = initial.map((item) =>
+			toListItem({ ...item, displayName: item.name, dirty: false, branch: "" }, "loading"),
+		);
 		this.list = this.createList(this.refs);
 		this.body = {
 			render: (width) => this.renderBody(width),
@@ -158,6 +165,7 @@ class ReferencePanel implements Component {
 			footer: { kind: "hints", hints: this.footerHints() },
 		};
 		this.panel = new ToolPanel(theme, this.panelConfig);
+		void this.hydrateInitialReferences(initial);
 	}
 
 	render(width: number): string[] {
@@ -596,6 +604,38 @@ class ReferencePanel implements Component {
 		this.syncPanel();
 	}
 
+	private async hydrateInitialReferences(locations: readonly ReferenceLocation[]): Promise<void> {
+		if (locations.length === 0) return;
+		const results = await Promise.all(
+			locations.map(async (location) => {
+				try {
+					return {
+						ok: true as const,
+						location,
+						item: await loadReference(this.git, location.name, location.path),
+					};
+				} catch (error) {
+					return { ok: false as const, location, error };
+				}
+			}),
+		);
+		const loaded = new Map<string, ReferenceItem>();
+		const failures: string[] = [];
+		for (const result of results) {
+			if (result.ok) loaded.set(result.location.path, result.item);
+			else failures.push(`${result.location.name}: ${errorText(result.error)}`);
+		}
+
+		this.refs = this.refs.map((item) => {
+			if (item.state !== "loading") return item;
+			const metadata = loaded.get(item.path);
+			return metadata ? toListItem(metadata) : { ...item, state: "failed" };
+		});
+		this.list.setItems(this.refs);
+		this.syncPanel();
+		if (failures.length > 0) this.ctx.ui.notify(`Reference metadata load failed:\n${failures.join("\n")}`, "error");
+	}
+
 	private syncPanel(): void {
 		this.panelConfig.secondary = this.secondaryText();
 		this.panelConfig.header = this.headerLines();
@@ -748,28 +788,39 @@ function compareReferenceItems(left: ReferenceListItem, right: ReferenceListItem
 	return left.name.localeCompare(right.name);
 }
 
-async function loadReferences(git: GitRunner): Promise<ReferenceItem[]> {
+async function loadReferenceLocations(): Promise<ReferenceLocation[]> {
 	await mkdir(REFERENCES_DIR, { recursive: true });
-	const refs = (await readdir(REFERENCES_DIR, { withFileTypes: true }))
+	return (await readdir(REFERENCES_DIR, { withFileTypes: true }))
 		.filter((entry) => entry.isDirectory() && !entry.name.startsWith(".clone-"))
 		.map((entry) => ({ name: entry.name, path: join(REFERENCES_DIR, entry.name) }))
 		.sort((left, right) => left.name.localeCompare(right.name));
+}
 
-	const references: ReferenceItem[] = [];
-	for (const ref of refs) references.push(await loadReference(git, ref.name, ref.path));
-	return references;
+async function loadReferences(git: GitRunner): Promise<ReferenceItem[]> {
+	const refs = await loadReferenceLocations();
+	return Promise.all(refs.map((ref) => loadReference(git, ref.name, ref.path)));
 }
 
 async function loadReference(git: GitRunner, name: string, path: string): Promise<ReferenceItem> {
-	const branch = await git.run(["branch", "--show-current"], { cwd: path, optional: true });
-	const commit = branch ? "" : await git.run(["rev-parse", "--short", "HEAD"], { cwd: path, optional: true });
-	const remoteUrl = await git.run(["config", "--get", "remote.origin.url"], { cwd: path, optional: true });
+	const [status, remoteUrl] = await Promise.all([
+		git.run(["status", "--porcelain=v2", "--branch"], { cwd: path, optional: true }),
+		git.run(["config", "--get", "remote.origin.url"], { cwd: path, optional: true }),
+	]);
+	let branch = "";
+	let commit = "";
+	let dirty = false;
+	for (const line of status.split("\n")) {
+		if (line.startsWith("# branch.head ")) branch = line.slice("# branch.head ".length);
+		else if (line.startsWith("# branch.oid ")) commit = line.slice("# branch.oid ".length).slice(0, 7);
+		else if (line && !line.startsWith("# ")) dirty = true;
+	}
+	if (branch === "(detached)") branch = commit ? `detached ${commit}` : "";
 	return {
 		name,
 		displayName: referenceDisplayName(remoteUrl, name),
 		path,
-		dirty: (await git.run(["status", "--porcelain=v1"], { cwd: path, optional: true })).length > 0,
-		branch: branch || (commit ? `detached ${commit}` : ""),
+		dirty,
+		branch,
 	};
 }
 
