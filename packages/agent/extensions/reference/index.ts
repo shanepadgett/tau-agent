@@ -55,6 +55,8 @@ export default function referenceExtension(pi: ExtensionAPI): void {
 			if (!references) return;
 
 			ctx.ui.setEditorText(buildReferenceDraft(references));
+			// Pi does not request a render when setEditorText runs after custom UI closes.
+			ctx.ui.setStatus("reference", undefined);
 		},
 	});
 }
