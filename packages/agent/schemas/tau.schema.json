@@ -12,6 +12,22 @@
 		"extensions": {
 			"type": "object",
 			"properties": {
+				"bashApproval": {
+					"type": "object",
+					"properties": {
+						"enabled": {
+							"type": "boolean",
+							"default": true,
+							"description": "Enable bash command review and approval."
+						},
+						"autoApprove": {
+							"type": "boolean",
+							"default": false,
+							"description": "Run recognized direct commands when the quick reviewer approves them."
+						}
+					},
+					"additionalProperties": false
+				},
 				"checkpoint": {
 					"type": "object",
 					"required": [
@@ -260,10 +276,10 @@
 							"default": true,
 							"description": "Add the lazy-senior-dev build ethos to Tau's system prompt."
 						},
-						"caveman": {
+						"simplified": {
 							"type": "boolean",
 							"default": true,
-							"description": "Add the terse communication style to Tau's system prompt."
+							"description": "Add Simplified Technical English and small-chunk explanations to Tau's system prompt."
 						}
 					},
 					"additionalProperties": false

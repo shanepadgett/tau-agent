@@ -2,7 +2,7 @@ name = "Soul"
 description = "Optional build-ethos and communication-style system prompt appendices"
 
 [extension-runtime]
-description = "Load soul.ponytail and soul.caveman on session_start; on before_agent_start append PONYTAIL_ETHOS and/or CAVEMAN_STYLE after Pi native system prompt; both default on; settings take effect next session start"
+description = "Load soul.ponytail and soul.simplified on session_start; on before_agent_start append PONYTAIL_ETHOS and/or SIMPLIFIED_TECHNICAL_ENGLISH after Pi native system prompt; both default on; settings take effect next session start"
 read = [
   "packages/agent/extensions/soul/index.ts",
   "packages/agent/extensions/soul/settings.ts",

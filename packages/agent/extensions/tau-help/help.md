@@ -22,6 +22,10 @@ Names sessions from their first request so saved sessions remain findable.
 
 Adds `/branch` to create and switch Git branches from the TUI.
 
+## bash-approval
+
+Reviews every agent `bash` call with a quick-effort model before execution. Trivially recognized read-only commands can run after a valid review. Set `extensions.bashApproval.autoApprove` to also run recognized direct commands with plain arguments when the reviewer approves them. Nontrivial or unrecognized shell input still needs confirmation. If the reviewer fails or returns malformed output, Tau shows the complete command for human approval and sends an attention notification.
+
 ## cache-diagnostics
 
 Records private prompt-cache fingerprints without storing prompt content. Run `/cache-debug` after suspicious cache misses to write a bounded investigation report under `~/.pi/agent/cache-diagnostics/reports/`.
@@ -108,7 +112,7 @@ Runs configured commands while keeping their output out of agent context when th
 
 ## soul
 
-Adds two independently toggleable sections to Pi’s native assistant prompt: `ponytail` (a lazy-senior-dev build ethos) and `caveman` (a terse communication style). Both on by default.
+Adds two independently toggleable sections to Pi’s native assistant prompt: `ponytail` (a lazy-senior-dev build ethos) and `simplified` (Simplified Technical English with short, explanatory responses and small planning chunks). Both on by default.
 
 ## stash
 

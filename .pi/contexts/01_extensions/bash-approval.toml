@@ -1,0 +1,45 @@
+name = "Bash Approval"
+description = "Quick model review and human approval policy for agent bash commands"
+
+[review-gate]
+description = "Gate eligible agent bash calls: deny malformed, empty, or overlong commands immediately; run a structured quick-effort reviewer with schema retries; reject denials and unknowns; auto-approve only conservative direct forms; signal tau:agent.blocked before confirmation; fall back to human approval on reviewer or schema failure; clear status on shutdown"
+read = [
+  "packages/agent/extensions/bash-approval/index.ts",
+  "packages/agent/extensions/bash-approval/settings.ts",
+  "packages/agent/extensions/bash-approval/README.md",
+  "packages/agent/shared/agent-blocked.ts",
+  "packages/agent/shared/model-effort.ts",
+  "packages/agent/shared/model-fallback/types.ts",
+  "packages/agent/shared/text.ts",
+  "packages/agent/shared/settings/load.ts",
+  "packages/agent/shared/settings/define.ts",
+  "packages/agent/shared/settings/json.ts",
+  "packages/agent/shared/settings/merge.ts",
+  "packages/agent/shared/settings/paths.ts",
+  "docs/standards/agent-runtime.md",
+]
+show = [
+  { path = "packages/agent/shared/model-fallback/index.ts", name = "resolveCandidates" },
+  { path = "packages/agent/shared/model-fallback/index.ts", name = "generateToolValidated" },
+  { path = "packages/agent/shared/events.ts", name = "emitTauEvent" },
+]
+outline = []
+references = [
+  "packages/agent/shared/model-fallback/index.ts",
+  "packages/agent/shared/events.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]
+
+[settings]
+description = "Declare bashApproval.enabled and bashApproval.autoApprove defaults and schema for project or global Tau settings"
+read = [
+  "packages/agent/extensions/bash-approval/settings.ts",
+  "packages/agent/extensions/bash-approval/README.md",
+  "packages/agent/shared/settings/define.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/bash-approval/index.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]
