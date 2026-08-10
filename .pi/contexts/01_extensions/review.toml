@@ -1,8 +1,8 @@
 name = "Review"
-description = "Isolated review of current Git changes with optional review direction and Markdown output"
+description = "Isolated review of current Git changes or a user-directed repository area with Markdown output"
 
 [command-lifecycle]
-description = "Register trusted-TUI /review [direction], require a dirty Git tree, choose a deep provider or current-model fallback, run the isolated review, and write the Markdown result under .pi/tau/reviews/"
+description = "Register trusted-TUI /review [direction], require a dirty Git tree only when direction is empty, choose a deep provider or current-model fallback, run the isolated review, and write the Markdown result under .pi/tau/reviews/"
 read = [
   "packages/agent/extensions/review/index.ts",
   "packages/agent/extensions/review/README.md",

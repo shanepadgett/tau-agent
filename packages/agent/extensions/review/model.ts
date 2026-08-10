@@ -61,14 +61,16 @@ export const REVIEW_RESULT_TOOL = {
 
 export function buildReviewPrompt(root: string, direction: string): string {
 	return [
-		`Review uncommitted work in ${root}.`,
-		"Inspect staged, unstaged, and untracked changes. Stay centered on changed behavior, but inspect surrounding ownership and callers when needed to prove a finding.",
+		`Review the repository at ${root}.`,
 		"Do not modify files. Do not report theoretical concerns or personal preferences. Use the cheapest evidence that settles each point.",
 		"Review for concrete runtime bugs, broken state transitions, unsafe boundaries, data loss, error-handling failures, and material maintainability costs. Prefer deletion, reuse, and the smallest credible implementation when they resolve a finding.",
-		"When the user supplies direction, center the review on it and inspect related code only as needed to prove findings. The direction does not change the read-only review or structured output requirements.",
+		"User direction does not change the read-only review or structured output requirements.",
 		`Call ${REVIEW_RESULT_TOOL.name} exactly once as the final action. Write no final prose outside that tool call.`,
 		"Order findings by severity. Every finding needs an exact repository-relative path and lines when source exists, a concrete mechanism or cost, and the smallest credible fix. Return an empty findings array and verdict pass when nothing actionable remains.",
-		direction ? `User review direction:\n\n${direction}` : "User review direction: General review.",
+		direction
+			? "Review scope: Follow the user's direction below. Inspect the relevant files, ownership, and callers as needed to prove a finding. Do not limit the review to uncommitted changes."
+			: "Review scope: Inspect staged, unstaged, and untracked changes. Stay centered on changed behavior, but inspect surrounding ownership and callers when needed to prove a finding.",
+		...(direction ? [`User review direction:\n\n${direction}`] : []),
 	].join("\n\n");
 }
 

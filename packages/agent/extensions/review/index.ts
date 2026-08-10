@@ -9,7 +9,7 @@ import { runReview } from "./session.ts";
 
 export default function reviewExtension(pi: ExtensionAPI): void {
 	pi.registerCommand("review", {
-		description: "Write an isolated review of current Git changes to Markdown",
+		description: "Write an isolated requested or Git-change review to Markdown",
 		handler: async (args, ctx) => {
 			if (ctx.mode !== "tui" || !ctx.isProjectTrusted()) {
 				ctx.ui.notify("/review requires a trusted TUI project", "warning");
@@ -22,7 +22,7 @@ export default function reviewExtension(pi: ExtensionAPI): void {
 				ctx.ui.notify("/review requires a Git repository", "warning");
 				return;
 			}
-			if (status.fileCount === 0) {
+			if (!direction && status.fileCount === 0) {
 				ctx.ui.notify("Nothing to review: working tree is clean", "info");
 				return;
 			}
