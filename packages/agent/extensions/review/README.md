@@ -8,6 +8,12 @@ Add review direction after the command to review the requested part of the repos
 /review focus on cancellation, cleanup, and data loss
 ```
 
-After the command, choose which logged-in provider runs the review. OpenAI Codex uses `gpt-5.6-sol` and Anthropic uses `claude-opus-5`, both at high thinking. Only providers you are logged in to appear. With no logged-in provider, the review uses the current model.
+Choose one focused review type:
+
+- `Simplify` looks for code and concepts that can disappear or reuse what already exists.
+- `Architecture` reconsiders ownership, boundaries, reuse, and overall structure.
+- `Correctness` checks concrete runtime bugs and failure paths after accepting the architecture.
+
+Then choose which logged-in provider runs the review. OpenAI Codex uses `gpt-5.6-sol` and Anthropic uses `claude-opus-5`, both at high thinking. Only providers you are logged in to appear. With no logged-in provider, the review uses the current model.
 
 Tau writes each result as Markdown under `.pi/tau/reviews/`. Review results do not enter the parent agent context. Reference the Markdown file later when you want an agent to use it.

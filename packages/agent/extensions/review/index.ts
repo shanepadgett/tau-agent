@@ -4,8 +4,14 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { createGitRunner, loadRepoStatus } from "../../shared/git.ts";
 import { resolveEffortProviders } from "../../shared/model-effort.ts";
 import { errorText } from "../../shared/text.ts";
-import { formatReviewMarkdown } from "./model.ts";
+import { formatReviewMarkdown, type ReviewMode } from "./model.ts";
 import { runReview } from "./session.ts";
+
+const REVIEW_TYPES = [
+	{ label: "Simplify", mode: "simplify" },
+	{ label: "Architecture", mode: "architecture" },
+	{ label: "Correctness", mode: "correctness" },
+] as const satisfies ReadonlyArray<{ label: string; mode: ReviewMode }>;
 
 export default function reviewExtension(pi: ExtensionAPI): void {
 	pi.registerCommand("review", {
@@ -26,6 +32,13 @@ export default function reviewExtension(pi: ExtensionAPI): void {
 				ctx.ui.notify("Nothing to review: working tree is clean", "info");
 				return;
 			}
+			const selectedType = await ctx.ui.select(
+				"Review type",
+				REVIEW_TYPES.map(({ label }) => label),
+			);
+			if (!selectedType) return;
+			const mode = REVIEW_TYPES.find(({ label }) => label === selectedType)?.mode;
+			if (!mode) return;
 			const providers = resolveEffortProviders(ctx, "deep");
 			let preferred: ReviewModelChoice | undefined;
 			if (providers.length > 0) {
@@ -41,11 +54,12 @@ export default function reviewExtension(pi: ExtensionAPI): void {
 				ctx.ui.notify("No logged-in review provider. Using current model.", "warning");
 			}
 			const signal = ctx.signal ?? new AbortController().signal;
-			ctx.ui.setStatus("review", "running review");
+			ctx.ui.setStatus("review", `running ${mode} review`);
 			try {
 				const output = await runReview({
 					ctx,
 					root: status.root,
+					mode,
 					direction,
 					preferredModel: preferred?.model,
 					preferredThinkingLevel: preferred?.thinkingLevel,
@@ -55,9 +69,9 @@ export default function reviewExtension(pi: ExtensionAPI): void {
 				const createdAt = new Date().toISOString();
 				const directory = join(status.root, ".pi", "tau", "reviews");
 				const timestamp = createdAt.replace(/[^0-9A-Za-z-]/g, "-");
-				const path = join(directory, `${timestamp}-review.md`);
+				const path = join(directory, `${timestamp}-${mode}-review.md`);
 				await mkdir(directory, { recursive: true });
-				await writeFile(path, formatReviewMarkdown({ ...output, direction, createdAt }), {
+				await writeFile(path, formatReviewMarkdown({ ...output, mode, direction, createdAt }), {
 					encoding: "utf8",
 					mode: 0o600,
 				});

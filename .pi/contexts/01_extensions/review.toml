@@ -1,8 +1,8 @@
 name = "Review"
-description = "Isolated review of current Git changes or a user-directed repository area with Markdown output"
+description = "Focused simplify, architecture, or correctness review of current Git changes or a user-directed repository area with Markdown output"
 
 [command-lifecycle]
-description = "Register trusted-TUI /review [direction], require a dirty Git tree only when direction is empty, choose a deep provider or current-model fallback, run the isolated review, and write the Markdown result under .pi/tau/reviews/"
+description = "Register trusted-TUI /review [direction], require a dirty Git tree only when direction is empty, choose a review type and deep provider or current-model fallback, run the isolated review, and write the Markdown result under .pi/tau/reviews/"
 read = [
   "packages/agent/extensions/review/index.ts",
   "packages/agent/extensions/review/README.md",
@@ -33,7 +33,7 @@ references = [
 ]
 
 [review-contract]
-description = "Review prompt, structured severity finding output, review document metadata, and Markdown formatting contract"
+description = "Simplify, architecture, and correctness instructions; user-directed or Git-change scope; structured severity findings; review document metadata; and Markdown formatting"
 read = [
   "packages/agent/extensions/review/model.ts",
 ]

@@ -88,7 +88,7 @@ Adds `/ready` to scan agent-readiness rails (cold start, toolchain, verify, lint
 
 ## review
 
-Adds `/review [direction]` for an isolated review. With no direction, it reviews current Git changes. Free-form direction reviews the requested part of the repository even when the working tree is clean. After choosing a logged-in provider, Tau writes the result as Markdown under `.pi/tau/reviews/` without adding it to the parent agent context.
+Adds `/review [direction]` for an isolated simplify, architecture, or correctness review. With no direction, it reviews current Git changes. Free-form direction reviews the requested part of the repository even when the working tree is clean. Choose a review type and logged-in provider, then Tau writes the result as Markdown under `.pi/tau/reviews/` without adding it to the parent agent context.
 
 ## reference
 

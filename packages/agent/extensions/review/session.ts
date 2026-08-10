@@ -6,7 +6,7 @@ import {
 	resolveIsolatedSessionModel,
 	type IsolatedSessionResource,
 } from "../../shared/isolated-session.ts";
-import { buildReviewPrompt, REVIEW_RESULT_TOOL, type ReviewOutput } from "./model.ts";
+import { buildReviewPrompt, REVIEW_RESULT_TOOL, type ReviewMode, type ReviewOutput } from "./model.ts";
 
 const REVIEW_TOOLS = [
 	"read",
@@ -30,13 +30,14 @@ const EXPLORE_EXTENSION = join(dirname(fileURLToPath(import.meta.url)), "..", "e
 export async function runReview(options: {
 	ctx: ExtensionContext;
 	root: string;
+	mode: ReviewMode;
 	direction: string;
 	preferredModel: string | undefined;
 	preferredThinkingLevel: NonNullable<ExtensionContext["thinkingLevel"]> | undefined;
 	parentThinkingLevel: NonNullable<ExtensionContext["thinkingLevel"]>;
 	signal: AbortSignal;
 }): Promise<ReviewOutput> {
-	const { ctx, root, direction, signal } = options;
+	const { ctx, root, mode, direction, signal } = options;
 	let output: ReviewOutput | undefined;
 	const outputTool = defineTool({
 		...REVIEW_RESULT_TOOL,
@@ -78,7 +79,7 @@ export async function runReview(options: {
 		const abort = () => void session.abort().catch(() => undefined);
 		signal.addEventListener("abort", abort, { once: true });
 		try {
-			await session.prompt(buildReviewPrompt(root, direction), { expandPromptTemplates: false });
+			await session.prompt(buildReviewPrompt(root, mode, direction), { expandPromptTemplates: false });
 		} finally {
 			signal.removeEventListener("abort", abort);
 		}
