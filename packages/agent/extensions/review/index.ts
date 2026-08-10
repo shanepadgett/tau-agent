@@ -1,37 +1,22 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { createGitRunner, loadRepoStatus } from "../../shared/git.ts";
-import { createInjectedContext } from "../../shared/injected-context.ts";
 import { resolveEffortProviders } from "../../shared/model-effort.ts";
 import { errorText } from "../../shared/text.ts";
-import {
-	formatReviewMarkdown,
-	isReviewRecord,
-	isReviewMode,
-	REVIEW_ENTRY_TYPE,
-	type ReviewMode,
-	type ReviewRecord,
-} from "./model.ts";
-import { ReviewProgressPanel, ReviewResultPanel, type ReviewResultAction } from "./panel.ts";
+import { formatReviewMarkdown } from "./model.ts";
 import { runReview } from "./session.ts";
 
 export default function reviewExtension(pi: ExtensionAPI): void {
 	pi.registerCommand("review", {
-		description: "Run or show an isolated simplify, architecture, or correctness review",
+		description: "Write an isolated review of current Git changes to Markdown",
 		handler: async (args, ctx) => {
 			if (ctx.mode !== "tui" || !ctx.isProjectTrusted()) {
 				ctx.ui.notify("/review requires a trusted TUI project", "warning");
 				return;
 			}
 			await ctx.waitForIdle();
-			const requested = args.trim().toLowerCase();
-			if (requested === "show") {
-				await showLatestReview(pi, ctx);
-				return;
-			}
-			const mode = await resolveReviewMode(requested, ctx);
-			if (!mode) return;
+			const direction = args.trim();
 			const status = await loadRepoStatus(createGitRunner(pi, ctx));
 			if (!status) {
 				ctx.ui.notify("/review requires a Git repository", "warning");
@@ -55,10 +40,36 @@ export default function reviewExtension(pi: ExtensionAPI): void {
 			} else {
 				ctx.ui.notify("No logged-in review provider. Using current model.", "warning");
 			}
-			const output = await runReviewWithPanel(pi, ctx, mode, status.root, preferred);
-			if (!output) return;
-			pi.appendEntry(REVIEW_ENTRY_TYPE, output);
-			await showReview(pi, ctx, output);
+			const signal = ctx.signal ?? new AbortController().signal;
+			ctx.ui.setStatus("review", "running review");
+			try {
+				const output = await runReview({
+					ctx,
+					root: status.root,
+					direction,
+					preferredModel: preferred?.model,
+					preferredThinkingLevel: preferred?.thinkingLevel,
+					parentThinkingLevel: pi.getThinkingLevel(),
+					signal,
+				});
+				const createdAt = new Date().toISOString();
+				const directory = join(status.root, ".pi", "tau", "reviews");
+				const timestamp = createdAt.replace(/[^0-9A-Za-z-]/g, "-");
+				const path = join(directory, `${timestamp}-review.md`);
+				await mkdir(directory, { recursive: true });
+				await writeFile(path, formatReviewMarkdown({ ...output, direction, createdAt }), {
+					encoding: "utf8",
+					mode: 0o600,
+				});
+				ctx.ui.notify(`Review written to ${path}`, "info");
+			} catch (error) {
+				ctx.ui.notify(
+					signal.aborted ? "Review cancelled" : `Review failed: ${errorText(error)}`,
+					signal.aborted ? "info" : "error",
+				);
+			} finally {
+				ctx.ui.setStatus("review", undefined);
+			}
 		},
 	});
 }
@@ -66,105 +77,4 @@ export default function reviewExtension(pi: ExtensionAPI): void {
 interface ReviewModelChoice {
 	model: string;
 	thinkingLevel: NonNullable<ExtensionContext["thinkingLevel"]>;
-}
-
-function latestReview(entries: readonly SessionEntry[]): ReviewRecord | undefined {
-	for (let index = entries.length - 1; index >= 0; index -= 1) {
-		const entry = entries[index];
-		if (entry?.type !== "custom" || entry.customType !== REVIEW_ENTRY_TYPE) continue;
-		if (isReviewRecord(entry.data)) return entry.data;
-	}
-	return undefined;
-}
-
-async function showLatestReview(pi: ExtensionAPI, ctx: ExtensionContext): Promise<void> {
-	const latest = latestReview(ctx.sessionManager.getBranch());
-	if (!latest) {
-		ctx.ui.notify("No review exists on this session branch", "warning");
-		return;
-	}
-	await showReview(pi, ctx, latest);
-}
-
-async function resolveReviewMode(requested: string, ctx: ExtensionContext): Promise<ReviewMode | undefined> {
-	if (requested) {
-		if (!isReviewMode(requested)) {
-			ctx.ui.notify("Usage: /review [simplify|architecture|correctness|show]", "warning");
-			return undefined;
-		}
-		return requested;
-	}
-	const selected = await ctx.ui.select("Review mode", ["Simplify", "Architecture", "Correctness"]);
-	if (!selected) return undefined;
-	const normalized = selected.toLowerCase();
-	return isReviewMode(normalized) ? normalized : undefined;
-}
-
-async function runReviewWithPanel(
-	pi: ExtensionAPI,
-	ctx: ExtensionContext,
-	mode: ReviewMode,
-	root: string,
-	preferred: ReviewModelChoice | undefined,
-): Promise<ReviewRecord | undefined> {
-	const controller = new AbortController();
-	const signal = ctx.signal ? AbortSignal.any([controller.signal, ctx.signal]) : controller.signal;
-	let failure: string | undefined;
-	const output = await ctx.ui.custom<ReviewRecord | undefined>((tui, theme, keys, done) => {
-		const panel = new ReviewProgressPanel(tui, theme, mode, keys, () => controller.abort());
-		void runReview({
-			ctx,
-			root,
-			mode,
-			preferredModel: preferred?.model,
-			preferredThinkingLevel: preferred?.thinkingLevel,
-			parentThinkingLevel: pi.getThinkingLevel(),
-			signal,
-			onProgress: (line) => panel.update(line),
-		})
-			.then((result) => done({ ...result, mode, root, createdAt: new Date().toISOString() }))
-			.catch((error: unknown) => {
-				failure = errorText(error);
-				done(undefined);
-			});
-		return panel;
-	});
-	if (output) return output;
-	ctx.ui.notify(
-		signal.aborted ? "Review cancelled" : `Review failed: ${failure ?? "unknown error"}`,
-		signal.aborted ? "info" : "error",
-	);
-	return undefined;
-}
-
-async function showReview(pi: ExtensionAPI, ctx: ExtensionContext, review: ReviewRecord): Promise<void> {
-	const action = await ctx.ui.custom<ReviewResultAction>(
-		(tui, theme, keys, done) => new ReviewResultPanel(tui, theme, keys, review, done),
-		{
-			overlay: true,
-			overlayOptions: { anchor: "top-center", width: "80%", minWidth: 68, maxHeight: "90%", margin: 1 },
-		},
-	);
-	if (action === "send") {
-		try {
-			await pi.sendMessage(
-				createInjectedContext(formatReviewMarkdown(review), { source: "review", title: `${review.mode} review` }),
-				{ triggerTurn: false, deliverAs: "nextTurn" },
-			);
-			ctx.ui.notify("Review queued for agent's next turn", "info");
-		} catch (error) {
-			ctx.ui.notify(`Failed to send review: ${errorText(error)}`, "error");
-		}
-	} else if (action === "export") {
-		try {
-			const directory = join(review.root, ".pi", "tau", "reviews");
-			await mkdir(directory, { recursive: true });
-			const timestamp = review.createdAt.replace(/[^0-9A-Za-z-]/g, "-");
-			const path = join(directory, `${timestamp}-${review.mode}.md`);
-			await writeFile(path, formatReviewMarkdown(review), { encoding: "utf8", mode: 0o600 });
-			ctx.ui.notify(`Review exported to ${path}`, "info");
-		} catch (error) {
-			ctx.ui.notify(`Failed to export review: ${errorText(error)}`, "error");
-		}
-	}
 }

@@ -1,12 +1,12 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineTool, type AgentSessionEvent, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { defineTool, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
 	createIsolatedSessionResource,
 	resolveIsolatedSessionModel,
 	type IsolatedSessionResource,
 } from "../../shared/isolated-session.ts";
-import { buildReviewPrompt, REVIEW_RESULT_TOOL, type ReviewMode, type ReviewOutput } from "./model.ts";
+import { buildReviewPrompt, REVIEW_RESULT_TOOL, type ReviewOutput } from "./model.ts";
 
 const REVIEW_TOOLS = [
 	"read",
@@ -30,14 +30,13 @@ const EXPLORE_EXTENSION = join(dirname(fileURLToPath(import.meta.url)), "..", "e
 export async function runReview(options: {
 	ctx: ExtensionContext;
 	root: string;
-	mode: ReviewMode;
+	direction: string;
 	preferredModel: string | undefined;
 	preferredThinkingLevel: NonNullable<ExtensionContext["thinkingLevel"]> | undefined;
 	parentThinkingLevel: NonNullable<ExtensionContext["thinkingLevel"]>;
 	signal: AbortSignal;
-	onProgress: (status: string) => void;
 }): Promise<ReviewOutput> {
-	const { ctx, root, mode, signal, onProgress } = options;
+	const { ctx, root, direction, signal } = options;
 	let output: ReviewOutput | undefined;
 	const outputTool = defineTool({
 		...REVIEW_RESULT_TOOL,
@@ -52,7 +51,6 @@ export async function runReview(options: {
 		},
 	});
 	let resource: IsolatedSessionResource | undefined;
-	let unsubscribe: (() => void) | undefined;
 	try {
 		const selected = await resolveIsolatedSessionModel({
 			label: "Review",
@@ -62,7 +60,7 @@ export async function runReview(options: {
 			ctx,
 			parentThinkingLevel: options.parentThinkingLevel,
 			signal,
-			onWarning: onProgress,
+			onWarning: (warning) => ctx.ui.notify(warning, "warning"),
 		});
 		resource = await createIsolatedSessionResource(
 			{
@@ -77,18 +75,10 @@ export async function runReview(options: {
 			signal,
 		);
 		const { session } = resource;
-		unsubscribe = session.subscribe((event: AgentSessionEvent) => {
-			if (event.type === "tool_execution_start") {
-				onProgress(`${event.toolName} ${summarizeArgs(event.args)}`.trim());
-			} else if (event.type === "tool_execution_end") {
-				onProgress(event.isError ? `${event.toolName} failed` : `${event.toolName} complete`);
-			}
-		});
 		const abort = () => void session.abort().catch(() => undefined);
 		signal.addEventListener("abort", abort, { once: true });
 		try {
-			onProgress(`Running ${mode} review`);
-			await session.prompt(buildReviewPrompt(root, mode), { expandPromptTemplates: false });
+			await session.prompt(buildReviewPrompt(root, direction), { expandPromptTemplates: false });
 		} finally {
 			signal.removeEventListener("abort", abort);
 		}
@@ -96,12 +86,6 @@ export async function runReview(options: {
 		if (!output) throw new Error("Review ended without structured output");
 		return output;
 	} finally {
-		unsubscribe?.();
 		await resource?.dispose();
 	}
-}
-
-function summarizeArgs(args: unknown): string {
-	const text = typeof args === "string" ? args : (JSON.stringify(args) ?? String(args));
-	return text.length > 140 ? `${text.slice(0, 139)}…` : text;
 }

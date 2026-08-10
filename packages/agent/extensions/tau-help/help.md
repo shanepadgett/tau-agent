@@ -88,7 +88,7 @@ Adds `/ready` to scan agent-readiness rails (cold start, toolchain, verify, lint
 
 ## review
 
-Adds `/review` for explicit isolated review of current Git changes. Choose `simplify`, `architecture`, or `correctness`, or run a mode directly, then choose a logged-in provider (OpenAI Codex `gpt-5.6-sol` or Anthropic `claude-opus-5`, high thinking). Results stay outside agent context until you send them from result view, and can be exported under `.pi/tau/reviews/`. `/review show` reopens latest result on current session branch.
+Adds `/review [direction]` for an isolated review of current Git changes. Optional free-form direction tells the agent what to focus on. After choosing a logged-in provider, Tau writes the result as Markdown under `.pi/tau/reviews/` without adding it to the parent agent context.
 
 ## reference
 

@@ -1,13 +1,11 @@
 # Review
 
-Run `/review` to inspect current repository's staged, unstaged, and untracked work in a fresh isolated session. Choose one focused pass:
+Run `/review` to inspect the current repository's staged, unstaged, and untracked work in a fresh isolated session. Add any review direction after the command:
 
-- `simplify` looks for code and concepts that can disappear or reuse what already exists.
-- `architecture` performs a nuclear maintainability review and accepts substantial redesign when ownership, reuse, or structure is poor.
-- `correctness` checks runtime bugs and failures after architecture is accepted.
+```text
+/review focus on cancellation, cleanup, and data loss
+```
 
-Run a mode directly with `/review simplify`, `/review architecture`, or `/review correctness`. Run `/review show` to reopen latest result on current session branch.
+Without direction, the agent performs a general correctness and maintainability review. After the command, choose which logged-in provider runs the review. OpenAI Codex uses `gpt-5.6-sol` and Anthropic uses `claude-opus-5`, both at high thinking. Only providers you are logged in to appear. With no logged-in provider, the review uses the current model.
 
-After the mode, choose which logged-in provider runs the review. OpenAI Codex uses `gpt-5.6-sol` and Anthropic uses `claude-opus-5`, both at high thinking. Only providers you are logged in to appear. With no logged-in provider, the review uses the current model.
-
-Results stay outside parent agent context. In result view, press `a` to send review to agent's next turn or `e` to export Markdown under `.pi/tau/reviews/`.
+Tau writes each result as Markdown under `.pi/tau/reviews/`. Review results do not enter the parent agent context. Reference the Markdown file later when you want an agent to use it.
