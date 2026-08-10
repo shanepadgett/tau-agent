@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { createGitRunner, loadRepoStatus } from "../../shared/git.ts";
 import { createInjectedContext } from "../../shared/injected-context.ts";
+import { resolveEffortProviders } from "../../shared/model-effort.ts";
 import { errorText } from "../../shared/text.ts";
 import {
 	formatReviewMarkdown,
@@ -40,12 +41,31 @@ export default function reviewExtension(pi: ExtensionAPI): void {
 				ctx.ui.notify("Nothing to review: working tree is clean", "info");
 				return;
 			}
-			const output = await runReviewWithPanel(pi, ctx, mode, status.root);
+			const providers = resolveEffortProviders(ctx, "deep");
+			let preferred: ReviewModelChoice | undefined;
+			if (providers.length > 0) {
+				const labels = providers.map((provider) => `${provider.label} · ${provider.candidates[0]?.model.id ?? ""}`);
+				const selected = await ctx.ui.select("Review provider", labels);
+				if (!selected) return;
+				const provider = providers[labels.indexOf(selected)];
+				const candidate = provider?.candidates[0];
+				if (provider && candidate) {
+					preferred = { model: `${provider.provider}/${candidate.model.id}`, thinkingLevel: candidate.reasoning };
+				}
+			} else {
+				ctx.ui.notify("No logged-in review provider. Using current model.", "warning");
+			}
+			const output = await runReviewWithPanel(pi, ctx, mode, status.root, preferred);
 			if (!output) return;
 			pi.appendEntry(REVIEW_ENTRY_TYPE, output);
 			await showReview(pi, ctx, output);
 		},
 	});
+}
+
+interface ReviewModelChoice {
+	model: string;
+	thinkingLevel: NonNullable<ExtensionContext["thinkingLevel"]>;
 }
 
 function latestReview(entries: readonly SessionEntry[]): ReviewRecord | undefined {
@@ -85,6 +105,7 @@ async function runReviewWithPanel(
 	ctx: ExtensionContext,
 	mode: ReviewMode,
 	root: string,
+	preferred: ReviewModelChoice | undefined,
 ): Promise<ReviewRecord | undefined> {
 	const controller = new AbortController();
 	const signal = ctx.signal ? AbortSignal.any([controller.signal, ctx.signal]) : controller.signal;
@@ -95,6 +116,8 @@ async function runReviewWithPanel(
 			ctx,
 			root,
 			mode,
+			preferredModel: preferred?.model,
+			preferredThinkingLevel: preferred?.thinkingLevel,
 			parentThinkingLevel: pi.getThinkingLevel(),
 			signal,
 			onProgress: (line) => panel.update(line),

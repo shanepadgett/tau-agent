@@ -8,7 +8,6 @@ import {
 } from "../../shared/isolated-session.ts";
 import { buildReviewPrompt, REVIEW_RESULT_TOOL, type ReviewMode, type ReviewOutput } from "./model.ts";
 
-const REVIEW_MODEL = "openai-codex/gpt-5.6-sol";
 const REVIEW_TOOLS = [
 	"read",
 	"bash",
@@ -32,6 +31,8 @@ export async function runReview(options: {
 	ctx: ExtensionContext;
 	root: string;
 	mode: ReviewMode;
+	preferredModel: string | undefined;
+	preferredThinkingLevel: NonNullable<ExtensionContext["thinkingLevel"]> | undefined;
 	parentThinkingLevel: NonNullable<ExtensionContext["thinkingLevel"]>;
 	signal: AbortSignal;
 	onProgress: (status: string) => void;
@@ -55,8 +56,8 @@ export async function runReview(options: {
 	try {
 		const selected = await resolveIsolatedSessionModel({
 			label: "Review",
-			preferredModel: REVIEW_MODEL,
-			preferredThinkingLevel: "high",
+			preferredModel: options.preferredModel,
+			preferredThinkingLevel: options.preferredThinkingLevel,
 			usePreferredThinkingAfterModelFallback: false,
 			ctx,
 			parentThinkingLevel: options.parentThinkingLevel,
