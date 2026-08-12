@@ -3,6 +3,7 @@ import { Container, Text, type TUI } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { addMessageBox, addPageTitle, addSampleTitle, addSection } from "./layout.ts";
 import { buildPreviewRow } from "./preview-row.ts";
+import { renderToolOutputPreview } from "../../../../packages/agent/shared/text.ts";
 
 export interface ToolPreviewSpec {
 	name: string;
@@ -89,8 +90,12 @@ function createDefinition(spec: ToolPreviewSpec, warning: boolean): ToolDefiniti
 				: theme.fg("toolTitle", theme.bold(spec.name));
 			return new Text(`${title} ${theme.fg("muted", spec.argText)}`, 0, 0);
 		},
-		renderResult(result, { expanded }, _theme, _context) {
-			return new Text(expanded ? textContent(result.content) : "", 0, 0);
+		renderResult(result, { expanded }, theme, _context) {
+			return new Text(
+				renderToolOutputPreview(textContent(result.content), expanded || spec.isError === true, theme),
+				0,
+				0,
+			);
 		},
 	};
 }

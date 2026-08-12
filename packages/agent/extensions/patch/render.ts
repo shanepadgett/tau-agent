@@ -1,4 +1,4 @@
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import { keyHint, type Theme } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.js";
 import { type ApplyPatchSummary, deriveStats } from "./executor.ts";
@@ -23,6 +23,7 @@ const REPLACE_FILE_MARKER = "*** Replace File: ";
 const DELETE_FILE_MARKER = "*** Delete File: ";
 const UPDATE_FILE_MARKER = "*** Update File: ";
 const MOVE_TO_MARKER = "*** Move to: ";
+const PATCH_PREVIEW_OPERATIONS = 10;
 
 function topLevelDirective(line: string): string {
 	return line.trim();
@@ -156,6 +157,21 @@ function renderOpLine(op: PreviewOp, status: OpStatus | undefined, theme: Theme)
 	return ind ? `${label}  ${ind}` : label;
 }
 
+function renderPreviewLines(preview: PreviewOp[], statuses: Map<number, OpStatus> | undefined, theme: Theme): string[] {
+	const lines = preview
+		.slice(0, PATCH_PREVIEW_OPERATIONS)
+		.map((op) => renderOpLine(op, statuses?.get(op.sectionIndex), theme));
+	const remaining = preview.length - lines.length;
+	if (remaining > 0) {
+		lines.push(
+			`${theme.fg("muted", `... (${remaining} more operations, ${preview.length} total,`)} ` +
+				keyHint("app.tools.expand", "to expand") +
+				theme.fg("muted", ")"),
+		);
+	}
+	return lines;
+}
+
 interface RenderCallContext {
 	expanded: boolean;
 	executionStarted: boolean;
@@ -198,7 +214,7 @@ export function renderPatchCall(args: { input?: string } | undefined, theme: The
 		text.setText(header);
 		return text;
 	}
-	const lines = preview.map((op) => renderOpLine(op, "pending", theme));
+	const lines = renderPreviewLines(preview, undefined, theme);
 	text.setText([header, ...lines].join("\n"));
 	return text;
 }
@@ -234,7 +250,7 @@ export function renderPatchResult(
 		return text;
 	}
 
-	const lines = preview.map((op) => renderOpLine(op, statuses.get(op.sectionIndex), theme));
+	const lines = renderPreviewLines(preview, statuses, theme);
 	text.setText([header, ...lines].join("\n"));
 	return text;
 }

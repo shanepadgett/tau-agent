@@ -9,6 +9,7 @@ import {
 	type TruncationResult,
 } from "@earendil-works/pi-coding-agent";
 import { type Component, Text } from "@earendil-works/pi-tui";
+import { renderToolOutputPreview } from "../../shared/text.ts";
 
 export function truncateToolOutput(text: string): { text: string; truncation?: TruncationResult } {
 	const truncation = truncateHead(text, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
@@ -31,7 +32,7 @@ export function renderWebToolResult(
 	result: AgentToolResult<unknown>,
 	options: ToolRenderResultOptions,
 	theme: Theme,
-	context: { lastComponent: Component | undefined },
+	context: { lastComponent: Component | undefined; isError: boolean },
 ): Text {
 	const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
 	const firstText = result.content.find((item) => item.type === "text");
@@ -40,15 +41,12 @@ export function renderWebToolResult(
 		text.setText("");
 		return text;
 	}
-	if (!options.expanded || firstText?.type !== "text") {
+	if (firstText?.type !== "text") {
 		text.setText("");
 		return text;
 	}
 
-	const output = firstText.text
-		.split("\n")
-		.map((line) => theme.fg("toolOutput", line))
-		.join("\n");
+	const output = renderToolOutputPreview(firstText.text, options.expanded || context.isError, theme);
 	text.setText(output ? `\n${output}` : "");
 	return text;
 }

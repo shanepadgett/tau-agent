@@ -15,6 +15,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { renderToolOutputPreview } from "../../shared/text.ts";
 
 type Language = "python3" | "node" | "deno";
 
@@ -293,6 +294,19 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 					? renderEditsPreview(edits, theme)
 					: theme.fg("accent", theme.bold(args.script ?? ""));
 			text.setText(body ? `${header}\n${body}` : header);
+			return text;
+		},
+		renderResult(result, options, theme, context) {
+			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+			if (options.isPartial) {
+				text.setText("");
+				return text;
+			}
+			const output = result.content
+				.filter((item): item is { type: "text"; text: string } => item.type === "text")
+				.map((item) => item.text)
+				.join("\n");
+			text.setText(renderToolOutputPreview(output, options.expanded || context.isError, theme));
 			return text;
 		},
 	});

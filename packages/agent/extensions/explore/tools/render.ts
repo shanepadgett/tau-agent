@@ -1,6 +1,7 @@
 import { formatSize, keyHint, type Theme } from "@earendil-works/pi-coding-agent";
 import { Text, truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
 import { formatToolRowTitle, type ToolRowStateStore } from "../../../shared/tool-row-state.ts";
+import { renderToolOutputPreview } from "../../../shared/text.ts";
 
 export type ExploreToolDetails = {
 	declarationCount: number;
@@ -94,28 +95,21 @@ export function renderExploreResult(
 	context: { lastComponent?: Component; isError: boolean },
 ): Text {
 	const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-	if (!expanded && !context.isError) {
-		const count = result.details?.declarationCount ?? 0;
-		const noun = count === 1 ? "declaration" : "declarations";
-		const bytes = result.details === undefined ? "" : `, ${formatSize(result.details.returnedBytes)} returned`;
-		text.setText(
-			theme.fg("muted", `${count} ${noun}${bytes} (`) +
-				keyHint("app.tools.expand", "to expand") +
-				theme.fg("muted", ")"),
-		);
-		return text;
-	}
 	const output = result.content
 		.filter((item): item is { type: string; text: string } => item.type === "text" && typeof item.text === "string")
 		.map((item) => item.text)
 		.join("\n");
-	text.setText(
-		output
-			? output
-					.split("\n")
-					.map((line) => theme.fg("toolOutput", line))
-					.join("\n")
-			: "",
-	);
+	if (!expanded && !context.isError) {
+		const count = result.details?.declarationCount ?? 0;
+		const noun = count === 1 ? "declaration" : "declarations";
+		const bytes = result.details === undefined ? "" : `, ${formatSize(result.details.returnedBytes)} returned`;
+		const summary = theme.fg("muted", `${count} ${noun}${bytes}`);
+		const preview = renderToolOutputPreview(output, false, theme);
+		text.setText(
+			preview ? `${summary}\n${preview}` : `${summary} (` + keyHint("app.tools.expand", "to expand") + ")",
+		);
+		return text;
+	}
+	text.setText(renderToolOutputPreview(output, true, theme));
 	return text;
 }
