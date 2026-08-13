@@ -39,6 +39,7 @@
 		"@vscode/tree-sitter-wasm": "0.3.1",
 		"image-size": "2.0.2",
 		"smol-toml": "1.7.1",
+		"unbash": "4.0.10",
 		"web-tree-sitter": "0.26.11"
 	},
 	"peerDependencies": {

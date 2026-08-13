@@ -5,6 +5,7 @@ import {
 	type ExtensionContext,
 	type ToolCallEvent,
 } from "@earendil-works/pi-coding-agent";
+import { Marker } from "@shanepadgett/tau-tui";
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
 import { emitAgentBlocked } from "../../shared/agent-blocked.ts";
@@ -12,9 +13,11 @@ import { resolveEffortCandidates } from "../../shared/model-effort.ts";
 import { generateToolValidated } from "../../shared/model-fallback/index.ts";
 import { errorText, truncAt } from "../../shared/text.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
+import { isAllowlistedBash } from "./allowlist.ts";
 import toolApprovalSettings from "./settings.ts";
 
 const STATUS_KEY = "tool-approval";
+const AUTO_APPROVED_TYPE = "tau.tool-approval.auto-approved";
 const MAX_REVIEW_CHARS = 12_000;
 
 const SUMMARY_SCHEMA = Type.String({
@@ -61,29 +64,6 @@ const REVIEW_SYSTEM_PROMPT = [
 	"An approved review has no reason field. A review that requires user approval must give one concise reason naming the concrete risk without repeating the summary.",
 ].join("\n");
 
-const PLAIN_COMMAND_PATTERN = /^[A-Za-z0-9_./:@%+,=-]+(?: +[A-Za-z0-9_./:@%+,=-]+)*$/;
-const TRIVIAL_READ_ONLY_COMMANDS = new Set(["git diff", "git log", "git show", "git status", "pwd"]);
-const TRIVIAL_READ_ONLY_PROGRAMS = new Set([
-	"basename",
-	"cat",
-	"comm",
-	"cut",
-	"dirname",
-	"du",
-	"echo",
-	"grep",
-	"head",
-	"ls",
-	"printf",
-	"realpath",
-	"rg",
-	"tail",
-	"test",
-	"uniq",
-	"wc",
-	"which",
-]);
-
 const REVIEW_TOOL = {
 	name: "submit_tool_review",
 	description: "Submit the complete safety review for the agent tool request.",
@@ -98,8 +78,23 @@ interface ToolApprovalRequest {
 	input: Record<string, unknown>;
 }
 
+interface AutoApprovedMarker {
+	toolName: ApprovalToolName;
+}
+
 export default function toolApprovalExtension(pi: ExtensionAPI): void {
 	let settings = toolApprovalSettings.defaults;
+
+	pi.registerEntryRenderer<AutoApprovedMarker>(AUTO_APPROVED_TYPE, (entry, _options, theme) => {
+		const marker = autoApprovedMarker(entry.data);
+		if (!marker) return undefined;
+		return new Marker({
+			theme,
+			state: "complete",
+			label: "Auto-approved",
+			parts: [toolLabel(marker.toolName)],
+		});
+	});
 
 	async function refreshSettings(ctx: Pick<ExtensionContext, "cwd" | "isProjectTrusted">): Promise<void> {
 		settings = await loadTauExtensionSettings(ctx, toolApprovalSettings);
@@ -114,7 +109,8 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 		if (!settings.enabled) return undefined;
 		return {
 			systemPrompt: `${event.systemPrompt}\n\n${[
-				"Agent bash and script_runner requests are reviewed by a separate quick-effort safety classifier before execution.",
+				"Known-safe read-only bash commands skip review.",
+				"Other bash and every script_runner request are reviewed by a separate quick-effort safety classifier before execution.",
 				"Treat classifier approval as a gate, not as permission to hide command intent from the user.",
 				"Routine local development requests can be approved automatically.",
 				"Requests with destructive, system, production, privileged, or security-sensitive effects require human confirmation.",
@@ -143,9 +139,9 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 				return block("bash command is empty");
 			}
 			command = value;
+			if (isAllowlistedBash(command)) return undefined;
 		}
 
-		const readOnlyCommand = request.toolName === "bash" && isTriviallyReadOnly(command ?? "");
 		ctx.ui.setStatus(STATUS_KEY, `reviewing ${toolLabel(request.toolName)}`);
 		try {
 			const review = await reviewToolRequest(ctx, request);
@@ -158,7 +154,10 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 					formatApproval(review.summary, review.reason),
 				);
 			}
-			if (settings.autoApprove || readOnlyCommand) return undefined;
+			if (settings.autoApprove) {
+				pi.appendEntry<AutoApprovedMarker>(AUTO_APPROVED_TYPE, { toolName: request.toolName });
+				return undefined;
+			}
 			return requestToolApproval(
 				pi,
 				ctx,
@@ -194,15 +193,15 @@ function approvalRequest(event: ToolCallEvent): ToolApprovalRequest | undefined 
 	return undefined;
 }
 
-function isTriviallyReadOnly(command: string): boolean {
-	const plainCommand = PLAIN_COMMAND_PATTERN.test(command);
-	const separator = command.indexOf(" ");
-	const program = separator === -1 ? command : command.slice(0, separator);
-	return plainCommand && (TRIVIAL_READ_ONLY_COMMANDS.has(command) || TRIVIAL_READ_ONLY_PROGRAMS.has(program));
-}
-
 function toolLabel(toolName: ApprovalToolName): string {
 	return toolName === "bash" ? "bash command" : "script_runner request";
+}
+
+function autoApprovedMarker(value: unknown): AutoApprovedMarker | undefined {
+	if (!value || typeof value !== "object") return undefined;
+	const toolName = (value as AutoApprovedMarker).toolName;
+	if (toolName !== "bash" && toolName !== "script_runner") return undefined;
+	return { toolName };
 }
 
 async function reviewToolRequest(ctx: ExtensionContext, request: ToolApprovalRequest): Promise<ToolReview> {

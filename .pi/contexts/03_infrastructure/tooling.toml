@@ -19,4 +19,4 @@ references = [".gitignore"]
 description = "Root and package manifests plus npm behavior"
 read = [".npmrc", ".pi/git/.gitignore", ".pi/npm/.gitignore", "package.json", "packages/agent/package.json"]
 outline = []
-references = []
+references = ["package-lock.json"]
