@@ -2,7 +2,7 @@ import { Type } from "typebox";
 import { defineTauExtensionSettings } from "../../shared/settings/define.ts";
 
 export default defineTauExtensionSettings({
-	key: "bashApproval",
+	key: "toolApproval",
 	defaults: {
 		enabled: true as boolean,
 		autoApprove: true as boolean,
@@ -10,12 +10,12 @@ export default defineTauExtensionSettings({
 	schema: Type.Object(
 		{
 			enabled: Type.Optional(
-				Type.Boolean({ default: true, description: "Enable bash command review and approval." }),
+				Type.Boolean({ default: true, description: "Enable tool request review and approval." }),
 			),
 			autoApprove: Type.Optional(
 				Type.Boolean({
 					default: true,
-					description: "Run reviewer-approved commands without human confirmation.",
+					description: "Run reviewer-approved tool requests without human confirmation.",
 				}),
 			),
 		},

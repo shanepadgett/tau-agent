@@ -22,10 +22,6 @@ Names sessions from their first request so saved sessions remain findable.
 
 Adds `/branch` to create and switch Git branches from the TUI.
 
-## bash-approval
-
-Reviews every agent `bash` call with a quick-effort model before execution. Set `extensions.bashApproval.autoApprove` to run every reviewer-approved command without another confirmation. The reviewer approves routine local development work. Concrete destructive, system, production, privileged, or security-sensitive effects require human approval with one explanatory paragraph. Reviewer failures fall back to human approval and send an attention notification.
-
 ## cache-diagnostics
 
 Records private prompt-cache fingerprints without storing prompt content. Run `/cache-debug` after suspicious cache misses to write a bounded investigation report under `~/.pi/agent/cache-diagnostics/reports/`.
@@ -129,6 +125,10 @@ Adds `/tau-help` to show this guide as rendered Markdown in the chat.
 ## tau
 
 Adds `/tau`, `/tau init [--global|--project]`, and `/tau doctor` for Tau setup and diagnostics.
+
+## tool-approval
+
+Reviews agent `bash` and `script_runner` requests with a quick-effort model before execution. Set `extensions.toolApproval.autoApprove` to run every reviewer-approved request without another confirmation. The reviewer approves routine local development work. Concrete destructive, system, production, privileged, or security-sensitive effects require human approval with one explanatory paragraph. Reviewer failures fall back to human approval and send an attention notification.
 
 ## tool-loader
 

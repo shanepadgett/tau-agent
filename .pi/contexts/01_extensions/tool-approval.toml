@@ -1,0 +1,46 @@
+name = "Tool Approval"
+description = "Quick model review and human approval policy for agent bash and script_runner requests"
+
+[review-gate]
+description = "Gate agent bash and script_runner calls: obtain a schema-validated discriminated quick-effort review with approved or requires_user_approval and a one-paragraph summary, omitting reason on approval; auto-run every approved request when autoApprove is enabled or when bash is trivially read-only; escalate only concrete high-impact destructive, system, privileged, production/shared external, or security-sensitive effects; show every approval as one flattened explanatory paragraph without repeating the request or rendering separate sections; use one fixed paragraph for reviewer or schema failures while still requiring human approval; signal tau:agent.blocked before confirmation; clear status on shutdown"
+read = [
+	"packages/agent/extensions/tool-approval/index.ts",
+	"packages/agent/extensions/tool-approval/settings.ts",
+	"packages/agent/extensions/tool-approval/README.md",
+  "packages/agent/shared/agent-blocked.ts",
+  "packages/agent/shared/model-effort.ts",
+  "packages/agent/shared/model-fallback/types.ts",
+  "packages/agent/shared/text.ts",
+  "packages/agent/shared/settings/load.ts",
+  "packages/agent/shared/settings/define.ts",
+  "packages/agent/shared/settings/json.ts",
+  "packages/agent/shared/settings/merge.ts",
+  "packages/agent/shared/settings/paths.ts",
+  "docs/standards/agent-runtime.md",
+]
+show = [
+  { path = "packages/agent/shared/model-fallback/index.ts", name = "resolveCandidates" },
+  { path = "packages/agent/shared/model-fallback/index.ts", name = "generateToolValidated" },
+  { path = "packages/agent/shared/events.ts", name = "emitTauEvent" },
+]
+outline = []
+references = [
+  "packages/agent/shared/model-fallback/index.ts",
+  "packages/agent/shared/events.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]
+
+[settings]
+description = "Declare toolApproval.enabled and toolApproval.autoApprove defaults and schema for project or global Tau settings"
+read = [
+	"packages/agent/extensions/tool-approval/settings.ts",
+	"packages/agent/extensions/tool-approval/README.md",
+  "packages/agent/shared/settings/define.ts",
+]
+show = []
+outline = []
+references = [
+	"packages/agent/extensions/tool-approval/index.ts",
+  "packages/agent/extensions/tau-help/help.md",
+  "packages/agent/schemas/tau.schema.json",
+]

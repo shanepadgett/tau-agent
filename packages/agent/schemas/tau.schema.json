@@ -12,22 +12,6 @@
 		"extensions": {
 			"type": "object",
 			"properties": {
-				"bashApproval": {
-					"type": "object",
-					"properties": {
-						"enabled": {
-							"type": "boolean",
-							"default": true,
-							"description": "Enable bash command review and approval."
-						},
-						"autoApprove": {
-							"type": "boolean",
-							"default": true,
-							"description": "Run reviewer-approved commands without human confirmation."
-						}
-					},
-					"additionalProperties": false
-				},
 				"checkpoint": {
 					"type": "object",
 					"required": [
@@ -295,6 +279,22 @@
 							},
 							"default": [],
 							"description": "Agent names unavailable for delegation."
+						}
+					},
+					"additionalProperties": false
+				},
+				"toolApproval": {
+					"type": "object",
+					"properties": {
+						"enabled": {
+							"type": "boolean",
+							"default": true,
+							"description": "Enable tool request review and approval."
+						},
+						"autoApprove": {
+							"type": "boolean",
+							"default": true,
+							"description": "Run reviewer-approved tool requests without human confirmation."
 						}
 					},
 					"additionalProperties": false
