@@ -12,7 +12,7 @@ import { ExploreCallComponent, renderExploreResult, shrinkingListVariants, type 
 
 const showTargetSchema = Type.Object(
 	{
-		path: Type.String({ description: "Defining file" }),
+		path: Type.String({ description: "Defining file for this target" }),
 		name: Type.String({ minLength: 1, description: "Decl name; dotted Type.method ok" }),
 		line: Type.Optional(Type.Integer({ minimum: 1, description: "1-based line inside decl range" })),
 	},
@@ -23,7 +23,8 @@ const showParams = Type.Object(
 	{
 		targets: Type.Array(showTargetSchema, {
 			minItems: 1,
-			description: "path+name targets (optional line pin)",
+			description:
+				'Required top-level array, even for one declaration. For one target: [{"path":"...","name":"..."}].',
 		}),
 		view: StringEnum(["signature", "signatureWithDocs", "declaration", "declarationWithImports"] as const, {
 			description: "signature | signatureWithDocs | declaration | declarationWithImports",
@@ -68,13 +69,30 @@ export function createShowTool(rowState: ToolRowStateStore, engineFor: (cwd: str
 		name: "show",
 		label: "show",
 		description:
-			"Exact signature or source for path+name targets. Whole batch fails on any missing/ambiguous target (candidate list, no partials). Views: signature → signatureWithDocs → declaration → declarationWithImports. Over budget throws — request fewer targets (bodies are not truncated).",
-		promptSnippet: "Signature or source for path+name targets",
+			'Show one or more declarations. Arguments always require a top-level `targets` array, even for one target: `{"targets":[{"path":"...","name":"..."}],"view":"declaration"}`. Whole batch fails on any missing/ambiguous target (candidate list, no partials). Views: signature → signatureWithDocs → declaration → declarationWithImports. Over budget throws — request fewer targets (bodies are not truncated).',
+		promptSnippet: "Show declarations using a top-level targets array",
 		promptGuidelines: [
+			"show always requires a top-level targets array, even for one declaration; do not pass path or name at the root.",
 			"Cheapest view that answers; declarationWithImports only when edits need imports.",
 			"Pin with path and line when names collide — do not guess.",
 		],
 		parameters: showParams,
+		prepareArguments(args) {
+			if (args === null || typeof args !== "object" || Array.isArray(args)) {
+				return args as Static<typeof showParams>;
+			}
+
+			const input = args as Record<string, unknown>;
+			if ("targets" in input || typeof input.path !== "string" || typeof input.name !== "string") {
+				return input as Static<typeof showParams>;
+			}
+
+			const { path, name, line, ...rest } = input;
+			return {
+				...rest,
+				targets: [{ path, name, ...(line === undefined ? {} : { line }) }],
+			} as Static<typeof showParams>;
+		},
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			const engine = engineFor(ctx.cwd);
 			const abort = signal ?? new AbortController().signal;

@@ -48,7 +48,7 @@ Use cheapest source that proves each returned fact. Skip steps when task supplie
 1. **Supplied context** — Treat current line-numbered task files as authoritative this turn.
 2. **Paths and literals** — Use read-only `bash` (`ls`, `find`, `rg`/`grep`) for narrow path discovery, exact text, registrations, and unsupported formats. Use ranged `read` for formatting or source without structural support.
 3. **Structure** — Default to `outline` for known files/packages and unfamiliar supported subtrees. Use `discover` when requested declaration path or exact name is unknown. Use `ast_search` for source shapes.
-4. **Exact declarations** — Use `show` with path + name (+ line when needed). Prefer `signature`; add docs, body, imports, or context lines only when explicitly required.
+4. **Exact declarations** — Use `show` with a top-level `targets` array containing path + name (+ line when needed), even for one declaration. Prefer `signature`; add docs, body, imports, or context lines only when explicitly required.
 5. **Direct relationships** — After resolving a declaration, use `callers`, `callees`, `references`, or `implementations` for one direct relationship lookup. Use `deps` and `reverse_deps` for file imports, not declaration calls.
 
 Structural results prove bounded syntax, not runtime dispatch. Preserve exact, inferred, and ambiguous labels emitted by tools. Never convert an ambiguous result into a fact.
