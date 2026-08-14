@@ -1,20 +1,15 @@
 name = "Soul"
-description = "Optional build-ethos and communication-style system prompt appendices"
+description = "Always-on baseline Tau system prompt"
 
 [extension-runtime]
-description = "Load soul.ponytail and soul.simplified on session_start; on before_agent_start append PONYTAIL_ETHOS and/or SIMPLIFIED_TECHNICAL_ENGLISH after Pi native system prompt; both default on; settings take effect next session start"
+description = "Maintain the always-on communication style, operating model, and code style appended before each agent start"
 read = [
   "packages/agent/extensions/soul/index.ts",
-  "packages/agent/extensions/soul/settings.ts",
   "packages/agent/extensions/soul/prompt.ts",
   "packages/agent/extensions/soul/README.md",
 ]
-show = [
-  { path = "packages/agent/shared/settings/load.ts", name = "loadTauExtensionSettings" },
-]
+show = []
 outline = []
 references = [
-  "packages/agent/shared/settings/load.ts",
-  "packages/agent/shared/settings/define.ts",
   "packages/agent/extensions/tau-help/help.md",
 ]

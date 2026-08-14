@@ -108,7 +108,7 @@ Runs configured commands while keeping their output out of agent context when th
 
 ## soul
 
-Adds two independently toggleable sections to Pi’s native assistant prompt: `ponytail` (a lazy-senior-dev build ethos) and `simplified` (Simplified Technical English with short, explanatory responses and small planning chunks). Both on by default.
+Adds the baseline Tau system prompt on every session: communication style, operating model, and code style.
 
 ## stash
 

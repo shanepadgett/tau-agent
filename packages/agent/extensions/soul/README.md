@@ -1,22 +1,11 @@
 # Soul
 
-Soul shapes how Tau works and talks by adding two independent sections to Pi's native assistant prompt:
+Soul is the baseline Tau system prompt. It is always on.
 
-- **ponytail** — a lazy-senior-dev build ethos: do the smallest correct thing, reuse before writing, YAGNI, fix bugs at the root, never cut validation, security, or accessibility.
-- **simplified** — Simplified Technical English (ASD-STE100): use short sentences and paragraphs, explain jargon, and shape plans and conversations in small chunks.
+- **communication style** — short replies, exact technical names, and a few worked examples.
+- **operating model** — answer questions before acting, keep research tight, plan in small steps, and stop when a fix needs unusual force.
+- **code style** — fast when the user is proving an idea, small and clean when the user wants real product code.
 
 Pi continues to own tool guidance, project instructions, skills, documentation paths, custom prompts, and working-directory context.
-
-Toggle each section in Tau settings (both on by default):
-
-```json
-{
-  "extensions": {
-    "soul": { "ponytail": true, "simplified": false }
-  }
-}
-```
-
-Settings take effect on session start.
 
 After changing this extension, run `/reload` before testing the new behavior.

@@ -252,22 +252,6 @@
 					},
 					"additionalProperties": false
 				},
-				"soul": {
-					"type": "object",
-					"properties": {
-						"ponytail": {
-							"type": "boolean",
-							"default": true,
-							"description": "Add the lazy-senior-dev build ethos to Tau's system prompt."
-						},
-						"simplified": {
-							"type": "boolean",
-							"default": true,
-							"description": "Add Simplified Technical English and small-chunk explanations to Tau's system prompt."
-						}
-					},
-					"additionalProperties": false
-				},
 				"subagent": {
 					"type": "object",
 					"properties": {
