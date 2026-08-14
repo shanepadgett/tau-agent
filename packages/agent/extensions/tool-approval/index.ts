@@ -18,7 +18,6 @@ import toolApprovalSettings from "./settings.ts";
 
 const STATUS_KEY = "tool-approval";
 const AUTO_APPROVED_TYPE = "tau.tool-approval.auto-approved";
-const MAX_REVIEW_CHARS = 12_000;
 
 const SUMMARY_SCHEMA = Type.String({
 	minLength: 1,
@@ -206,8 +205,6 @@ function autoApprovedMarker(value: unknown): AutoApprovedMarker | undefined {
 
 async function reviewToolRequest(ctx: ExtensionContext, request: ToolApprovalRequest): Promise<ToolReview> {
 	const requestJson = JSON.stringify(request);
-	if (!requestJson || requestJson.length > MAX_REVIEW_CHARS)
-		throw new Error("tool request is too large to review safely");
 	const candidates = await resolveEffortCandidates(ctx, "quick", {
 		includeParentModel: false,
 		preferredProvider: "xai",
