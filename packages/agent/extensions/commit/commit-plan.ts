@@ -45,11 +45,16 @@ interface CommitPlanToolCommit {
 	files: readonly number[];
 }
 
+export interface CommitGenerationOptions {
+	onStatus?: (status: string) => void | Promise<void>;
+}
+
 export async function generatePlan(
 	ctx: ExtensionCommandContext,
 	evidence: CommitEvidence,
 	previousPlan: readonly CommitGroup[] = [],
 	regenerationNote = "",
+	options?: CommitGenerationOptions,
 ): Promise<CommitGroup[]> {
 	const prompt = buildPlanPrompt(evidence, previousPlan, regenerationNote);
 	return generateToolValidated(
@@ -68,7 +73,11 @@ export async function generatePlan(
 				"Previous response:",
 				text,
 			].join("\n"),
-		{ statusKey: "commit", notifyOnFallback: true },
+		{
+			statusKey: options?.onStatus ? undefined : "commit",
+			onStatus: options?.onStatus,
+			notifyOnFallback: true,
+		},
 	);
 }
 
@@ -79,6 +88,7 @@ export async function regenerateMessage(
 	previousPlan: readonly CommitGroup[] = [],
 	selectedGroupId: string | undefined = undefined,
 	regenerationNote = "",
+	options?: CommitGenerationOptions,
 ): Promise<string> {
 	const selected = evidence.files.filter((file) => files.includes(file.path));
 	const prompt = buildMessagePrompt(evidence, selected, previousPlan, selectedGroupId, regenerationNote);
@@ -89,7 +99,8 @@ export async function regenerateMessage(
 		requireCommitMessage,
 		undefined,
 		{
-			statusKey: "commit",
+			statusKey: options?.onStatus ? undefined : "commit",
+			onStatus: options?.onStatus,
 			notifyOnFallback: true,
 		},
 	);

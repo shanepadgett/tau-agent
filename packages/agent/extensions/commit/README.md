@@ -10,6 +10,6 @@ Generate a semantic commit plan from current repository changes, review it, then
 
 ## Overview
 
-`/commit` looks at staged, unstaged, and untracked files, gathers bounded change evidence, and asks a model for a small set of meaningful conventional commits. You can review the plan in the TUI, edit messages, move files between commits, regenerate messages, and then commit the approved groups.
+`/commit` takes over the editor for the full run. It gathers change evidence, asks a model for a small set of meaningful conventional commits, lets you review and edit the plan, commits the approved groups, then asks whether to run `git push`.
 
-Unassigned files are left uncommitted. After successful commits, Tau asks whether to run `git push`.
+Unassigned files are left uncommitted. Progress and prompts stay in the commit panel until the flow ends; success still uses the normal notify messages.
