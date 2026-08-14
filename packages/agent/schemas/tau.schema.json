@@ -247,6 +247,37 @@
 					},
 					"additionalProperties": false
 				},
+				"soul": {
+					"type": "object",
+					"required": [
+						"overseer"
+					],
+					"properties": {
+						"overseer": {
+							"type": "object",
+							"required": [
+								"enabled",
+								"toolCallInterval"
+							],
+							"properties": {
+								"enabled": {
+									"type": "boolean",
+									"default": true,
+									"description": "Run hidden primary-directive reviews during long tool-using work."
+								},
+								"toolCallInterval": {
+									"type": "integer",
+									"minimum": 1,
+									"maximum": 100,
+									"default": 20,
+									"description": "Unreviewed tool calls required before the next primary-directive review."
+								}
+							},
+							"additionalProperties": false
+						}
+					},
+					"additionalProperties": false
+				},
 				"subagent": {
 					"type": "object",
 					"properties": {

@@ -1,8 +1,8 @@
 name = "Soul"
-description = "Always-on baseline Tau system prompt"
+description = "Always-on baseline prompt, primary-directive oversight, and Soul settings"
 
-[extension-runtime]
-description = "Maintain the always-on communication style, operating model, and code style appended before each agent start"
+[prompt-runtime]
+description = "Maintain the always-on communication, operating-model, and code-style prompt appended before each agent start"
 read = [
   "packages/agent/extensions/soul/index.ts",
   "packages/agent/extensions/soul/prompt.ts",
@@ -11,5 +11,49 @@ read = [
 show = []
 outline = []
 references = [
+  "packages/agent/extensions/soul/overseer.ts",
   "packages/agent/extensions/tau-help/help.md",
+]
+
+[overseer-runtime]
+description = "Run hidden primary-directive reviews during long tool-using work and apply one-shot guidance without interrupting the working agent"
+read = [
+  "packages/agent/extensions/soul/index.ts",
+  "packages/agent/extensions/soul/overseer.ts",
+  "packages/agent/extensions/soul/settings.ts",
+  "packages/agent/extensions/soul/prompt.ts",
+  "packages/agent/extensions/soul/README.md",
+  "packages/agent/shared/settings/load.ts",
+  "packages/agent/shared/settings/define.ts",
+  "packages/agent/shared/settings/json.ts",
+  "packages/agent/shared/settings/merge.ts",
+  "packages/agent/shared/settings/paths.ts",
+  "packages/agent/shared/text.ts",
+  "docs/standards/agent-runtime.md",
+]
+show = [
+  { path = "packages/agent/shared/model-effort.ts", name = "resolveEffortCandidates" },
+  { path = "packages/agent/shared/model-fallback/index.ts", name = "generateToolValidated" },
+]
+outline = []
+references = [
+  "packages/agent/shared/model-effort.ts",
+  "packages/agent/shared/model-fallback/index.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]
+
+[settings]
+description = "Declare Soul overseer enablement and the number of unreviewed tool calls before each review"
+read = [
+  "packages/agent/extensions/soul/settings.ts",
+  "packages/agent/extensions/soul/README.md",
+  "packages/agent/shared/settings/define.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/soul/overseer.ts",
+  "packages/agent/extensions/tau-help/help.md",
+  "packages/agent/schemas/tau.schema.json",
+  "packages/agent/scripts/generate-tau-schema.ts",
 ]

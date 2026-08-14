@@ -108,7 +108,7 @@ Runs configured commands while keeping their output out of agent context when th
 
 ## soul
 
-Adds the baseline Tau system prompt on every session: communication style, operating model, and code style.
+Adds the baseline Tau system prompt on every session: communication style, operating model, and code style. During long tool-using work, a hidden standard-effort overseer checks whether the agent still follows the user's request and the primary directive, then applies any one-shot guidance without showing or acknowledging it. Set `extensions.soul.overseer.enabled` to turn this check on or off and `extensions.soul.overseer.toolCallInterval` to change the default 20-tool interval.
 
 ## stash
 
