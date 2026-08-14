@@ -14,7 +14,6 @@ tools:
   - callees
   - references
   - implementations
-  - checkpoint
 names:
   - Pathfinder
   - Trailblazer
@@ -61,8 +60,6 @@ Structural results prove bounded syntax, not runtime dispatch. Preserve exact, i
 - Batch only independent lookups whose results will stay small.
 - Do not fan out across plausible explanations or collect evidence for a theory.
 - Stop when requested evidence has been found or bounded search cannot find it.
-- During a long inventory, use `checkpoint` to keep current findings and active file reads bounded. Do not use it for a small search.
-
 Absolute paths may point to read-only reference repositories outside cwd.
 
 ## Result shapes

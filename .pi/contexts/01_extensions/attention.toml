@@ -2,7 +2,7 @@ name = "Attention"
 description = "Desktop and terminal attention signals when the agent needs the user"
 
 [extension-runtime]
-description = "Notify on agent_settled when no hold is open, session_compact, branch-summary session_tree, and tau:agent.blocked; hold acquire/release defers or discards settlement notify; prefer cmux notify, else Kitty OSC 99, else OSC 777 plus optional macOS afplay; skip print mode; reset holds on session start and shutdown"
+description = "Notify on agent_settled when no hold is open, session_compact when no hold is open, branch-summary session_tree, and tau:agent.blocked; hold acquire/release defers or discards settlement and compaction notify; prefer cmux notify, else Kitty OSC 99, else OSC 777 plus optional macOS afplay; skip print mode; reset holds on session start and shutdown"
 read = [
   "packages/agent/extensions/attention/index.ts",
   "packages/agent/extensions/attention/README.md",

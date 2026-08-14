@@ -110,5 +110,5 @@ outline = []
 references = [
   "packages/agent/extensions/context/settings.ts",
   "packages/agent/extensions/subagent/agents/context-sync.md",
-  ".pi/contexts/01_extensions/checkpoint.toml",
+  ".pi/contexts/01_extensions/auto-compact.toml",
 ]

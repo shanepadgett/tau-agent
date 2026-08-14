@@ -1,0 +1,18 @@
+name = "Auto Compact"
+description = "Compact long conversations before model turns and resume interrupted work through a hidden continuation"
+
+[extension-runtime]
+description = "Load the token limit, hold attention notifications during Pi's native compaction, resume interrupted work through a hidden continuation, and release the hold only after resumed work settles"
+read = [
+  "packages/agent/extensions/auto-compact/index.ts",
+  "packages/agent/extensions/auto-compact/settings.ts",
+  "packages/agent/extensions/auto-compact/README.md",
+  "packages/agent/shared/settings/load.ts",
+  "packages/agent/shared/settings/define.ts",
+  "packages/agent/shared/events.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/tau-help/help.md",
+]

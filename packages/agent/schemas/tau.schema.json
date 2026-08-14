@@ -12,22 +12,17 @@
 		"extensions": {
 			"type": "object",
 			"properties": {
-				"checkpoint": {
+				"autoCompact": {
 					"type": "object",
 					"required": [
-						"checkpointTokenLimit"
+						"tokenLimit"
 					],
 					"properties": {
-						"showToolRows": {
-							"type": "boolean",
-							"default": false,
-							"description": "Show checkpoint and injected-file rows in the TUI for debugging."
-						},
-						"checkpointTokenLimit": {
+						"tokenLimit": {
 							"type": "integer",
 							"minimum": 1,
-							"default": 150000,
-							"description": "Context-token ceiling before a checkpoint is required."
+							"default": 175000,
+							"description": "Absolute context-token count that triggers compaction before the next model turn."
 						}
 					},
 					"additionalProperties": false

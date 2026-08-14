@@ -12,11 +12,15 @@ Adds `/aside <question>` for a one-off question to the current model without put
 
 ## attention
 
-Shows attention state when Tau needs the user to look at the chat, finishes compacting a session, or summarizes an abandoned branch.
+Shows attention state when Tau needs the user to look at the chat, finishes a manual compaction, or summarizes an abandoned branch. Automatic compaction stays quiet until its resumed work settles.
 
 ## auto-name
 
 Names sessions from their first request so saved sessions remain findable.
+
+## auto-compact
+
+Uses Pi's native compaction before a model turn when the current context reaches `extensions.autoCompact.tokenLimit`, which defaults to 175,000 tokens for every model. Interrupted work resumes through a hidden continuation message without an attention alert until the resumed work settles. Pi's native collapsed compaction entry remains visible in chat.
 
 ## branch
 
@@ -37,10 +41,6 @@ Adds `/commit` for semantic commit grouping, review, and committing selected rep
 ## context
 
 Adds `/context` to inject reusable repository work scopes from `.pi/contexts`, and `/context-sync` or `/context-sync <nudge>` for human-driven catalog sync. Selecting entries injects them once into the conversation: `read` paths as complete files, `show` targets as current declaration slices, `outline` paths as Explore structures, and one hidden note listing `references` plus instructions to treat the injected material as current. Run `/context` again to inject more. Manual sync replaces the editor with a status panel; Escape or Ctrl+C cancels. When `sync.automation` is on, coding agent can also run `context-sync` after meaningful uncommitted work. Sync catalogs durable code and long-lived documentation; recurring scratch, planning, interview, and rough-idea paths belong in `validation.ignoreGlobs`. `sync.enabled` is master switch for command, automation, and validation auto-run. Context validation is off by default; when on (and sync enabled), Tau auto-runs context-sync on failure. Domain folders are `NN_slug` tabs (ordered by the two-digit prefix; UI shows the slug), TOML files are concepts, and TOML sections are selectable entries.
-
-## checkpoint
-
-Adds the `checkpoint` tool for retaining exact user and assistant messages, current file reads and outlines, durable work state, an agent-written resume directive, and deferred file paths as a rolling continuation context. Checkpoint rows are hidden by default. Set `extensions.checkpoint.showToolRows` to `true` before `/reload` to watch checkpoint and newly injected-file rows while working; existing injected-file rows keep their saved display state. The agent receives hidden checkpoint nudges at 50% and 75% of `extensions.checkpoint.checkpointTokenLimit` (150,000 by default); non-checkpoint tools are blocked at the limit until checkpoint succeeds.
 
 ## effort
 

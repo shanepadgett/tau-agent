@@ -2,7 +2,7 @@ name = "Cache Diagnostics"
 description = "Fingerprint final provider payloads to diagnose cache hits, misses, and local prompt drift"
 
 [extension-runtime]
-description = "Session jsonl under ~/.pi/agent/cache-diagnostics with 30-day prune and baseline restore past model-select; fingerprint prompt state and final provider payloads; compare envelope, tools, and sequence prefix; promote baseline on successful assistant turns; flag cacheMiss above 1KB noise once cache activity is seen; mark model/thinking/compact/tree and checkpoint/load_tools events; /cache-debug writes a bounded incident report"
+description = "Session jsonl under ~/.pi/agent/cache-diagnostics with 30-day prune and baseline restore past model-select; fingerprint prompt state and final provider payloads; compare envelope, tools, and sequence prefix; promote baseline on successful assistant turns; flag cacheMiss above 1KB noise once cache activity is seen; mark model/thinking/compact/tree/load_tools events; /cache-debug writes a bounded incident report"
 read = [
   "packages/agent/extensions/cache-diagnostics/index.ts",
   "packages/agent/extensions/cache-diagnostics/README.md",

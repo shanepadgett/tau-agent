@@ -104,7 +104,7 @@ export default function attentionExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_compact", (_event, ctx) => {
-		if (ctx.mode === "print") return;
+		if (ctx.mode === "print" || holds.size > 0) return;
 		notify({ title: DEFAULT_TITLE, body: COMPACTION_BODY });
 	});
 
