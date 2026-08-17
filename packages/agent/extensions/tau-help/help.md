@@ -24,7 +24,9 @@ Uses Pi's native compaction before a model turn when the current context reaches
 
 ## branch
 
-Adds `/branch` to create and switch Git branches from the TUI.
+Adds `/branch` to create and switch Git branches from the TUI. Switching
+confirms first, then removes untracked files with `git clean -fd` while keeping
+ignored files. Press `Ctrl+F` in the picker to fetch remotes and refresh.
 
 ## cache-diagnostics
 

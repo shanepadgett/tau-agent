@@ -99,8 +99,15 @@ async function chooseBranch(git: GitRunner, ctx: ExtensionCommandContext): Promi
 	});
 	if (!choice) return;
 
+	const confirmed = await ctx.ui.confirm(
+		`Switch to ${choice.name}?`,
+		"After switch, untracked files and folders will be removed. Ignored files like .env stay.",
+	);
+	if (!confirmed) return;
+
 	if (choice.kind === "local") await git.run(["switch", choice.name], { cwd: root });
 	else await git.run(["switch", "--track", "-c", choice.name, choice.upstream], { cwd: root });
+	await git.run(["clean", "-fd"], { cwd: root });
 	ctx.ui.notify(`Switched to ${choice.name}.`, "info");
 }
 
