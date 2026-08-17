@@ -72,6 +72,13 @@ async function publish(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<
 	const manifests = await loadManifests(repo.root);
 	const currentVersion = sharedVersion(manifests);
 	const tag = await latestReleaseTag(git, repo.root);
+	if (tag) {
+		const commits = await git.run(["log", "--format=%H", `${tag}..HEAD`], { cwd: repo.root });
+		if (!commits.trim()) {
+			ctx.ui.notify(`No commits since ${tag}. Nothing to publish.`, "info");
+			return;
+		}
+	}
 	const bump = await recommendBump(git, repo.root, tag, currentVersion);
 	const version = tag ? incrementVersion(currentVersion, bump) : currentVersion;
 	const selectedBump = await ctx.ui.select(`Release ${version}`, [
