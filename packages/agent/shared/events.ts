@@ -16,6 +16,15 @@ export type TauAgentEvents = {
 		id: string;
 		disposition: "notify" | "discard";
 	};
+	/** Pause silent post-edit checks across a compact that will resume the same work chain. */
+	"tau:silent-command-runner.pause": {
+		id: string;
+	};
+	/** End a silent-check pause. continue keeps the chain open; settle finalizes a deferred settle. */
+	"tau:silent-command-runner.resume": {
+		id: string;
+		disposition: "continue" | "settle";
+	};
 	"tau:file-mutation.applied": {
 		source: "patch";
 		toolCallId: string;

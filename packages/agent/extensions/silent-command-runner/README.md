@@ -23,3 +23,5 @@ Configure it in Tau settings under `extensions.silentCommandRunner`:
 ```
 
 Passes are notifications only. Failures are shown in chat and sent to the agent. Tau's ready-for-input notification waits for these checks and stays quiet when a failure starts another agent turn.
+
+When auto-compact pauses a long run to compact context, checks wait until that work chain finishes. They do not run on the compact abort, and file changes from before the compact still count.

@@ -6,4 +6,4 @@ Set `extensions.autoCompact.tokenLimit` to change the limit. It defaults to 175,
 
 After changing this extension, run `/reload` before testing it.
 
-Automatic compaction holds attention notifications while it runs and while the hidden continuation resumes the interrupted work. The notification is released only after that resumed work settles.
+Automatic compaction holds attention notifications while it runs and while the hidden continuation resumes the interrupted work. The notification is released only after that resumed work settles. It also pauses silent post-edit checks across the compact so they do not run on incomplete work.

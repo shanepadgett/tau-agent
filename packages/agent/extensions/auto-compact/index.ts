@@ -14,12 +14,25 @@ export default function autoCompactExtension(pi: ExtensionAPI): void {
 	let sessionVersion = 0;
 	let attentionHoldSequence = 0;
 	let attentionHoldId: string | undefined;
+	let silentCheckPauseId: string | undefined;
 	let continuationPending = false;
 
 	function releaseAttentionHold(disposition: "notify" | "discard"): void {
 		const holdId = attentionHoldId;
 		attentionHoldId = undefined;
 		if (holdId) emitTauEvent(pi, "tau:attention.hold.release", { id: holdId, disposition });
+	}
+
+	function pauseSilentChecks(): void {
+		if (silentCheckPauseId) return;
+		silentCheckPauseId = `auto-compact:${++attentionHoldSequence}`;
+		emitTauEvent(pi, "tau:silent-command-runner.pause", { id: silentCheckPauseId });
+	}
+
+	function resumeSilentChecks(disposition: "continue" | "settle"): void {
+		const pauseId = silentCheckPauseId;
+		silentCheckPauseId = undefined;
+		if (pauseId) emitTauEvent(pi, "tau:silent-command-runner.resume", { id: pauseId, disposition });
 	}
 
 	pi.on("session_start", async (_event, ctx) => {
@@ -31,6 +44,7 @@ export default function autoCompactExtension(pi: ExtensionAPI): void {
 		compacting = false;
 		attentionHoldSequence = 0;
 		attentionHoldId = undefined;
+		silentCheckPauseId = undefined;
 		continuationPending = false;
 	});
 	pi.on("session_shutdown", () => {
@@ -38,6 +52,7 @@ export default function autoCompactExtension(pi: ExtensionAPI): void {
 		armed = true;
 		compacting = false;
 		attentionHoldId = undefined;
+		silentCheckPauseId = undefined;
 		continuationPending = false;
 	});
 	pi.on("session_tree", () => {
@@ -64,6 +79,8 @@ export default function autoCompactExtension(pi: ExtensionAPI): void {
 
 		armed = false;
 		compacting = true;
+		// Pause before compact: compact aborts the agent, and that agent_end must not run checks.
+		pauseSilentChecks();
 		if (ctx.mode !== "print") {
 			attentionHoldId = `auto-compact:${++attentionHoldSequence}`;
 			emitTauEvent(pi, "tau:attention.hold.acquire", { id: attentionHoldId });
@@ -72,6 +89,8 @@ export default function autoCompactExtension(pi: ExtensionAPI): void {
 		const continueWork = (): void => {
 			if (version !== sessionVersion) return;
 			compacting = false;
+			// Keep the silent-check baseline across the new agent run started below.
+			resumeSilentChecks("continue");
 			continuationPending = true;
 			pi.sendMessage(
 				{
@@ -90,6 +109,7 @@ export default function autoCompactExtension(pi: ExtensionAPI): void {
 				if (version !== sessionVersion) return;
 				compacting = false;
 				if (error.name === "AbortError" || error.message === "Compaction cancelled") {
+					resumeSilentChecks("settle");
 					releaseAttentionHold("notify");
 					return;
 				}
