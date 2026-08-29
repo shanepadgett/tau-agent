@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="en" class="h-full">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Cost report · Month to date · All sessions</title>
+		<script>
+			(() => {
+				const key = "tau-cost-report-theme";
+				const stored = localStorage.getItem(key);
+				const dark =
+					stored === "dark" ||
+					(stored !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+				document.documentElement.classList.toggle("dark", dark);
+			})();
+		</script>
+		<script src="https://cdn.tailwindcss.com"></script>
+		<script>
+			tailwind.config = {
+				darkMode: "class",
+				theme: {
+					extend: {
+						fontFamily: {
+							sans: [
+								"ui-sans-serif",
+								"system-ui",
+								"-apple-system",
+								"Segoe UI",
+								"sans-serif",
+							],
+							mono: ["ui-monospace", "SF Mono", "Menlo", "Consolas", "monospace"],
+						},
+					},
+				},
+			};
+		</script>
+		<style type="text/tailwindcss">
+			@layer utilities {
+				.tabular {
+					font-variant-numeric: tabular-nums;
+				}
+			}
+		</style>
+	</head>
+	<body class="scope-all min-h-full bg-stone-100 text-stone-900 antialiased dark:bg-stone-950 dark:text-stone-100">
+		<!--
+			Sketch / generation template for Tau cost report.
+			Tailwind CDN + default palette. Light/dark via header toggle (class strategy).
+
+			Toggle scope preview: body.scope-all | body.scope-project
+		-->
+		<style>
+			body.scope-project .all-only {
+				display: none;
+			}
+			body.scope-project .project-col {
+				display: none;
+			}
+			.day-cell .day-tip {
+				position: absolute;
+				bottom: calc(100% + 6px);
+				left: 50%;
+				z-index: 10;
+				transform: translateX(-50%);
+				white-space: nowrap;
+				padding: 0.3rem 0.5rem;
+				border-radius: 0.25rem;
+				border: 1px solid rgb(214 211 209);
+				background: rgb(255 255 255);
+				color: rgb(28 25 23);
+				font-size: 0.75rem;
+				line-height: 1.25;
+				pointer-events: none;
+				opacity: 0;
+				visibility: hidden;
+			}
+			.dark .day-cell .day-tip {
+				border-color: rgb(68 64 60);
+				background: rgb(28 25 23);
+				color: rgb(245 245 244);
+			}
+			.day-cell:hover .day-tip,
+			.day-cell:focus-visible .day-tip {
+				opacity: 1;
+				visibility: visible;
+			}
+			.day-cell {
+				container-type: size;
+			}
+			.day-cell .day-fire {
+				position: absolute;
+				inset: 0.25rem; /* p-1 */
+				display: grid;
+				place-items: center;
+				font-size: 80cqmin;
+				line-height: 1;
+				pointer-events: none;
+			}
+			/* Faded diagonal hatch for Sat/Sun so weekends read at a glance. */
+			.day-cell.is-weekend::before {
+				content: "";
+				position: absolute;
+				inset: 0;
+				border-radius: inherit;
+				background: repeating-linear-gradient(
+					-45deg,
+					transparent 0 3px,
+					rgb(0 0 0 / 0.14) 3px 5px
+				);
+				pointer-events: none;
+			}
+			.dark .day-cell.is-weekend::before {
+				background: repeating-linear-gradient(
+					-45deg,
+					transparent 0 3px,
+					rgb(255 255 255 / 0.16) 3px 5px
+				);
+			}
+			.day-grid-31 {
+				display: grid;
+				grid-template-columns: repeat(31, minmax(0, 1fr));
+				gap: 0.25rem;
+			}
+		</style>
+
+		<main class="mx-auto w-full max-w-[90rem] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+			<header class="mb-6 flex items-start justify-between gap-4 border-b border-stone-300 pb-4 dark:border-stone-700">
+				<div>
+					<h1 class="text-xl font-semibold tracking-tight">Cost report</h1>
+					<p class="mt-1 text-sm text-stone-600 dark:text-stone-400">
+						<span>Month to date</span>
+						<span class="before:mx-2 before:text-stone-400 before:content-['·'] dark:before:text-stone-600">All sessions</span>
+						<span class="before:mx-2 before:text-stone-400 before:content-['·'] dark:before:text-stone-600">Generated 26 Aug 2026, 14:02</span>
+					</p>
+				</div>
+				<button
+					type="button"
+					id="theme-toggle"
+					class="shrink-0 rounded border border-stone-300 bg-white px-2.5 py-1 text-sm text-stone-800 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100"
+					aria-label="Switch to dark mode"
+				>
+					Dark
+				</button>
+			</header>
+
+			<div class="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+				<div class="rounded border border-stone-300 bg-white px-4 py-4 text-center dark:border-stone-700 dark:bg-stone-900">
+					<div class="text-3xl font-semibold tracking-tight tabular sm:text-4xl">$84.16</div>
+					<div class="mt-1 text-sm text-stone-600 dark:text-stone-400">Total spend</div>
+				</div>
+				<div class="rounded border border-stone-300 bg-white px-4 py-4 text-center dark:border-stone-700 dark:bg-stone-900">
+					<div class="text-3xl font-semibold tracking-tight tabular sm:text-4xl">18</div>
+					<div class="mt-1 text-sm text-stone-600 dark:text-stone-400">Sessions</div>
+				</div>
+				<div class="all-only rounded border border-stone-300 bg-white px-4 py-4 text-center dark:border-stone-700 dark:bg-stone-900">
+					<div class="text-3xl font-semibold tracking-tight tabular sm:text-4xl">6</div>
+					<div class="mt-1 text-sm text-stone-600 dark:text-stone-400">Projects</div>
+				</div>
+				<div class="rounded border border-stone-300 bg-white px-4 py-4 text-center dark:border-stone-700 dark:bg-stone-900">
+					<div class="text-3xl font-semibold tracking-tight tabular sm:text-4xl">12.4M</div>
+					<div class="mt-1 text-sm text-stone-600 dark:text-stone-400">Tokens</div>
+				</div>
+			</div>
+
+			<section class="mb-8 space-y-8" aria-labelledby="daily-heading">
+				<div class="flex items-baseline justify-between gap-3">
+					<h2 id="daily-heading" class="text-sm font-semibold">Daily spend</h2>
+					<span class="text-sm text-stone-600 dark:text-stone-400">Layout previews</span>
+				</div>
+
+				<div>
+					<div class="mb-2 text-sm text-stone-600 dark:text-stone-400">Past 7 days</div>
+					<div id="daily-7" class="flex h-10 w-full gap-1" role="list" aria-label="Past 7 days spend"></div>
+				</div>
+
+				<div>
+					<div class="mb-2 text-sm text-stone-600 dark:text-stone-400">Full month · 31 days</div>
+					<div id="daily-31" class="flex h-10 w-full gap-1" role="list" aria-label="Full month spend"></div>
+				</div>
+
+				<div>
+					<div class="mb-2 text-sm text-stone-600 dark:text-stone-400">Year to date · one row per month</div>
+					<div id="daily-ytd" class="space-y-1" role="list" aria-label="Year to date spend by month"></div>
+				</div>
+
+				<div class="flex items-center gap-2 text-xs text-stone-600 dark:text-stone-400" aria-hidden="true">
+					<span>$0</span>
+					<span class="flex gap-px">
+						<span class="size-3 rounded-sm border border-stone-900/10 bg-stone-200 dark:border-white/10 dark:bg-stone-800"></span>
+						<span class="size-3 rounded-sm border border-stone-900/10 bg-green-600"></span>
+						<span class="size-3 rounded-sm border border-stone-900/10 bg-yellow-500"></span>
+						<span class="size-3 rounded-sm border border-stone-900/10 bg-red-600"></span>
+					</span>
+					<span>$50+</span>
+					<span>· 🔥 over $100</span>
+					<span>· diagonal = weekend</span>
+				</div>
+			</section>
+
+			<div class="mb-8 grid gap-8 xl:grid-cols-2 xl:items-start">
+				<section aria-labelledby="models-heading">
+					<h2 id="models-heading" class="mb-3 text-sm font-semibold">Models</h2>
+					<div class="overflow-x-auto rounded border border-stone-300 bg-white dark:border-stone-700 dark:bg-stone-900">
+						<table class="w-full text-sm tabular">
+							<thead>
+								<tr class="text-left text-xs font-medium text-stone-600 dark:text-stone-400">
+									<th scope="col" class="px-3 py-2 font-medium">Model</th>
+									<th scope="col" class="px-3 py-2 text-right font-medium">Cost</th>
+									<th scope="col" class="px-3 py-2 text-right font-medium">Share</th>
+									<th scope="col" class="min-w-[7rem] px-3 py-2 font-medium"></th>
+									<th scope="col" class="px-3 py-2 text-right font-medium">Sessions</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-stone-200 dark:divide-stone-800">
+								<tr>
+									<td class="px-3 py-2">anthropic / claude-opus-4</td>
+									<td class="px-3 py-2 text-right">$48.10</td>
+									<td class="px-3 py-2 text-right">57%</td>
+									<td class="px-3 py-2">
+										<span class="mt-1 block h-1 rounded-sm bg-stone-200 dark:bg-stone-700" aria-hidden="true">
+											<span class="block h-full w-[57%] rounded-sm bg-stone-500 dark:bg-stone-400"></span>
+										</span>
+									</td>
+									<td class="px-3 py-2 text-right">11</td>
+								</tr>
+								<tr>
+									<td class="px-3 py-2">anthropic / claude-sonnet-4</td>
+									<td class="px-3 py-2 text-right">$22.40</td>
+									<td class="px-3 py-2 text-right">27%</td>
+									<td class="px-3 py-2">
+										<span class="mt-1 block h-1 rounded-sm bg-stone-200 dark:bg-stone-700" aria-hidden="true">
+											<span class="block h-full w-[27%] rounded-sm bg-stone-500 dark:bg-stone-400"></span>
+										</span>
+									</td>
+									<td class="px-3 py-2 text-right">14</td>
+								</tr>
+								<tr>
+									<td class="px-3 py-2">openai / gpt-5</td>
+									<td class="px-3 py-2 text-right">$13.66</td>
+									<td class="px-3 py-2 text-right">16%</td>
+									<td class="px-3 py-2">
+										<span class="mt-1 block h-1 rounded-sm bg-stone-200 dark:bg-stone-700" aria-hidden="true">
+											<span class="block h-full w-[16%] rounded-sm bg-stone-500 dark:bg-stone-400"></span>
+										</span>
+									</td>
+									<td class="px-3 py-2 text-right">5</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</section>
+
+				<section aria-labelledby="subagents-heading">
+					<h2 id="subagents-heading" class="mb-3 text-sm font-semibold">Subagents</h2>
+					<div class="overflow-x-auto rounded border border-stone-300 bg-white dark:border-stone-700 dark:bg-stone-900">
+						<table class="w-full text-sm tabular">
+							<thead>
+								<tr class="text-left text-xs font-medium text-stone-600 dark:text-stone-400">
+									<th scope="col" class="px-3 py-2 font-medium">Agent</th>
+									<th scope="col" class="px-3 py-2 text-right font-medium">Cost</th>
+									<th scope="col" class="px-3 py-2 text-right font-medium">Share</th>
+									<th scope="col" class="min-w-[7rem] px-3 py-2 font-medium"></th>
+									<th scope="col" class="px-3 py-2 text-right font-medium">Calls</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-stone-200 dark:divide-stone-800">
+								<tr>
+									<td class="px-3 py-2">web-research</td>
+									<td class="px-3 py-2 text-right">$11.20</td>
+									<td class="px-3 py-2 text-right">49%</td>
+									<td class="px-3 py-2">
+										<span class="mt-1 block h-1 rounded-sm bg-stone-200 dark:bg-stone-700" aria-hidden="true">
+											<span class="block h-full w-[49%] rounded-sm bg-stone-500 dark:bg-stone-400"></span>
+										</span>
+									</td>
+									<td class="px-3 py-2 text-right">9</td>
+								</tr>
+								<tr>
+									<td class="px-3 py-2">scout</td>
+									<td class="px-3 py-2 text-right">$8.40</td>
+									<td class="px-3 py-2 text-right">37%</td>
+									<td class="px-3 py-2">
+										<span class="mt-1 block h-1 rounded-sm bg-stone-200 dark:bg-stone-700" aria-hidden="true">
+											<span class="block h-full w-[37%] rounded-sm bg-stone-500 dark:bg-stone-400"></span>
+										</span>
+									</td>
+									<td class="px-3 py-2 text-right">22</td>
+								</tr>
+								<tr>
+									<td class="px-3 py-2">context-sync</td>
+									<td class="px-3 py-2 text-right">$3.16</td>
+									<td class="px-3 py-2 text-right">14%</td>
+									<td class="px-3 py-2">
+										<span class="mt-1 block h-1 rounded-sm bg-stone-200 dark:bg-stone-700" aria-hidden="true">
+											<span class="block h-full w-[14%] rounded-sm bg-stone-500 dark:bg-stone-400"></span>
+										</span>
+									</td>
+									<td class="px-3 py-2 text-right">4</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</section>
+			</div>
+
+			<section class="all-only mb-8" aria-labelledby="projects-heading">
+				<h2 id="projects-heading" class="mb-3 text-sm font-semibold">Projects</h2>
+				<div class="overflow-x-auto rounded border border-stone-300 bg-white dark:border-stone-700 dark:bg-stone-900">
+					<table class="w-full text-sm tabular">
+						<thead>
+							<tr class="text-left text-xs font-medium text-stone-600 dark:text-stone-400">
+								<th scope="col" class="px-3 py-2 font-medium">Project</th>
+								<th scope="col" class="px-3 py-2 text-right font-medium">Cost</th>
+								<th scope="col" class="px-3 py-2 text-right font-medium">Share</th>
+								<th scope="col" class="min-w-[7rem] px-3 py-2 font-medium"></th>
+								<th scope="col" class="px-3 py-2 text-right font-medium">Sessions</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-stone-200 dark:divide-stone-800">
+							<tr>
+								<td class="px-3 py-2">tau-agent</td>
+								<td class="px-3 py-2 text-right">$41.20</td>
+								<td class="px-3 py-2 text-right">49%</td>
+								<td class="px-3 py-2">
+									<span class="mt-1 block h-1 rounded-sm bg-stone-200 dark:bg-stone-700" aria-hidden="true">
+										<span class="block h-full w-[49%] rounded-sm bg-stone-500 dark:bg-stone-400"></span>
+									</span>
+								</td>
+								<td class="px-3 py-2 text-right">7</td>
+							</tr>
+							<tr>
+								<td class="px-3 py-2">crumbs</td>
+								<td class="px-3 py-2 text-right">$18.90</td>
+								<td class="px-3 py-2 text-right">22%</td>
+								<td class="px-3 py-2">
+									<span class="mt-1 block h-1 rounded-sm bg-stone-200 dark:bg-stone-700" aria-hidden="true">
+										<span class="block h-full w-[22%] rounded-sm bg-stone-500 dark:bg-stone-400"></span>
+									</span>
+								</td>
+								<td class="px-3 py-2 text-right">4</td>
+							</tr>
+							<tr>
+								<td class="px-3 py-2">notes</td>
+								<td class="px-3 py-2 text-right">$12.40</td>
+								<td class="px-3 py-2 text-right">15%</td>
+								<td class="px-3 py-2">
+									<span class="mt-1 block h-1 rounded-sm bg-stone-200 dark:bg-stone-700" aria-hidden="true">
+										<span class="block h-full w-[15%] rounded-sm bg-stone-500 dark:bg-stone-400"></span>
+									</span>
+								</td>
+								<td class="px-3 py-2 text-right">3</td>
+							</tr>
+							<tr>
+								<td class="px-3 py-2">dotfiles</td>
+								<td class="px-3 py-2 text-right">$7.10</td>
+								<td class="px-3 py-2 text-right">8%</td>
+								<td class="px-3 py-2">
+									<span class="mt-1 block h-1 rounded-sm bg-stone-200 dark:bg-stone-700" aria-hidden="true">
+										<span class="block h-full w-[8%] rounded-sm bg-stone-500 dark:bg-stone-400"></span>
+									</span>
+								</td>
+								<td class="px-3 py-2 text-right">2</td>
+							</tr>
+							<tr>
+								<td class="px-3 py-2">misc</td>
+								<td class="px-3 py-2 text-right">$4.56</td>
+								<td class="px-3 py-2 text-right">5%</td>
+								<td class="px-3 py-2">
+									<span class="mt-1 block h-1 rounded-sm bg-stone-200 dark:bg-stone-700" aria-hidden="true">
+										<span class="block h-full w-[5%] rounded-sm bg-stone-500 dark:bg-stone-400"></span>
+									</span>
+								</td>
+								<td class="px-3 py-2 text-right">2</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</section>
+
+			<section class="mb-8" aria-labelledby="sessions-heading">
+				<div class="mb-3 flex items-baseline justify-between gap-3">
+					<h2 id="sessions-heading" class="text-sm font-semibold">Sessions</h2>
+					<div class="all-only flex items-center gap-2">
+						<label for="project-filter" class="text-sm text-stone-600 dark:text-stone-400">Project</label>
+						<select
+							id="project-filter"
+							class="rounded border border-stone-300 bg-white px-2 py-1 text-sm text-stone-900 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100"
+						>
+							<option>All projects</option>
+							<option>tau-agent</option>
+							<option>crumbs</option>
+							<option>notes</option>
+							<option>dotfiles</option>
+							<option>misc</option>
+						</select>
+					</div>
+				</div>
+				<div class="overflow-x-auto rounded border border-stone-300 bg-white dark:border-stone-700 dark:bg-stone-900">
+					<table class="w-full text-sm">
+						<thead>
+							<tr class="text-left text-xs font-medium text-stone-600 dark:text-stone-400">
+								<th scope="col" class="px-3 py-2 font-medium">Session</th>
+								<th scope="col" class="project-col px-3 py-2 font-medium">Project</th>
+								<th scope="col" class="px-3 py-2 font-medium">Models</th>
+								<th scope="col" class="px-3 py-2 text-right font-medium">Tokens</th>
+								<th scope="col" class="px-3 py-2 text-right font-medium">Cost</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-stone-200 dark:divide-stone-800">
+							<tr>
+								<td class="px-3 py-2">
+									<span class="font-medium">Cost report criteria</span>
+									<span class="mt-0.5 block text-xs text-stone-600 dark:text-stone-400">26 Aug · 14:02</span>
+								</td>
+								<td class="project-col px-3 py-2">tau-agent</td>
+								<td class="px-3 py-2 font-mono text-xs text-stone-600 dark:text-stone-400">
+									opus-4 ($12.10), sonnet-4 ($6.30)
+								</td>
+								<td class="px-3 py-2 text-right tabular">2.1M</td>
+								<td class="px-3 py-2 text-right tabular">$18.40</td>
+							</tr>
+							<tr>
+								<td class="px-3 py-2">
+									<span class="font-medium">Subagent resume paths</span>
+									<span class="mt-0.5 block text-xs text-stone-600 dark:text-stone-400">22 Aug · 09:11</span>
+								</td>
+								<td class="project-col px-3 py-2">tau-agent</td>
+								<td class="px-3 py-2 font-mono text-xs text-stone-600 dark:text-stone-400">opus-4 ($14.20)</td>
+								<td class="px-3 py-2 text-right tabular">1.6M</td>
+								<td class="px-3 py-2 text-right tabular">$14.20</td>
+							</tr>
+							<tr>
+								<td class="px-3 py-2">
+									<span class="font-medium">HTML report pass</span>
+									<span class="mt-0.5 block text-xs text-stone-600 dark:text-stone-400">15 Aug · 16:44</span>
+								</td>
+								<td class="project-col px-3 py-2">crumbs</td>
+								<td class="px-3 py-2 font-mono text-xs text-stone-600 dark:text-stone-400">
+									sonnet-4 ($7.40), gpt-5 ($3.65)
+								</td>
+								<td class="px-3 py-2 text-right tabular">980K</td>
+								<td class="px-3 py-2 text-right tabular">$11.05</td>
+							</tr>
+							<tr>
+								<td class="px-3 py-2">
+									<span class="font-medium">Weekly notes</span>
+									<span class="mt-0.5 block text-xs text-stone-600 dark:text-stone-400">12 Aug · 20:03</span>
+								</td>
+								<td class="project-col px-3 py-2">notes</td>
+								<td class="px-3 py-2 font-mono text-xs text-stone-600 dark:text-stone-400">sonnet-4 ($6.80)</td>
+								<td class="px-3 py-2 text-right tabular">420K</td>
+								<td class="px-3 py-2 text-right tabular">$6.80</td>
+							</tr>
+							<tr>
+								<td class="px-3 py-2">
+									<span class="font-medium">Shell aliases</span>
+									<span class="mt-0.5 block text-xs text-stone-600 dark:text-stone-400">10 Aug · 11:28</span>
+								</td>
+								<td class="project-col px-3 py-2">dotfiles</td>
+								<td class="px-3 py-2 font-mono text-xs text-stone-600 dark:text-stone-400">sonnet-4 ($4.10)</td>
+								<td class="px-3 py-2 text-right tabular">210K</td>
+								<td class="px-3 py-2 text-right tabular">$4.10</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</section>
+
+			<footer class="mt-10 border-t border-stone-300 pt-4 text-xs text-stone-600 dark:border-stone-700 dark:text-stone-400">
+				<p>
+					Costs are estimates from stored session usage, not provider invoices. Branched turns count. Subagent
+					totals come from parent tool results.
+				</p>
+			</footer>
+		</main>
+		<script>
+			(() => {
+				const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+				function heatClass(amount) {
+					if (amount <= 0) return "bg-stone-200 dark:bg-stone-800";
+					if (amount < 10) return "bg-green-600";
+					if (amount < 18) return "bg-lime-500";
+					if (amount < 28) return "bg-yellow-400";
+					if (amount < 38) return "bg-yellow-500";
+					if (amount < 45) return "bg-amber-500";
+					if (amount < 50) return "bg-orange-500";
+					if (amount < 100) return "bg-red-600";
+					return "bg-red-700";
+				}
+
+				function money(amount) {
+					return new Intl.NumberFormat(undefined, {
+						style: "currency",
+						currency: "USD",
+					}).format(amount);
+				}
+
+				function dayButton(date, amount, opts = {}) {
+					const fire = amount > 100;
+					const label = `${date.getDate()} ${MONTHS[date.getMonth()]}`;
+					const tip = `${label} · ${money(amount)}`;
+					const weekend = date.getDay() === 0 || date.getDay() === 6;
+					const button = document.createElement("button");
+					button.type = "button";
+					button.role = "listitem";
+					button.className = [
+						"day-cell relative h-full min-w-0 rounded-sm border border-stone-900/10 dark:border-white/10",
+						opts.fill ? "w-full" : "flex-1",
+						heatClass(amount),
+						weekend ? "is-weekend" : "",
+					]
+						.filter(Boolean)
+						.join(" ");
+					button.setAttribute(
+						"aria-label",
+						[tip, weekend ? "weekend" : "", fire ? "high spend" : ""].filter(Boolean).join(", "),
+					);
+					button.innerHTML =
+						(fire ? `<span class="day-fire" aria-hidden="true">🔥</span>` : "") +
+						`<span class="day-tip" aria-hidden="true">${tip}</span>`;
+					return button;
+				}
+
+				// Deterministic-ish sample amounts for layout only.
+				function sampleAmount(seed) {
+					const n = (Math.sin(seed * 12.9898) * 43758.5453) % 1;
+					const u = Math.abs(n);
+					if (u < 0.22) return 0;
+					if (u > 0.97) return 118;
+					if (u > 0.9) return 52 + u * 20;
+					return u * 48;
+				}
+
+				function fillFlexRow(el, dates) {
+					if (!el) return;
+					el.replaceChildren();
+					dates.forEach((date, i) => {
+						el.append(dayButton(date, sampleAmount(i + dates.length * 17)));
+					});
+				}
+
+				const days7 = Array.from({ length: 7 }, (_, i) => new Date(2026, 7, 20 + i));
+				fillFlexRow(document.getElementById("daily-7"), days7);
+
+				const days31 = Array.from({ length: 31 }, (_, i) => new Date(2026, 7, 1 + i));
+				fillFlexRow(document.getElementById("daily-31"), days31);
+
+				const ytd = document.getElementById("daily-ytd");
+				if (ytd) {
+					ytd.replaceChildren();
+					// Always 31 day columns so day-of-month lines up across rows.
+					const lengths = [31, 28, 31, 30, 31, 30, 31, 26]; // through 26 Aug 2026
+					lengths.forEach((days, monthIndex) => {
+						const row = document.createElement("div");
+						row.className = "grid grid-cols-[2.5rem_1fr] items-center gap-2";
+						row.setAttribute("role", "listitem");
+
+						const label = document.createElement("div");
+						label.className = "text-xs text-stone-600 dark:text-stone-400";
+						label.textContent = MONTHS[monthIndex];
+
+						const track = document.createElement("div");
+						track.className = "day-grid-31 h-8 w-full";
+						track.setAttribute("role", "list");
+						track.setAttribute("aria-label", `${MONTHS[monthIndex]} spend`);
+
+						for (let day = 0; day < 31; day += 1) {
+							if (day < days) {
+								const date = new Date(2026, monthIndex, day + 1);
+								track.append(
+									dayButton(date, sampleAmount(monthIndex * 40 + day), { fill: true }),
+								);
+							} else {
+								const empty = document.createElement("span");
+								empty.className = "min-w-0";
+								empty.setAttribute("aria-hidden", "true");
+								track.append(empty);
+							}
+						}
+
+						row.append(label, track);
+						ytd.append(row);
+					});
+				}
+			})();
+
+			(() => {
+				const key = "tau-cost-report-theme";
+				const root = document.documentElement;
+				const button = document.getElementById("theme-toggle");
+				if (!button) return;
+
+				const sync = () => {
+					const dark = root.classList.contains("dark");
+					button.textContent = dark ? "Light" : "Dark";
+					button.setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to dark mode");
+				};
+
+				button.addEventListener("click", () => {
+					const dark = !root.classList.contains("dark");
+					root.classList.toggle("dark", dark);
+					localStorage.setItem(key, dark ? "dark" : "light");
+					sync();
+				});
+
+				sync();
+			})();
+		</script>
+	</body>
+</html>

@@ -40,6 +40,10 @@ Adds `/clear-screen` to clear terminal output without changing the session.
 
 Adds `/commit` for semantic commit grouping, review, and committing selected repository changes.
 
+## cost-report
+
+Adds `/cost-report` to build an HTML spend report from local session usage. Pick a time frame (past 7 days, current week, current month, year to date, or a specific month) and scope (current project or all sessions). Tau scans sessions, writes under `~/.pi/tau/cost-reports/`, opens the file, and notifies with the path. Empty windows warn without writing a file.
+
 ## context
 
 Adds `/context` to inject reusable repository work scopes from `.pi/contexts`, and `/context-sync` or `/context-sync <nudge>` for human-driven catalog sync. Selecting entries injects them once into the conversation: `read` paths as complete files, `show` targets as current declaration slices, `outline` paths as Explore structures, and one hidden note listing `references` plus instructions to treat the injected material as current. Run `/context` again to inject more. Manual sync replaces the editor with a status panel; Escape or Ctrl+C cancels. When `sync.automation` is on, coding agent can also run `context-sync` after meaningful uncommitted work. Sync catalogs durable code and long-lived documentation; recurring scratch, planning, interview, and rough-idea paths belong in `validation.ignoreGlobs`. `sync.enabled` is master switch for command, automation, and validation auto-run. Context validation is off by default; when on (and sync enabled), Tau auto-runs context-sync on failure. Domain folders are `NN_slug` tabs (ordered by the two-digit prefix; UI shows the slug), TOML files are concepts, and TOML sections are selectable entries.
