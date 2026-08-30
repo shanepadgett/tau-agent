@@ -232,7 +232,7 @@ export async function buildCostReport(options: BuildCostReportOptions): Promise<
 			tokens: bucket.tokens,
 			sessions: bucket.sessions.size,
 		}))
-		.sort((a, b) => b.cost - a.cost);
+		.sort((a, b) => b.tokens - a.tokens || b.cost - a.cost);
 
 	const subagents: SubagentCost[] = [...subagentMap.values()].sort((a, b) => b.cost - a.cost);
 

@@ -125,15 +125,17 @@ export function renderCostReportHtml(report: CostReport): string {
 	const scopeLabel = report.scope === "project" ? "Current project" : "All sessions";
 	const scopeClass = report.scope === "project" ? "scope-project" : "scope-all";
 	const totalShare = report.totalCost;
+	const tokenShareBase = report.totalTokens;
 	const subagentShareBase = report.subagentCost;
 
 	const modelRows = report.models
 		.map((model) => {
-			const share = totalShare > 0 ? model.cost / totalShare : 0;
-			return `<tr>
+			const share = tokenShareBase > 0 ? model.tokens / tokenShareBase : 0;
+			return `<tr data-cost="${model.cost}" data-share="${model.tokens}">
 				<td class="px-3 py-2">${escapeHtml(model.provider)} / ${escapeHtml(model.model)}</td>
 				<td class="px-3 py-2 text-right">${money(model.cost)}</td>
-				<td class="px-3 py-2 text-right">${percent(model.cost, totalShare)}</td>
+				<td class="px-3 py-2 text-right">${tokens(model.tokens)}</td>
+				<td class="px-3 py-2 text-right">${percent(model.tokens, tokenShareBase)}</td>
 				<td class="px-3 py-2">${shareBar(share)}</td>
 				<td class="px-3 py-2 text-right">${model.sessions}</td>
 			</tr>`;
@@ -294,6 +296,22 @@ export function renderCostReportHtml(report: CostReport): string {
 			grid-template-columns: repeat(31, minmax(0, 1fr));
 			gap: 0.25rem;
 		}
+		th.sortable {
+			cursor: pointer;
+			user-select: none;
+		}
+		th.sortable:hover {
+			color: rgb(28 25 23);
+		}
+		.dark th.sortable:hover {
+			color: rgb(245 245 244);
+		}
+		th.sortable[aria-sort="descending"]::after {
+			content: " ↓";
+		}
+		th.sortable[aria-sort="ascending"]::after {
+			content: " ↑";
+		}
 	</style>
 </head>
 <body class="${scopeClass} min-h-full bg-stone-100 text-stone-900 antialiased dark:bg-stone-950 dark:text-stone-100">
@@ -353,17 +371,18 @@ export function renderCostReportHtml(report: CostReport): string {
 			<section aria-labelledby="models-heading">
 				<h2 id="models-heading" class="mb-3 text-sm font-semibold">Models</h2>
 				<div class="overflow-x-auto rounded border border-stone-300 bg-white dark:border-stone-700 dark:bg-stone-900">
-					<table class="w-full text-sm tabular">
+					<table id="models-table" class="w-full text-sm tabular">
 						<thead>
 							<tr class="text-left text-xs font-medium text-stone-600 dark:text-stone-400">
 								<th scope="col" class="px-3 py-2 font-medium">Model</th>
-								<th scope="col" class="px-3 py-2 text-right font-medium">Cost</th>
-								<th scope="col" class="px-3 py-2 text-right font-medium">Share</th>
+								<th scope="col" class="sortable px-3 py-2 text-right font-medium" data-sort="cost" aria-sort="none">Cost</th>
+								<th scope="col" class="px-3 py-2 text-right font-medium">Tokens</th>
+								<th scope="col" class="sortable px-3 py-2 text-right font-medium" data-sort="share" aria-sort="descending">Share (tok)</th>
 								<th scope="col" class="min-w-[7rem] px-3 py-2 font-medium"></th>
 								<th scope="col" class="px-3 py-2 text-right font-medium">Sessions</th>
 							</tr>
 						</thead>
-						<tbody class="divide-y divide-stone-200 dark:divide-stone-800">${modelRows || `<tr><td class="px-3 py-2 text-stone-600 dark:text-stone-400" colspan="5">No model spend.</td></tr>`}</tbody>
+						<tbody class="divide-y divide-stone-200 dark:divide-stone-800">${modelRows || `<tr><td class="px-3 py-2 text-stone-600 dark:text-stone-400" colspan="6">No model spend.</td></tr>`}</tbody>
 					</table>
 				</div>
 			</section>
@@ -466,6 +485,53 @@ export function renderCostReportHtml(report: CostReport): string {
 						row.hidden = Boolean(value) && key !== value;
 					}
 				});
+			}
+
+			const modelsTable = document.getElementById("models-table");
+			if (modelsTable) {
+				const tbody = modelsTable.querySelector("tbody");
+				const headers = modelsTable.querySelectorAll("th.sortable");
+				if (tbody && headers.length > 0) {
+					let active = "share";
+					let direction = "desc";
+					const sortRows = () => {
+						const rows = [...tbody.querySelectorAll("tr[data-cost]")];
+						rows.sort((a, b) => {
+							const attr = "data-" + active;
+							const av = Number(a.getAttribute(attr)) || 0;
+							const bv = Number(b.getAttribute(attr)) || 0;
+							return direction === "desc" ? bv - av : av - bv;
+						});
+						for (const row of rows) tbody.appendChild(row);
+						for (const header of headers) {
+							const key = header.getAttribute("data-sort") || "";
+							header.setAttribute(
+								"aria-sort",
+								key === active ? (direction === "desc" ? "descending" : "ascending") : "none",
+							);
+						}
+					};
+					for (const header of headers) {
+						header.tabIndex = 0;
+						const activate = () => {
+							const key = header.getAttribute("data-sort") || "";
+							if (key === active) {
+								direction = direction === "desc" ? "asc" : "desc";
+							} else {
+								active = key;
+								direction = "desc";
+							}
+							sortRows();
+						};
+						header.addEventListener("click", activate);
+						header.addEventListener("keydown", (event) => {
+							if (event.key === "Enter" || event.key === " ") {
+								event.preventDefault();
+								activate();
+							}
+						});
+					}
+				}
 			}
 		})();
 	</script>
