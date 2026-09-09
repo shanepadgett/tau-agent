@@ -902,17 +902,11 @@ async function switchBranch(git: GitRunner, path: string, branch: string): Promi
 		return;
 	}
 
-	const remote = await git.run(["show-ref", "--verify", `refs/remotes/origin/${branch}`], {
+	await git.run(["remote", "set-branches", "--add", "origin", branch], { cwd: path });
+	await git.run(["fetch", "--quiet", "--depth=1", "origin", branch], {
 		cwd: path,
-		optional: true,
-		timeout: BRANCH_LOOKUP_TIMEOUT_MS,
+		timeout: BRANCH_SWITCH_TIMEOUT_MS,
 	});
-	if (!remote.trim()) {
-		await git.run(["fetch", "--quiet", "--depth=1", "origin", `refs/heads/${branch}:refs/remotes/origin/${branch}`], {
-			cwd: path,
-			timeout: BRANCH_SWITCH_TIMEOUT_MS,
-		});
-	}
 	await git.run(["switch", "--track", "-c", branch, `origin/${branch}`], {
 		cwd: path,
 		timeout: BRANCH_SWITCH_TIMEOUT_MS,
