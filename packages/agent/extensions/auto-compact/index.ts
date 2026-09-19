@@ -8,6 +8,7 @@ const CONTINUATION_MESSAGE =
 	"Continue the current work directly from the compacted context. Do not mention compaction or wait for user input.";
 
 export default function autoCompactExtension(pi: ExtensionAPI): void {
+	let enabled = true;
 	let tokenLimit = DEFAULT_AUTO_COMPACT_TOKEN_LIMIT;
 	let armed = true;
 	let compacting = false;
@@ -39,6 +40,7 @@ export default function autoCompactExtension(pi: ExtensionAPI): void {
 		const version = ++sessionVersion;
 		const settings = await loadTauExtensionSettings(ctx, autoCompactSettings);
 		if (version !== sessionVersion) return;
+		enabled = settings.enabled;
 		tokenLimit = settings.tokenLimit;
 		armed = true;
 		compacting = false;
@@ -67,7 +69,7 @@ export default function autoCompactExtension(pi: ExtensionAPI): void {
 		releaseAttentionHold("notify");
 	});
 	pi.on("turn_start", (_event, ctx) => {
-		if (compacting) return;
+		if (!enabled || compacting) return;
 
 		const tokens = ctx.getContextUsage()?.tokens;
 		if (tokens === undefined || tokens === null) return;

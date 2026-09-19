@@ -20,7 +20,7 @@ Names sessions from their first request so saved sessions remain findable.
 
 ## auto-compact
 
-Uses Pi's native compaction before a model turn when the current context reaches `extensions.autoCompact.tokenLimit`, which defaults to 175,000 tokens for every model. Interrupted work resumes through a hidden continuation message without an attention alert until the resumed work settles. Pi's native collapsed compaction entry remains visible in chat.
+Uses Pi's native compaction before a model turn when the current context reaches `extensions.autoCompact.tokenLimit`, which defaults to 175,000 tokens for every model. Set `extensions.autoCompact.enabled` to `false` to disable it. Interrupted work resumes through a hidden continuation message without an attention alert until the resumed work settles. Pi's native collapsed compaction entry remains visible in chat.
 
 ## branch
 

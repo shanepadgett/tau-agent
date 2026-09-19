@@ -18,6 +18,11 @@
 						"tokenLimit"
 					],
 					"properties": {
+						"enabled": {
+							"type": "boolean",
+							"default": true,
+							"description": "Enable automatic compaction when context reaches the token limit."
+						},
 						"tokenLimit": {
 							"type": "integer",
 							"minimum": 1,

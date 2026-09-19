@@ -2,7 +2,7 @@
 
 Compacts long conversations before the next model turn when their context reaches an absolute token limit. Active work resumes through a hidden continuation message after Pi's native compaction finishes.
 
-Set `extensions.autoCompact.tokenLimit` to change the limit. It defaults to 175,000 context tokens for every model. Pi still shows its native collapsed compaction entry in the chat.
+Set `extensions.autoCompact.enabled` to `false` to turn automatic compaction off. Set `extensions.autoCompact.tokenLimit` to change the limit. It defaults to 175,000 context tokens for every model. Pi still shows its native collapsed compaction entry in the chat.
 
 After changing this extension, run `/reload` before testing it.
 
