@@ -17,11 +17,13 @@ export default defineTauExtensionSettings({
 					description: "Enable automatic compaction when context reaches the token limit.",
 				}),
 			),
-			tokenLimit: Type.Integer({
-				minimum: 1,
-				default: DEFAULT_AUTO_COMPACT_TOKEN_LIMIT,
-				description: "Absolute context-token count that triggers compaction before the next model turn.",
-			}),
+			tokenLimit: Type.Optional(
+				Type.Integer({
+					minimum: 1,
+					default: DEFAULT_AUTO_COMPACT_TOKEN_LIMIT,
+					description: "Absolute context-token count that triggers compaction before the next model turn.",
+				}),
+			),
 		},
 		{ additionalProperties: false },
 	),

@@ -14,9 +14,6 @@
 			"properties": {
 				"autoCompact": {
 					"type": "object",
-					"required": [
-						"tokenLimit"
-					],
 					"properties": {
 						"enabled": {
 							"type": "boolean",
