@@ -1,4 +1,4 @@
-import type { Tool } from "@earendil-works/pi-ai";
+import type { ThinkingLevel, Tool } from "@earendil-works/pi-ai";
 import {
 	isToolCallEventType,
 	type ExtensionAPI,
@@ -6,11 +6,9 @@ import {
 	type ToolCallEvent,
 } from "@earendil-works/pi-coding-agent";
 import { Marker } from "@shanepadgett/tau-tui";
-import { Type, type Static } from "typebox";
-import { Value } from "typebox/value";
+import { Type } from "typebox";
 import { emitAgentBlocked } from "../../shared/agent-blocked.ts";
-import { resolveEffortCandidates } from "../../shared/model-effort.ts";
-import { generateToolValidated } from "../../shared/model-fallback/index.ts";
+import { generateToolValidated, resolveCandidates } from "../../shared/model-fallback/index.ts";
 import { errorText, truncAt } from "../../shared/text.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { isAllowlistedBash } from "./allowlist.ts";
@@ -19,34 +17,22 @@ import toolApprovalSettings from "./settings.ts";
 const STATUS_KEY = "tool-approval";
 const AUTO_APPROVED_TYPE = "tau.tool-approval.auto-approved";
 
-const SUMMARY_SCHEMA = Type.String({
-	minLength: 1,
-	maxLength: 600,
-	pattern: "^[^\\r\\n]+$",
-	description: "One concise paragraph that fully explains what the tool request does.",
-});
-const REVIEW_SCHEMA = Type.Union([
-	Type.Object(
-		{
-			decision: Type.Literal("approved"),
-			summary: SUMMARY_SCHEMA,
-		},
-		{ additionalProperties: false },
-	),
-	Type.Object(
-		{
-			decision: Type.Literal("requires_user_approval"),
-			summary: SUMMARY_SCHEMA,
-			reason: Type.String({
-				minLength: 1,
-				maxLength: 300,
-				pattern: "^[^\\r\\n]+$",
-				description: "One concise paragraph that states the concrete high-impact risk requiring approval.",
-			}),
-		},
-		{ additionalProperties: false },
-	),
-]);
+const REVIEW_SCHEMA = Type.Object(
+	{
+		decision: Type.Union([Type.Literal("approved"), Type.Literal("requires_user_approval")]),
+		summary: Type.String({
+			minLength: 1,
+			maxLength: 600,
+			description: "One concise paragraph that fully explains what the tool request does.",
+		}),
+		reason: Type.String({
+			maxLength: 300,
+			description:
+				"Empty when approved. One concise paragraph naming the concrete risk when user approval is required.",
+		}),
+	},
+	{ additionalProperties: false },
+);
 
 const REVIEW_SYSTEM_PROMPT = [
 	"You are a tool-request safety reviewer.",
@@ -59,8 +45,8 @@ const REVIEW_SYSTEM_PROMPT = [
 	"Do not require approval merely because the request writes files, invokes code, uses shell composition, could fail, or has ordinary local side effects.",
 	"Routine deletion of generated, temporary, or local project files is ordinary local work. Escalate deletion only when it is broad or difficult to recover.",
 	"Default to approved. Uncertainty is not a reason to escalate; require user approval only when the request shows a concrete substantial risk listed above.",
-	"The summary must be one concise paragraph with no line breaks. Explain the complete effect of the request without lists, headings, or repeated details.",
-	"An approved review has no reason field. A review that requires user approval must give one concise reason naming the concrete risk without repeating the summary.",
+	"The summary must be one concise paragraph. Explain the complete effect of the request without lists, headings, or repeated details.",
+	"Always set reason. Use an empty string when approved. When user approval is required, give one concise reason naming the concrete risk without repeating the summary.",
 ].join("\n");
 
 const REVIEW_TOOL = {
@@ -69,7 +55,18 @@ const REVIEW_TOOL = {
 	parameters: REVIEW_SCHEMA,
 } satisfies Tool;
 
-type ToolReview = Static<typeof REVIEW_SCHEMA>;
+const REVIEW_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
+	{ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" },
+	{ provider: "openai-codex", model: "gpt-5.6-luna", reasoning: "medium" },
+	{ provider: "anthropic", model: "claude-sonnet-5", reasoning: "medium" },
+	{ provider: "xai", model: "grok-4.5", reasoning: "low" },
+	{ provider: "openrouter", model: "deepseek/deepseek-v4.1-flash", reasoning: "low" },
+	{ provider: "opencode-go", model: "deepseek-v4.1-flash", reasoning: "low" },
+];
+
+type ToolReview =
+	| { decision: "approved"; summary: string }
+	| { decision: "requires_user_approval"; summary: string; reason: string };
 type ApprovalToolName = "bash" | "script_runner";
 
 interface ToolApprovalRequest {
@@ -79,6 +76,8 @@ interface ToolApprovalRequest {
 
 interface AutoApprovedMarker {
 	toolName: ApprovalToolName;
+	provider: string;
+	model: string;
 }
 
 export default function toolApprovalExtension(pi: ExtensionAPI): void {
@@ -91,7 +90,7 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 			theme,
 			state: "complete",
 			label: "Auto-approved",
-			parts: [toolLabel(marker.toolName)],
+			parts: [toolLabel(marker.toolName), `${marker.provider}/${marker.model}`],
 		});
 	});
 
@@ -109,7 +108,7 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 		return {
 			systemPrompt: `${event.systemPrompt}\n\n${[
 				"Known-safe read-only bash commands skip review.",
-				"Other bash and every script_runner request are reviewed by a separate quick-effort safety classifier before execution.",
+				"Other bash and every script_runner request are reviewed by a separate safety classifier before execution.",
 				"Treat classifier approval as a gate, not as permission to hide command intent from the user.",
 				"Routine local development requests can be approved automatically.",
 				"Requests with destructive, system, production, privileged, or security-sensitive effects require human confirmation.",
@@ -143,7 +142,7 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 
 		ctx.ui.setStatus(STATUS_KEY, `reviewing ${toolLabel(request.toolName)}`);
 		try {
-			const review = await reviewToolRequest(ctx, request);
+			const { review, provider, model } = await reviewToolRequest(ctx, request);
 			if (review.decision === "requires_user_approval") {
 				return requestToolApproval(
 					pi,
@@ -154,7 +153,11 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 				);
 			}
 			if (settings.autoApprove) {
-				pi.appendEntry<AutoApprovedMarker>(AUTO_APPROVED_TYPE, { toolName: request.toolName });
+				pi.appendEntry<AutoApprovedMarker>(AUTO_APPROVED_TYPE, {
+					toolName: request.toolName,
+					provider,
+					model,
+				});
 				return undefined;
 			}
 			return requestToolApproval(
@@ -198,26 +201,41 @@ function toolLabel(toolName: ApprovalToolName): string {
 
 function autoApprovedMarker(value: unknown): AutoApprovedMarker | undefined {
 	if (!value || typeof value !== "object") return undefined;
-	const toolName = (value as AutoApprovedMarker).toolName;
-	if (toolName !== "bash" && toolName !== "script_runner") return undefined;
-	return { toolName };
+	const record = value as AutoApprovedMarker;
+	if (record.toolName !== "bash" && record.toolName !== "script_runner") return undefined;
+	if (typeof record.provider !== "string" || record.provider.length === 0) return undefined;
+	if (typeof record.model !== "string" || record.model.length === 0) return undefined;
+	return { toolName: record.toolName, provider: record.provider, model: record.model };
 }
 
-async function reviewToolRequest(ctx: ExtensionContext, request: ToolApprovalRequest): Promise<ToolReview> {
+async function reviewToolRequest(
+	ctx: ExtensionContext,
+	request: ToolApprovalRequest,
+): Promise<{ review: ToolReview; provider: string; model: string }> {
 	const requestJson = JSON.stringify(request);
-	const candidates = await resolveEffortCandidates(ctx, "quick", {
-		includeParentModel: false,
-		preferredProvider: "xai",
-	});
-	return generateToolValidated(
+	const reviewer = REVIEW_MODELS.find((item) => item.provider === ctx.model?.provider);
+	const preferred = reviewer ? [reviewer] : [];
+	if (ctx.model) {
+		preferred.push({
+			provider: ctx.model.provider,
+			model: ctx.model.id,
+			reasoning: "medium",
+		});
+	}
+	const candidates = await resolveCandidates(ctx, preferred, false);
+	const wanted = preferred[0];
+	if (
+		wanted &&
+		!candidates.some((item) => item.model.provider === wanted.provider && item.model.id === wanted.model)
+	) {
+		ctx.ui.notify(`Tool review skipped ${wanted.provider}/${wanted.model}; trying next model.`, "info");
+	}
+	const { value, candidate } = await generateToolValidated(
 		ctx,
 		candidates,
 		[REVIEW_SYSTEM_PROMPT, "", "Review this tool request JSON:", requestJson].join("\n"),
 		REVIEW_TOOL,
-		(input) => {
-			if (!Value.Check(REVIEW_SCHEMA, input)) throw new Error("quick reviewer returned an invalid review shape");
-			return input;
-		},
+		reviewFromToolInput,
 		(error, output) =>
 			[
 				`The tool review failed validation: ${error.message}`,
@@ -226,8 +244,25 @@ async function reviewToolRequest(ctx: ExtensionContext, request: ToolApprovalReq
 				"Previous response:",
 				output,
 			].join("\n"),
-		{ maxAttempts: 3 },
+		{ maxAttempts: 3, notifyOnFallback: true },
 	);
+	return { review: value, provider: candidate.model.provider, model: candidate.model.id };
+}
+
+function reviewFromToolInput(input: unknown): ToolReview {
+	if (!input || typeof input !== "object") throw new Error("reviewer returned an invalid review shape");
+	const record = input as Record<string, unknown>;
+	const decision = record.decision;
+	if (decision !== "approved" && decision !== "requires_user_approval") {
+		throw new Error("reviewer returned an invalid review shape");
+	}
+	if (typeof record.summary !== "string") throw new Error("reviewer returned an invalid review shape");
+	const summary = truncAt(singleLine(record.summary), 600);
+	if (!summary) throw new Error("reviewer returned an invalid review shape");
+	const reason = typeof record.reason === "string" ? truncAt(singleLine(record.reason), 300) : "";
+	if (decision === "approved") return { decision, summary };
+	if (!reason) throw new Error("reviewer returned an invalid review shape");
+	return { decision, summary, reason };
 }
 
 function formatApproval(summary: string, reason: string): string {

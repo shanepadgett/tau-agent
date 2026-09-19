@@ -75,7 +75,7 @@ export default function handoffExtension(pi: ExtensionAPI): void {
 								].join("\n"),
 							{ maxAttempts: 3 },
 						);
-						done(result);
+						done(result.value);
 					} catch (error) {
 						if (!loader.signal.aborted) generationError = errorText(error);
 						done(null);

@@ -57,7 +57,7 @@ export async function generatePlan(
 	options?: CommitGenerationOptions,
 ): Promise<CommitGroup[]> {
 	const prompt = buildPlanPrompt(evidence, previousPlan, regenerationNote);
-	return generateToolValidated(
+	const { value } = await generateToolValidated(
 		ctx,
 		await resolveEffortCandidates(ctx, commitEffort(evidence.files), { includeParentModel: true }),
 		prompt,
@@ -79,6 +79,7 @@ export async function generatePlan(
 			notifyOnFallback: true,
 		},
 	);
+	return value;
 }
 
 export async function regenerateMessage(

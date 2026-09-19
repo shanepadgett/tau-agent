@@ -71,9 +71,10 @@ export async function generateValidated<T>(
 	correctionPrompt?: (error: Error, text: string) => string,
 	options?: ModelFallbackOptions,
 ): Promise<T> {
-	return withModelFallback(ctx, candidates, options, (candidate) =>
+	const { value } = await withModelFallback(ctx, candidates, options, (candidate) =>
 		requestValidated(ctx, candidate, prompt, validate, correctionPrompt),
 	);
+	return value;
 }
 
 export async function generateToolValidated<T>(
@@ -84,7 +85,7 @@ export async function generateToolValidated<T>(
 	validate: (input: unknown) => T,
 	correctionPrompt?: (error: Error, output: string) => string,
 	options?: ModelFallbackOptions,
-): Promise<T> {
+): Promise<{ value: T; candidate: ModelCandidate }> {
 	return withModelFallback(ctx, candidates, options, (candidate) =>
 		requestToolValidated(
 			ctx,
@@ -117,7 +118,7 @@ async function withModelFallback<T>(
 	candidates: readonly ModelCandidate[],
 	options: ModelFallbackOptions | undefined,
 	request: (candidate: ModelCandidate) => Promise<T>,
-): Promise<T> {
+): Promise<{ value: T; candidate: ModelCandidate }> {
 	const failures: string[] = [];
 	const statusKey = options?.statusKey;
 
@@ -126,7 +127,7 @@ async function withModelFallback<T>(
 		if (statusKey) ctx.ui.setStatus(statusKey, `generating (${label})`);
 		await options?.onStatus?.(`Generating with ${label}`);
 		try {
-			return await request(candidate);
+			return { value: await request(candidate), candidate };
 		} catch (error) {
 			if (ctx.signal?.aborted) throw new Error("Cancelled.");
 			if (shouldCooldownProvider(error)) await markProviderUnavailable(candidate.model.provider);

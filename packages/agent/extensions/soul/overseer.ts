@@ -130,7 +130,7 @@ async function reviewPrimaryDirective(
 	toolCalls: readonly ToolSignature[],
 ): Promise<PrimaryDirectiveReview> {
 	const candidates = await resolveEffortCandidates(ctx, "standard", { includeParentModel: false });
-	return generateToolValidated(
+	const { value } = await generateToolValidated(
 		ctx,
 		candidates,
 		buildReviewPrompt(branch, toolCalls),
@@ -144,6 +144,7 @@ async function reviewPrimaryDirective(
 		undefined,
 		{ maxAttempts: 1 },
 	);
+	return value;
 }
 
 function buildReviewPrompt(branch: readonly SessionEntry[], toolCalls: readonly ToolSignature[]): string {
