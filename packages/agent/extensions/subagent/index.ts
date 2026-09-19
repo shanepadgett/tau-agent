@@ -18,32 +18,29 @@ interface SubagentSessionState {
 
 const SUBAGENT_SESSION_STATE_TYPE = "tau.subagent.disabled";
 
-const params = Type.Union([
-	Type.Object(
-		{
-			agent: Type.String({ minLength: 1 }),
-			task: Type.String({ minLength: 1 }),
-			files: Type.Optional(
-				Type.Array(Type.String({ minLength: 1 }), {
-					description: "Files to autoread into the child's context before this turn",
-				}),
-			),
-		},
-		{ additionalProperties: false },
-	),
-	Type.Object(
-		{
-			thread: Type.String({ minLength: 1 }),
-			task: Type.String({ minLength: 1 }),
-			files: Type.Optional(
-				Type.Array(Type.String({ minLength: 1 }), {
-					description: "Files to autoread into the child's context before this turn",
-				}),
-			),
-		},
-		{ additionalProperties: false },
-	),
-]);
+const params = Type.Object(
+	{
+		agent: Type.Optional(
+			Type.String({
+				minLength: 1,
+				description: "Fresh agent name. Pass agent or thread, never both.",
+			}),
+		),
+		thread: Type.Optional(
+			Type.String({
+				minLength: 1,
+				description: "Retained thread id. Pass thread or agent, never both.",
+			}),
+		),
+		task: Type.String({ minLength: 1 }),
+		files: Type.Optional(
+			Type.Array(Type.String({ minLength: 1 }), {
+				description: "Files to autoread into the child's context before this turn",
+			}),
+		),
+	},
+	{ additionalProperties: false },
+);
 
 export default function subagentExtension(pi: ExtensionAPI): void {
 	const runtime = new SubagentRuntime(pi);
@@ -215,7 +212,7 @@ Use \`subagent\` only when an available agent's listed purpose matches the deleg
 Available agents for this turn:
 ${lines.join("\n") || "none"}
 
-Start a fresh thread with \`agent\` and \`task\`. Continue an existing thread with \`thread\` and \`task\`. Reuse a thread when feedback or follow-up work depends on its prior reads and reasoning. Start fresh for unrelated work or when its context is stale or oversized.
+Start a fresh thread with \`agent\` and \`task\`. Continue an existing thread with \`thread\` and \`task\`. Pass exactly one of \`agent\` or \`thread\`, never both and never neither. Reuse a thread when feedback or follow-up work depends on its prior reads and reasoning. Start fresh for unrelated work or when its context is stale or oversized.
 
 Pass \`files\` when exact relevant files are already known. Tau autoreads current line-numbered snapshots into that child turn before it starts.
 
@@ -296,25 +293,48 @@ Delegate one focused task per call. Children do not inherit parent messages. Inc
 			async execute(_id, raw, signal, onUpdate, ctx) {
 				const task = raw.task.trim();
 				const files = [...new Set((raw.files ?? []).map((path) => path.trim()))];
-				const continuing = "thread" in raw;
+				const agentName = raw.agent?.trim() || undefined;
+				const threadKey = raw.thread?.trim() || undefined;
 				const parentModel = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : "unavailable";
 				const parentThinking = pi.getThinkingLevel();
-				const agent = continuing ? raw.thread.trim() : raw.agent.trim();
-				const threadKey = continuing ? raw.thread.trim() : undefined;
 
 				failureNotify = (message) => {
 					ctx.ui.notify(message, "warning");
 				};
 				dashboard.setInteractive(ctx.mode === "tui" && ctx.hasUI);
 
-				if (!task || !agent || files.some((path) => !path)) {
-					const error = continuing
-						? "Subagent continuation requires non-empty thread, task, and file paths"
-						: "Subagent input requires non-empty agent, task, and file paths";
-					return failedToolResult(agent, task, "queue", parentModel, parentThinking, error, threadKey);
+				const failQueue = (agent: string, error: string, thread?: string) =>
+					failedToolResult(agent, task, "queue", parentModel, parentThinking, error, thread);
+
+				if (!task || files.some((path) => !path)) {
+					return failQueue(
+						agentName ?? threadKey ?? "",
+						threadKey !== undefined
+							? "Subagent continuation requires non-empty thread, task, and file paths"
+							: "Subagent input requires non-empty agent, task, and file paths",
+						threadKey,
+					);
+				}
+				if (agentName !== undefined && threadKey !== undefined) {
+					return failQueue(
+						agentName,
+						"Subagent input requires exactly one of agent or thread, not both",
+						threadKey,
+					);
 				}
 
-				if (continuing) {
+				const onUpdateDetails = (details: SubagentDetails) =>
+					onUpdate?.({
+						content: [
+							{
+								type: "text",
+								text: details.currentActivity ?? details.response ?? `${details.agent}: ${details.status}`,
+							},
+						],
+						details,
+					});
+
+				if (threadKey !== undefined) {
 					const disabledContinuation = await disabledContinuationResult(
 						ctx,
 						threadKey,
@@ -323,29 +343,36 @@ Delegate one focused task per call. Children do not inherit parent messages. Inc
 						parentThinking,
 					);
 					if (disabledContinuation) return disabledContinuation;
+					return runtime.execute({
+						agent: threadKey,
+						task,
+						files,
+						continuing: true,
+						threadKey,
+						ctx,
+						parentModel,
+						parentThinking,
+						signal,
+						onUpdate: onUpdateDetails,
+						resolveFreshDefinition: () => resolveFreshSubagentDefinition(ctx, threadKey),
+					});
+				}
+
+				if (agentName === undefined) {
+					return failQueue("", "Subagent input requires exactly one of agent or thread");
 				}
 
 				return runtime.execute({
-					agent,
+					agent: agentName,
 					task,
 					files,
-					continuing,
-					threadKey,
+					continuing: false,
 					ctx,
 					parentModel,
 					parentThinking,
 					signal,
-					onUpdate: (details) =>
-						onUpdate?.({
-							content: [
-								{
-									type: "text",
-									text: details.currentActivity ?? details.response ?? `${details.agent}: ${details.status}`,
-								},
-							],
-							details,
-						}),
-					resolveFreshDefinition: () => resolveFreshSubagentDefinition(ctx, agent),
+					onUpdate: onUpdateDetails,
+					resolveFreshDefinition: () => resolveFreshSubagentDefinition(ctx, agentName),
 				});
 			},
 			renderCall(args, theme, context) {
