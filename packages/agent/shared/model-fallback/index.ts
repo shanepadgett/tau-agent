@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import type { Api, AssistantMessage, Message, Model, ThinkingLevel, Tool } from "@earendil-works/pi-ai";
+import {
+	normalizeContext,
+	type Api,
+	type AssistantMessage,
+	type Message,
+	type Model,
+	type ThinkingLevel,
+	type Tool,
+} from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { loadTauExtensionSettings, updateTauExtensionSettings } from "../settings/load.ts";
 import { errorText, truncAt } from "../text.ts";
@@ -246,14 +254,18 @@ function completeCandidate(
 	tools?: Tool[],
 ): Promise<AssistantMessage> {
 	return candidate.provider
-		.streamSimple(candidate.model, tools ? { messages: [...messages], tools } : { messages: [...messages] }, {
-			apiKey: candidate.apiKey,
-			headers: candidate.headers,
-			env: candidate.env,
-			signal: ctx.signal,
-			reasoning: candidate.reasoning,
-			sessionId,
-		})
+		.streamSimple(
+			candidate.model,
+			normalizeContext(tools ? { messages: [...messages], tools } : { messages: [...messages] }),
+			{
+				apiKey: candidate.apiKey,
+				headers: candidate.headers,
+				env: candidate.env,
+				signal: ctx.signal,
+				reasoning: candidate.reasoning,
+				sessionId,
+			},
+		)
 		.result();
 }
 

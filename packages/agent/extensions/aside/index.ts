@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Context, Message, Model } from "@earendil-works/pi-ai";
+import { normalizeContext, type Context, type Message, type Model } from "@earendil-works/pi-ai";
 import {
 	buildSessionContext,
 	convertToLlm,
@@ -141,7 +141,7 @@ async function runAside(
 			)
 		: buildAsideRequest([], question, undefined);
 	const response = await provider
-		.streamSimple(model, request, {
+		.streamSimple(model, normalizeContext(request), {
 			apiKey: auth.apiKey,
 			headers: auth.headers,
 			env: auth.env,

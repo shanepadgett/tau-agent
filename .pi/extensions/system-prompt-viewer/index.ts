@@ -63,10 +63,7 @@ export default function systemPromptViewer(pi: ExtensionAPI): void {
 	});
 
 	pi.on("context", (event) => ({
-		messages: event.messages.filter((message) => {
-			if (!isRecord(message) || message.role !== "custom") return true;
-			return message.customType !== MESSAGE_TYPE;
-		}),
+		messages: event.messages.filter((message) => message.role !== "custom" || message.customType !== MESSAGE_TYPE),
 	}));
 
 	pi.on("session_before_tree", (event, ctx) => {
