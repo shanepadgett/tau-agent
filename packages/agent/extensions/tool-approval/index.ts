@@ -56,12 +56,12 @@ const REVIEW_TOOL = {
 } satisfies Tool;
 
 const REVIEW_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
-	{ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" },
-	{ provider: "openai-codex", model: "gpt-5.6-luna", reasoning: "medium" },
+	{ provider: "openai", model: "gpt-6-luna", reasoning: "medium" },
+	{ provider: "openai-codex", model: "gpt-6-luna", reasoning: "medium" },
 	{ provider: "anthropic", model: "claude-sonnet-5", reasoning: "medium" },
 	{ provider: "xai", model: "grok-4.5", reasoning: "low" },
-	{ provider: "openrouter", model: "deepseek/deepseek-v4.1-flash", reasoning: "low" },
-	{ provider: "opencode-go", model: "deepseek-v4.1-flash", reasoning: "low" },
+	{ provider: "openrouter", model: "deepseek/deepseek-v4.1-flash", reasoning: "high" },
+	{ provider: "opencode-go", model: "deepseek-v4.1-flash", reasoning: "high" },
 ];
 
 type ToolReview =
