@@ -1,9 +1,14 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Editor, type Focusable, Key, matchesKey, type TUI } from "@earendil-works/pi-tui";
-import { editorTheme } from "@shanepadgett/tau-tui";
+import {
+	editorTheme,
+	pushSavedNote,
+	renderInlineEditor,
+	renderNoteEditor,
+	wrapWithPrefix,
+} from "@shanepadgett/tau-tui";
 import { bindingHint, bindingsHint, rawHint, type ToolKeyHint } from "@shanepadgett/tau-tui";
 import { renderQuestionPrompt } from "./body-render.ts";
-import { pushSavedNote, renderInlineEditor, renderNoteEditor, wrapWithPrefix } from "./inline-editor-row.ts";
 import { renderRecommendation } from "./input-question-body.ts";
 import {
 	getAnswer,

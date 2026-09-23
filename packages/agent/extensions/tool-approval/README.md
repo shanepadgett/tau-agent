@@ -8,6 +8,8 @@ With `autoApprove` enabled, reviewer-approved requests run without another confi
 
 When approval is required, Tau shows one paragraph that explains the effect and risk without repeating the request. If the reviewer fails or returns a malformed decision, Tau asks for direct human approval instead of running it automatically. Tau also sends an attention notification when the approval window opens.
 
+In the terminal approval panel, move between Approve and Reject, press `n` to add a note to the highlighted choice, then press Enter to choose. Enter saves an edited note before choosing; Escape cancels note editing or blocks the request from the choice list. A rejection note tells the agent why the request was blocked. An approval note reaches the agent with the tool result; it does not change the request being approved. To ask for a different request, reject it with a note. Long notes are truncated. RPC clients use the standard confirmation dialog without notes.
+
 Configure under `extensions.toolApproval`:
 
 ```json

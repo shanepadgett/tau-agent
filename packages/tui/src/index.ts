@@ -1,4 +1,5 @@
 export { editorTheme } from "./editor-theme.ts";
+export { pushSavedNote, renderInlineEditor, renderNoteEditor, wrapWithPrefix } from "./inline-editor-row.ts";
 export { bindingHint, bindingsHint, rawHint, type ToolKeyHint } from "./key-hints.ts";
 export { Marker, type MarkerState } from "./marker.ts";
 export { ScrollableMarkdown } from "./scrollable-markdown.ts";

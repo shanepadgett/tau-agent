@@ -122,7 +122,7 @@ Adds `/tau`, `/tau init [--global|--project]`, and `/tau doctor` for Tau setup a
 
 ## tool-approval
 
-Reviews agent `bash` and `script_runner` requests before they run. Common read-only bash commands skip review. Set `extensions.toolApproval.autoApprove` to run every reviewer-approved request without another confirmation. Those auto-approvals show a user-only marker. The reviewer approves routine local development work. Concrete destructive, system, production, privileged, or security-sensitive effects require human approval with one explanatory paragraph. Reviewer failures fall back to human approval and send an attention notification.
+Reviews agent `bash` and `script_runner` requests before they run. Common read-only bash commands skip review. Set `extensions.toolApproval.autoApprove` to run every reviewer-approved request without another confirmation. Those auto-approvals show a user-only marker. The reviewer approves routine local development work. Concrete destructive, system, production, privileged, or security-sensitive effects require human approval with one explanatory paragraph. Reviewer failures fall back to human approval and send an attention notification. In the terminal approval panel, press `n` to add a note to Approve or Reject before choosing. Rejection notes tell the agent why the request was blocked; approval notes reach it with the tool result without changing the request. Reject with a note to ask for a revised request.
 
 ## tool-loader
 

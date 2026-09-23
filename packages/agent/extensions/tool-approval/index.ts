@@ -12,6 +12,7 @@ import { generateToolValidated, resolveCandidates } from "../../shared/model-fal
 import { errorText, truncAt } from "../../shared/text.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { isAllowlistedBash } from "./allowlist.ts";
+import { ToolApprovalPanel, type ApprovalAnswer } from "./panel.ts";
 import toolApprovalSettings from "./settings.ts";
 
 const STATUS_KEY = "tool-approval";
@@ -82,6 +83,7 @@ interface AutoApprovedMarker {
 
 export default function toolApprovalExtension(pi: ExtensionAPI): void {
 	let settings = toolApprovalSettings.defaults;
+	const pendingNotes = new Map<string, string>();
 
 	pi.registerEntryRenderer<AutoApprovedMarker>(AUTO_APPROVED_TYPE, (entry, _options, theme) => {
 		const marker = autoApprovedMarker(entry.data);
@@ -98,7 +100,43 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 		settings = await loadTauExtensionSettings(ctx, toolApprovalSettings);
 	}
 
+	async function requestToolApproval(
+		ctx: ExtensionContext,
+		toolCallId: string,
+		toolName: ApprovalToolName,
+		title: string,
+		body: string,
+	): Promise<{ block: true; reason: string } | undefined> {
+		if (!ctx.hasUI) return block(`${toolLabel(toolName)} needs confirmation, but interactive UI is unavailable`);
+		try {
+			emitAgentBlocked(pi, {
+				title: "Tool request review",
+				body: `Waiting for ${toolLabel(toolName)} approval`,
+				source: "tool-approval.review",
+			});
+			if (ctx.mode !== "tui") {
+				const confirmed = await ctx.ui.confirm(title, body);
+				return confirmed ? undefined : block(`${toolLabel(toolName)} rejected by user`);
+			}
+			const answer = await ctx.ui.custom<ApprovalAnswer | undefined>(
+				(tui, theme, keys, done) => new ToolApprovalPanel(tui, theme, keys, title, body, done),
+			);
+			if (!answer) return block(`${toolLabel(toolName)} approval cancelled by user`);
+			const note = truncAt(answer.note, 800);
+			if (answer.choice === "reject") {
+				return block(`${toolLabel(toolName)} rejected by user${note ? `. User note: ${note}` : ""}`);
+			}
+			if (note) pendingNotes.set(toolCallId, note);
+			return undefined;
+		} catch (error) {
+			const message = singleLine(errorText(error));
+			ctx.ui.notify(`Tool approval failed; request blocked: ${truncAt(message, 600)}`, "error");
+			return block(`tool approval failed: ${truncAt(message, 600)}`);
+		}
+	}
+
 	pi.on("session_start", async (_event, ctx) => {
+		pendingNotes.clear();
 		await refreshSettings(ctx);
 	});
 
@@ -131,8 +169,8 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 			const { review, provider, model } = await reviewToolRequest(ctx, request);
 			if (review.decision === "requires_user_approval") {
 				return requestToolApproval(
-					pi,
 					ctx,
+					event.toolCallId,
 					request.toolName,
 					`Approve high-impact ${toolLabel(request.toolName)}?`,
 					formatApproval(review.summary, review.reason),
@@ -147,8 +185,8 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 				return undefined;
 			}
 			return requestToolApproval(
-				pi,
 				ctx,
+				event.toolCallId,
 				request.toolName,
 				`Run reviewed ${toolLabel(request.toolName)}?`,
 				formatApproval(review.summary, "Automatic approval is disabled."),
@@ -157,8 +195,8 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 			const message = singleLine(errorText(error));
 			ctx.ui.notify(`Tool review failed; manual approval required: ${truncAt(message, 600)}`, "warning");
 			return requestToolApproval(
-				pi,
 				ctx,
+				event.toolCallId,
 				request.toolName,
 				`Automatic ${toolLabel(request.toolName)} review failed. Continue?`,
 				`The automatic review failed, so Tau could not summarize this ${toolLabel(request.toolName)}. Approve it only if you understand the request shown above.`,
@@ -168,7 +206,27 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 		}
 	});
 
+	pi.on("tool_result", (event) => {
+		const note = pendingNotes.get(event.toolCallId);
+		if (!note) return;
+		pendingNotes.delete(event.toolCallId);
+		return {
+			content: [
+				...event.content,
+				{
+					type: "text" as const,
+					text: `User approval note (guidance for subsequent actions; does not change this tool request):\n${note}`,
+				},
+			],
+		};
+	});
+
+	pi.on("agent_end", () => {
+		pendingNotes.clear();
+	});
+
 	pi.on("session_shutdown", (_event, ctx) => {
+		pendingNotes.clear();
 		ctx.ui.setStatus(STATUS_KEY, undefined);
 	});
 }
@@ -253,29 +311,6 @@ function reviewFromToolInput(input: unknown): ToolReview {
 
 function formatApproval(summary: string, reason: string): string {
 	return singleLine(`${summary} ${reason}`);
-}
-
-async function requestToolApproval(
-	pi: Pick<ExtensionAPI, "events">,
-	ctx: ExtensionContext,
-	toolName: ApprovalToolName,
-	title: string,
-	body: string,
-): Promise<{ block: true; reason: string } | undefined> {
-	if (!ctx.hasUI) return block(`${toolLabel(toolName)} needs confirmation, but interactive UI is unavailable`);
-	try {
-		emitAgentBlocked(pi, {
-			title: "Tool request review",
-			body: `Waiting for ${toolLabel(toolName)} approval`,
-			source: "tool-approval.review",
-		});
-		const confirmed = await ctx.ui.confirm(title, body);
-		return confirmed ? undefined : block(`${toolLabel(toolName)} rejected by user`);
-	} catch (error) {
-		const message = singleLine(errorText(error));
-		ctx.ui.notify(`Tool approval failed; request blocked: ${truncAt(message, 600)}`, "error");
-		return block(`tool approval failed: ${truncAt(message, 600)}`);
-	}
 }
 
 function singleLine(text: string): string {
