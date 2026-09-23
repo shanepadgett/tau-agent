@@ -1,8 +1,26 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { Tool } from "@earendil-works/pi-ai";
 import type { ToolRowVisualState } from "./tool-row-state.js";
 import type { FileInjectionRequest, PreparedFileInjection } from "../src/file-injection/index.ts";
 
 export type TauAgentEvents = {
+	/** @internal Soul's runtime-scoped prompt contributors. */
+	"tau:prompt.sources": {
+		accept(source: {
+			key: string;
+			section: string;
+			refresh: "compaction" | "append";
+			read(ctx: ExtensionContext): Promise<string>;
+		}): void;
+	};
+	/** @internal Check a tool loadout before activation. */
+	"tau:prompt.tools.check": {
+		ctx: ExtensionContext;
+		tools: Tool[];
+		reject(reason: string): void;
+	};
+	/** @internal Exact projected Soul instructions, for prompt viewers. */
+	"tau:prompt.snapshot": { text: string };
 	"tau:agent.blocked": {
 		title?: string;
 		body?: string;

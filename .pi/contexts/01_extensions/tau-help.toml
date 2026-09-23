@@ -1,11 +1,13 @@
 name = "Tau Help"
-description = "In-product extension and prompt guide plus Tau docs path guidance"
+description = "In-product extension and prompt guide plus Tau documentation guidance registered as a Soul source"
 
 [extension-runtime]
-description = "On before_agent_start append Tau Agent docs path guidance for Tau/Rok/extension topics only; register tau-help message renderer with centered ASCII mark plus Markdown; register /tau-help to send display-only tau-help custom message from bundled help.md without triggering a turn"
+description = "Register Tau documentation guidance as a Soul source for Tau/Rok/extension topics; register tau-help message renderer with centered ASCII mark plus Markdown; register /tau-help to send display-only tau-help custom message from bundled help.md without triggering a turn"
 read = [
   "packages/agent/extensions/tau-help/index.ts",
   "packages/agent/extensions/tau-help/README.md",
+  "packages/agent/shared/prompt-contributions.ts",
+  "packages/agent/shared/events.ts",
 ]
 show = []
 outline = []

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { appendFile, type FileHandle, mkdir, open, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getAgentDir, type BuildSystemPromptOptions, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { onTauEventImmediately } from "../../shared/events.ts";
 
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const CACHE_NOISE_FLOOR = 1_024;
@@ -328,6 +329,9 @@ export default function cacheDiagnosticsExtension(pi: ExtensionAPI): void {
 
 	pi.on("before_agent_start", (event) => {
 		latestPromptState = fingerprintPromptState(event.systemPrompt, event.systemPromptOptions);
+	});
+	onTauEventImmediately(pi, "cache-diagnostics.prompt", "tau:prompt.snapshot", ({ text }) => {
+		if (latestPromptState) latestPromptState = { ...latestPromptState, systemPromptHash: hashJson(text).hash };
 	});
 
 	pi.on("turn_start", (event) => {

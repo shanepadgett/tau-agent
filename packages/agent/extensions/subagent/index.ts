@@ -1,6 +1,7 @@
 import { rm } from "node:fs/promises";
 import { defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { registerPromptSource } from "../../shared/prompt-contributions.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { createToolRowStateStore } from "../../shared/tool-row-state.js";
 import contextSettings from "../context/settings.ts";
@@ -197,16 +198,20 @@ export default function subagentExtension(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.on("before_agent_start", async (event, ctx) => {
-		if (!pi.getActiveTools().includes("subagent")) return undefined;
-		const discovery = await discoverAgents(ctx.cwd, ctx.isProjectTrusted());
-		warn(discovery, ctx);
-		const agents = await parentVisibleAgents(ctx, discovery);
-		const lines = agents.map((agent) => `- ${agent.name}: ${agent.description}`);
-		const scoutGuidance = agents.some((agent) => agent.name === "scout")
-			? "\n\nScout only for substantial multi-hop lookup that would flood parent context. Skip few known-path reads, single declaration lookups, or small digs with most evidence already in hand; use tools directly. When uncertain, dig yourself. Do not send code review, diagnosis, design, or other judgment work to scout."
-			: "";
-		const prompt = `## Subagents
+	registerPromptSource(pi, {
+		key: "subagent/availability",
+		section: "subagents",
+		refresh: "append",
+		async read(ctx) {
+			if (!pi.getActiveTools().includes("subagent")) return "";
+			const discovery = await discoverAgents(ctx.cwd, ctx.isProjectTrusted());
+			warn(discovery, ctx);
+			const agents = await parentVisibleAgents(ctx, discovery);
+			const lines = agents.map((agent) => `- ${agent.name}: ${agent.description}`);
+			const scoutGuidance = agents.some((agent) => agent.name === "scout")
+				? "\n\nScout only for substantial multi-hop lookup that would flood parent context. Skip few known-path reads, single declaration lookups, or small digs with most evidence already in hand; use tools directly. When uncertain, dig yourself. Do not send code review, diagnosis, design, or other judgment work to scout."
+				: "";
+			const prompt = `## Subagents
 Use \`subagent\` only when an available agent's listed purpose matches the delegated work. Stay inside that purpose. Off-purpose calls are denied — for example, do not send code review to a lookup-only agent.
 
 Available agents for this turn:
@@ -217,7 +222,8 @@ Start a fresh thread with \`agent\` and \`task\`. Continue an existing thread wi
 Pass \`files\` when exact relevant files are already known. Tau autoreads current line-numbered snapshots into that child turn before it starts.
 
 Delegate one focused task per call. Children do not inherit parent messages. Include exact absolute reference paths when a child must inspect a repository outside the current working directory.${scoutGuidance}`;
-		return { systemPrompt: `${event.systemPrompt}\n\n${prompt}` };
+			return prompt;
+		},
 	});
 	const resolveFreshSubagentDefinition = async (ctx: ExtensionContext, agent: string) => {
 		const discovery = await discoverAgents(ctx.cwd, ctx.isProjectTrusted());

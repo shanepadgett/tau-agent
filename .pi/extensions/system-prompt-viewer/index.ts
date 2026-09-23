@@ -1,6 +1,6 @@
 import { type ExtensionAPI, keyText, type Theme, type ToolInfo } from "@earendil-works/pi-coding-agent";
 import { Box, Text } from "@earendil-works/pi-tui";
-import { setTauFooterItem } from "../../../packages/agent/shared/events.ts";
+import { onTauEventImmediately, setTauFooterItem } from "../../../packages/agent/shared/events.ts";
 
 const COMMAND = "system-prompt-viewer";
 const MESSAGE_TYPE = "tau.system-prompt-viewer.snapshot";
@@ -33,8 +33,8 @@ export default function systemPromptViewer(pi: ExtensionAPI): void {
 		});
 	}
 
-	pi.registerMessageRenderer(MESSAGE_TYPE, (message, { expanded }, theme) =>
-		renderSnapshot(detailsContent(message.details), expanded, theme),
+	pi.registerEntryRenderer(MESSAGE_TYPE, (entry, { expanded }, theme) =>
+		renderSnapshot(detailsContent(entry.data), expanded, theme),
 	);
 
 	pi.registerCommand(COMMAND, {
@@ -46,29 +46,20 @@ export default function systemPromptViewer(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.on("agent_start", (_event, ctx) => {
+	onTauEventImmediately(pi, "system-prompt-viewer", "tau:prompt.snapshot", ({ text }) => {
 		if (!enabled) return;
 		const activeTools = new Set(pi.getActiveTools());
-		pi.sendMessage({
-			customType: MESSAGE_TYPE,
-			content: "",
-			display: true,
-			details: {
-				content: formatSnapshot(
-					ctx.getSystemPrompt(),
-					pi.getAllTools().filter((tool) => activeTools.has(tool.name)),
-				),
-			} satisfies SnapshotDetails,
-		});
+		pi.appendEntry(MESSAGE_TYPE, {
+			content: formatSnapshot(
+				text,
+				pi.getAllTools().filter((tool) => activeTools.has(tool.name)),
+			),
+		} satisfies SnapshotDetails);
 	});
-
-	pi.on("context", (event) => ({
-		messages: event.messages.filter((message) => message.role !== "custom" || message.customType !== MESSAGE_TYPE),
-	}));
 
 	pi.on("session_before_tree", (event, ctx) => {
 		const entry = ctx.sessionManager.getEntry(event.preparation.targetId);
-		if (entry?.type === "custom_message" && entry.customType === MESSAGE_TYPE) return { cancel: true };
+		if (entry?.type === "custom" && entry.customType === MESSAGE_TYPE) return { cancel: true };
 	});
 
 	pi.on("session_shutdown", () => {

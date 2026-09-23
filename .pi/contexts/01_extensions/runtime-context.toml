@@ -1,18 +1,15 @@
 name = "Runtime Context"
-description = "Inject local display date and a frozen depth-2 root snapshot into each agent run system prompt"
+description = "Register Soul's runtime environment source with a local display date and frozen depth-2 root snapshot"
 
 [extension-shell]
-description = "Freeze runtime context once on session_start; on before_agent_start append current display date and the frozen root snapshot to the system prompt"
+description = "Register the runtime environment source; Soul captures the current display date and root snapshot in its baseline and refreshes them after compaction"
 read = [
   "packages/agent/extensions/runtime-context/index.ts",
+  "packages/agent/shared/prompt-contributions.ts",
+  "packages/agent/shared/events.ts",
   "packages/agent/extensions/runtime-context/README.md",
 ]
-show = [
-  { path = "packages/agent/extensions/runtime-context/context.ts", name = "freezeRuntimeContext" },
-  { path = "packages/agent/extensions/runtime-context/context.ts", name = "formatLocalDisplayDate" },
-  { path = "packages/agent/extensions/runtime-context/context.ts", name = "formatRuntimeContextMessage" },
-  { path = "packages/agent/extensions/runtime-context/context.ts", name = "RuntimeContext", view = "declaration" },
-]
+show = []
 outline = []
 references = [
   "packages/agent/extensions/runtime-context/context.ts",
@@ -20,7 +17,7 @@ references = [
 ]
 
 [snapshot]
-description = "Depth-2 root listing with git check-ignore and always-hidden .git, 300-path cap with ellipsis, freeze cwd and paths, format display date and system-prompt message; date-key and snapshot fingerprint helpers"
+description = "Build the depth-2 root listing and display-date text supplied by the runtime environment prompt source"
 read = [
   "packages/agent/extensions/runtime-context/context.ts",
 ]

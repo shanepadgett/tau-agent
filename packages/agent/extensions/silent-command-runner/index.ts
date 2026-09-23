@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { type ExecResult, type ExtensionAPI, keyText, type Theme } from "@earendil-works/pi-coding-agent";
 import { Box, Text } from "@earendil-works/pi-tui";
 import { emitTauEvent } from "../../shared/events.ts";
+import { registerPromptSource } from "../../shared/prompt-contributions.ts";
 import { matchGlob, posixPath } from "../../shared/glob.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { resolveProjectRoot } from "../../shared/settings/paths.ts";
@@ -106,10 +107,15 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		attentionHoldId = undefined;
 	});
 
-	pi.on("before_agent_start", async (event, ctx) => {
-		settings = normalizeSettings(await loadTauExtensionSettings(ctx, silentCommandRunnerSettings));
-		if (!settings.enabled || settings.commands.length === 0) return undefined;
-		return { systemPrompt: `${event.systemPrompt}\n\n${formatSilentCheckPrompt(settings.commands)}` };
+	registerPromptSource(pi, {
+		key: "checks/instructions",
+		section: "automatic-checks",
+		refresh: "append",
+		async read(ctx) {
+			settings = normalizeSettings(await loadTauExtensionSettings(ctx, silentCommandRunnerSettings));
+			if (!settings.enabled || settings.commands.length === 0) return "";
+			return formatSilentCheckPrompt(settings.commands);
+		},
 	});
 
 	pi.on("agent_start", async (_event, ctx) => {

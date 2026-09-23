@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { Markdown, type Component, visibleWidth } from "@earendil-works/pi-tui";
+import { registerPromptSource } from "../../shared/prompt-contributions.ts";
 
 const TAU_DOCS_PATH = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "docs");
 const TAU_DOCS_GUIDANCE = `Tau Agent documentation (read only when the user asks about Tau Agent, Rok, Tau extensions, Tau event APIs, harness behavior, or extending Tau Agent):
@@ -54,9 +55,14 @@ class TauHelpMessage implements Component {
 }
 
 export default function tauHelpExtension(pi: ExtensionAPI): void {
-	pi.on("before_agent_start", (event) => ({
-		systemPrompt: `${event.systemPrompt}\n\n${TAU_DOCS_GUIDANCE}`,
-	}));
+	registerPromptSource(pi, {
+		key: "tau/documentation",
+		section: "documentation",
+		refresh: "compaction",
+		async read() {
+			return TAU_DOCS_GUIDANCE;
+		},
+	});
 
 	pi.registerMessageRenderer("tau-help", (message, _options, _theme) => {
 		if (typeof message.content !== "string") return undefined;

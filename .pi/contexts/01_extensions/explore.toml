@@ -2,12 +2,14 @@ name = "Explore"
 description = "Structural source inspection through in-process tree-sitter WASM"
 
 [extension-runtime]
-description = "Wire Explore tools, session caches, mutation invalidation, read settings, and workspace guidance"
+description = "Wire Explore tools, session caches, mutation invalidation, read settings, and its Soul tool-guidance source"
 read = [
   "packages/agent/extensions/explore/index.ts",
   "packages/agent/extensions/explore/README.md",
   "packages/agent/extensions/explore/guidance.ts",
   "packages/agent/extensions/explore/settings.ts",
+  "packages/agent/shared/prompt-contributions.ts",
+  "packages/agent/shared/events.ts",
   "packages/agent/src/ast/session.ts",
   "packages/agent/shared/tool-row-state.ts",
 ]
@@ -20,7 +22,6 @@ show = [
 outline = []
 references = [
   "packages/agent/shared/temporary-output-store.ts",
-  "packages/agent/shared/events.ts",
   "packages/agent/shared/settings/load.ts",
   "packages/agent/src/file-injection/index.ts",
   "packages/agent/src/ast/engine.ts",

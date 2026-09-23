@@ -9,7 +9,7 @@ interface SnapshotEntry {
 	path: string;
 }
 
-export interface RuntimeContext {
+interface RuntimeContext {
 	cwd: string;
 	rootSnapshot: readonly string[];
 }

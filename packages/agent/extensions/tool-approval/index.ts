@@ -8,6 +8,7 @@ import {
 import { Marker } from "@shanepadgett/tau-tui";
 import { Type } from "typebox";
 import { emitAgentBlocked } from "../../shared/agent-blocked.ts";
+import { registerPromptSource } from "../../shared/prompt-contributions.ts";
 import { generateToolValidated, resolveCandidates } from "../../shared/model-fallback/index.ts";
 import { errorText, truncAt } from "../../shared/text.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
@@ -102,18 +103,21 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 		await refreshSettings(ctx);
 	});
 
-	pi.on("before_agent_start", async (event, ctx) => {
-		await refreshSettings(ctx);
-		if (!settings.enabled) return undefined;
-		return {
-			systemPrompt: `${event.systemPrompt}\n\n${[
+	registerPromptSource(pi, {
+		key: "approval/instructions",
+		section: "tool-approval",
+		refresh: "append",
+		async read(ctx) {
+			await refreshSettings(ctx);
+			if (!settings.enabled) return "";
+			return [
 				"Known-safe read-only bash commands skip review.",
 				"Other bash and every script_runner request are reviewed by a separate safety classifier before execution.",
 				"Treat classifier approval as a gate, not as permission to hide command intent from the user.",
 				"Routine local development requests can be approved automatically.",
 				"Requests with destructive, system, production, privileged, or security-sensitive effects require human confirmation.",
-			].join("\n")}`,
-		};
+			].join("\n");
+		},
 	});
 
 	pi.on("tool_call", async (event, ctx) => {

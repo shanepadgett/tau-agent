@@ -94,7 +94,7 @@ Shows a compact display-only marker after each run with wall time and model cost
 
 ## runtime-context
 
-Supplies the agent with the current local date and an initial root directory snapshot as hidden session context.
+Supplies Soul with the local date and root directory snapshot. Both remain fixed across turns, reload, and resume, and refresh after successful compaction.
 
 ## script-runner
 
@@ -106,7 +106,7 @@ Runs configured commands while keeping their output out of agent context when th
 
 ## soul
 
-Adds the baseline Tau system prompt on every session: communication style, operating model, and code style. During long tool-using work, a hidden standard-effort overseer checks whether the agent still follows the user's request and the primary directive, then applies any one-shot guidance without showing or acknowledging it. Set `extensions.soul.overseer.enabled` to turn this check on or off and `extensions.soul.overseer.toolCallInterval` to change the default 20-tool interval.
+Supplies Tau's communication, discussion, planning, execution, and coding instructions. Saves a prompt baseline across turns, reload, and resume; refreshes it after successful compaction. Operational changes arrive as saved context updates without rewriting earlier instructions. Tool groups that cannot load without changing the cached prefix wait for successful compaction.
 
 ## stash
 
@@ -130,7 +130,7 @@ Reviews agent `bash` and `script_runner` requests before they run. Common read-o
 
 ## tool-loader
 
-Progressively exposes registered specialist tool groups through `load_tools`. Tau registers `web`, `image`, and `appshot`; project or global package extensions can add groups with `registerDeferredToolGroup()` from `@shanepadgett/tau-agent`. Supported providers can preserve more prompt-cache reuse.
+Progressively exposes registered specialist tool groups through `load_tools`. Tau registers `web`, `image`, and `appshot`; project or global package extensions can add groups with `registerDeferredToolGroup()` from `@shanepadgett/tau-agent`. Compatible models load tools without replacing the cached prefix. Otherwise, requested groups are queued until successful compaction; loading never triggers compaction automatically.
 
 ## web
 

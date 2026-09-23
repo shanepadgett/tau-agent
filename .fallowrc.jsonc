@@ -45,6 +45,8 @@
 		"packages/agent/shared/injected-context.ts",
 		"packages/agent/src/ast/languages/fixtures/**",
 		"docs/plans/explore-archive/**",
+		// Standalone offline investigation of installed Pi internals, not application code.
+		"docs/plans/soul-request-check.mjs",
 		"packages/agent/native-bin/**",
 		".fallow/**"
 	],

@@ -1,12 +1,14 @@
 name = "Subagent"
-description = "Delegation to isolated child Tau sessions with retained threads and live progress"
+description = "Delegation to isolated child Tau sessions with retained threads, live progress, and Soul availability guidance"
 
 [extension-shell]
-description = "Register the subagent tool, session disable state, /agents command, parent prompt injection, dashboard lifecycle, and settings"
+description = "Register the subagent tool, session disable state, /agents command, Soul availability source, dashboard lifecycle, and settings"
 read = [
   "packages/agent/extensions/subagent/index.ts",
   "packages/agent/extensions/subagent/settings.ts",
   "packages/agent/extensions/subagent/README.md",
+  "packages/agent/shared/prompt-contributions.ts",
+  "packages/agent/shared/events.ts",
 ]
 show = [
   { path = "packages/agent/shared/settings/load.ts", name = "loadTauExtensionSettings" },

@@ -1,59 +1,46 @@
 name = "Soul"
-description = "Always-on baseline prompt, primary-directive oversight, and Soul settings"
+description = "Capture and replay Soul's saved prompt baseline and updates, collect runtime prompt sources, and enforce cache-safe tool admission"
 
-[prompt-runtime]
-description = "Maintain the always-on communication, operating-model, and code-style prompt appended before each agent start"
+[prompt-lifecycle]
+description = "Capture the sorted system-prompt baseline, persist source updates across compaction, replay the saved prefix, and reject unsafe tool or history changes"
 read = [
   "packages/agent/extensions/soul/index.ts",
+  "packages/agent/extensions/soul/context.ts",
+  "packages/agent/extensions/soul/state.ts",
+  "packages/agent/extensions/soul/tools.ts",
   "packages/agent/extensions/soul/prompt.ts",
+  "packages/agent/extensions/soul/README.md",
+  "packages/agent/shared/prompt-contributions.ts",
+  "packages/agent/shared/events.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/runtime-context/index.ts",
+  "packages/agent/extensions/explore/guidance.ts",
+  "packages/agent/extensions/tau-help/index.ts",
+  "packages/agent/extensions/subagent/index.ts",
+  "packages/agent/extensions/silent-command-runner/index.ts",
+  "packages/agent/extensions/tool-approval/index.ts",
+  "packages/agent/extensions/tool-loader/index.ts",
+]
+
+[source-collection]
+description = "Register, validate, read, sort, and render extension-owned prompt sources for Soul baseline capture and append-only updates"
+read = [
+  "packages/agent/extensions/soul/index.ts",
+  "packages/agent/extensions/soul/context.ts",
+  "packages/agent/shared/prompt-contributions.ts",
+  "packages/agent/shared/events.ts",
   "packages/agent/extensions/soul/README.md",
 ]
 show = []
 outline = []
 references = [
-  "packages/agent/extensions/soul/overseer.ts",
-  "packages/agent/extensions/tau-help/help.md",
-]
-
-[overseer-runtime]
-description = "Run hidden primary-directive reviews during long tool-using work and apply one-shot guidance without interrupting the working agent"
-read = [
-  "packages/agent/extensions/soul/index.ts",
-  "packages/agent/extensions/soul/overseer.ts",
-  "packages/agent/extensions/soul/settings.ts",
-  "packages/agent/extensions/soul/prompt.ts",
-  "packages/agent/extensions/soul/README.md",
-  "packages/agent/shared/settings/load.ts",
-  "packages/agent/shared/settings/define.ts",
-  "packages/agent/shared/settings/json.ts",
-  "packages/agent/shared/settings/merge.ts",
-  "packages/agent/shared/settings/paths.ts",
-  "packages/agent/shared/text.ts",
-  "docs/standards/agent-runtime.md",
-]
-show = [
-  { path = "packages/agent/shared/model-effort.ts", name = "resolveEffortCandidates" },
-  { path = "packages/agent/shared/model-fallback/index.ts", name = "generateToolValidated" },
-]
-outline = []
-references = [
-  "packages/agent/shared/model-effort.ts",
-  "packages/agent/shared/model-fallback/index.ts",
-  "packages/agent/extensions/tau-help/help.md",
-]
-
-[settings]
-description = "Declare Soul overseer enablement and the number of unreviewed tool calls before each review"
-read = [
-  "packages/agent/extensions/soul/settings.ts",
-  "packages/agent/extensions/soul/README.md",
-  "packages/agent/shared/settings/define.ts",
-]
-show = []
-outline = []
-references = [
-  "packages/agent/extensions/soul/overseer.ts",
-  "packages/agent/extensions/tau-help/help.md",
-  "packages/agent/schemas/tau.schema.json",
-  "packages/agent/scripts/generate-tau-schema.ts",
+  "packages/agent/extensions/runtime-context/index.ts",
+  "packages/agent/extensions/explore/guidance.ts",
+  "packages/agent/extensions/tau-help/index.ts",
+  "packages/agent/extensions/subagent/index.ts",
+  "packages/agent/extensions/silent-command-runner/index.ts",
+  "packages/agent/extensions/tool-approval/index.ts",
 ]

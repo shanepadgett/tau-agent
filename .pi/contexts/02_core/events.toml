@@ -1,26 +1,30 @@
 name = "Events"
-description = "Tau event contracts and shared event-backed coordination"
+description = "Tau event contracts and shared event-backed coordination, including internal Soul prompt and tool-load checks"
 
 [contracts]
-description = "Typed shared event names and payloads"
-read = []
-outline = ["packages/agent/shared/events.ts"]
+description = "Maintain typed public and internal event names and payloads for prompt sources, Soul snapshots, tool checks, file mutation, and UI coordination"
+read = ["packages/agent/shared/events.ts"]
+show = []
+outline = []
 references = ["packages/agent/docs/extending-tau-agent.md"]
 
 [review-context]
 description = "Hidden review injections and branch reconstruction for session naming"
 read = []
+show = []
 outline = ["packages/agent/shared/injected-context.ts"]
 references = []
 
 [agent-blocking]
 description = "Blocked-agent notices over the shared event API"
 read = []
+show = []
 outline = ["packages/agent/shared/agent-blocked.ts"]
 references = []
 
 [tool-row-state]
 description = "Persistent tool-row expansion state and rendering integration"
 read = []
+show = []
 outline = ["packages/agent/shared/tool-row-state.ts"]
 references = []
