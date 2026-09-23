@@ -12,23 +12,6 @@
 		"extensions": {
 			"type": "object",
 			"properties": {
-				"autoCompact": {
-					"type": "object",
-					"properties": {
-						"enabled": {
-							"type": "boolean",
-							"default": true,
-							"description": "Enable automatic compaction when context reaches the token limit."
-						},
-						"tokenLimit": {
-							"type": "integer",
-							"minimum": 1,
-							"default": 175000,
-							"description": "Absolute context-token count that triggers compaction before the next model turn."
-						}
-					},
-					"additionalProperties": false
-				},
 				"context": {
 					"type": "object",
 					"properties": {

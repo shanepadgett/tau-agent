@@ -2,7 +2,7 @@ import { readdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { type ExecResult, type ExtensionAPI, keyText, type Theme } from "@earendil-works/pi-coding-agent";
 import { Box, Text } from "@earendil-works/pi-tui";
-import { emitTauEvent, onTauEvent } from "../../shared/events.ts";
+import { emitTauEvent } from "../../shared/events.ts";
 import { matchGlob, posixPath } from "../../shared/glob.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { resolveProjectRoot } from "../../shared/settings/paths.ts";
@@ -84,15 +84,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	let chainActive = false;
 	let attentionHoldSequence = 0;
 	let attentionHoldId: string | undefined;
-	const checkPauses = new Set<string>();
-	let settleDeferred = false;
-
-	function checksPaused(): boolean {
-		return checkPauses.size > 0;
-	}
 
 	function finalizeChain(): void {
-		settleDeferred = false;
 		chainActive = false;
 		const holdId = attentionHoldId;
 		attentionHoldId = undefined;
@@ -103,21 +96,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		renderFailure(asFailureDetails(message.details), expanded, theme),
 	);
 
-	onTauEvent(pi, "silent-command-runner.pause", "tau:silent-command-runner.pause", ({ id }) => {
-		checkPauses.add(id);
-	});
-
-	onTauEvent(pi, "silent-command-runner.resume", "tau:silent-command-runner.resume", ({ id, disposition }) => {
-		checkPauses.delete(id);
-		if (checksPaused()) return;
-		if (disposition === "continue") {
-			// Compact will start a new agent run on the same work chain; keep baseline + hold.
-			settleDeferred = false;
-			return;
-		}
-		if (settleDeferred || chainActive) finalizeChain();
-	});
-
 	pi.on("session_start", async (_event, ctx) => {
 		settings = normalizeSettings(await loadTauExtensionSettings(ctx, silentCommandRunnerSettings));
 		sessionActive = true;
@@ -126,8 +104,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		chainActive = false;
 		attentionHoldSequence = 0;
 		attentionHoldId = undefined;
-		checkPauses.clear();
-		settleDeferred = false;
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
@@ -139,7 +115,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	pi.on("agent_start", async (_event, ctx) => {
 		const startingChain = !chainActive;
 		chainActive = true;
-		settleDeferred = false;
 		if (!settings.enabled || settings.commands.length === 0) {
 			if (startingChain) {
 				turnStart = Date.now();
@@ -156,7 +131,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("agent_end", async (event, ctx) => {
-		if (checksPaused()) return;
 		if (hasAbortedAssistantMessage(event.messages)) return;
 		try {
 			await runChangedCommands(ctx.cwd, turnStart, ctx.ui.notify);
@@ -165,14 +139,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		}
 	});
 
-	pi.on("agent_settled", () => {
-		if (checksPaused()) {
-			// Compact aborted this run; keep chain + file baseline until resume.
-			settleDeferred = true;
-			return;
-		}
-		finalizeChain();
-	});
+	pi.on("agent_settled", finalizeChain);
 
 	pi.on("session_shutdown", () => {
 		sessionActive = false;
@@ -181,8 +148,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		turnPaths = new Set();
 		chainActive = false;
 		attentionHoldId = undefined;
-		checkPauses.clear();
-		settleDeferred = false;
 	});
 
 	async function collectCommandFailures(

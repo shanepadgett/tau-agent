@@ -12,15 +12,11 @@ Adds `/aside <question>` for a one-off question to the current model without put
 
 ## attention
 
-Shows attention state when Tau needs the user to look at the chat, finishes a manual compaction, or summarizes an abandoned branch. Automatic compaction stays quiet until its resumed work settles.
+Shows attention state when Tau needs the user to look at the chat, finishes a compaction, or summarizes an abandoned branch.
 
 ## auto-name
 
 Names sessions from their first request so saved sessions remain findable.
-
-## auto-compact
-
-Uses Pi's native compaction before a model turn when the current context reaches `extensions.autoCompact.tokenLimit`, which defaults to 175,000 tokens for every model. Set `extensions.autoCompact.enabled` to `false` to disable it. Interrupted work resumes through a hidden continuation message without an attention alert until the resumed work settles. Pi's native collapsed compaction entry remains visible in chat.
 
 ## branch
 

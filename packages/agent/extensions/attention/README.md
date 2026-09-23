@@ -1,6 +1,6 @@
 # Attention
 
-Sends a terminal-driven attention notification when Tau is ready for input, finishes a compaction without an automatic continuation, or summarizes an abandoned branch during tree navigation.
+Sends a terminal-driven attention notification when Tau is ready for input, finishes a compaction, or summarizes an abandoned branch during tree navigation.
 
 ## Behavior
 
