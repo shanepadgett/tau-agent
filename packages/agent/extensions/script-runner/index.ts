@@ -169,7 +169,6 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 	const langPhrase = formatLangList(detected);
 
 	const scripts = new Map<string, StoredScript>();
-	let tempDir: string | undefined;
 
 	function remember(scriptId: string, script: StoredScript): void {
 		scripts.set(scriptId, script);
@@ -190,12 +189,6 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 		throw new Error("Deno is not available on this machine.");
 	}
 
-	async function ensureTempDir(): Promise<string> {
-		if (tempDir) return tempDir;
-		tempDir = await mkdtemp(join(tmpdir(), "tau-script-runner-"));
-		return tempDir;
-	}
-
 	async function runScript(
 		language: Language,
 		command: string,
@@ -203,21 +196,27 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 		cwd: string,
 		signal: AbortSignal | undefined,
 	): Promise<ExecResult> {
-		const dir = await ensureTempDir();
-		const file = join(dir, language === "python3" ? "_run.py" : "_run.ts");
-		await writeFile(file, source, "utf8");
-		const args =
-			language === "python3"
-				? [file]
-				: language === "node"
-					? ["--experimental-strip-types", file]
-					: ["run", "-A", file];
-		const result = await pi.exec(command, args, { cwd, signal, timeout: TIMEOUT_MS });
-		return {
-			...result,
-			stdout: scrubPath(result.stdout, file, dir),
-			stderr: scrubPath(result.stderr, file, dir),
-		};
+		const dir = await mkdtemp(join(tmpdir(), "tau-script-runner-"));
+		try {
+			const file = join(dir, language === "python3" ? "_run.py" : "_run.ts");
+			await writeFile(file, source, "utf8");
+			const args =
+				language === "python3"
+					? [file]
+					: language === "node"
+						? ["--experimental-strip-types", file]
+						: ["run", "-A", file];
+			const result = await pi.exec(command, args, { cwd, signal, timeout: TIMEOUT_MS });
+			return {
+				...result,
+				stdout: scrubPath(result.stdout, file, dir),
+				stderr: scrubPath(result.stderr, file, dir),
+			};
+		} finally {
+			await rm(dir, { recursive: true, force: true }).catch(() => {
+				// best-effort cleanup
+			});
+		}
 	}
 
 	const paramsSchema = Type.Object(
@@ -315,12 +314,5 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 
 	pi.on("session_shutdown", () => {
 		scripts.clear();
-		const dir = tempDir;
-		tempDir = undefined;
-		if (dir) {
-			void rm(dir, { recursive: true, force: true }).catch(() => {
-				// best-effort cleanup
-			});
-		}
 	});
 }

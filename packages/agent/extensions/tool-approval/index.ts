@@ -17,6 +17,7 @@ import toolApprovalSettings from "./settings.ts";
 
 const STATUS_KEY = "tool-approval";
 const AUTO_APPROVED_TYPE = "tau.tool-approval.auto-approved";
+const MAX_CONCURRENT_REVIEWS = 3;
 
 const REVIEW_SCHEMA = Type.Object(
 	{
@@ -75,6 +76,13 @@ interface ToolApprovalRequest {
 	input: Record<string, unknown>;
 }
 
+type ToolReviewResult = { review: ToolReview; provider: string; model: string };
+
+interface CachedReview {
+	requestJson: string;
+	outcome: PromiseSettledResult<ToolReviewResult>;
+}
+
 interface AutoApprovedMarker {
 	toolName: ApprovalToolName;
 	provider: string;
@@ -83,6 +91,7 @@ interface AutoApprovedMarker {
 
 export default function toolApprovalExtension(pi: ExtensionAPI): void {
 	let settings = toolApprovalSettings.defaults;
+	let batchReviews: Map<string, CachedReview> | undefined;
 	const pendingNotes = new Map<string, string>();
 
 	pi.registerEntryRenderer<AutoApprovedMarker>(AUTO_APPROVED_TYPE, (entry, _options, theme) => {
@@ -136,6 +145,7 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 	}
 
 	pi.on("session_start", async (_event, ctx) => {
+		batchReviews = undefined;
 		pendingNotes.clear();
 		await refreshSettings(ctx);
 	});
@@ -152,21 +162,32 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 		}
 		if (!settings.enabled) return undefined;
 
-		let command: string | undefined;
 		if (request.toolName === "bash") {
-			const value = request.input.command;
-			if (typeof value !== "string") return block("bash command was malformed");
-			if (!value.trim()) {
+			const command = request.input.command;
+			if (typeof command !== "string") return block("bash command was malformed");
+			if (!command.trim()) {
 				ctx.ui.notify("Bash command blocked: command is empty", "warning");
 				return block("bash command is empty");
 			}
-			command = value;
 			if (isAllowlistedBash(command)) return undefined;
 		}
 
 		ctx.ui.setStatus(STATUS_KEY, `reviewing ${toolLabel(request.toolName)}`);
 		try {
-			const { review, provider, model } = await reviewToolRequest(ctx, request);
+			batchReviews ??= await reviewAssistantRequests(ctx, event, request);
+			if (ctx.signal?.aborted) return block("Tool review cancelled");
+			const cached = batchReviews.get(event.toolCallId);
+			batchReviews.delete(event.toolCallId);
+			let result: ToolReviewResult;
+			if (cached && cached.requestJson === JSON.stringify(request)) {
+				if (cached.outcome.status === "rejected") throw cached.outcome.reason;
+				result = cached.outcome.value;
+			} else {
+				// A sibling's validated input may differ from its arguments in the assistant message.
+				result = await reviewToolRequest(ctx, request);
+			}
+			if (ctx.signal?.aborted) return block("Tool review cancelled");
+			const { review, provider, model } = result;
 			if (review.decision === "requires_user_approval") {
 				return requestToolApproval(
 					ctx,
@@ -192,6 +213,7 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 				formatApproval(review.summary, "Automatic approval is disabled."),
 			);
 		} catch (error) {
+			if (ctx.signal?.aborted) return block("Tool review cancelled");
 			const message = singleLine(errorText(error));
 			ctx.ui.notify(`Tool review failed; manual approval required: ${truncAt(message, 600)}`, "warning");
 			return requestToolApproval(
@@ -204,6 +226,10 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 		} finally {
 			ctx.ui.setStatus(STATUS_KEY, undefined);
 		}
+	});
+
+	pi.on("turn_end", () => {
+		batchReviews = undefined;
 	});
 
 	pi.on("tool_result", (event) => {
@@ -222,10 +248,12 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("agent_end", () => {
+		batchReviews = undefined;
 		pendingNotes.clear();
 	});
 
 	pi.on("session_shutdown", (_event, ctx) => {
+		batchReviews = undefined;
 		pendingNotes.clear();
 		ctx.ui.setStatus(STATUS_KEY, undefined);
 	});
@@ -252,10 +280,49 @@ function autoApprovedMarker(value: unknown): AutoApprovedMarker | undefined {
 	return { toolName: record.toolName, provider: record.provider, model: record.model };
 }
 
-async function reviewToolRequest(
+async function reviewAssistantRequests(
 	ctx: ExtensionContext,
-	request: ToolApprovalRequest,
-): Promise<{ review: ToolReview; provider: string; model: string }> {
+	event: ToolCallEvent,
+	currentRequest: ToolApprovalRequest,
+): Promise<Map<string, CachedReview>> {
+	const reviews = new Map<string, CachedReview>();
+	const assistant = ctx.sessionManager
+		.getBranch()
+		.reverse()
+		.find((entry) => entry.type === "message" && entry.message.role === "assistant");
+	if (!assistant || assistant.type !== "message" || assistant.message.role !== "assistant") return reviews;
+	if (
+		!assistant.message.content.some(
+			(part) => part.type === "toolCall" && part.id === event.toolCallId && part.name === currentRequest.toolName,
+		)
+	)
+		return reviews;
+
+	const requests = assistant.message.content.flatMap((part) => {
+		if (part.type !== "toolCall" || (part.name !== "bash" && part.name !== "script_runner")) return [];
+		const request: ToolApprovalRequest = {
+			toolName: part.name,
+			input: part.id === event.toolCallId ? currentRequest.input : part.arguments,
+		};
+		if (request.toolName === "bash") {
+			const command = request.input.command;
+			if (typeof command !== "string" || !command.trim() || isAllowlistedBash(command)) return [];
+		}
+		return [{ toolCallId: part.id, request, requestJson: JSON.stringify(request) }];
+	});
+
+	for (let index = 0; index < requests.length && !ctx.signal?.aborted; index += MAX_CONCURRENT_REVIEWS) {
+		const group = requests.slice(index, index + MAX_CONCURRENT_REVIEWS);
+		const outcomes = await Promise.allSettled(group.map((item) => reviewToolRequest(ctx, item.request)));
+		for (const [offset, item] of group.entries()) {
+			const outcome = outcomes[offset];
+			if (outcome) reviews.set(item.toolCallId, { requestJson: item.requestJson, outcome });
+		}
+	}
+	return reviews;
+}
+
+async function reviewToolRequest(ctx: ExtensionContext, request: ToolApprovalRequest): Promise<ToolReviewResult> {
 	const requestJson = JSON.stringify(request);
 	const reviewer = REVIEW_MODELS.find((item) => item.provider === ctx.model?.provider);
 	const preferred = reviewer ? [reviewer] : [];
