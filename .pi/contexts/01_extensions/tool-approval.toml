@@ -29,7 +29,6 @@ outline = []
 references = [
   "packages/agent/extensions/tool-approval/allowlist.ts",
   "packages/agent/shared/model-fallback/index.ts",
-  "packages/agent/shared/events.ts",
   "packages/agent/extensions/tau-help/help.md",
 ]
 

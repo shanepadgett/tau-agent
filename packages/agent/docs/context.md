@@ -73,4 +73,4 @@ Do not store raw line ranges in the catalog — they drift. `show` stores durabl
 
 Inspect the existing catalog before placing new paths. Re-evaluate domain, concept, and entry boundaries after moves, ownership changes, or a coherent batch of new work; avoid stuffing paths into the nearest existing bucket.
 
-Run `/context-sync` to update the catalog from uncommitted repository changes (editor is replaced until it finishes; Escape or Ctrl+C cancels). Tau can also delegate to the `context-sync` subagent when automation is enabled. The agent uses normal repo tools, checks every eligible changed file for membership, removes stale paths, and re-evaluates taxonomy and work-pack quality (including `read` / `show` / `outline` / `references`) before editing `.pi/contexts`. Nudge with `/context-sync <note>` when you want a quality rewrite of weak bags, not only dirty-path coverage.
+Edit the TOML files in `.pi/contexts` when code or work scopes change. `/context` reads the current catalog when opened; selecting an entry injects its current files and declaration slices. The catalog is not generated or checked after agent turns.

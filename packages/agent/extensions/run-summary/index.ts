@@ -7,6 +7,9 @@ const ENTRY_TYPE = "tau.run-summary";
 interface RunSummary {
 	wallMs: number;
 	runCost: number;
+}
+
+interface PreviousRunSummary extends RunSummary {
 	subagentCost: number;
 	totalCost: number;
 }
@@ -14,7 +17,6 @@ interface RunSummary {
 export default function runSummaryExtension(pi: ExtensionAPI): void {
 	let startedAt: number | undefined;
 	let runCost = 0;
-	let subagentCost = 0;
 
 	pi.registerEntryRenderer<RunSummary>(ENTRY_TYPE, (entry, _options, theme) => {
 		const summary = readRunSummary(entry.data);
@@ -26,8 +28,9 @@ export default function runSummaryExtension(pi: ExtensionAPI): void {
 			parts: [
 				`Wall ${formatDuration(summary.wallMs)}`,
 				`Run ${formatCost(summary.runCost)}`,
-				`Subagents ${formatCost(summary.subagentCost)}`,
-				`Total ${formatCost(summary.totalCost)}`,
+				...("subagentCost" in summary
+					? [`Subagents ${formatCost(summary.subagentCost)}`, `Total ${formatCost(summary.totalCost)}`]
+					: []),
 			],
 		});
 	});
@@ -35,7 +38,6 @@ export default function runSummaryExtension(pi: ExtensionAPI): void {
 	pi.on("session_start", () => {
 		startedAt = undefined;
 		runCost = 0;
-		subagentCost = 0;
 	});
 
 	pi.on("agent_start", () => {
@@ -44,12 +46,7 @@ export default function runSummaryExtension(pi: ExtensionAPI): void {
 
 	pi.on("agent_end", (event) => {
 		for (const message of event.messages) {
-			if (message.role === "assistant") {
-				runCost += finiteNonNegative((message as AssistantMessage).usage.cost.total);
-				continue;
-			}
-			if (message.role !== "toolResult" || message.toolName !== "subagent") continue;
-			subagentCost += readUsageCost(message.usage);
+			if (message.role === "assistant") runCost += finiteNonNegative((message as AssistantMessage).usage.cost.total);
 		}
 	});
 
@@ -60,31 +57,27 @@ export default function runSummaryExtension(pi: ExtensionAPI): void {
 		pi.appendEntry<RunSummary>(ENTRY_TYPE, {
 			wallMs,
 			runCost,
-			subagentCost,
-			totalCost: runCost + subagentCost,
 		});
 		runCost = 0;
-		subagentCost = 0;
 	});
 }
 
-function readUsageCost(value: unknown): number {
-	if (!value || typeof value !== "object") return 0;
-	const cost = (value as Record<string, unknown>).cost;
-	if (!cost || typeof cost !== "object") return 0;
-	return finiteNonNegative((cost as Record<string, unknown>).total);
-}
-
-function readRunSummary(value: unknown): RunSummary | undefined {
+function readRunSummary(value: unknown): RunSummary | PreviousRunSummary | undefined {
 	if (!value || typeof value !== "object") return undefined;
 	const record = value as Record<string, unknown>;
-	if (![record.wallMs, record.runCost, record.subagentCost, record.totalCost].every(isFiniteNonNegative))
-		return undefined;
+	if (![record.wallMs, record.runCost].every(isFiniteNonNegative)) return undefined;
+	if ("subagentCost" in record || "totalCost" in record) {
+		if (![record.subagentCost, record.totalCost].every(isFiniteNonNegative)) return undefined;
+		return {
+			wallMs: record.wallMs as number,
+			runCost: record.runCost as number,
+			subagentCost: record.subagentCost as number,
+			totalCost: record.totalCost as number,
+		};
+	}
 	return {
 		wallMs: record.wallMs as number,
 		runCost: record.runCost as number,
-		subagentCost: record.subagentCost as number,
-		totalCost: record.totalCost as number,
 	};
 }
 

@@ -47,11 +47,10 @@ Any text that can reach the model via Pi/Tau surfaces this extension uses:
 - `tool_call` `{ block: true, reason }`
 - Final tool result only — ignore pure TUI `onUpdate` partials unless they become final `content`
 
-### Compaction / subagents
+### Compaction
 
 - `session_before_compact` summary
 - `session_before_tree` summary
-- Tau subagent def `description` + body; parent-visible subagent tool results; child task/files/prior-result injections this extension owns
 
 ### Easy to miss
 

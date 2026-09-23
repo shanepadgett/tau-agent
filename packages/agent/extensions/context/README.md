@@ -6,30 +6,7 @@ See [Context management](../../docs/context.md) for catalog structure and taxono
 
 Use `/context` to inject entries into the conversation. Selecting entries reads `read` paths in full, resolves `show` targets to current declaration slices, outlines `outline` paths, and adds one hidden note listing `references` and instructing the agent to treat the injected material as current. Injection happens once, immediately, before your next prompt; nothing is rebuilt on later model calls. Prefer complete reads for bounded work files; use `show` for thin contracts from larger neighbors; reserve `outline` for large or noisy files.
 
-After meaningful uncommitted work (new/moved ownership, not trivial already-covered polish), the coding agent should run the `context-sync` subagent so `.pi/contexts` stays aligned. Context sync catalogs durable code and long-lived documentation as **work packs** (job-shaped entries an agent can start from), not bare path indexes. Scratch pads, working plans, interviews, rough ideas, and other temporary artifacts should stay out; add recurring transient paths to `validation.ignoreGlobs`. Humans can also run `/context-sync` or `/context-sync <nudge>`; the command replaces the editor with a status panel (Escape / Ctrl+C cancel). It uses normal repo tools, walks domain → concept → entry → start-pack modes, and prefers `patch` under `.pi/contexts`. The harness verifies catalog coverage afterward. Optional nudge text soft-steers judgment (including quality rewrites of weak bags) without skipping the ladder or coverage.
-
-Sync surface is configurable:
-
-- `sync.enabled` (default true) — master switch. Off: no `/context-sync`, parent cannot call `context-sync`, validation does not auto-run sync.
-- `sync.automation` (default true) — when false with sync still enabled: manual `/context-sync` only (coding agent does not see context-sync). Validation auto-run still works if validation is enabled.
-- `validation.enabled` (default false) — after agent turns, check membership and auto-run context-sync on failure (requires `sync.enabled`).
-
-```json
-{
-  "extensions": {
-    "context": {
-      "sync": {
-        "enabled": true,
-        "automation": true
-      },
-      "validation": {
-        "enabled": true,
-        "ignoreGlobs": ["generated/**"]
-      }
-    }
-  }
-}
-```
+Edit `.pi/contexts` files to maintain the catalog. Keep entries as work packs for recurring jobs; leave scratch files and plans out of the catalog. `/context` reads current catalog files when opened.
 
 ```toml
 name = "Player"

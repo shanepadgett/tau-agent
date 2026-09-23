@@ -2,7 +2,6 @@ import { access, readFile, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { parse } from "smol-toml";
-import { matchGlob } from "../../shared/glob.ts";
 
 export type ContextShowView = "signature" | "signatureWithDocs" | "declaration" | "declarationWithImports";
 
@@ -27,26 +26,6 @@ export interface ContextEntry {
 	path: string;
 }
 
-const CONTEXT_IGNORED_FILENAMES = new Set([
-	"bun.lock",
-	"bun.lockb",
-	"Cargo.lock",
-	"composer.lock",
-	"flake.lock",
-	"Gemfile.lock",
-	"go.sum",
-	"mix.lock",
-	"npm-shrinkwrap.json",
-	"package-lock.json",
-	"Package.resolved",
-	"Pipfile.lock",
-	"pnpm-lock.yaml",
-	"Podfile.lock",
-	"poetry.lock",
-	"pubspec.lock",
-	"uv.lock",
-	"yarn.lock",
-]);
 const CONTEXT_ENTRY_FIELDS = new Set(["description", "read", "show", "outline", "references"]);
 const CONTEXT_SHOW_VIEWS = new Set<ContextShowView>([
 	"signature",
@@ -56,28 +35,7 @@ const CONTEXT_SHOW_VIEWS = new Set<ContextShowView>([
 ]);
 const CONTEXT_SHOW_TARGET_FIELDS = new Set(["path", "name", "view"]);
 
-export function isContextEligiblePath(path: string, ignoreGlobs: readonly string[] = []): boolean {
-	return (
-		path !== "LICENSE" &&
-		!CONTEXT_IGNORED_FILENAMES.has(basename(path)) &&
-		!ignoreGlobs.some((glob) => matchGlob(glob, path)) &&
-		path !== ".pi/tau/ideas.jsonl" &&
-		path !== ".pi/tau/reviews" &&
-		!path.startsWith(".pi/tau/reviews/") &&
-		path !== ".working" &&
-		!path.startsWith(".working/") &&
-		path !== ".pi/contexts" &&
-		!path.startsWith(".pi/contexts/")
-	);
-}
-
-export function isSensitiveContextPath(path: string): boolean {
-	const name = basename(path);
-	if (name === ".env.example" || name === ".env.sample") return false;
-	return name === ".env" || name.startsWith(".env.") || /\.(?:pem|key|crt|p12|pfx)$/i.test(name);
-}
-
-export async function pathExists(path: string): Promise<boolean> {
+async function pathExists(path: string): Promise<boolean> {
 	try {
 		await access(path);
 		return true;
@@ -152,15 +110,6 @@ function normalizeProjectPath(root: string, input: string): string {
 
 function sortedUnique(values: readonly string[]): string[] {
 	return [...new Set(values)].sort((a, b) => a.localeCompare(b));
-}
-
-export function contextEntryPaths(entry: Pick<ContextEntry, "read" | "show" | "outline" | "references">): string[] {
-	return sortedUnique([
-		...entry.read,
-		...entry.show.map((target) => target.path),
-		...entry.outline,
-		...entry.references,
-	]);
 }
 
 function parseOneShowTarget(root: string, catalogPath: string, entryName: string, item: unknown): ContextShowTarget {

@@ -2,7 +2,7 @@ name = "Run Summary"
 description = "Post-turn run cost and wall-time marker in the transcript"
 
 [extension-runtime]
-description = "Accumulate assistant and subagent toolResult costs across agent_end; on agent_settled append display-only tau.run-summary entry with wall time, run cost, subagent cost, and total; Marker renderer; reset on session_start; entry never enters model context"
+description = "Accumulate assistant costs across agent_end; on agent_settled append display-only tau.run-summary entry with wall time and run cost; render historical delegated costs when present; reset on session_start; entry never enters model context"
 read = [
   "packages/agent/extensions/run-summary/index.ts",
   "packages/agent/extensions/run-summary/README.md",

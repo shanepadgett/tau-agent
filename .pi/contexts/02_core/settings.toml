@@ -11,4 +11,4 @@ references = [".pi/tau/settings.json", "packages/agent/shared/settings/json.ts",
 description = "Settings declarations, discovery, schema generation, synchronization, generated schema, and schema-sync documentation"
 read = []
 outline = [".pi/extensions/tau-schema-sync/index.ts", "packages/agent/shared/settings/define.ts", "packages/agent/shared/settings/schema.ts", "packages/agent/shared/settings/specs.ts"]
-references = [".pi/extensions/tau-schema-sync/README.md", "packages/agent/extensions/subagent/settings.ts", "packages/agent/schemas/tau.schema.json", "packages/agent/scripts/generate-tau-schema.ts"]
+references = [".pi/extensions/tau-schema-sync/README.md", "packages/agent/schemas/tau.schema.json", "packages/agent/scripts/generate-tau-schema.ts"]

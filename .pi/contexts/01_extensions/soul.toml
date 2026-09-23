@@ -19,7 +19,6 @@ references = [
   "packages/agent/extensions/runtime-context/index.ts",
   "packages/agent/extensions/explore/guidance.ts",
   "packages/agent/extensions/tau-help/index.ts",
-  "packages/agent/extensions/subagent/index.ts",
   "packages/agent/extensions/silent-command-runner/index.ts",
   "packages/agent/extensions/tool-approval/index.ts",
   "packages/agent/extensions/tool-loader/index.ts",
@@ -40,7 +39,6 @@ references = [
   "packages/agent/extensions/runtime-context/index.ts",
   "packages/agent/extensions/explore/guidance.ts",
   "packages/agent/extensions/tau-help/index.ts",
-  "packages/agent/extensions/subagent/index.ts",
   "packages/agent/extensions/silent-command-runner/index.ts",
   "packages/agent/extensions/tool-approval/index.ts",
 ]

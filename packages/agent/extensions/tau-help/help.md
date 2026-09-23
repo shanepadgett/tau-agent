@@ -42,7 +42,7 @@ Adds `/cost-report` to build an HTML spend report from local session usage. Pick
 
 ## context
 
-Adds `/context` to inject reusable repository work scopes from `.pi/contexts`, and `/context-sync` or `/context-sync <nudge>` for human-driven catalog sync. Selecting entries injects them once into the conversation: `read` paths as complete files, `show` targets as current declaration slices, `outline` paths as Explore structures, and one hidden note listing `references` plus instructions to treat the injected material as current. Run `/context` again to inject more. Manual sync replaces the editor with a status panel; Escape or Ctrl+C cancels. When `sync.automation` is on, coding agent can also run `context-sync` after meaningful uncommitted work. Sync catalogs durable code and long-lived documentation; recurring scratch, planning, interview, and rough-idea paths belong in `validation.ignoreGlobs`. `sync.enabled` is master switch for command, automation, and validation auto-run. Context validation is off by default; when on (and sync enabled), Tau auto-runs context-sync on failure. Domain folders are `NN_slug` tabs (ordered by the two-digit prefix; UI shows the slug), TOML files are concepts, and TOML sections are selectable entries.
+Adds `/context` to browse and inject reusable repository work scopes from `.pi/contexts`. Selecting entries injects them once into the conversation: `read` paths as complete files, `show` targets as current declaration slices, `outline` paths as Explore structures, and one hidden note listing `references` plus instructions to treat the injected material as current. Run `/context` again to inject more. Edit catalog files by hand when work scopes change. Domain folders are `NN_slug` tabs (ordered by the two-digit prefix; UI shows the slug), TOML files are concepts, and TOML sections are selectable entries.
 
 ## explore
 
@@ -111,10 +111,6 @@ Supplies Tau's communication, discussion, planning, execution, and coding instru
 ## stash
 
 Adds `Alt+S` to stash the current prompt draft and `/pop` to browse stashed drafts and put one back in the editor.
-
-## subagent
-
-Gives Tau a subagent delegation tool for isolated, focused work. Run `/agents` to enable or disable individual agents for the current session, or set `extensions.subagent.disabled` in Tau settings for a persistent choice. `scout` is substantial multi-hop local code lookup that would chew parent context; facts only, not small digs; `web-research` handles external research. Known files can be autoread as line-numbered snapshots into a fresh or retained child turn. Tau can continue a retained child thread when follow-up work depends on its prior reads and reasoning. You can also create your own subagents in supported subagent directories. Ask Tau how to do it and have it consult extension documentation; built-in agents show pattern. Each subagent can register its own model, tools, and pool of display names. Reused pool names get numeric suffixes. In interactive cmux sessions, Tau opens one temporary Markdown dashboard for live subagent progress; it does not change how children run and closes shortly after active cohort finishes.
 
 ## tau-help
 

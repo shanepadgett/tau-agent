@@ -2,13 +2,8 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { prepareFileInjection } from "@shanepadgett/tau-agent";
-import { createGitRunner, loadRepoStatus } from "../../shared/git.ts";
-import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { findProjectRoot, loadContextEntries, type ContextEntry, type ContextShowTarget } from "./definitions.ts";
-import { ContextPanel, ContextSyncStatusPanel } from "./panel.ts";
-import contextSettings from "./settings.ts";
-import { type ContextSyncDetails, runContextSync } from "./sync.ts";
-import { formatContextValidationFailure, validateContextCatalog } from "./validation.ts";
+import { ContextPanel } from "./panel.ts";
 
 const CONTEXT_BRIEF_TYPE = "tau.context.brief";
 
@@ -103,91 +98,7 @@ async function injectSelectedContext(
 	}
 }
 
-function hasAbortedAssistant(messages: readonly unknown[]): boolean {
-	return messages.some(
-		(message) =>
-			typeof message === "object" &&
-			message !== null &&
-			"role" in message &&
-			message.role === "assistant" &&
-			"stopReason" in message &&
-			message.stopReason === "aborted",
-	);
-}
-
-async function handleAgentEndValidation(
-	pi: ExtensionAPI,
-	ctx: ExtensionContext,
-	settings: typeof contextSettings.defaults,
-	lastValidationFailure: string | undefined,
-): Promise<string | undefined> {
-	if (!settings.sync.enabled || !settings.validation.enabled || !ctx.isProjectTrusted()) return undefined;
-	const root = await findProjectRoot(ctx.cwd);
-	const git = createGitRunner(pi, ctx);
-	if (!(await loadRepoStatus(git))) return lastValidationFailure;
-	const failure = formatContextValidationFailure(
-		await validateContextCatalog(git, root, settings.validation.ignoreGlobs),
-	);
-	if (!failure) return undefined;
-	if (failure === lastValidationFailure) return lastValidationFailure;
-	ctx.ui.notify("Context catalog validation failed; running context-sync", "error");
-	const result = ctx.mode === "tui" ? await runContextSyncWithEditor(pi, ctx, {}) : await runContextSync(pi, ctx, {});
-	if (!result || result.outcome === "cancelled") {
-		ctx.ui.notify("Context sync cancelled", "info");
-		return failure;
-	}
-	const afterFailure = formatContextValidationFailure(
-		await validateContextCatalog(git, root, settings.validation.ignoreGlobs),
-	);
-	if (result.outcome === "failed" || afterFailure) {
-		ctx.ui.notify(
-			result.outcome === "failed" ? result.summary : "Context catalog still invalid after context-sync",
-			"error",
-		);
-		return afterFailure ?? `${failure}\n${result.reason}`;
-	}
-	ctx.ui.notify(result.summary, "info");
-	return undefined;
-}
-
 export default function contextExtension(pi: ExtensionAPI): void {
-	let settings = contextSettings.defaults;
-	let lastValidationFailure: string | undefined;
-	let syncCommandRegistered = false;
-
-	const refreshSettings = async (ctx: { cwd: string; isProjectTrusted(): boolean }) => {
-		settings = await loadTauExtensionSettings(ctx, contextSettings);
-		if (settings.sync.enabled) registerContextSyncCommand();
-	};
-
-	const registerContextSyncCommand = () => {
-		if (syncCommandRegistered) return;
-		syncCommandRegistered = true;
-		pi.registerCommand("context-sync", {
-			description: "Synchronize repository context from current Git changes via context-sync subagent",
-			handler: async (args, ctx) => {
-				if (!(await loadTauExtensionSettings(ctx, contextSettings)).sync.enabled) {
-					ctx.ui.notify("Context sync is disabled in settings", "warning");
-					return;
-				}
-				if (ctx.mode !== "tui" || !ctx.isProjectTrusted()) {
-					ctx.ui.notify("/context-sync requires a trusted TUI project", "warning");
-					return;
-				}
-				await ctx.waitForIdle();
-				const result = await runContextSyncWithEditor(pi, ctx, {
-					nudge: args.trim() || undefined,
-				});
-				if (!result) return;
-				if (result.outcome === "cancelled") {
-					ctx.ui.notify(result.summary, "info");
-					return;
-				}
-				ctx.ui.notify(result.summary, result.outcome === "failed" ? "error" : "info");
-			},
-		});
-	};
-
 	pi.registerCommand("context", {
 		description: "Inject repository context entries into the conversation",
 		handler: async (_args, ctx) => {
@@ -212,65 +123,5 @@ export default function contextExtension(pi: ExtensionAPI): void {
 			if (selected === undefined || selected.length === 0) return;
 			await injectSelectedContext(pi, ctx, root, selected);
 		},
-	});
-
-	// Default on: register immediately so /context-sync exists before session_start in tests and early UI.
-	if (settings.sync.enabled) registerContextSyncCommand();
-
-	pi.on("session_start", async (_event, ctx) => {
-		await refreshSettings(ctx);
-	});
-	pi.on("agent_start", async (_event, ctx) => {
-		await refreshSettings(ctx);
-	});
-	pi.on("agent_end", async (event, ctx) => {
-		if (hasAbortedAssistant(event.messages)) return;
-		settings = await loadTauExtensionSettings(ctx, contextSettings);
-		try {
-			lastValidationFailure = await handleAgentEndValidation(pi, ctx, settings, lastValidationFailure);
-		} catch (error) {
-			ctx.ui.notify(`Context validation failed: ${error instanceof Error ? error.message : String(error)}`, "error");
-		}
-	});
-}
-
-async function runContextSyncWithEditor(
-	pi: ExtensionAPI,
-	ctx: ExtensionContext,
-	options: { nudge?: string },
-): Promise<ContextSyncDetails | undefined> {
-	return ctx.ui.custom<ContextSyncDetails | undefined>((tui, theme, _keys, done) => {
-		const panel = new ContextSyncStatusPanel(tui, theme, "Synchronizing repository context");
-		void (async () => {
-			try {
-				const result = await runContextSync(pi, ctx, {
-					nudge: options.nudge,
-					signal: panel.signal,
-					onStatus: (status) => {
-						panel.update(status);
-					},
-				});
-				done(result);
-			} catch (error) {
-				if (panel.signal.aborted) {
-					done({
-						outcome: "cancelled",
-						summary: "Context sync cancelled",
-						reason: "Cancelled by user.",
-						changedContextFiles: [],
-					});
-					return;
-				}
-				done({
-					outcome: "failed",
-					summary: `Context sync failed: ${error instanceof Error ? error.message : String(error)}`,
-					reason: error instanceof Error ? error.message : String(error),
-					changedContextFiles: [],
-				});
-			} finally {
-				panel.dispose();
-			}
-		})();
-		return panel;
 	});
 }

@@ -108,7 +108,6 @@ Only events documented in this file are public. Extensions run trusted in-proces
 
 Related:
 
-- [Custom subagents](./subagents.md)
 - [TUI components](./tui.md)
 
 ## `tau:footer-item`
@@ -187,4 +186,4 @@ Fields:
 - `rowId`: tool row id.
 - `state`: optional visual state. Omit to clear.
 
-Most extenders do not need this; it is for coordinating tool-row rendering with Tau's explore/patch/subagent tooling.
+Most extenders do not need this; it is for coordinating tool-row rendering with Tau's explore/patch tooling.

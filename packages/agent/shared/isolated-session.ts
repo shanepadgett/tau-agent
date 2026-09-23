@@ -158,7 +158,6 @@ export async function createIsolatedSessionResource(
 			modelRuntime,
 			thinkingLevel: inputs.thinkingLevel,
 			tools: [...inputs.tools],
-			excludeTools: ["subagent"],
 			resourceLoader,
 			customTools: [...inputs.customTools],
 			sessionManager: SessionManager.inMemory(inputs.cwd),
@@ -169,7 +168,7 @@ export async function createIsolatedSessionResource(
 		if (signal.aborted) throw new Error(`${inputs.label} startup aborted`);
 		const active = session.getActiveToolNames().sort();
 		const expected = [...inputs.tools].sort();
-		if (active.join("\0") !== expected.join("\0") || active.includes("subagent")) {
+		if (active.join("\0") !== expected.join("\0")) {
 			const missing = expected.filter((tool) => !active.includes(tool));
 			throw new Error(
 				`${inputs.label} startup failed: unavailable tools: ${missing.join(", ") || "active tool mismatch"}`,
