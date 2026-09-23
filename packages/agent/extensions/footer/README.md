@@ -14,7 +14,7 @@ Replaces Pi’s default footer with Tau’s compact two-line footer.
 ## Layout
 
 ```text
-git • EFFORT • provider/model (thinking)       S $0.18 · D $2.43
+git • provider/model (thinking)                S $0.18 · D $2.43
 cwd • session                                  footer items
 ```
 

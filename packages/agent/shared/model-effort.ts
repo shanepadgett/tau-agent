@@ -33,46 +33,40 @@ const MODEL_PREFERENCES: Record<ModelEffort, readonly ProviderPreference[]> = {
 	quick: [
 		{
 			provider: "openai-codex",
-			models: [{ model: "gpt-5.6-luna", reasoning: "medium" }],
+			models: [
+				{ model: "gpt-6-luna", reasoning: "medium" },
+				{ model: "gpt-5.6-luna", reasoning: "medium" },
+			],
 		},
-		{ provider: "xai", models: [{ model: "grok-4.5", reasoning: "medium" }] },
-		{ provider: "anthropic", models: [{ model: "claude-haiku-4-5", reasoning: "high" }] },
+		{ provider: "xai", models: [{ model: "grok-4.7", reasoning: "medium" }] },
+		{ provider: "anthropic", models: [{ model: "claude-sonnet-5", reasoning: "medium" }] },
 	],
 	standard: [
 		{
 			provider: "openai-codex",
-			models: [{ model: "gpt-5.6-luna", reasoning: "max" }],
+			models: [
+				{ model: "gpt-6-sol", reasoning: "high" },
+				{ model: "gpt-6-luna", reasoning: "max" },
+				{ model: "gpt-5.6-luna", reasoning: "max" },
+			],
 		},
-		{ provider: "xai", models: [{ model: "grok-4.5", reasoning: "high" }] },
+		{ provider: "xai", models: [{ model: "grok-4.7", reasoning: "high" }] },
 		{ provider: "anthropic", models: [{ model: "claude-sonnet-5", reasoning: "high" }] },
 	],
 	deep: [
 		{
 			provider: "openai-codex",
-			models: [{ model: "gpt-5.6-sol", reasoning: "high" }],
+			models: [{ model: "gpt-6-astra", reasoning: "medium" }],
 		},
 		{
 			provider: "anthropic",
 			models: [
-				{ model: "claude-opus-5", reasoning: "high" },
-				{ model: "claude-fable-5", reasoning: "low" },
+				{ model: "claude-opus-5.5", reasoning: "medium" },
+				{ model: "claude-fable-5.1", reasoning: "low" },
 			],
 		},
 	],
 };
-
-export function effortForSelection(
-	provider: string | undefined,
-	model: string | undefined,
-	reasoning: string | undefined,
-): ModelEffort | undefined {
-	if (!provider || !model || !reasoning) return undefined;
-	for (const effort of ["deep", "standard", "quick"] as const) {
-		const preference = MODEL_PREFERENCES[effort].find((item) => item.provider === provider);
-		if (preference?.models.some((item) => item.model === model && item.reasoning === reasoning)) return effort;
-	}
-	return undefined;
-}
 
 export function resolveEffortProviders(
 	ctx: Pick<ExtensionContext, "modelRegistry">,

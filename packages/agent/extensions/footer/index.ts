@@ -6,8 +6,7 @@ import { homedir } from "node:os";
 import { join, relative } from "node:path";
 import type { ExtensionAPI, ExtensionContext, Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { emitTauEvent, onTauEvent } from "../../shared/events.ts";
-import { effortForSelection, type ModelEffort } from "../../shared/model-effort.ts";
+import { onTauEvent } from "../../shared/events.ts";
 import { loadTauExtensionSettings, updateTauExtensionSettings } from "../../shared/settings/load.ts";
 import footerSettings from "./settings.ts";
 
@@ -40,8 +39,6 @@ export default function footerExtension(pi: ExtensionAPI): void {
 	let footerInstalled = false;
 	let requestRender: (() => void) | undefined;
 	let unsubscribeFooterItems: (() => void) | undefined;
-	let unsubscribeModelEffort: (() => void) | undefined;
-	let activeEffort: ModelEffort | undefined;
 	const gitByCwd = new Map<string, GitSummary | undefined>();
 	let gitRefresh: Promise<void> | undefined;
 	let dailyCost: number | undefined;
@@ -80,8 +77,7 @@ export default function footerExtension(pi: ExtensionAPI): void {
 					const model = currentCtx.model ? `${currentCtx.model.provider}/${currentCtx.model.id}` : "no-model";
 					const thinking = pi.getThinkingLevel();
 					const separator = theme.fg("dim", " • ");
-					const effort = effortText(theme, activeEffort);
-					const topLeft = [theme.fg("dim", gitText(git)), effort, theme.fg("dim", `${model} (${thinking})`)]
+					const topLeft = [theme.fg("dim", gitText(git)), theme.fg("dim", `${model} (${thinking})`)]
 						.filter(Boolean)
 						.join(separator);
 					const sessionUsage = sessionCost(currentCtx);
@@ -172,11 +168,6 @@ export default function footerExtension(pi: ExtensionAPI): void {
 		items.set(item.id, next);
 		render();
 	});
-	unsubscribeModelEffort = onTauEvent(pi, "footer.model-effort", "tau:model-effort.changed", (state) => {
-		activeEffort = state.effort;
-		render();
-	});
-
 	pi.registerCommand(COMMAND, {
 		description: "Toggle Tau footer",
 		handler: async (args, ctx) => {
@@ -213,20 +204,15 @@ export default function footerExtension(pi: ExtensionAPI): void {
 	pi.on("session_start", async (_event, ctx) => {
 		const settings = await loadTauExtensionSettings(ctx, footerSettings);
 		setEnabled(ctx, settings.enabled);
-		activeEffort = effortForSelection(ctx.model?.provider, ctx.model?.id, pi.getThinkingLevel());
 		onStateChange(ctx);
-		emitTauEvent(pi, "tau:model-effort.snapshot.requested", {});
 	});
 	pi.on("session_tree", (_event, ctx) => {
-		activeEffort = effortForSelection(ctx.model?.provider, ctx.model?.id, pi.getThinkingLevel());
 		onStateChange(ctx, false);
 	});
 	pi.on("model_select", (_event, ctx) => {
-		activeEffort = effortForSelection(ctx.model?.provider, ctx.model?.id, pi.getThinkingLevel());
 		rerender(ctx);
 	});
-	pi.on("thinking_level_select", (event, ctx) => {
-		activeEffort = effortForSelection(ctx.model?.provider, ctx.model?.id, event.level);
+	pi.on("thinking_level_select", (_event, ctx) => {
 		rerender(ctx);
 	});
 	pi.on("agent_start", (_event, ctx) => onStateChange(ctx, false));
@@ -236,9 +222,6 @@ export default function footerExtension(pi: ExtensionAPI): void {
 	pi.on("session_shutdown", (_event, ctx) => {
 		unsubscribeFooterItems?.();
 		unsubscribeFooterItems = undefined;
-		unsubscribeModelEffort?.();
-		unsubscribeModelEffort = undefined;
-		activeEffort = undefined;
 		requestRender = undefined;
 		activeCtx = undefined;
 		footerInstalled = false;
@@ -249,11 +232,6 @@ export default function footerExtension(pi: ExtensionAPI): void {
 		setActiveCtx(ctx);
 		refresh(ctx, includeDaily);
 	}
-}
-
-function effortText(theme: Theme, effort: ModelEffort | undefined): string {
-	if (!effort) return "";
-	return theme.fg("dim", theme.bold(effort.toUpperCase()));
 }
 
 async function saveEnabled(ctx: ExtensionContext, enabled: boolean): Promise<void> {
