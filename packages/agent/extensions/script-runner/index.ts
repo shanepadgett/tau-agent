@@ -4,17 +4,13 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StringEnum } from "@earendil-works/pi-ai";
-import {
-	DEFAULT_MAX_BYTES,
-	DEFAULT_MAX_LINES,
-	defineTool,
-	type ExecResult,
-	type ExtensionAPI,
-	type Theme,
-	truncateTail,
-} from "@earendil-works/pi-coding-agent";
+import { defineTool, type ExecResult, type ExtensionAPI, type Theme } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { BoundedTextResultBuilder } from "../../shared/bounded-text-result.ts";
+import { onTauEventImmediately } from "../../shared/events.ts";
+import { createScriptSourceStore } from "../../shared/script-source.ts";
+import { createTemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { renderToolOutputPreview } from "../../shared/text.ts";
 
 type Language = "python3" | "node" | "deno";
@@ -25,13 +21,7 @@ interface Runtimes {
 	deno: string | undefined;
 }
 
-interface StoredScript {
-	language: Language;
-	source: string;
-}
-
 const TIMEOUT_MS = 120_000;
-const MAX_STORED = 8;
 
 function detectRuntimes(): Runtimes {
 	let python3: string | undefined;
@@ -81,18 +71,6 @@ function scrubPath(text: string, file: string, dir: string): string {
 	return text.replaceAll(file, "<script>").replaceAll(dir, "<tmpdir>");
 }
 
-function applyEdits(source: string, edits: ReadonlyArray<{ oldText: string; newText: string }>): string {
-	let next = source;
-	for (const edit of edits) {
-		const idx = next.indexOf(edit.oldText);
-		if (idx === -1) {
-			throw new Error("edits oldText not found. Copy exact text from the script you wrote.");
-		}
-		next = next.slice(0, idx) + edit.newText + next.slice(idx + edit.oldText.length);
-	}
-	return next;
-}
-
 function renderEditsPreview(edits: ReadonlyArray<{ oldText: string; newText: string }>, theme: Theme): string {
 	return edits
 		.map((edit) => {
@@ -109,56 +87,6 @@ function renderEditsPreview(edits: ReadonlyArray<{ oldText: string; newText: str
 		.join("\n");
 }
 
-function resolveScriptSource(
-	scripts: Map<string, StoredScript>,
-	language: Language,
-	params: {
-		script?: string;
-		scriptId?: string;
-		edits?: ReadonlyArray<{ oldText: string; newText: string }>;
-	},
-): { scriptId: string; source: string } {
-	const edits = params.edits;
-	if (edits && edits.length > 0) {
-		const scriptId = params.scriptId;
-		if (!scriptId) throw new Error("edits require scriptId from the failed run.");
-		const stored = scripts.get(scriptId);
-		if (!stored) throw new Error(`No stored script for scriptId ${scriptId}. Evicted; resend full script.`);
-		if (stored.language !== language) {
-			throw new Error(`Language mismatch: scriptId ${scriptId} is ${stored.language}, not ${language}.`);
-		}
-		return { scriptId, source: applyEdits(stored.source, edits) };
-	}
-	if (typeof params.script !== "string" || params.script.length === 0) {
-		throw new Error("Provide script, or edits + scriptId.");
-	}
-	return { scriptId: params.scriptId ?? newScriptId(), source: params.script };
-}
-
-function formatTruncatedTail(text: string): { body: string; note: string } {
-	const trunc = truncateTail(text, { maxLines: DEFAULT_MAX_LINES, maxBytes: DEFAULT_MAX_BYTES });
-	const note = trunc.truncated
-		? `\n\n[output truncated: kept tail ${trunc.outputLines} / ${trunc.totalLines} lines]`
-		: "";
-	return { body: trunc.content, note };
-}
-
-function successScriptResult(stdout: string): { content: [{ type: "text"; text: string }]; details: undefined } {
-	const { body, note } = formatTruncatedTail(stdout.trim());
-	const out = body.trim();
-	return {
-		content: [{ type: "text", text: out ? `${out}${note}` : `(no output)${note}` }],
-		details: undefined,
-	};
-}
-
-function throwScriptFailure(scriptId: string, result: { stdout: string; stderr: string }): never {
-	const diag = result.stderr.trim() || result.stdout.trim();
-	const { body, note } = formatTruncatedTail(diag);
-	const detail = body ? `${body}${note}\n\n` : "";
-	throw new Error(`${detail}scriptId: ${scriptId}`);
-}
-
 export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 	const runtimes = detectRuntimes();
 	const detected = (["python3", "node", "deno"] as const).filter(
@@ -168,16 +96,15 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 
 	const langPhrase = formatLangList(detected);
 
-	const scripts = new Map<string, StoredScript>();
-
-	function remember(scriptId: string, script: StoredScript): void {
-		scripts.set(scriptId, script);
-		while (scripts.size > MAX_STORED) {
-			const oldest = scripts.keys().next().value;
-			if (oldest === undefined) break;
-			scripts.delete(oldest);
-		}
-	}
+	const scriptStore = createScriptSourceStore();
+	const temporaryOutput = createTemporaryOutputStore();
+	onTauEventImmediately(pi, "script-runner.source-store", "tau:script-runner.source-store", ({ accept }) =>
+		accept(scriptStore),
+	);
+	pi.on("session_start", async () => {
+		await temporaryOutput.shutdown();
+		await temporaryOutput.start();
+	});
 
 	function resolveCommand(language: Language): string {
 		const cmd = runtimes[language];
@@ -265,24 +192,41 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 			"script_runner never exposes the script path; you already have the source. Never try to read it back.",
 		],
 		parameters: paramsSchema,
-		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+		async execute(toolCallId, params, signal, onUpdate, ctx) {
 			const language = params.language;
 			if (signal?.aborted) {
 				return { content: [{ type: "text", text: "Cancelled." }], details: undefined };
 			}
+			scriptStore.verifyAndConsume(toolCallId, params);
 			const command = resolveCommand(language);
-			const { scriptId, source } = resolveScriptSource(scripts, language, params);
-			remember(scriptId, { language, source });
+			const resolved = scriptStore.resolve(params);
+			const scriptId = resolved.scriptId ?? newScriptId();
+			const source = resolved.source;
+			scriptStore.remember(scriptId, language, source);
 			await onUpdate?.({
 				content: [{ type: "text", text: `Running ${languageLabel(language)}...` }],
 				details: undefined,
 			});
 			const result = await runScript(language, command, source, ctx.cwd, signal);
-			if (result.code === 0 && !result.killed) {
-				scripts.delete(scriptId);
-				return successScriptResult(result.stdout);
+			const succeeded = result.code === 0 && !result.killed;
+			const output = new BoundedTextResultBuilder(temporaryOutput, "tail");
+			let content: string;
+			try {
+				await output.append(succeeded ? result.stdout.trim() : result.stderr.trim() || result.stdout.trim());
+				if (signal?.aborted) {
+					await output.abort();
+					return { content: [{ type: "text", text: "Cancelled." }], details: undefined };
+				}
+				content = (await output.finish()).content;
+			} catch (error) {
+				await output.abort();
+				throw error;
 			}
-			throwScriptFailure(scriptId, result);
+			if (succeeded) {
+				scriptStore.forget(scriptId);
+				return { content: [{ type: "text", text: content.trim() || "(no output)" }], details: undefined };
+			}
+			throw new Error(`${content ? `${content}\n\n` : ""}scriptId: ${scriptId}`);
 		},
 		renderCall(args, theme, context) {
 			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
@@ -312,7 +256,8 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 
 	pi.registerTool(tool);
 
-	pi.on("session_shutdown", () => {
-		scripts.clear();
+	pi.on("session_shutdown", async () => {
+		scriptStore.clear();
+		await temporaryOutput.shutdown();
 	});
 }

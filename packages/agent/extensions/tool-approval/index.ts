@@ -8,7 +8,9 @@ import {
 import { Marker } from "@shanepadgett/tau-tui";
 import { Type } from "typebox";
 import { emitAgentBlocked } from "../../shared/agent-blocked.ts";
+import { emitTauEvent } from "../../shared/events.ts";
 import { generateToolValidated, resolveCandidates } from "../../shared/model-fallback/index.ts";
+import type { ScriptSourceStore } from "../../shared/script-source.ts";
 import { errorText, truncAt } from "../../shared/text.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { isAllowlistedBash } from "./allowlist.ts";
@@ -112,10 +114,16 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 	async function requestToolApproval(
 		ctx: ExtensionContext,
 		toolCallId: string,
-		toolName: ApprovalToolName,
+		request: ToolApprovalRequest,
 		title: string,
 		body: string,
 	): Promise<{ block: true; reason: string } | undefined> {
+		const toolName = request.toolName;
+		const source =
+			toolName === "script_runner" && typeof request.input.script === "string" ? request.input.script : undefined;
+		if (toolName === "script_runner" && source === undefined) {
+			return block("script_runner source is unavailable for manual approval");
+		}
 		if (!ctx.hasUI) return block(`${toolLabel(toolName)} needs confirmation, but interactive UI is unavailable`);
 		try {
 			emitAgentBlocked(pi, {
@@ -124,11 +132,14 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 				source: "tool-approval.review",
 			});
 			if (ctx.mode !== "tui") {
-				const confirmed = await ctx.ui.confirm(title, body);
+				const confirmed = await ctx.ui.confirm(
+					title,
+					source === undefined ? body : `${body}\n\nFull script:\n${source}`,
+				);
 				return confirmed ? undefined : block(`${toolLabel(toolName)} rejected by user`);
 			}
 			const answer = await ctx.ui.custom<ApprovalAnswer | undefined>(
-				(tui, theme, keys, done) => new ToolApprovalPanel(tui, theme, keys, title, body, done),
+				(tui, theme, keys, done) => new ToolApprovalPanel(tui, theme, keys, title, body, source, done),
 			);
 			if (!answer) return block(`${toolLabel(toolName)} approval cancelled by user`);
 			const note = truncAt(answer.note, 800);
@@ -147,6 +158,7 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 	pi.on("session_start", async (_event, ctx) => {
 		batchReviews = undefined;
 		pendingNotes.clear();
+		scriptSourceStoreFrom(pi)?.clearApprovals();
 		await refreshSettings(ctx);
 	});
 
@@ -161,6 +173,17 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 			return block(`tool approval settings failed to load: ${truncAt(message, 600)}`);
 		}
 		if (!settings.enabled) return undefined;
+		const scriptStore = scriptSourceStoreFrom(pi);
+		if (request.toolName === "script_runner") {
+			try {
+				if (!scriptStore) return block("script_runner source store is unavailable for review");
+				const { source } = scriptStore.resolve(request.input);
+				request.input.script = source;
+				delete request.input.edits;
+			} catch (error) {
+				return block(`script_runner source could not be reviewed: ${errorText(error)}`);
+			}
+		}
 
 		if (request.toolName === "bash") {
 			const command = request.input.command;
@@ -174,7 +197,7 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 
 		ctx.ui.setStatus(STATUS_KEY, `reviewing ${toolLabel(request.toolName)}`);
 		try {
-			batchReviews ??= await reviewAssistantRequests(ctx, event, request);
+			batchReviews ??= await reviewAssistantRequests(ctx, event, request, scriptStore);
 			if (ctx.signal?.aborted) return block("Tool review cancelled");
 			const cached = batchReviews.get(event.toolCallId);
 			batchReviews.delete(event.toolCallId);
@@ -188,41 +211,51 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 			}
 			if (ctx.signal?.aborted) return block("Tool review cancelled");
 			const { review, provider, model } = result;
+			let rejected: { block: true; reason: string } | undefined;
 			if (review.decision === "requires_user_approval") {
-				return requestToolApproval(
+				rejected = await requestToolApproval(
 					ctx,
 					event.toolCallId,
-					request.toolName,
+					request,
 					`Approve high-impact ${toolLabel(request.toolName)}?`,
 					formatApproval(review.summary, review.reason),
 				);
-			}
-			if (settings.autoApprove) {
+			} else if (settings.autoApprove) {
 				pi.appendEntry<AutoApprovedMarker>(AUTO_APPROVED_TYPE, {
 					toolName: request.toolName,
 					provider,
 					model,
 				});
-				return undefined;
+			} else {
+				rejected = await requestToolApproval(
+					ctx,
+					event.toolCallId,
+					request,
+					`Run reviewed ${toolLabel(request.toolName)}?`,
+					formatApproval(review.summary, "Automatic approval is disabled."),
+				);
 			}
-			return requestToolApproval(
-				ctx,
-				event.toolCallId,
-				request.toolName,
-				`Run reviewed ${toolLabel(request.toolName)}?`,
-				formatApproval(review.summary, "Automatic approval is disabled."),
-			);
+			if (!rejected && request.toolName === "script_runner") {
+				if (!scriptStore) return block("script_runner source store is unavailable for approval");
+				scriptStore.approve(event.toolCallId, request.input);
+			}
+			return rejected;
 		} catch (error) {
 			if (ctx.signal?.aborted) return block("Tool review cancelled");
 			const message = singleLine(errorText(error));
 			ctx.ui.notify(`Tool review failed; manual approval required: ${truncAt(message, 600)}`, "warning");
-			return requestToolApproval(
+			const rejected = await requestToolApproval(
 				ctx,
 				event.toolCallId,
-				request.toolName,
+				request,
 				`Automatic ${toolLabel(request.toolName)} review failed. Continue?`,
-				`The automatic review failed, so Tau could not summarize this ${toolLabel(request.toolName)}. Approve it only if you understand the request shown above.`,
+				`The automatic review failed, so Tau could not summarize this ${toolLabel(request.toolName)}. Approve it only if you understand ${request.toolName === "script_runner" ? "the full script below" : "the request shown above"}.`,
 			);
+			if (!rejected && request.toolName === "script_runner") {
+				if (!scriptStore) return block("script_runner source store is unavailable for approval");
+				scriptStore.approve(event.toolCallId, request.input);
+			}
+			return rejected;
 		} finally {
 			ctx.ui.setStatus(STATUS_KEY, undefined);
 		}
@@ -250,13 +283,27 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 	pi.on("agent_end", () => {
 		batchReviews = undefined;
 		pendingNotes.clear();
+		scriptSourceStoreFrom(pi)?.clearApprovals();
 	});
 
 	pi.on("session_shutdown", (_event, ctx) => {
 		batchReviews = undefined;
 		pendingNotes.clear();
+		scriptSourceStoreFrom(pi)?.clearApprovals();
 		ctx.ui.setStatus(STATUS_KEY, undefined);
 	});
+}
+
+function scriptSourceStoreFrom(pi: ExtensionAPI): ScriptSourceStore | undefined {
+	let store: ScriptSourceStore | undefined;
+	let count = 0;
+	emitTauEvent(pi, "tau:script-runner.source-store", {
+		accept(candidate) {
+			store = candidate;
+			count++;
+		},
+	});
+	return count === 1 ? store : undefined;
 }
 
 function approvalRequest(event: ToolCallEvent): ToolApprovalRequest | undefined {
@@ -284,6 +331,7 @@ async function reviewAssistantRequests(
 	ctx: ExtensionContext,
 	event: ToolCallEvent,
 	currentRequest: ToolApprovalRequest,
+	scriptStore: ScriptSourceStore | undefined,
 ): Promise<Map<string, CachedReview>> {
 	const reviews = new Map<string, CachedReview>();
 	const assistant = ctx.sessionManager
@@ -307,6 +355,17 @@ async function reviewAssistantRequests(
 		if (request.toolName === "bash") {
 			const command = request.input.command;
 			if (typeof command !== "string" || !command.trim() || isAllowlistedBash(command)) return [];
+		}
+		if (request.toolName === "script_runner" && part.id !== event.toolCallId) {
+			if (!scriptStore) return [];
+			try {
+				const { source } = scriptStore.resolve(request.input);
+				request.input = { ...request.input, script: source };
+				delete request.input.edits;
+			} catch {
+				// The sibling's own validated tool call will reject invalid or missing source.
+				return [];
+			}
 		}
 		return [{ toolCallId: part.id, request, requestJson: JSON.stringify(request) }];
 	});

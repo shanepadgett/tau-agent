@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Tool } from "@earendil-works/pi-ai";
 import type { ToolRowVisualState } from "./tool-row-state.js";
+import type { ScriptSourceStore } from "./script-source.ts";
 import type { FileInjectionRequest, PreparedFileInjection } from "../src/file-injection/index.ts";
 
 export type TauAgentEvents = {
@@ -56,6 +57,10 @@ export type TauAgentEvents = {
 	"tau:file-injection.prepare": {
 		request: FileInjectionRequest;
 		accept(preparation: Promise<PreparedFileInjection[]>): void;
+	};
+	/** @internal Script runner's live source store, used to review the code it will execute. */
+	"tau:script-runner.source-store": {
+		accept(store: ScriptSourceStore): void;
 	};
 	"tau:footer-item": {
 		id: string;

@@ -15,6 +15,7 @@ import {
 	pushSavedNote,
 	rawHint,
 	renderNoteEditor,
+	ScrollableMarkdown,
 	ToolPanel,
 	type ToolPanelConfig,
 	wrapWithPrefix,
@@ -34,6 +35,7 @@ export class ToolApprovalPanel implements Component, Focusable {
 	private readonly noteEditor: Editor;
 	private readonly panelConfig: ToolPanelConfig;
 	private readonly panel: ToolPanel;
+	private readonly sourceView: ScrollableMarkdown | undefined;
 	private readonly notes: Record<ApprovalChoice, string> = { approve: "", reject: "" };
 	private choice: ApprovalChoice = "approve";
 	private editing = false;
@@ -45,6 +47,7 @@ export class ToolApprovalPanel implements Component, Focusable {
 		keys: KeybindingsManager,
 		title: string,
 		body: string,
+		scriptSource: string | undefined,
 		done: (answer: ApprovalAnswer | undefined) => void,
 	) {
 		this.tui = tui;
@@ -56,11 +59,16 @@ export class ToolApprovalPanel implements Component, Focusable {
 			this.notes[this.choice] = value.trim();
 			this.closeNote();
 		};
+		if (scriptSource !== undefined) {
+			const fenceLength = (scriptSource.match(/`+/g) ?? []).reduce((max, run) => Math.max(max, run.length + 1), 3);
+			const fence = "`".repeat(fenceLength);
+			this.sourceView = new ScrollableMarkdown(tui, `${fence}\n${scriptSource}\n${fence}`, 14);
+		}
 		this.panelConfig = {
 			title,
 			secondary: "Approve runs this request as shown. To change it, reject with a note.",
 			header: [body],
-			body: { render: (width) => this.renderChoices(width), invalidate: () => {} },
+			body: { render: (width) => this.renderChoices(width), invalidate: () => this.sourceView?.invalidate() },
 			footer: { kind: "hints", hints: this.hints() },
 		};
 		this.panel = new ToolPanel(theme, this.panelConfig);
@@ -90,7 +98,9 @@ export class ToolApprovalPanel implements Component, Focusable {
 			this.done(undefined);
 			return;
 		}
-		if (this.keys.matches(data, "tui.select.up") || this.keys.matches(data, "tui.select.down")) {
+		if (this.sourceView && (data === "j" || data === "k")) {
+			this.sourceView.scroll(data === "j" ? 1 : -1);
+		} else if (this.keys.matches(data, "tui.select.up") || this.keys.matches(data, "tui.select.down")) {
 			this.choice = this.choice === "approve" ? "reject" : "approve";
 		} else if (data === "n") {
 			this.editing = true;
@@ -113,6 +123,9 @@ export class ToolApprovalPanel implements Component, Focusable {
 
 	private renderChoices(width: number): string[] {
 		const lines: string[] = [];
+		if (this.sourceView) {
+			lines.push(this.theme.fg("muted", "Complete script:"), ...this.sourceView.render(width), "");
+		}
 		for (const choice of ["approve", "reject"] as const) {
 			const selected = choice === this.choice;
 			const prefix = selected ? this.theme.fg("accent", "→ ") : "  ";
@@ -140,6 +153,7 @@ export class ToolApprovalPanel implements Component, Focusable {
 			? [bindingHint("tui.input.submit", "save"), bindingHint("tui.select.cancel", "cancel note")]
 			: [
 					bindingsHint(["tui.select.up", "tui.select.down"], "move"),
+					...(this.sourceView ? [rawHint("j/k", "scroll script")] : []),
 					bindingHint("tui.select.confirm", "choose"),
 					rawHint("n", "note"),
 					bindingHint("tui.select.cancel", "block"),
