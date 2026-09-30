@@ -85,10 +85,15 @@ interface TauEventSubscription {
 	stop(): void;
 }
 
-const tauEventSubscriptions = new WeakMap<
+type TauEventSubscriptionRegistry = WeakMap<
 	ExtensionAPI["events"],
 	Map<string, Map<keyof TauAgentEvents, TauEventSubscription>>
->();
+>;
+
+// Global and project installs load separate module instances but share one pi.events bus.
+const registryKey = Symbol.for("tau-agent.eventSubscriptions");
+const registryHost = globalThis as typeof globalThis & { [registryKey]?: TauEventSubscriptionRegistry };
+const tauEventSubscriptions: TauEventSubscriptionRegistry = (registryHost[registryKey] ??= new WeakMap());
 
 export function emitTauEvent<Name extends keyof TauAgentEvents>(
 	pi: EmitEventAPI,
