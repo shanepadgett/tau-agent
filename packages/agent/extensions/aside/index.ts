@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { normalizeContext, type Context, type Message, type Model } from "@earendil-works/pi-ai";
+import type { Context, Message, Model } from "@earendil-works/pi-ai";
 import {
 	buildSessionContext,
 	convertToLlm,
@@ -128,11 +128,6 @@ async function runAside(
 	withConversation: boolean,
 	signal: AbortSignal,
 ): Promise<AsideResult> {
-	const provider = ctx.modelRegistry.getProvider(model.provider);
-	if (!provider) throw new Error(`Provider ${model.provider} is unavailable`);
-	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
-	if (!auth.ok) throw new Error(auth.error);
-
 	const request = withConversation
 		? buildAsideRequest(
 				convertToLlm(buildSessionContext(ctx.sessionManager.getEntries(), ctx.sessionManager.getLeafId()).messages),
@@ -140,11 +135,8 @@ async function runAside(
 				ctx.getSystemPrompt(),
 			)
 		: buildAsideRequest([], question, undefined);
-	const response = await provider
-		.streamSimple(model, normalizeContext(request), {
-			apiKey: auth.apiKey,
-			headers: auth.headers,
-			env: auth.env,
+	const response = await ctx.modelRegistry
+		.streamSimple(model, request, {
 			signal,
 			reasoning: ctx.thinkingLevel === "off" ? undefined : ctx.thinkingLevel,
 			sessionId: withConversation ? ctx.sessionManager.getSessionId() : randomUUID(),

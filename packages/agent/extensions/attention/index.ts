@@ -25,10 +25,6 @@ function playMacOSSound(pi: ExtensionAPI): void {
 }
 
 export default function attentionExtension(pi: ExtensionAPI): void {
-	const holds = new Set<string>();
-	let pendingAttention: (() => void) | undefined;
-	let discardNextSettlement = false;
-
 	function notify(data: { title?: string; body?: string }): void {
 		const raw: unknown = data;
 		const record = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
@@ -69,53 +65,19 @@ export default function attentionExtension(pi: ExtensionAPI): void {
 	}
 
 	onTauEvent(pi, "attention.agent-blocked", "tau:agent.blocked", notify);
-	onTauEvent(pi, "attention.hold-acquire", "tau:attention.hold.acquire", ({ id }) => {
-		holds.add(id);
-	});
-	onTauEvent(pi, "attention.hold-release", "tau:attention.hold.release", ({ id, disposition }) => {
-		if (!holds.delete(id)) return;
-		if (disposition === "discard") {
-			if (pendingAttention) pendingAttention = undefined;
-			else discardNextSettlement = true;
-		}
-		if (holds.size > 0 || !pendingAttention) return;
-		const notifyPending = pendingAttention;
-		pendingAttention = undefined;
-		notifyPending();
-	});
-
-	pi.on("session_start", () => {
-		holds.clear();
-		pendingAttention = undefined;
-		discardNextSettlement = false;
-	});
-
 	pi.on("agent_settled", (_event, ctx) => {
 		if (ctx.mode === "print") return;
-		if (discardNextSettlement) {
-			discardNextSettlement = false;
-			return;
-		}
-		if (holds.size > 0) {
-			pendingAttention = () => notify({ title: DEFAULT_TITLE, body: DEFAULT_BODY });
-			return;
-		}
 		notify({ title: DEFAULT_TITLE, body: DEFAULT_BODY });
 	});
 
 	pi.on("session_compact", (_event, ctx) => {
-		if (ctx.mode === "print" || holds.size > 0) return;
+		// A compaction in the middle of a run is followed by the settle notification.
+		if (ctx.mode === "print" || !ctx.isIdle()) return;
 		notify({ title: DEFAULT_TITLE, body: COMPACTION_BODY });
 	});
 
 	pi.on("session_tree", (event, ctx) => {
 		if (ctx.mode === "print" || !event.summaryEntry) return;
 		notify({ title: DEFAULT_TITLE, body: BRANCH_SUMMARY_BODY });
-	});
-
-	pi.on("session_shutdown", () => {
-		holds.clear();
-		pendingAttention = undefined;
-		discardNextSettlement = false;
 	});
 }

@@ -1,11 +1,10 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { Tool } from "@earendil-works/pi-ai";
 import type { ToolRowVisualState } from "./tool-row-state.js";
 import type { ScriptSourceStore } from "./script-source.ts";
 import type { FileInjectionRequest, PreparedFileInjection } from "../src/file-injection/index.ts";
 
 export type TauAgentEvents = {
-	/** @internal Soul's runtime-scoped prompt contributors. */
+	/** @internal Soul's runtime-scoped prompt contributors. Each source becomes one named Pi prompt section. */
 	"tau:prompt.sources": {
 		accept(source: {
 			key: string;
@@ -14,25 +13,12 @@ export type TauAgentEvents = {
 			read(ctx: ExtensionContext): Promise<string>;
 		}): void;
 	};
-	/** @internal Check a tool loadout before activation. */
-	"tau:prompt.tools.check": {
-		ctx: ExtensionContext;
-		tools: Tool[];
-		reject(reason: string): void;
-	};
-	/** @internal Exact projected Soul instructions, for prompt viewers. */
+	/** @internal Soul's complete instructions for the current turn, for prompt viewers. */
 	"tau:prompt.snapshot": { text: string };
 	"tau:agent.blocked": {
 		title?: string;
 		body?: string;
 		source?: string;
-	};
-	"tau:attention.hold.acquire": {
-		id: string;
-	};
-	"tau:attention.hold.release": {
-		id: string;
-		disposition: "notify" | "discard";
 	};
 	"tau:file-mutation.applied": {
 		source: "patch";
@@ -48,10 +34,6 @@ export type TauAgentEvents = {
 			resultingFingerprint: string | null;
 			snapshotRanges?: Array<{ startLine: number; endLine: number }>;
 		}>;
-	};
-	/** @internal Runtime-scoped discovery for deferred tool groups. */
-	"tau:deferred-tool-group.request": {
-		accept(group: { id: string; description: string; toolNames: readonly string[] }): void;
 	};
 	/** @internal Runtime-scoped request for Explore-owned file preparation. */
 	"tau:file-injection.prepare": {

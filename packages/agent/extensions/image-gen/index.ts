@@ -40,6 +40,7 @@ export default function imageGenExtension(pi: ExtensionAPI): void {
 			defineTool<typeof imageGenSchema, ImageGenDetails | undefined>({
 				name: "image_gen",
 				label: "Image Generation",
+				annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
 				description:
 					"Generate a requested raster image or AI-edit existing images with OpenAI GPT Image or xAI Grok Imagine. Omit provider to follow the parent model; set it to openai or xai to override. Omit referenced_image_paths to generate; pass one to three local paths to edit or compose. Omit path to use Tau's external image store; pass path only when the user explicitly requests a repository file or other destination. Returns the image for inspection.",
 				parameters: imageGenSchema,

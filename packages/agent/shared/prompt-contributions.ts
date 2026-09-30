@@ -3,8 +3,6 @@ import { emitTauEvent, onTauEventImmediately, type TauAgentEvents } from "./even
 
 type PromptSource = Parameters<TauAgentEvents["tau:prompt.sources"]["accept"]>[0];
 
-export type PromptValue = Pick<PromptSource, "key" | "section" | "refresh"> & { text: string };
-
 export function collectPromptSources(pi: ExtensionAPI): PromptSource[] {
 	const sources: PromptSource[] = [];
 	emitTauEvent(pi, "tau:prompt.sources", { accept: (source) => sources.push(source) });

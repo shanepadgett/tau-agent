@@ -1,144 +1,68 @@
-import { getCurrentTools, toToolDeclaration } from "@earendil-works/pi-ai";
-import { createHash } from "node:crypto";
-import type { BuildSystemPromptOptions, ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { emitTauEvent, onTauEventImmediately } from "../../shared/events.ts";
-import { readPromptValues, renderBaseline, renderUpdate } from "./context.ts";
-import {
-	admittedTools,
-	BASELINE_TYPE,
-	projectPrompt,
-	restorePrompt,
-	UPDATE_TYPE,
-	type SavedBaseline,
-	type SavedUpdate,
-} from "./state.ts";
-import { toolChangeReason } from "./tools.ts";
+import { getDocsPath, getExamplesPath, getReadmePath, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { emitTauEvent } from "../../shared/events.ts";
+import { collectPromptSources } from "../../shared/prompt-contributions.ts";
+import { FIXED_INSTRUCTIONS } from "./prompt.ts";
 
-const CHECKPOINT_TYPE = "tau.soul.prefix";
-interface PrefixCheckpoint {
-	baselineEntryId: string;
-	count: number;
-	hash: string;
-}
+const CAPTURE_TYPE = "tau.soul.capture";
+
+const DOCUMENTATION = `Consult Pi or Tau documentation when the request concerns their usage or extension APIs.
+Pi documentation:
+- Main documentation: ${getReadmePath()}
+- Additional docs: ${getDocsPath()}
+- Examples: ${getExamplesPath()}
+- Resolve docs/... and examples/... under those installed paths, not the working directory.
+- Extensions: docs/extensions.md and examples/extensions/; themes: docs/themes.md; skills: docs/skills.md; prompt templates: docs/prompt-templates.md; TUI: docs/tui.md; keybindings: docs/keybindings.md; SDK: docs/sdk.md; providers: docs/custom-provider.md; models: docs/models.md; packages: docs/packages.md; environment: docs/environment-variables.md.
+- Read the relevant documentation and follow related Markdown references before implementing Pi integrations.`;
 
 export default function soulExtension(pi: ExtensionAPI): void {
-	let inputs: BuildSystemPromptOptions | null = null;
+	pi.on("before_agent_start", async (event, ctx) => {
+		const options = event.systemPromptOptions;
 
-	pi.on("session_start", () => {
-		inputs = null;
-	});
-	pi.on("session_shutdown", () => {
-		inputs = null;
-	});
-	pi.on("before_agent_start", (event) => {
-		// Keep the shared options reference until all contributors have finished.
-		inputs = event.systemPromptOptions;
-	});
-
-	onTauEventImmediately(pi, "soul.tools", "tau:prompt.tools.check", ({ ctx, tools, reject }) => {
-		try {
-			const saved = restorePrompt(ctx.sessionManager.getBranch());
-			if (!saved || !ctx.model) return;
-			const previous = admittedTools(saved);
-			// getAllTools exposes schemas but not constrainedSampling. Preserve that
-			// metadata here; the request boundary checks the complete Pi declarations.
-			const reason = toolChangeReason(
-				ctx.model,
-				previous,
-				tools.map((tool) => ({
-					...previous.find((candidate) => candidate.name === tool.name),
-					...tool,
-				})),
-			);
-			if (reason) reject(reason);
-		} catch (error) {
-			reject(String(error));
+		// Sources that refresh on compaction are read once per compaction epoch and saved on the branch.
+		const branch = ctx.sessionManager.getBranch();
+		let epochStart = 0;
+		branch.forEach((entry, index) => {
+			if (entry.type === "compaction") epochStart = index + 1;
+		});
+		let captured: Record<string, string> = {};
+		for (const entry of branch.slice(epochStart)) {
+			if (entry.type === "custom" && entry.customType === CAPTURE_TYPE)
+				captured = entry.data as Record<string, string>;
 		}
-	});
-
-	pi.on("context_with_system", async (event, ctx) => {
-		try {
-			if (!inputs) throw new Error("Soul has no loaded prompt inputs.");
-			if (inputs.forceSystemPrompt !== undefined)
-				throw new Error(
-					"A forced system prompt conflicts with Soul. Remove the extension's systemPrompt replacement.",
-				);
-			const branch = ctx.sessionManager.getBranch();
-			const newestFirst = [...branch].reverse();
-			const projection = ctx.sessionManager.buildSessionProjection();
-			const anchor = [...projection.entries].reverse().find((entry) => entry.messages.length > 0);
-			if (!anchor) throw new Error("Soul has no conversation anchor.");
-			const saved = restorePrompt(branch);
-			const active = new Set(pi.getActiveTools());
-			const requested = getCurrentTools(event.messages)
-				.filter((tool) => active.has(tool.name))
-				.map(toToolDeclaration);
-			if (saved && ctx.model) {
-				const reason = toolChangeReason(ctx.model, admittedTools(saved), requested);
-				if (reason) throw new Error(reason);
-			}
-			const values = await readPromptValues(pi, ctx, inputs, saved === null);
-			if (!saved) {
-				pi.appendEntry<SavedBaseline>(BASELINE_TYPE, {
-					version: 1,
-					compactionId: newestFirst.find((entry) => entry.type === "compaction")?.id ?? null,
-					afterEntryId: anchor.sourceEntry.id,
-					text: renderBaseline(inputs, values),
-					values,
-					initialTools: getCurrentTools(event.messages),
-				});
-			} else {
-				const previous = new Map(saved.baseline.values.map((value) => [value.key, value]));
-				for (const update of saved.updates) for (const value of update.data.values) previous.set(value.key, value);
-				const currentKeys = new Set(values.map((value) => value.key));
-				for (const value of previous.values()) {
-					if (value.refresh === "append" && !currentKeys.has(value.key)) values.push({ ...value, text: "" });
-				}
-				const changed = values.filter((value) => previous.get(value.key)?.text !== value.text);
-				const tools = new Map(admittedTools(saved).map((tool) => [tool.name, tool]));
-				const added = requested.some((tool) => !tools.has(tool.name));
-				for (const tool of requested) tools.set(tool.name, tool);
-				if (changed.length > 0 || added)
-					pi.appendEntry<SavedUpdate>(UPDATE_TYPE, {
-						version: 1,
-						baselineEntryId: saved.entryId,
-						afterEntryId: anchor.sourceEntry.id,
-						text: renderUpdate(changed),
-						values: changed,
-						tools: [...tools.values()],
-					});
-			}
-			const admitted = restorePrompt(ctx.sessionManager.getBranch());
-			if (!admitted) throw new Error("Soul failed to save its baseline.");
-			const messages = projectPrompt(event.messages, admitted, ctx);
-			const checkpointEntry = newestFirst.find(
-				(entry) => entry.type === "custom" && entry.customType === CHECKPOINT_TYPE,
-			);
-			const checkpoint = checkpointEntry?.type === "custom" ? (checkpointEntry.data as PrefixCheckpoint) : null;
-			if (checkpoint?.baselineEntryId === admitted.entryId) {
-				const prefix = createHash("sha256")
-					.update(JSON.stringify(messages.slice(0, checkpoint.count)))
-					.digest("hex");
-				if (prefix !== checkpoint.hash)
-					throw new Error("Previously sent conversation content changed. Compact before continuing.");
-			}
-			const hash = createHash("sha256").update(JSON.stringify(messages)).digest("hex");
-			if (hash !== checkpoint?.hash)
-				pi.appendEntry<PrefixCheckpoint>(CHECKPOINT_TYPE, {
-					baselineEntryId: admitted.entryId,
-					count: messages.length,
-					hash,
-				});
-			emitTauEvent(pi, "tau:prompt.snapshot", {
-				text: [admitted.baseline.text, ...admitted.updates.map((update) => update.data.text)].join("\n\n"),
-			});
-			return { messages };
-		} catch (error) {
-			ctx.ui.notify(`Soul stopped this request: ${error instanceof Error ? error.message : String(error)}`, "error");
-			ctx.abort();
-			// Pi currently enters the provider with an aborted signal; do not weaken that
-			// cancellation into a fallback prompt. See soul-request-check-findings.md.
-			return undefined;
+		const sources = collectPromptSources(pi);
+		const missing = sources.filter((source) => source.refresh === "compaction" && !(source.key in captured));
+		if (missing.length > 0) {
+			const read = await Promise.all(missing.map(async (source) => [source.key, await source.read(ctx)] as const));
+			captured = { ...captured, ...Object.fromEntries(read) };
+			pi.appendEntry(CAPTURE_TYPE, captured);
 		}
+
+		const active = pi.getActiveTools();
+		const guidance = [
+			...new Set([
+				...(active.includes("bash") ? ["Use bash for file operations like ls, rg, find."] : []),
+				...active.flatMap((name) => options.toolGuidelines[name] ?? []),
+				...options.promptGuidelines,
+			]),
+		]
+			.map((rule) => `- ${rule}`)
+			.join("\n");
+
+		const sections = new Map<string, string[]>();
+		const add = (section: string, text: string) => {
+			if (text.trim()) sections.set(section, [...(sections.get(section) ?? []), text]);
+		};
+		add("documentation", DOCUMENTATION);
+		add("tool-guidance", guidance);
+		if (options.customPrompt) add("additional-instructions", options.customPrompt);
+		for (const source of sources) {
+			add(source.section, source.refresh === "append" ? await source.read(ctx) : (captured[source.key] ?? ""));
+		}
+
+		// Pi diffs these sections against the prompt already in the transcript and appends a patch only for
+		// sections whose text changed, so unchanged sections keep the cached prefix.
+		options.customPrompt = FIXED_INSTRUCTIONS;
+		for (const name of [...sections.keys()].sort()) options.sections[name] = (sections.get(name) ?? []).join("\n\n");
+		emitTauEvent(pi, "tau:prompt.snapshot", { text: event.systemPrompt });
 	});
 }

@@ -35,6 +35,7 @@ export function createWebSearchTool(rowState: ToolRowStateStore) {
 	return defineTool<typeof webSearchParams, WebSearchDetails | undefined>({
 		name: "websearch",
 		label: "Web Search",
+		annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 		description:
 			"Search the public web through Exa for current information and relevant pages. Use websearch for broad discovery, then webfetch for a known URL; use codesearch for implementation-oriented code and documentation context. Use a separate research workflow when several searches, fetches, and synthesis are needed. Output is truncated to 2,000 lines or 50 KB.",
 		parameters: webSearchParams,

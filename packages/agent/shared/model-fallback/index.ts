@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import {
-	normalizeContext,
 	type Api,
 	type AssistantMessage,
 	type Message,
@@ -20,6 +19,7 @@ const SEVEN_DAYS_MS = 604_800_000;
 
 interface GenerationContext {
 	ui: ExtensionContext["ui"];
+	modelRegistry: ExtensionContext["modelRegistry"];
 	signal: AbortSignal | undefined;
 }
 
@@ -40,32 +40,22 @@ export async function resolveCandidates(
 	const seen = new Set<string>();
 	const blocked = currentBlockedProviders(settings.cooldowns ?? {});
 
-	const add = async (model: Model<Api>, reasoning: ThinkingLevel | undefined): Promise<void> => {
+	const add = (model: Model<Api>, reasoning: ThinkingLevel | undefined): void => {
 		if (blocked.has(model.provider)) return;
 		const key = `${model.provider}/${model.id}`;
 		if (seen.has(key)) return;
 
-		const provider = ctx.modelRegistry.getProvider(model.provider);
-		if (!provider) return;
-		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
-		if (!auth.ok) return;
+		if (!ctx.modelRegistry.hasConfiguredAuth(model)) return;
 
 		seen.add(key);
-		candidates.push({
-			model,
-			provider,
-			apiKey: auth.apiKey,
-			headers: auth.headers,
-			env: auth.env,
-			reasoning,
-		});
+		candidates.push({ model, reasoning });
 	};
 
 	for (const preferred of preferredModels) {
 		const model = ctx.modelRegistry.find(preferred.provider, preferred.model);
-		if (model) await add(model, preferred.reasoning);
+		if (model) add(model, preferred.reasoning);
 	}
-	if (includeParentModel && ctx.model) await add(ctx.model, undefined);
+	if (includeParentModel && ctx.model) add(ctx.model, undefined);
 
 	if (candidates.length === 0) throw new Error("No authenticated model available for generation.");
 	return candidates;
@@ -253,19 +243,12 @@ function completeCandidate(
 	sessionId: string,
 	tools?: Tool[],
 ): Promise<AssistantMessage> {
-	return candidate.provider
-		.streamSimple(
-			candidate.model,
-			normalizeContext(tools ? { messages: [...messages], tools } : { messages: [...messages] }),
-			{
-				apiKey: candidate.apiKey,
-				headers: candidate.headers,
-				env: candidate.env,
-				signal: ctx.signal,
-				reasoning: candidate.reasoning,
-				sessionId,
-			},
-		)
+	return ctx.modelRegistry
+		.streamSimple(candidate.model, tools ? { messages: [...messages], tools } : { messages: [...messages] }, {
+			signal: ctx.signal,
+			reasoning: candidate.reasoning,
+			sessionId,
+		})
 		.result();
 }
 

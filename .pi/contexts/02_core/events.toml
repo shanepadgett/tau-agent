@@ -1,8 +1,8 @@
 name = "Events"
-description = "Tau event contracts and shared event-backed coordination, including internal Soul prompt and tool-load checks"
+description = "Tau event contracts and shared event-backed coordination, including internal Soul prompt sources and snapshots"
 
 [contracts]
-description = "Maintain typed public and internal event names and payloads for prompt sources, Soul snapshots, tool checks, file mutation, and UI coordination"
+description = "Maintain typed public and internal event names and payloads for prompt sources, Soul snapshots, file mutation, and UI coordination"
 read = ["packages/agent/shared/events.ts"]
 show = []
 outline = []

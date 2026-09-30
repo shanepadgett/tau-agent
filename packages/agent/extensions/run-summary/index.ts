@@ -1,4 +1,3 @@
-import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Marker } from "@shanepadgett/tau-tui";
 
@@ -7,11 +6,6 @@ const ENTRY_TYPE = "tau.run-summary";
 interface RunSummary {
 	wallMs: number;
 	runCost: number;
-}
-
-interface PreviousRunSummary extends RunSummary {
-	subagentCost: number;
-	totalCost: number;
 }
 
 export default function runSummaryExtension(pi: ExtensionAPI): void {
@@ -25,13 +19,7 @@ export default function runSummaryExtension(pi: ExtensionAPI): void {
 			theme,
 			state: "muted",
 			label: "Run complete:",
-			parts: [
-				`Wall ${formatDuration(summary.wallMs)}`,
-				`Run ${formatCost(summary.runCost)}`,
-				...("subagentCost" in summary
-					? [`Subagents ${formatCost(summary.subagentCost)}`, `Total ${formatCost(summary.totalCost)}`]
-					: []),
-			],
+			parts: [`Wall ${formatDuration(summary.wallMs)}`, `Run ${formatCost(summary.runCost)}`],
 		});
 	});
 
@@ -46,7 +34,10 @@ export default function runSummaryExtension(pi: ExtensionAPI): void {
 
 	pi.on("agent_end", (event) => {
 		for (const message of event.messages) {
-			if (message.role === "assistant") runCost += finiteNonNegative((message as AssistantMessage).usage.cost.total);
+			// Tool results carry the usage of model calls a tool made.
+			if (message.role === "assistant") runCost += finiteNonNegative(message.usage.cost.total);
+			else if (message.role === "toolResult" && message.usage)
+				runCost += finiteNonNegative(message.usage.cost.total);
 		}
 	});
 
@@ -62,19 +53,10 @@ export default function runSummaryExtension(pi: ExtensionAPI): void {
 	});
 }
 
-function readRunSummary(value: unknown): RunSummary | PreviousRunSummary | undefined {
+function readRunSummary(value: unknown): RunSummary | undefined {
 	if (!value || typeof value !== "object") return undefined;
 	const record = value as Record<string, unknown>;
 	if (![record.wallMs, record.runCost].every(isFiniteNonNegative)) return undefined;
-	if ("subagentCost" in record || "totalCost" in record) {
-		if (![record.subagentCost, record.totalCost].every(isFiniteNonNegative)) return undefined;
-		return {
-			wallMs: record.wallMs as number,
-			runCost: record.runCost as number,
-			subagentCost: record.subagentCost as number,
-			totalCost: record.totalCost as number,
-		};
-	}
 	return {
 		wallMs: record.wallMs as number,
 		runCost: record.runCost as number,

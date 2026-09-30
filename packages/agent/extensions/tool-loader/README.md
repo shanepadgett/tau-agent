@@ -1,15 +1,15 @@
 # Tool Loader
 
-Tau progressively exposes registered specialist tool groups. Most coding turns do not need web, image, macOS application, or application-specific schemas, so Pi can load those tools later without discarding supported provider cache prefixes.
+Tau registers specialist tool groups as deferred tools so their schemas stay out of every request. Most coding turns do not need web, image, macOS application, or application-specific schemas. The agent finds and loads them with Pi's built-in `tool_search` tool, which Tau keeps active whenever deferred tools exist.
 
-The agent normally calls `load_tools` itself. Tau's built-in groups are:
+Tau's built-in groups are:
 
 - `web` for public web and implementation research
 - `image` for raster image generation and editing
 - `appshot` for macOS window discovery, capture, and activation
 
-Project and global package extensions can add groups with `registerDeferredToolGroup()` from `@shanepadgett/tau-agent`. The group description is included in the loader catalog so the agent can select it when a task needs that capability.
+Project and global package extensions can add groups with `registerDeferredToolGroup()` from `@shanepadgett/tau-agent`. The group id and description become the tool namespace shown to the agent.
 
-Supported models load new groups without replacing the cached prompt prefix. If the selected model cannot do that, the group is queued for activation after successful compaction. The loader reports this and does not compact automatically.
+Loaded tools are recorded in the session and stay available on that branch. All models can discover and load deferred tools. Supported models preserve the cached prompt prefix; other models, including Grok and opencode-go, can incur a cache miss when tools are activated. Tau does not compact automatically.
 
-After changing this extension during development, run `/reload` before testing.
+Pi's built-in `tool_search` extension must be enabled. After changing this extension during development, run `/reload` before testing.

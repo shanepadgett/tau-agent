@@ -34,12 +34,6 @@ export interface ModelCost {
 	sessions: number;
 }
 
-export interface SubagentCost {
-	agent: string;
-	cost: number;
-	calls: number;
-}
-
 export interface ProjectCost {
 	key: string;
 	label: string;
@@ -79,15 +73,12 @@ export interface CostReport {
 	cwd: string;
 	scope: ReportScope;
 	range: ReportRange;
-	directCost: number;
-	subagentCost: number;
 	totalCost: number;
 	totalTokens: number;
 	sessionCount: number;
 	projectCount: number;
 	days: DayCost[];
 	models: ModelCost[];
-	subagents: SubagentCost[];
 	projects: ProjectCost[];
 	sessions: SessionCost[];
 }

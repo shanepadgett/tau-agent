@@ -1,0 +1,14 @@
+name = "Codex Priority"
+description = "Priority service tier and cost accounting for gpt-6-luna on openai-codex"
+
+[extension-runtime]
+description = "Overlay the openai-codex provider through registerProvider with api openai-codex-responses; route every stream through the raw Codex API stream; add serviceTier priority for gpt-6-luna only; recompute cost on done and error events at 2.5x because pi-ai applies 2x; derive reasoningEffort from the neutral reasoning option only when present"
+read = [
+  "packages/agent/extensions/codex-priority/index.ts",
+  "packages/agent/extensions/codex-priority/README.md",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/tau-help/help.md",
+]

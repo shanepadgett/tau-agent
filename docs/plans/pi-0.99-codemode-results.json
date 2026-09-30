@@ -1,0 +1,971 @@
+[
+  {
+    "task": "parallel-outlines",
+    "repeat": 1,
+    "mode": "direct",
+    "elapsedMs": 6926,
+    "requests": 2,
+    "usage": {
+      "input": 5425,
+      "output": 217,
+      "cacheRead": 4608,
+      "cacheWrite": 0,
+      "cost": 0.0017427000000000002
+    },
+    "calls": [
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/soul/index.ts",
+          "includePrivate": true
+        }
+      },
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/tool-loader/index.ts",
+          "includePrivate": true
+        }
+      },
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/compaction/index.ts",
+          "includePrivate": true
+        }
+      }
+    ],
+    "wire": [
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      },
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      }
+    ],
+    "stopReason": "stop",
+    "answer": "- `packages/agent/extensions/soul/index.ts`: `CAPTURE_TYPE` (line 6); `DOCUMENTATION` (lines 8–15); `soulExtension` (lines 17–68).\n- `packages/agent/extensions/tool-loader/index.ts`: `TOOL_SEARCH` (line 4); `supportsToolAdditions` (lines 7–20); `toolLoaderExtension` (lines 22–42).\n- `packages/agent/extensions/compaction/index.ts`: `compactionExtension` (lines 5–47).",
+    "toolErrors": []
+  },
+  {
+    "task": "parallel-outlines",
+    "repeat": 1,
+    "mode": "codemode",
+    "elapsedMs": 4885,
+    "requests": 2,
+    "usage": {
+      "input": 7801,
+      "output": 217,
+      "cacheRead": 6656,
+      "cacheWrite": 0,
+      "cost": 0.0023879
+    },
+    "calls": [
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/soul/index.ts",
+          "includePrivate": true
+        }
+      },
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/tool-loader/index.ts",
+          "includePrivate": true
+        }
+      },
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/compaction/index.ts",
+          "includePrivate": true
+        }
+      }
+    ],
+    "wire": [
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "codemode",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      },
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "codemode",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      }
+    ],
+    "stopReason": "stop",
+    "answer": "- `packages/agent/extensions/soul/index.ts`: `CAPTURE_TYPE` (line 6); `DOCUMENTATION` (lines 8–15); `soulExtension` (lines 17–68).\n- `packages/agent/extensions/tool-loader/index.ts`: `TOOL_SEARCH` (line 4); `supportsToolAdditions` (lines 7–20); `toolLoaderExtension` (lines 22–42).\n- `packages/agent/extensions/compaction/index.ts`: `compactionExtension` (lines 5–47).",
+    "toolErrors": []
+  },
+  {
+    "task": "filtered-declarations",
+    "repeat": 1,
+    "mode": "direct",
+    "elapsedMs": 8036,
+    "requests": 2,
+    "usage": {
+      "input": 8042,
+      "output": 314,
+      "cacheRead": 4608,
+      "cacheWrite": 0,
+      "cost": 0.0025182
+    },
+    "calls": [
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/cache-diagnostics/index.ts",
+          "includePrivate": true
+        }
+      },
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/silent-command-runner/index.ts",
+          "includePrivate": true
+        }
+      },
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/tool-approval/index.ts",
+          "includePrivate": true
+        }
+      }
+    ],
+    "wire": [
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      },
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      }
+    ],
+    "stopReason": "stop",
+    "answer": "- `packages/agent/extensions/cache-diagnostics/index.ts`\n  - `fingerprintPromptState` — lines 541–562\n  - `fingerprintPayload` — lines 564–597\n- `packages/agent/extensions/silent-command-runner/index.ts`\n  - `formatSilentCheckPrompt` — lines 231–237\n  - `formatSilentCheckCommand` — lines 239–247\n  - `formatCommandNames` — lines 341–343\n  - `formatAgentMessage` — lines 371–377\n  - `formatAgentFailure` — lines 379–388\n  - `formatOutput` — lines 390–393\n- `packages/agent/extensions/tool-approval/index.ts`\n  - `reviewAssistantRequests` — lines 322–374\n  - `reviewToolRequest` — lines 376–400\n  - `reviewFromToolInput` — lines 402–416\n  - `formatApproval` — lines 418–420",
+    "toolErrors": []
+  },
+  {
+    "task": "filtered-declarations",
+    "repeat": 1,
+    "mode": "codemode",
+    "elapsedMs": 6316,
+    "requests": 2,
+    "usage": {
+      "input": 10418,
+      "output": 315,
+      "cacheRead": 6656,
+      "cacheWrite": 0,
+      "cost": 0.0031646500000000006
+    },
+    "calls": [
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/cache-diagnostics/index.ts",
+          "includePrivate": true
+        }
+      },
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/silent-command-runner/index.ts",
+          "includePrivate": true
+        }
+      },
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/tool-approval/index.ts",
+          "includePrivate": true
+        }
+      }
+    ],
+    "wire": [
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "codemode",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      },
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "codemode",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      }
+    ],
+    "stopReason": "stop",
+    "answer": "**packages/agent/extensions/cache-diagnostics/index.ts**\n- `fingerprintPromptState` — lines 541–562\n- `fingerprintPayload` — lines 564–597\n\n**packages/agent/extensions/silent-command-runner/index.ts**\n- `formatSilentCheckPrompt` — lines 231–237\n- `formatSilentCheckCommand` — lines 239–247\n- `formatCommandNames` — lines 341–343\n- `formatAgentMessage` — lines 371–377\n- `formatAgentFailure` — lines 379–388\n- `formatOutput` — lines 390–393\n\n**packages/agent/extensions/tool-approval/index.ts**\n- `reviewAssistantRequests` — lines 322–374\n- `reviewToolRequest` — lines 376–400\n- `reviewFromToolInput` — lines 402–416\n- `formatApproval` — lines 418–420\n\nNo matching top-level function declarations were found in any of the three files.",
+    "toolErrors": []
+  },
+  {
+    "task": "dependency-summary",
+    "repeat": 1,
+    "mode": "direct",
+    "elapsedMs": 7434,
+    "requests": 2,
+    "usage": {
+      "input": 5443,
+      "output": 175,
+      "cacheRead": 4608,
+      "cacheWrite": 0,
+      "cost": 0.0016947000000000002
+    },
+    "calls": [
+      {
+        "name": "deps",
+        "input": {
+          "path": "packages/agent/extensions/soul/index.ts",
+          "depth": 1,
+          "resultLimit": 100
+        }
+      },
+      {
+        "name": "deps",
+        "input": {
+          "path": "packages/agent/extensions/tool-loader/index.ts",
+          "depth": 1,
+          "resultLimit": 100
+        }
+      },
+      {
+        "name": "deps",
+        "input": {
+          "path": "packages/agent/extensions/compaction/index.ts",
+          "depth": 1,
+          "resultLimit": 100
+        }
+      }
+    ],
+    "wire": [
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      },
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      }
+    ],
+    "stopReason": "stop",
+    "answer": "No common internal dependencies across any two files.\n\n- **Soul:** `shared/events.ts`, `shared/prompt-contributions.ts`, `extensions/soul/prompt.ts`\n- **Tool loader:** no internal imports\n- **Compaction:** `shared/model-effort.ts`, `shared/text.ts`",
+    "toolErrors": []
+  },
+  {
+    "task": "dependency-summary",
+    "repeat": 1,
+    "mode": "codemode",
+    "elapsedMs": 6881,
+    "requests": 2,
+    "usage": {
+      "input": 1163,
+      "output": 176,
+      "cacheRead": 13312,
+      "cacheWrite": 0,
+      "cost": 0.0008435500000000001
+    },
+    "calls": [
+      {
+        "name": "deps",
+        "input": {
+          "path": "packages/agent/extensions/soul/index.ts",
+          "depth": 1,
+          "resultLimit": 100
+        }
+      },
+      {
+        "name": "deps",
+        "input": {
+          "path": "packages/agent/extensions/tool-loader/index.ts",
+          "depth": 1,
+          "resultLimit": 100
+        }
+      },
+      {
+        "name": "deps",
+        "input": {
+          "path": "packages/agent/extensions/compaction/index.ts",
+          "depth": 1,
+          "resultLimit": 100
+        }
+      }
+    ],
+    "wire": [
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "codemode",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      },
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "codemode",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      }
+    ],
+    "stopReason": "stop",
+    "answer": "No internal imports are shared by any two files.\n\n- **soul** — `shared/events.ts`, `shared/prompt-contributions.ts`, `extensions/soul/prompt.ts`\n- **tool-loader** — none\n- **compaction** — `model-effort.ts`, `text.ts`",
+    "toolErrors": []
+  },
+  {
+    "task": "parallel-outlines",
+    "repeat": 2,
+    "mode": "codemode",
+    "elapsedMs": 6114,
+    "requests": 2,
+    "usage": {
+      "input": 7801,
+      "output": 203,
+      "cacheRead": 6656,
+      "cacheWrite": 0,
+      "cost": 0.0023704000000000004
+    },
+    "calls": [
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/soul/index.ts",
+          "includePrivate": true
+        }
+      },
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/tool-loader/index.ts",
+          "includePrivate": true
+        }
+      },
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/compaction/index.ts",
+          "includePrivate": true
+        }
+      }
+    ],
+    "wire": [
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "codemode",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      },
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "codemode",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      }
+    ],
+    "stopReason": "stop",
+    "answer": "- `packages/agent/extensions/soul/index.ts`: `CAPTURE_TYPE` (6); `DOCUMENTATION` (8–15); `soulExtension` (17–68).\n- `packages/agent/extensions/tool-loader/index.ts`: `TOOL_SEARCH` (4); `supportsToolAdditions` (7–20); `toolLoaderExtension` (22–42).\n- `packages/agent/extensions/compaction/index.ts`: `compactionExtension` (5–47).",
+    "toolErrors": []
+  },
+  {
+    "task": "parallel-outlines",
+    "repeat": 2,
+    "mode": "direct",
+    "elapsedMs": 6349,
+    "requests": 2,
+    "usage": {
+      "input": 817,
+      "output": 230,
+      "cacheRead": 9216,
+      "cacheWrite": 0,
+      "cost": 0.00072215
+    },
+    "calls": [
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/soul/index.ts",
+          "includePrivate": true
+        }
+      },
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/tool-loader/index.ts",
+          "includePrivate": true
+        }
+      },
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/compaction/index.ts",
+          "includePrivate": true
+        }
+      }
+    ],
+    "wire": [
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      },
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      }
+    ],
+    "stopReason": "stop",
+    "answer": "- `packages/agent/extensions/soul/index.ts`\n  - `CAPTURE_TYPE` — lines 6\n  - `DOCUMENTATION` — lines 8–15\n  - `soulExtension` — lines 17–68\n- `packages/agent/extensions/tool-loader/index.ts`\n  - `TOOL_SEARCH` — line 4\n  - `supportsToolAdditions` — lines 7–20\n  - `toolLoaderExtension` — lines 22–42\n- `packages/agent/extensions/compaction/index.ts`\n  - `compactionExtension` — lines 5–47",
+    "toolErrors": []
+  },
+  {
+    "task": "filtered-declarations",
+    "repeat": 2,
+    "mode": "codemode",
+    "elapsedMs": 9668,
+    "requests": 2,
+    "usage": {
+      "input": 690,
+      "output": 314,
+      "cacheRead": 16384,
+      "cacheWrite": 0,
+      "cost": 0.0009746
+    },
+    "calls": [
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/cache-diagnostics/index.ts",
+          "includePrivate": true
+        }
+      },
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/silent-command-runner/index.ts",
+          "includePrivate": true
+        }
+      },
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/tool-approval/index.ts",
+          "includePrivate": true
+        }
+      }
+    ],
+    "wire": [
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "codemode",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      },
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "codemode",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      }
+    ],
+    "stopReason": "stop",
+    "answer": "- `packages/agent/extensions/cache-diagnostics/index.ts`\n  - `fingerprintPromptState` — lines 541–562\n  - `fingerprintPayload` — lines 564–597\n- `packages/agent/extensions/silent-command-runner/index.ts`\n  - `formatSilentCheckPrompt` — lines 231–237\n  - `formatSilentCheckCommand` — lines 239–247\n  - `formatCommandNames` — lines 341–343\n  - `formatAgentMessage` — lines 371–377\n  - `formatAgentFailure` — lines 379–388\n  - `formatOutput` — lines 390–393\n- `packages/agent/extensions/tool-approval/index.ts`\n  - `reviewAssistantRequests` — lines 322–374\n  - `reviewToolRequest` — lines 376–400\n  - `reviewFromToolInput` — lines 402–416\n  - `formatApproval` — lines 418–420",
+    "toolErrors": []
+  },
+  {
+    "task": "filtered-declarations",
+    "repeat": 2,
+    "mode": "direct",
+    "elapsedMs": 6281,
+    "requests": 2,
+    "usage": {
+      "input": 1386,
+      "output": 285,
+      "cacheRead": 11264,
+      "cacheWrite": 0,
+      "cost": 0.00098435
+    },
+    "calls": [
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/cache-diagnostics/index.ts",
+          "includePrivate": true
+        }
+      },
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/silent-command-runner/index.ts",
+          "includePrivate": true
+        }
+      },
+      {
+        "name": "outline",
+        "input": {
+          "path": "packages/agent/extensions/tool-approval/index.ts",
+          "includePrivate": true
+        }
+      }
+    ],
+    "wire": [
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      },
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      }
+    ],
+    "stopReason": "stop",
+    "answer": "- `packages/agent/extensions/cache-diagnostics/index.ts`: `fingerprintPromptState` (lines 541–562), `fingerprintPayload` (564–597), `compareFingerprints` (599–637).\n- `packages/agent/extensions/silent-command-runner/index.ts`: `formatSilentCheckPrompt` (231–237), `formatSilentCheckCommand` (239–247), `formatCommandNames` (341–343), `formatAgentMessage` (371–377), `formatAgentFailure` (379–388), `formatOutput` (390–393).\n- `packages/agent/extensions/tool-approval/index.ts`: `reviewAssistantRequests` (322–374), `reviewToolRequest` (376–400), `reviewFromToolInput` (402–416), `formatApproval` (418–420).\n\nNo file had zero matches.",
+    "toolErrors": []
+  },
+  {
+    "task": "dependency-summary",
+    "repeat": 2,
+    "mode": "codemode",
+    "elapsedMs": 5032,
+    "requests": 2,
+    "usage": {
+      "input": 7841,
+      "output": 183,
+      "cacheRead": 6656,
+      "cacheWrite": 0,
+      "cost": 0.0023553999999999997
+    },
+    "calls": [
+      {
+        "name": "codemode",
+        "input": {
+          "code": "const paths = [\n  \"packages/agent/extensions/soul/index.ts\",\n  \"packages/agent/extensions/tool-loader/index.ts\",\n  \"packages/agent/extensions/compaction/index.ts\"\n];\nconst results = await Promise.all(paths.map(path => tools.deps({path, depth: 1, resultLimit: 100})));\nfor (let i = 0; i < paths.length; i++) {\n  text(paths[i] + \"\\n\" + results[i]);\n}\n"
+        }
+      },
+      {
+        "name": "deps",
+        "input": {
+          "path": "packages/agent/extensions/soul/index.ts",
+          "depth": 1,
+          "resultLimit": 100
+        },
+        "parent": "call_BDjbBw1M5049ELPauKzEWZaN|ctc_06d89dba5f64fc5b016abc7298c01487d1900d487c6bf1e1e0"
+      },
+      {
+        "name": "deps",
+        "input": {
+          "path": "packages/agent/extensions/tool-loader/index.ts",
+          "depth": 1,
+          "resultLimit": 100
+        },
+        "parent": "call_BDjbBw1M5049ELPauKzEWZaN|ctc_06d89dba5f64fc5b016abc7298c01487d1900d487c6bf1e1e0"
+      },
+      {
+        "name": "deps",
+        "input": {
+          "path": "packages/agent/extensions/compaction/index.ts",
+          "depth": 1,
+          "resultLimit": 100
+        },
+        "parent": "call_BDjbBw1M5049ELPauKzEWZaN|ctc_06d89dba5f64fc5b016abc7298c01487d1900d487c6bf1e1e0"
+      }
+    ],
+    "wire": [
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "codemode",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      },
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "codemode",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      }
+    ],
+    "stopReason": "stop",
+    "answer": "No common internal imports are shared by any two files.\n\nUnique internal imports:\n- `soul/index.ts`: `shared/events.ts`, `shared/prompt-contributions.ts`, `extensions/soul/prompt.ts`\n- `tool-loader/index.ts`: none\n- `compaction/index.ts`: `shared/model-effort.ts`, `shared/text.ts`",
+    "toolErrors": []
+  },
+  {
+    "task": "dependency-summary",
+    "repeat": 2,
+    "mode": "direct",
+    "elapsedMs": 6598,
+    "requests": 2,
+    "usage": {
+      "input": 5443,
+      "output": 183,
+      "cacheRead": 4608,
+      "cacheWrite": 0,
+      "cost": 0.0017047
+    },
+    "calls": [
+      {
+        "name": "deps",
+        "input": {
+          "path": "packages/agent/extensions/soul/index.ts",
+          "depth": 1,
+          "resultLimit": 100
+        }
+      },
+      {
+        "name": "deps",
+        "input": {
+          "path": "packages/agent/extensions/tool-loader/index.ts",
+          "depth": 1,
+          "resultLimit": 100
+        }
+      },
+      {
+        "name": "deps",
+        "input": {
+          "path": "packages/agent/extensions/compaction/index.ts",
+          "depth": 1,
+          "resultLimit": 100
+        }
+      }
+    ],
+    "wire": [
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      },
+      {
+        "serviceTier": "priority",
+        "toolNames": [
+          "read",
+          "outline",
+          "show",
+          "discover",
+          "ast_search",
+          "deps",
+          "reverse_deps",
+          "callers",
+          "callees",
+          "references",
+          "implementations",
+          "impact",
+          "context"
+        ]
+      }
+    ],
+    "stopReason": "stop",
+    "answer": "No internal imports are shared by any two files.\n\n- `soul/index.ts`: `shared/events.ts`, `shared/prompt-contributions.ts`, `extensions/soul/prompt.ts`\n- `tool-loader/index.ts`: no internal imports\n- `compaction/index.ts`: `shared/model-effort.ts`, `shared/text.ts`",
+    "toolErrors": []
+  }
+]

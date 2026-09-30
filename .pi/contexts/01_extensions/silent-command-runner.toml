@@ -1,8 +1,8 @@
 name = "Silent Command Runner"
-description = "Automatic post-edit project commands with Soul automatic-check guidance, pass notifications, and failure follow-ups"
+description = "Automatic post-edit project commands with Soul automatic-check guidance, pass notifications, and failure continuations"
 
 [extension-runtime]
-description = "Load silentCommandRunner settings; register automatic-check guidance as a Soul source; snapshot project file set on agent_start chain start and acquire attention hold; on agent_end walk project, match include/exclude globs plus mtime/deleted paths since turnStart, run changed commands via pi.exec sh -lc; pass notifies only; failures send tau:silent-command-runner followUp with stdout/stderr tails; release hold on agent_settled with notify disposition; skip aborted assistant turns; abort in-flight on session_shutdown; custom message renderer for expanded failure details"
+description = "Load silentCommandRunner settings; register automatic-check guidance as a Soul source; snapshot project file set and time on agent_start; on agent_before_settle (completed outcome only) walk project, match include/exclude globs plus mtime/deleted paths since the snapshot, run changed commands via pi.exec sh -lc; pass notifies only; failures append a tau:silent-command-runner custom_message with stdout/stderr tails and continue the run, then reset the snapshot so only later agent changes trigger another check; abort in-flight on session_shutdown; custom message renderer for expanded failure details"
 read = [
   "packages/agent/extensions/silent-command-runner/index.ts",
   "packages/agent/extensions/silent-command-runner/README.md",

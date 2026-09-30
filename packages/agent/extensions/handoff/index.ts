@@ -61,7 +61,7 @@ export default function handoffExtension(pi: ExtensionAPI): void {
 						);
 						const conversation = serializeConversation(convertToLlm(messages));
 						const result = await generateToolValidated(
-							{ ui: ctx.ui, signal: loader.signal },
+							{ ui: ctx.ui, modelRegistry: ctx.modelRegistry, signal: loader.signal },
 							candidates,
 							buildHandoffRequest(conversation, goal, ctx.cwd),
 							HANDOFF_TOOL,

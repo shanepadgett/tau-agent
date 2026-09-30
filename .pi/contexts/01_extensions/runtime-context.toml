@@ -2,7 +2,7 @@ name = "Runtime Context"
 description = "Register Soul's runtime environment source with a local display date and frozen depth-2 root snapshot"
 
 [extension-shell]
-description = "Register the runtime environment source; Soul captures the current display date and root snapshot in its baseline and refreshes them after compaction"
+description = "Register the runtime environment source; Soul captures the current display date and root snapshot on the first prompt and refreshes them after compaction"
 read = [
   "packages/agent/extensions/runtime-context/index.ts",
   "packages/agent/shared/prompt-contributions.ts",

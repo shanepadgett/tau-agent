@@ -1,13 +1,10 @@
 name = "Soul"
-description = "Capture and replay Soul's saved prompt baseline and updates, collect runtime prompt sources, and enforce cache-safe tool admission"
+description = "Build Tau's system prompt as Pi prompt sections from collected prompt sources, freezing compaction-refreshed sources per compaction epoch"
 
 [prompt-lifecycle]
-description = "Capture the sorted system-prompt baseline, persist source updates across compaction, replay the saved prefix, and reject unsafe tool or history changes"
+description = "In before_agent_start set the fixed instructions as customPrompt, add documentation, tool guidance and prompt sources as named sections, save compaction-refreshed source values in a custom entry per compaction epoch, and emit the prompt snapshot"
 read = [
   "packages/agent/extensions/soul/index.ts",
-  "packages/agent/extensions/soul/context.ts",
-  "packages/agent/extensions/soul/state.ts",
-  "packages/agent/extensions/soul/tools.ts",
   "packages/agent/extensions/soul/prompt.ts",
   "packages/agent/extensions/soul/README.md",
   "packages/agent/shared/prompt-contributions.ts",
@@ -25,10 +22,9 @@ references = [
 ]
 
 [source-collection]
-description = "Register, validate, read, sort, and render extension-owned prompt sources for Soul baseline capture and append-only updates"
+description = "Register, validate, and collect extension-owned prompt sources that become named Soul prompt sections"
 read = [
   "packages/agent/extensions/soul/index.ts",
-  "packages/agent/extensions/soul/context.ts",
   "packages/agent/shared/prompt-contributions.ts",
   "packages/agent/shared/events.ts",
   "packages/agent/extensions/soul/README.md",

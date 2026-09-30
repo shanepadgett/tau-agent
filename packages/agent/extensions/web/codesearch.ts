@@ -26,6 +26,7 @@ export function createCodeSearchTool(rowState: ToolRowStateStore) {
 	return defineTool<typeof codeSearchParams, CodeSearchDetails | undefined>({
 		name: "codesearch",
 		label: "Code Search",
+		annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 		description:
 			"Search Exa for API usage, code examples, and implementation-oriented documentation context. Use websearch for broad discovery and webfetch for a known URL. Use a separate research workflow when several searches, fetches, and synthesis are needed. Output is truncated to 2,000 lines or 50 KB.",
 		parameters: codeSearchParams,

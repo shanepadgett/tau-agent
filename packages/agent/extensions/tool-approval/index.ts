@@ -1,4 +1,4 @@
-import type { ThinkingLevel, Tool } from "@earendil-works/pi-ai";
+import type { Tool } from "@earendil-works/pi-ai";
 import {
 	isToolCallEventType,
 	type ExtensionAPI,
@@ -9,7 +9,8 @@ import { Marker } from "@shanepadgett/tau-tui";
 import { Type } from "typebox";
 import { emitAgentBlocked } from "../../shared/agent-blocked.ts";
 import { emitTauEvent } from "../../shared/events.ts";
-import { generateToolValidated, resolveCandidates } from "../../shared/model-fallback/index.ts";
+import { generateToolValidated } from "../../shared/model-fallback/index.ts";
+import { resolveEffortCandidates } from "../../shared/model-effort.ts";
 import type { ScriptSourceStore } from "../../shared/script-source.ts";
 import { errorText, truncAt } from "../../shared/text.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
@@ -58,15 +59,6 @@ const REVIEW_TOOL = {
 	description: "Submit the complete safety review for the agent tool request.",
 	parameters: REVIEW_SCHEMA,
 } satisfies Tool;
-
-const REVIEW_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
-	{ provider: "openai", model: "gpt-6-luna", reasoning: "medium" },
-	{ provider: "openai-codex", model: "gpt-6-luna", reasoning: "medium" },
-	{ provider: "anthropic", model: "claude-sonnet-5", reasoning: "medium" },
-	{ provider: "xai", model: "grok-4.5", reasoning: "low" },
-	{ provider: "openrouter", model: "deepseek/deepseek-v4.1-flash", reasoning: "high" },
-	{ provider: "opencode-go", model: "deepseek-v4.1-flash", reasoning: "high" },
-];
 
 type ToolReview =
 	| { decision: "approved"; summary: string }
@@ -383,23 +375,11 @@ async function reviewAssistantRequests(
 
 async function reviewToolRequest(ctx: ExtensionContext, request: ToolApprovalRequest): Promise<ToolReviewResult> {
 	const requestJson = JSON.stringify(request);
-	const reviewer = REVIEW_MODELS.find((item) => item.provider === ctx.model?.provider);
-	const preferred = reviewer ? [reviewer] : [];
-	if (ctx.model) {
-		preferred.push({
-			provider: ctx.model.provider,
-			model: ctx.model.id,
-			reasoning: "medium",
-		});
-	}
-	const candidates = await resolveCandidates(ctx, preferred, false);
-	const wanted = preferred[0];
-	if (
-		wanted &&
-		!candidates.some((item) => item.model.provider === wanted.provider && item.model.id === wanted.model)
-	) {
-		ctx.ui.notify(`Tool review skipped ${wanted.provider}/${wanted.model}; trying next model.`, "info");
-	}
+	// Requests contain shell commands and scripts, so only the session's own provider reviews them.
+	const provider = ctx.model?.provider;
+	const candidates = (
+		await resolveEffortCandidates(ctx, "quick", { includeParentModel: true, preferredProvider: provider })
+	).filter((candidate) => candidate.model.provider === provider);
 	const { value, candidate } = await generateToolValidated(
 		ctx,
 		candidates,

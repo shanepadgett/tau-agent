@@ -487,7 +487,7 @@ export default function cacheDiagnosticsExtension(pi: ExtensionAPI): void {
 	);
 	pi.on("session_tree", () => addMarker("session-tree"));
 	pi.on("tool_execution_end", (event) => {
-		if (event.toolName !== "load_tools") return;
+		if (event.toolName !== "tool_search") return;
 		return addMarker("cache-affecting-tool", { tool: event.toolName, isError: event.isError });
 	});
 }

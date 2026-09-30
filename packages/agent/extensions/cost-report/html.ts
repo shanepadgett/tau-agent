@@ -126,7 +126,6 @@ export function renderCostReportHtml(report: CostReport): string {
 	const scopeClass = report.scope === "project" ? "scope-project" : "scope-all";
 	const totalShare = report.totalCost;
 	const tokenShareBase = report.totalTokens;
-	const subagentShareBase = report.subagentCost;
 
 	const modelRows = report.models
 		.map((model) => {
@@ -141,22 +140,6 @@ export function renderCostReportHtml(report: CostReport): string {
 			</tr>`;
 		})
 		.join("");
-
-	const subagentRows =
-		report.subagents.length === 0
-			? `<tr><td class="px-3 py-2 text-stone-600 dark:text-stone-400" colspan="5">No subagent spend in this window.</td></tr>`
-			: report.subagents
-					.map((agent) => {
-						const share = subagentShareBase > 0 ? agent.cost / subagentShareBase : 0;
-						return `<tr>
-							<td class="px-3 py-2">${escapeHtml(agent.agent)}</td>
-							<td class="px-3 py-2 text-right">${money(agent.cost)}</td>
-							<td class="px-3 py-2 text-right">${percent(agent.cost, subagentShareBase)}</td>
-							<td class="px-3 py-2">${shareBar(share)}</td>
-							<td class="px-3 py-2 text-right">${agent.calls}</td>
-						</tr>`;
-					})
-					.join("");
 
 	const projectRows = report.projects
 		.map((project) => {
@@ -386,24 +369,6 @@ export function renderCostReportHtml(report: CostReport): string {
 					</table>
 				</div>
 			</section>
-
-			<section aria-labelledby="subagents-heading">
-				<h2 id="subagents-heading" class="mb-3 text-sm font-semibold">Subagents</h2>
-				<div class="overflow-x-auto rounded border border-stone-300 bg-white dark:border-stone-700 dark:bg-stone-900">
-					<table class="w-full text-sm tabular">
-						<thead>
-							<tr class="text-left text-xs font-medium text-stone-600 dark:text-stone-400">
-								<th scope="col" class="px-3 py-2 font-medium">Agent</th>
-								<th scope="col" class="px-3 py-2 text-right font-medium">Cost</th>
-								<th scope="col" class="px-3 py-2 text-right font-medium">Share</th>
-								<th scope="col" class="min-w-[7rem] px-3 py-2 font-medium"></th>
-								<th scope="col" class="px-3 py-2 text-right font-medium">Calls</th>
-							</tr>
-						</thead>
-						<tbody class="divide-y divide-stone-200 dark:divide-stone-800">${subagentRows}</tbody>
-					</table>
-				</div>
-			</section>
 		</div>
 
 		<section class="all-only mb-8" aria-labelledby="projects-heading">
@@ -450,8 +415,7 @@ export function renderCostReportHtml(report: CostReport): string {
 
 		<footer class="mt-10 border-t border-stone-300 pt-4 text-xs text-stone-600 dark:border-stone-700 dark:text-stone-400">
 			<p>
-				Costs are estimates from stored session usage, not provider invoices. Branched turns count. Subagent
-				totals come from parent tool results. Direct ${money(report.directCost)} · Subagents ${money(report.subagentCost)}.
+				Costs are estimates from stored session usage, not provider invoices. Branched turns count.
 			</p>
 		</footer>
 	</main>

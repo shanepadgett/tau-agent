@@ -1,0 +1,15 @@
+name = "Compaction"
+description = "Summarize compactions with the session provider's quick-tier model"
+
+[extension-runtime]
+description = "On session_before_compact, resolve quick-tier candidates for the session's provider excluding the session model and any model whose context window cannot hold tokensBefore plus reserveTokens; run Pi compact() with a streamFn over ctx.modelRegistry.streamSimple; return the CompactionResult, else undefined so Pi's default compaction runs; never crosses providers"
+read = [
+  "packages/agent/extensions/compaction/index.ts",
+  "packages/agent/extensions/compaction/README.md",
+  "packages/agent/shared/model-effort.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/tau-help/help.md",
+]

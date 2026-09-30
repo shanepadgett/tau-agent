@@ -2,7 +2,6 @@ import { readdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { type ExecResult, type ExtensionAPI, keyText, type Theme } from "@earendil-works/pi-coding-agent";
 import { Box, Text } from "@earendil-works/pi-tui";
-import { emitTauEvent } from "../../shared/events.ts";
 import { registerPromptSource } from "../../shared/prompt-contributions.ts";
 import { matchGlob, posixPath } from "../../shared/glob.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
@@ -82,16 +81,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	let turnPaths = new Set<string>();
 	let abortController: AbortController | undefined;
 	let sessionActive = false;
-	let chainActive = false;
-	let attentionHoldSequence = 0;
-	let attentionHoldId: string | undefined;
-
-	function finalizeChain(): void {
-		chainActive = false;
-		const holdId = attentionHoldId;
-		attentionHoldId = undefined;
-		if (holdId) emitTauEvent(pi, "tau:attention.hold.release", { id: holdId, disposition: "notify" });
-	}
 
 	pi.registerMessageRenderer<FailureDetails>(MESSAGE_TYPE, (message, { expanded }, theme) =>
 		renderFailure(asFailureDetails(message.details), expanded, theme),
@@ -102,9 +91,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		sessionActive = true;
 		turnStart = Date.now();
 		turnPaths = new Set();
-		chainActive = false;
-		attentionHoldSequence = 0;
-		attentionHoldId = undefined;
 	});
 
 	registerPromptSource(pi, {
@@ -119,41 +105,43 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("agent_start", async (_event, ctx) => {
-		const startingChain = !chainActive;
-		chainActive = true;
-		if (!settings.enabled || settings.commands.length === 0) {
-			if (startingChain) {
-				turnStart = Date.now();
-				turnPaths = new Set();
-			}
-			return;
-		}
-		if (!startingChain) return;
-		attentionHoldId = `silent-command-runner:${++attentionHoldSequence}`;
-		emitTauEvent(pi, "tau:attention.hold.acquire", { id: attentionHoldId });
 		turnStart = Date.now();
-		const projectRoot = await resolveProjectRoot(ctx.cwd);
-		turnPaths = new Set(await walkFiles(projectRoot));
+		turnPaths =
+			settings.enabled && settings.commands.length > 0
+				? new Set(await walkFiles(await resolveProjectRoot(ctx.cwd)))
+				: new Set();
 	});
 
-	pi.on("agent_end", async (event, ctx) => {
-		if (hasAbortedAssistantMessage(event.messages)) return;
+	// The last boundary before the run settles: failures continue the run instead of starting a new one.
+	pi.on("agent_before_settle", async (event, ctx) => {
+		if (event.outcome !== "completed") return undefined;
 		try {
-			await runChangedCommands(ctx.cwd, turnStart, ctx.ui.notify);
+			const failures = await runChangedCommands(ctx.cwd, ctx.ui.notify);
+			if (!failures || failures.length === 0) return undefined;
+			return {
+				entries: [
+					...event.entries,
+					{
+						type: "custom_message" as const,
+						customType: MESSAGE_TYPE,
+						content: formatAgentMessage(failures),
+						display: true,
+						details: { failed: [...failures] } satisfies FailureDetails,
+					},
+				],
+				continue: true,
+			};
 		} catch (error: unknown) {
 			ctx.ui.notify(`silent-command-runner: ${errorMessage(error)}`, "error");
+			return undefined;
 		}
 	});
-
-	pi.on("agent_settled", finalizeChain);
 
 	pi.on("session_shutdown", () => {
 		sessionActive = false;
 		abortController?.abort();
 		abortController = undefined;
 		turnPaths = new Set();
-		chainActive = false;
-		attentionHoldId = undefined;
 	});
 
 	async function collectCommandFailures(
@@ -183,37 +171,16 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		return failures;
 	}
 
-	function reportCommandResults(
-		changed: readonly CommandConfig[],
-		failures: readonly FailedCommandDetails[],
-		notify: (message: string, type?: "info" | "warning" | "error") => void,
-	): void {
-		const failedNames = new Set(failures.map((failure) => failure.name));
-		const passed = changed.filter((command) => !failedNames.has(command.name));
-		if (passed.length > 0) notify(`silent-command-runner: passed ${formatCommandNames(passed)}`, "info");
-		if (failures.length === 0) return;
-		pi.sendMessage<FailureDetails>(
-			{
-				customType: MESSAGE_TYPE,
-				content: formatAgentMessage(failures),
-				display: true,
-				details: { failed: [...failures] },
-			},
-			{ deliverAs: "followUp" },
-		);
-	}
-
 	async function runChangedCommands(
 		cwd: string,
-		turnStart: number,
 		notify: (message: string, type?: "info" | "warning" | "error") => void,
-	): Promise<void> {
-		if (!settings.enabled || settings.commands.length === 0) return;
+	): Promise<FailedCommandDetails[] | undefined> {
+		if (!settings.enabled || settings.commands.length === 0) return undefined;
 
 		const projectRoot = await resolveProjectRoot(cwd);
 		const paths = await walkFiles(projectRoot);
 		const changed = await scanChangedCommands(projectRoot, settings.commands, paths, turnPaths, turnStart);
-		if (!sessionActive || changed.length === 0) return;
+		if (!sessionActive || changed.length === 0) return undefined;
 
 		notify(
 			changed.length === 1
@@ -223,8 +190,16 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		);
 
 		const failures = await collectCommandFailures(projectRoot, changed, notify);
-		if (failures === undefined || !sessionActive) return;
-		reportCommandResults(changed, failures, notify);
+		if (failures === undefined || !sessionActive) return undefined;
+		const failedNames = new Set(failures.map((failure) => failure.name));
+		const passed = changed.filter((command) => !failedNames.has(command.name));
+		if (passed.length > 0) notify(`silent-command-runner: passed ${formatCommandNames(passed)}`, "info");
+		if (failures.length > 0) {
+			// Only files the agent changes after this report can trigger another check and continuation.
+			turnStart = Date.now();
+			turnPaths = new Set(paths);
+		}
+		return failures;
 	}
 }
 
@@ -255,7 +230,7 @@ function normalizeSettings(value: typeof silentCommandRunnerSettings.defaults): 
 
 function formatSilentCheckPrompt(commands: readonly CommandConfig[]): string {
 	return [
-		"Do not manually run the commands listed below. They run automatically after matching changes. After fixing a reported failure, end the turn so they can run again. Targeted checks outside this list remain allowed when needed.",
+		"Do not manually run the commands listed below. They run automatically after matching changes. Complete the work and finish normally; treat it as correct unless a failure is reported. Do not announce pending validation, hedge completion because of these commands, or tell the user that checks will run or rerun. If a failure is reported, fix it and describe the correction, then finish normally. Do not claim commands passed without evidence. Targeted checks outside this list remain allowed when needed.",
 		"Automatic commands:",
 		...commands.map(formatSilentCheckCommand),
 	].join("\n");
@@ -269,12 +244,6 @@ function formatSilentCheckCommand(command: CommandConfig): string {
 		`  triggers: ${command.includeGlobs.join(", ")}`,
 		...(command.excludeGlobs.length ? [`  excludes: ${command.excludeGlobs.join(", ")}`] : []),
 	].join("\n");
-}
-
-function hasAbortedAssistantMessage(messages: readonly unknown[]): boolean {
-	return messages.some(
-		(message) => isRecord(message) && message.role === "assistant" && message.stopReason === "aborted",
-	);
 }
 
 async function scanChangedCommands(
@@ -403,7 +372,7 @@ function formatAgentMessage(failures: readonly FailedCommandDetails[]): string {
 	return [
 		`silent-command-runner failed: ${failures.length} command${failures.length === 1 ? "" : "s"}`,
 		...failures.map(formatAgentFailure),
-		"**Do not** rerun these checks. They will run automatically after your fix.",
+		"Fix the reported failures without manually rerunning these commands. Describe the correction and finish normally; do not announce validation or reruns.",
 	].join("\n\n");
 }
 

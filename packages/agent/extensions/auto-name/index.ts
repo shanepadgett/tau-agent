@@ -1,21 +1,18 @@
-import { type ThinkingLevel, type Tool, Type } from "@earendil-works/pi-ai";
+import { type Tool, Type } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
 	getBranchInjectedContexts,
 	getPendingInjectedContexts,
 	type InjectedContext,
 } from "../../shared/injected-context.ts";
-import { generateToolValidated, resolveCandidates } from "../../shared/model-fallback/index.ts";
+import { generateToolValidated } from "../../shared/model-fallback/index.ts";
+import { resolveEffortCandidates } from "../../shared/model-effort.ts";
 import { errorText, truncAt } from "../../shared/text.ts";
 
 const STATUS_KEY = "auto-name";
 const SENTINEL = "NONE";
 const MAX_NAME_LENGTH = 80;
 const MAX_NAMING_INPUT_CHARS = 120_000;
-const AUTO_NAME_MODELS: ReadonlyArray<{ provider: string; model: string; reasoning: ThinkingLevel }> = [
-	{ provider: "openai-codex", model: "gpt-5.4-mini", reasoning: "medium" },
-	{ provider: "openrouter", model: "cohere/north-mini-code:free", reasoning: "high" },
-];
 
 const NAMING_PROMPT = [
 	"You are naming a chat session based on the user's first message and any injected hidden context.",
@@ -87,9 +84,9 @@ async function runAutoName(
 ): Promise<void> {
 	const ui = ctx.ui;
 	try {
-		const candidates = await resolveCandidates(ctx, AUTO_NAME_MODELS, true);
+		const candidates = await resolveEffortCandidates(ctx, "quick", { includeParentModel: true });
 		const { value: result } = await generateToolValidated(
-			{ ui, signal: controller.signal },
+			{ ui, modelRegistry: ctx.modelRegistry, signal: controller.signal },
 			candidates,
 			`${NAMING_PROMPT}\n\n${prompt}`,
 			NAME_SESSION_TOOL,

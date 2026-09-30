@@ -2,10 +2,8 @@
 
 Soul supplies Tau's system prompt: communication, discussion, planning, execution, and coding guidance. It is always on.
 
-Soul captures tools, skills, project instructions, documentation, and environment context in a saved baseline. Reload and resume reuse it. Successful compaction captures a fresh baseline, including a new date and directory listing.
+Soul adds Pi documentation pointers, tool guidance, and the context that other Tau extensions supply, such as the local date, directory snapshot, and automatic-check instructions. The date and directory snapshot are captured on the first prompt and again after successful compaction, so they stay fixed across turns, reload, resume, and tree navigation.
 
-Changes to available agents, automatic checks, approval guidance, and loaded tools are supplied as saved context updates. Earlier instructions and updates keep their positions instead of being rewritten each turn.
+Everything else is read each turn. When an instruction changes, such as an edited `AGENTS.md` after `/reload`, a changed automatic-check configuration, or a different set of active tools, Pi appends the updated section without rewriting earlier instructions. Models that cannot take later system messages receive the change in the leading instructions, which costs one cache miss on the next request.
 
-Tools that cannot be loaded without changing the cached prefix wait for compaction. Tool execution permissions still take effect immediately. Soul reports incompatible prompt replacements or changes to previously sent history rather than silently replacing its baseline.
-
-Run `/reload` after changing this extension. The first request after installation captures the new Soul baseline; later instruction edits take effect after compaction.
+Run `/reload` after changing this extension.

@@ -11,7 +11,6 @@ import type {
 	ReportScope,
 	SessionCost,
 	SessionModelCost,
-	SubagentCost,
 } from "./types.ts";
 
 export interface BuildCostReportOptions {
@@ -31,12 +30,6 @@ interface ModelBucket {
 	sessions: Set<string>;
 }
 
-interface SubagentBucket {
-	agent: string;
-	cost: number;
-	calls: number;
-}
-
 interface ProjectBucket {
 	key: string;
 	label: string;
@@ -53,11 +46,9 @@ interface SessionModelBucket {
 
 interface AnalyzedSession {
 	session: SessionCost;
-	directCost: number;
-	subagentCost: number;
+	cost: number;
 	dayCosts: Map<string, number>;
 	models: ModelBucket[];
-	subagents: SubagentBucket[];
 }
 
 function numberOrZero(value: unknown): number {
@@ -167,15 +158,12 @@ export async function buildCostReport(options: BuildCostReportOptions): Promise<
 
 	const dayMap = new Map<string, number>();
 	const modelMap = new Map<string, ModelBucket>();
-	const subagentMap = new Map<string, SubagentBucket>();
 	const projectMap = new Map<string, ProjectBucket>();
-	let directCost = 0;
-	let subagentCost = 0;
+	let totalCost = 0;
 	let totalTokens = 0;
 
 	for (const item of analyzed) {
-		directCost += item.directCost;
-		subagentCost += item.subagentCost;
+		totalCost += item.cost;
 		totalTokens += item.session.tokens;
 
 		for (const [key, cost] of item.dayCosts) {
@@ -193,16 +181,6 @@ export async function buildCostReport(options: BuildCostReportOptions): Promise<
 					...model,
 					sessions: new Set(model.sessions),
 				});
-			}
-		}
-
-		for (const agent of item.subagents) {
-			const existing = subagentMap.get(agent.agent);
-			if (existing) {
-				existing.cost += agent.cost;
-				existing.calls += agent.calls;
-			} else {
-				subagentMap.set(agent.agent, { ...agent });
 			}
 		}
 
@@ -234,8 +212,6 @@ export async function buildCostReport(options: BuildCostReportOptions): Promise<
 		}))
 		.sort((a, b) => b.tokens - a.tokens || b.cost - a.cost);
 
-	const subagents: SubagentCost[] = [...subagentMap.values()].sort((a, b) => b.cost - a.cost);
-
 	const projects: ProjectCost[] = [...projectMap.values()]
 		.map((bucket) => ({
 			key: bucket.key,
@@ -253,15 +229,12 @@ export async function buildCostReport(options: BuildCostReportOptions): Promise<
 		cwd,
 		scope,
 		range,
-		directCost,
-		subagentCost,
-		totalCost: directCost + subagentCost,
+		totalCost,
 		totalTokens,
 		sessionCount: sessions.length,
 		projectCount: projects.length,
 		days,
 		models,
-		subagents,
 		projects,
 		sessions,
 	};
@@ -293,9 +266,7 @@ function analyzeSession(info: SessionInfo, range: ReportRange): AnalyzedSession 
 
 	const dayCosts = new Map<string, number>();
 	const modelBuckets = new Map<string, SessionModelBucket & { tokens: number; provider: string; model: string }>();
-	const subagentBuckets = new Map<string, SubagentBucket>();
-	let directCost = 0;
-	let subagentCost = 0;
+	let cost = 0;
 	let tokens = 0;
 	let startedAtMs = Number.POSITIVE_INFINITY;
 
@@ -306,7 +277,7 @@ function analyzeSession(info: SessionInfo, range: ReportRange): AnalyzedSession 
 				if (ts === undefined || !inRange(ts, range)) continue;
 				const usage = normalizeUsage(entry.usage);
 				if (usage.cost <= 0 && usage.totalTokens <= 0) continue;
-				directCost += usage.cost;
+				cost += usage.cost;
 				tokens += usage.totalTokens;
 				dayCosts.set(localDateKey(ts), (dayCosts.get(localDateKey(ts)) ?? 0) + usage.cost);
 				if (ts < startedAtMs) startedAtMs = ts;
@@ -330,7 +301,7 @@ function analyzeSession(info: SessionInfo, range: ReportRange): AnalyzedSession 
 		if (message.role === "assistant" && message.usage) {
 			const usage = normalizeUsage(message.usage);
 			if (usage.cost <= 0 && usage.totalTokens <= 0) continue;
-			directCost += usage.cost;
+			cost += usage.cost;
 			tokens += usage.totalTokens;
 			dayCosts.set(localDateKey(ts), (dayCosts.get(localDateKey(ts)) ?? 0) + usage.cost);
 			if (ts < startedAtMs) startedAtMs = ts;
@@ -361,29 +332,11 @@ function analyzeSession(info: SessionInfo, range: ReportRange): AnalyzedSession 
 			dayCosts.set(localDateKey(ts), (dayCosts.get(localDateKey(ts)) ?? 0) + usage.cost);
 			if (ts < startedAtMs) startedAtMs = ts;
 			tokens += usage.totalTokens;
-
-			if (message.toolName === "subagent") {
-				subagentCost += usage.cost;
-				const details = asRecord(message.details);
-				const agent =
-					(typeof details?.agent === "string" && details.agent) ||
-					(typeof details?.displayName === "string" && details.displayName) ||
-					"subagent";
-				const existing = subagentBuckets.get(agent);
-				if (existing) {
-					existing.cost += usage.cost;
-					existing.calls += 1;
-				} else {
-					subagentBuckets.set(agent, { agent, cost: usage.cost, calls: 1 });
-				}
-			} else {
-				directCost += usage.cost;
-			}
+			cost += usage.cost;
 		}
 	}
 
-	const sessionCost = directCost + subagentCost;
-	if (sessionCost <= 0 && tokens <= 0) return undefined;
+	if (cost <= 0 && tokens <= 0) return undefined;
 
 	const models: ModelBucket[] = [...modelBuckets.values()].map((bucket) => ({
 		key: bucket.key,
@@ -410,14 +363,12 @@ function analyzeSession(info: SessionInfo, range: ReportRange): AnalyzedSession 
 			projectKey: project.key,
 			projectLabel: project.label,
 			startedAtMs: Number.isFinite(startedAtMs) ? startedAtMs : range.startMs,
-			cost: sessionCost,
+			cost,
 			tokens,
 			models: sessionModels,
 		},
-		directCost,
-		subagentCost,
+		cost,
 		dayCosts,
 		models,
-		subagents: [...subagentBuckets.values()],
 	};
 }

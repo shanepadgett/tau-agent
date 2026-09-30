@@ -67,7 +67,7 @@ Behavior:
 
 ## Deferred tool groups
 
-Extensions can register tools with Tau's `load_tools` registry while keeping their schemas out of the active tool set until the agent needs them. The extension and Tau must run in the same Pi runtime.
+Extensions can register tools as deferred tools, keeping their schemas out of the active tool set until the agent loads them with Pi's built-in `tool_search`. Tau keeps `tool_search` active whenever deferred tools exist.
 
 ```ts
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -96,9 +96,9 @@ export default function confluenceExtension(pi: ExtensionAPI): void {
 }
 ```
 
-`registerDeferredToolGroup()` registers tool definitions with Pi and exposes the group through `load_tools`. Call it during extension initialization. Project-local and global package extensions use the same API. `id` must be unique in the runtime, and tool names must be unique within the group.
+`registerDeferredToolGroup()` registers each tool with `exposure: "deferred"` and a namespace made from `id` and `description`. Call it during extension initialization. Project-local and global package extensions use the same API. Tool names must be unique within the group.
 
-Deferred loading affects model-visible tool schemas, not JavaScript package loading. Initialize expensive clients, authentication, and network connections inside tool execution when possible. Pi handles provider-specific deferred-tool behavior after Tau additively activates the group.
+Deferred loading affects model-visible tool schemas, not JavaScript package loading. Initialize expensive clients, authentication, and network connections inside tool execution when possible. Pi handles provider-specific deferred-tool behavior when `tool_search` loads a tool. On models that cannot take tool changes without replacing the cached prefix, Tau blocks `tool_search`.
 
 ## Events
 

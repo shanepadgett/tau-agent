@@ -32,6 +32,10 @@ Records private prompt-cache fingerprints without storing prompt content. Run `/
 
 Adds `/clear-screen` to clear terminal output without changing the session.
 
+## codex-priority
+
+Requests Codex priority processing (Fast mode) for every `gpt-6-luna` request on the `openai-codex` provider, including the agent loop, compaction, tool approval, auto-naming, commit, and handoff. It has no command or setting. Cost uses OpenAI's 2.5x Fast mode rate for GPT-6 models. Do not run another extension that overlays `openai-codex` or sets `service_tier`.
+
 ## commit
 
 Adds `/commit` for semantic commit grouping, review, and committing selected repository changes.
@@ -39,6 +43,10 @@ Adds `/commit` for semantic commit grouping, review, and committing selected rep
 ## cost-report
 
 Adds `/cost-report` to build an HTML spend report from local session usage. Pick a time frame (past 7 days, current week, current month, year to date, or a specific month) and scope (current project or all sessions). Tau scans sessions, writes under `~/.pi/tau/cost-reports/`, opens the file, and notifies with the path. Empty windows warn without writing a file.
+
+## compaction
+
+Writes compaction summaries (automatic, `/compact`, and overflow recovery) with a cheaper model from the same provider as the session, so Opus, GPT-6.1 Sol, and Astra sessions do not pay their own rates to summarize themselves. Summaries never cross providers, and a notice names the model that wrote each one. When no cheaper model fits, Pi's default compaction runs.
 
 ## context
 
@@ -106,7 +114,7 @@ Runs configured commands while keeping their output out of agent context when th
 
 ## soul
 
-Supplies Tau's communication, discussion, planning, execution, and coding instructions. Saves a prompt baseline across turns, reload, and resume; refreshes it after successful compaction. Operational changes arrive as saved context updates without rewriting earlier instructions. Tool groups that cannot load without changing the cached prefix wait for successful compaction.
+Supplies Tau's communication, discussion, planning, execution, and coding instructions, plus tool guidance and context from other Tau extensions. The date and directory snapshot stay fixed until successful compaction. Other changes, such as an edited `AGENTS.md` after `/reload`, arrive as appended updates without rewriting earlier instructions.
 
 ## stash
 
@@ -126,7 +134,7 @@ Reviews agent `bash` and `script_runner` requests before they run. Common read-o
 
 ## tool-loader
 
-Progressively exposes registered specialist tool groups through `load_tools`. Tau registers `web`, `image`, and `appshot`; project or global package extensions can add groups with `registerDeferredToolGroup()` from `@shanepadgett/tau-agent`. Compatible models load tools without replacing the cached prefix. Otherwise, requested groups are queued until successful compaction; loading never triggers compaction automatically.
+Keeps specialist tool groups out of every request as deferred tools and lets the agent load them with Pi's `tool_search`. Tau registers `web`, `image`, and `appshot`; project or global package extensions can add groups with `registerDeferredToolGroup()` from `@shanepadgett/tau-agent`. All models can load tools. Compatible models preserve the cached prefix; other models can incur a cache miss when tools are activated. Loading never triggers compaction.
 
 ## web
 

@@ -29,4 +29,4 @@ All-sessions reports include a project ranking and a project filter on the sessi
 
 Reports are written under `~/.pi/tau/cost-reports/` and opened automatically. Empty windows get a warning instead of a file.
 
-Costs come from stored session usage estimates, including subagent tool results on parent sessions.
+Costs come from stored session usage estimates, including model calls made by tools.

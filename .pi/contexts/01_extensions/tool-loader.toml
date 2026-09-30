@@ -1,15 +1,12 @@
 name = "Tool Loader"
-description = "Progressive session loading of specialist tool groups with Soul cache checks, compaction-queued activation, and bounded results"
+description = "Keep specialist tool groups deferred and reachable through Pi's tool_search on all models"
 
 [extension-runtime]
-description = "Register load_tools for every registered specialist group; capture allowed tool names at session_start; activate a requested group through Soul's cache check or queue it for compaction; restore loaded capabilities from branch results and applied queue entries; return bounded tool results"
+description = "registerDeferredToolGroup registers tools with deferred exposure and a group namespace; at session_start activate tool_search when any deferred tool exists, or warn when the built-in extension is disabled; allow Pi to load tools on all models even when activation invalidates the cached prefix"
 read = [
   "packages/agent/extensions/tool-loader/index.ts",
   "packages/agent/extensions/tool-loader/README.md",
   "packages/agent/src/tool-loading/index.ts",
-  "packages/agent/shared/events.ts",
-  "packages/agent/shared/bounded-text-result.ts",
-  "packages/agent/shared/temporary-output-store.ts",
 ]
 show = []
 outline = []

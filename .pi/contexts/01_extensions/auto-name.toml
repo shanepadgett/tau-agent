@@ -9,7 +9,7 @@ read = [
 ]
 show = [
   { path = "packages/agent/shared/model-fallback/index.ts", name = "generateToolValidated" },
-  { path = "packages/agent/shared/model-fallback/index.ts", name = "resolveCandidates" },
+  { path = "packages/agent/shared/model-effort.ts", name = "resolveEffortCandidates" },
   { path = "packages/agent/shared/injected-context.ts", name = "getBranchInjectedContexts" },
   { path = "packages/agent/shared/injected-context.ts", name = "getPendingInjectedContexts" },
   { path = "packages/agent/shared/injected-context.ts", name = "InjectedContext", view = "declaration" },

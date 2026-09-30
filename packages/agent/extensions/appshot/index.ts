@@ -109,6 +109,7 @@ function registerAppshotTools(pi: ExtensionAPI, runHelper: RunHelper): void {
 	const listWindowsTool = defineTool<typeof listWindowsSchema, undefined>({
 		name: "list_windows",
 		label: "List Windows",
+		annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
 		description:
 			"List visible normal macOS windows as compact JSON with window IDs, titles, application identity, process IDs, and bounds. Use list_windows to discover exact window IDs and application PIDs before screenshot_window or activate_app. Requires macOS 14 or newer and Screen & System Audio Recording permission.",
 		parameters: listWindowsSchema,
@@ -145,6 +146,7 @@ function registerAppshotTools(pi: ExtensionAPI, runHelper: RunHelper): void {
 	const screenshotWindowTool = defineTool<typeof screenshotWindowSchema, ScreenshotDetails | undefined>({
 		name: "screenshot_window",
 		label: "Screenshot Window",
+		annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
 		description:
 			"Capture one visible macOS window by an exact ID returned by list_windows, resize it to fit within 1568×1568 pixels, save it to the required PNG path, and inspect the image. Call list_windows first.",
 		parameters: screenshotWindowSchema,
@@ -202,6 +204,7 @@ function registerAppshotTools(pi: ExtensionAPI, runHelper: RunHelper): void {
 	const activateAppTool = defineTool<typeof activateAppSchema, ActivationDetails>({
 		name: "activate_app",
 		label: "Activate App",
+		annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 		description:
 			"Bring a running macOS application and its windows to the foreground by a process ID returned by list_windows. Use only when foregrounding is required for visual validation because activate_app changes user focus.",
 		parameters: activateAppSchema,
