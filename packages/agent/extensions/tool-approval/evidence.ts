@@ -23,10 +23,20 @@ interface ReviewedFile {
 	source: string;
 }
 
+export type EvidenceGapReason =
+	| "inspection_budget_exceeded"
+	| "unsupported_execution"
+	| "code_loading_configuration"
+	| "unresolved_target"
+	| "source_unavailable"
+	| "invalid_reference"
+	| "task_unavailable";
+
 // Internal reviewer evidence is inherently bounded, not a model-visible public tool result.
 export class ApprovalEvidence {
 	readonly files: ReviewedFile[] = [];
 	readonly gaps: string[] = [];
+	readonly gapReasons = new Set<EvidenceGapReason>();
 	readonly targets = new Map<string, ExecutionTarget>();
 	private readonly localImports = new Map<
 		string,
@@ -57,14 +67,15 @@ export class ApprovalEvidence {
 		}
 	}
 
-	private gap(message: string): void {
+	private gap(reason: EvidenceGapReason, message: string): void {
+		this.gapReasons.add(reason);
 		if (this.gaps.length < 8) this.gaps.push(truncAt(message, 400));
 	}
 
 	private reference(path: string, cwd: string, required: boolean, task: string | undefined): void {
 		const absolute = resolve(cwd, path);
 		if (this.references.size >= MAX_REFERENCES && !this.references.has(absolute)) {
-			this.gap("Too many execution references to inspect within the review budget.");
+			this.gap("inspection_budget_exceeded", "Too many execution references to inspect within the review budget.");
 			return;
 		}
 		const target = { path: absolute, cwd, task };
@@ -74,27 +85,30 @@ export class ApprovalEvidence {
 
 	private shell(command: string, cwd: string, depth: number): void {
 		if (Buffer.byteLength(command) > MAX_SOURCE_BYTES) {
-			this.gap("Shell source exceeds the inspection work budget.");
+			this.gap("inspection_budget_exceeded", "Shell source exceeds the inspection work budget.");
 			return;
 		}
 		if (depth > 8) {
-			this.gap("Nested shell execution exceeds the inspection budget.");
+			this.gap("inspection_budget_exceeded", "Nested shell execution exceeds the inspection budget.");
 			return;
 		}
 		let script: ReturnType<typeof parse>;
 		try {
 			script = parse(command);
 		} catch {
-			this.gap("The shell command could not be parsed to identify code it executes.");
+			this.gap("unsupported_execution", "The shell command could not be parsed to identify code it executes.");
 			return;
 		}
 		if (script.errors?.length) {
-			this.gap("The shell command has unsupported syntax, so its execution targets could not be verified.");
+			this.gap(
+				"unsupported_execution",
+				"The shell command has unsupported syntax, so its execution targets could not be verified.",
+			);
 			return;
 		}
 		const visit = (node: Node, currentCwd: string): string => {
 			if (++this.shellNodes > 256) {
-				this.gap("Shell execution exceeds the inspection work budget.");
+				this.gap("inspection_budget_exceeded", "Shell execution exceeds the inspection work budget.");
 				return currentCwd;
 			}
 			switch (node.type) {
@@ -102,7 +116,7 @@ export class ApprovalEvidence {
 					return visit(node.command, currentCwd);
 				case "AndOr":
 					if (node.operators.includes("||") && /\bcd\b/.test(command))
-						this.gap("Conditional directory changes make execution targets uncertain.");
+						this.gap("unresolved_target", "Conditional directory changes make execution targets uncertain.");
 					for (const child of node.commands) currentCwd = visit(child, currentCwd);
 					return currentCwd;
 				case "CompoundList":
@@ -121,7 +135,10 @@ export class ApprovalEvidence {
 					const name = staticWord(node.name);
 					const args = node.suffix.map(staticWord);
 					if (!name) {
-						this.gap("The executable name is computed at runtime and could not be inspected.");
+						this.gap(
+							"unresolved_target",
+							"The executable name is computed at runtime and could not be inspected.",
+						);
 						return currentCwd;
 					}
 					const executable = basename(name);
@@ -135,23 +152,33 @@ export class ApprovalEvidence {
 							if (part.type === "DoubleQuoted" || part.type === "LocaleString") parts.push(...part.parts);
 							if (part.type === "CommandExpansion" || part.type === "ProcessSubstitution") {
 								if (part.inner) this.shell(part.inner, currentCwd, depth + 1);
-								else this.gap("A nested executable shell expression could not be resolved.");
+								else
+									this.gap("unresolved_target", "A nested executable shell expression could not be resolved.");
 							}
 						}
 					}
 					if (node.prefix.some((prefix) => /^(?:PATH|PYTHONPATH|NODE_OPTIONS|BASH_ENV|ENV)=/.test(prefix.text))) {
-						this.gap("The command changes code-loading configuration that could hide execution targets.");
+						this.gap(
+							"code_loading_configuration",
+							"The command changes code-loading configuration that could hide execution targets.",
+						);
 					}
 					if (executable === "cd") {
 						const path = args[0];
 						if (!path || path.startsWith("-")) {
-							this.gap("The working directory could not be resolved for execution inspection.");
+							this.gap(
+								"unresolved_target",
+								"The working directory could not be resolved for execution inspection.",
+							);
 							return currentCwd;
 						}
 						return resolve(currentCwd, path);
 					}
 					if (["env", "command", "exec", "sudo", "timeout", "nohup"].includes(executable)) {
-						this.gap(`Execution through ${executable} needs confirmation because its target was not resolved.`);
+						this.gap(
+							"unresolved_target",
+							`Execution through ${executable} needs confirmation because its target was not resolved.`,
+						);
 						return currentCwd;
 					}
 					if (["npm", "pnpm", "yarn"].includes(executable)) {
@@ -167,7 +194,10 @@ export class ApprovalEvidence {
 							const separator = args.indexOf("--");
 							const taskArgs = separator < 0 ? args : args.slice(0, separator);
 							if (taskArgs.some((arg) => arg === undefined || arg.startsWith("-"))) {
-								this.gap("Package-task options could change the manifest or execution target.");
+								this.gap(
+									"unresolved_target",
+									"Package-task options could change the manifest or execution target.",
+								);
 							} else {
 								this.reference("package.json", currentCwd, true, task);
 								for (const config of executable === "yarn"
@@ -192,7 +222,7 @@ export class ApprovalEvidence {
 							if (["-r", "--require", "--import", "--loader", "--rcfile"].includes(option ?? "")) {
 								const path = args[index + 1];
 								if (path) this.reference(path, currentCwd, true, undefined);
-								else this.gap("A runtime preload target is computed or missing.");
+								else this.gap("unresolved_target", "A runtime preload target is computed or missing.");
 								consumed.add(index + 1);
 							}
 							if (
@@ -219,7 +249,7 @@ export class ApprovalEvidence {
 									importRoot: currentCwd,
 									required: false,
 								});
-							} else this.gap("The Python module execution target is computed at runtime.");
+							} else this.gap("unresolved_target", "The Python module execution target is computed at runtime.");
 							return currentCwd;
 						}
 						const inlineIndex = args.findIndex(
@@ -233,7 +263,8 @@ export class ApprovalEvidence {
 						);
 						if (inlineIndex >= 0) {
 							const source = args[inlineIndex + 1];
-							if (source === undefined) this.gap("Inline executable source is computed at runtime.");
+							if (source === undefined)
+								this.gap("unresolved_target", "Inline executable source is computed at runtime.");
 							else if (shell) this.shell(source, currentCwd, depth + 1);
 							else this.source(source, currentCwd, currentCwd, executable.startsWith("python") ? ".py" : ".js");
 							return currentCwd;
@@ -259,6 +290,7 @@ export class ApprovalEvidence {
 								this.reference(redirect.target.value, currentCwd, true, undefined);
 							} else
 								this.gap(
+									"unresolved_target",
 									"Executable input comes from a computed path or standard input and could not be inspected.",
 								);
 						} else this.reference(target, currentCwd, true, undefined);
@@ -271,12 +303,15 @@ export class ApprovalEvidence {
 					) {
 						const target = executable === "source" || name === "." ? args[0] : name;
 						if (target) this.reference(target, currentCwd, true, undefined);
-						else this.gap("The sourced script path is computed at runtime.");
+						else this.gap("unresolved_target", "The sourced script path is computed at runtime.");
 					}
 					return currentCwd;
 				}
 				default:
-					this.gap("Shell control flow could hide execution targets; this syntax is not inspected automatically.");
+					this.gap(
+						"unsupported_execution",
+						"Shell control flow could hide execution targets; this syntax is not inspected automatically.",
+					);
 					return currentCwd;
 			}
 		};
@@ -285,7 +320,7 @@ export class ApprovalEvidence {
 
 	private source(source: string, importCwd: string | undefined, executionCwd: string, extension: string): void {
 		if (Buffer.byteLength(source) > MAX_SOURCE_BYTES) {
-			this.gap("Inline source exceeds the inspection work budget.");
+			this.gap("inspection_budget_exceeded", "Inline source exceeds the inspection work budget.");
 			return;
 		}
 		if ([".sh", ".bash", ".zsh"].includes(extension) || /^#![^\n]*\b(?:sh|bash|zsh)\b/.test(source)) {
@@ -294,7 +329,10 @@ export class ApprovalEvidence {
 		}
 		if (/^#![^\n]*python/.test(source)) extension = ".py";
 		if (/\bsys\.path\s*(?:=|\.(?:insert|append|extend)\s*\()/.test(source))
-			this.gap("The script changes Python's code search path, so its local imports could not be resolved reliably.");
+			this.gap(
+				"code_loading_configuration",
+				"The script changes Python's code search path, so its local imports could not be resolved reliably.",
+			);
 		// Exact quoted file references are available only when the reviewer asks for them.
 		for (const match of source.matchAll(/["']([^"'\n]+\.(?:py|js|mjs|cjs|ts|sh|bash|json))["']/g)) {
 			if (match[1]) this.reference(match[1], executionCwd, false, undefined);
@@ -309,7 +347,10 @@ export class ApprovalEvidence {
 				/(?:^|[;\n])\s*(?:from\s+([\w.]+)\s+import\s+([^;\n]+)|import\s+([^;\n]+))/g,
 			)) {
 				if (this.localImports.size >= MAX_REFERENCES) {
-					this.gap("Too many local import references to inspect within the review budget.");
+					this.gap(
+						"inspection_budget_exceeded",
+						"Too many local import references to inspect within the review budget.",
+					);
 					break;
 				}
 				const modules = match[1]
@@ -321,11 +362,17 @@ export class ApprovalEvidence {
 				for (const module of modules) {
 					if (!module) continue;
 					if (this.localImports.size >= MAX_REFERENCES) {
-						this.gap("Too many local import references to inspect within the review budget.");
+						this.gap(
+							"inspection_budget_exceeded",
+							"Too many local import references to inspect within the review budget.",
+						);
 						break;
 					}
 					if (module.startsWith(".") || !/^[\w.]+$/.test(module)) {
-						this.gap("A Python import could not be resolved without additional package context.");
+						this.gap(
+							"unresolved_target",
+							"A Python import could not be resolved without additional package context.",
+						);
 						continue;
 					}
 					if (importCwd === undefined) continue;
@@ -338,7 +385,7 @@ export class ApprovalEvidence {
 					});
 					const segments = module.split(".");
 					if (segments.length > 8) {
-						this.gap("Python import depth exceeds the inspection work budget.");
+						this.gap("inspection_budget_exceeded", "Python import depth exceeds the inspection work budget.");
 						continue;
 					}
 					for (let index = 1; index < segments.length && this.localImports.size < MAX_REFERENCES; index++) {
@@ -373,13 +420,17 @@ export class ApprovalEvidence {
 				/(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)["']((?:\.|\/)[^"'\n]+)["']/g,
 			)) {
 				if (this.localImports.size >= MAX_REFERENCES) {
-					this.gap("Too many local import references to inspect within the review budget.");
+					this.gap(
+						"inspection_budget_exceeded",
+						"Too many local import references to inspect within the review budget.",
+					);
 					break;
 				}
 				const path = match[1];
 				if (!path) continue;
 				if (importCwd === undefined && !path.startsWith("/")) {
 					this.gap(
+						"unresolved_target",
 						"Relative script_runner imports resolve in a temporary source directory; their code could not be inspected.",
 					);
 					continue;
@@ -409,7 +460,7 @@ export class ApprovalEvidence {
 				...[...body.matchAll(/["']([^"'\n]*)["']/g)].map((word) => word[1] ?? ""),
 			];
 			if (body.replace(/["'][^"'\n]*["']/g, "").replace(/[\s,]/g, ""))
-				this.gap("A subprocess argument list is computed at runtime.");
+				this.gap("unresolved_target", "A subprocess argument list is computed at runtime.");
 			else this.shell(words.map((word) => `'${word.replaceAll("'", "'\\''")}'`).join(" "), executionCwd, 0);
 		}
 	}
@@ -421,7 +472,7 @@ export class ApprovalEvidence {
 			let found = false;
 			for (const path of paths) {
 				if (++this.importChecks > MAX_REFERENCES || Date.now() - this.workStarted > MAX_WORK_MS) {
-					this.gap("Local import resolution exceeds the inspection budget.");
+					this.gap("inspection_budget_exceeded", "Local import resolution exceeds the inspection budget.");
 					return;
 				}
 				this.signal?.throwIfAborted();
@@ -434,10 +485,11 @@ export class ApprovalEvidence {
 				} catch (error) {
 					if (error && typeof error === "object" && "code" in error && error.code === "ENOENT")
 						this.absentPaths.add(path);
-					else this.gap(`Could not check local import ${path}.`);
+					else this.gap("source_unavailable", `Could not check local import ${path}.`);
 				}
 			}
-			if (!found && required) this.gap(`The local import ${key} could not be resolved to an exact source file.`);
+			if (!found && required)
+				this.gap("unresolved_target", `The local import ${key} could not be resolved to an exact source file.`);
 		}
 	}
 
@@ -446,16 +498,26 @@ export class ApprovalEvidence {
 		for (const path of requested) {
 			const target = this.references.get(resolve(this.cwd, path));
 			if (target) this.targets.set(`${target.path}:${target.task ?? ""}`, target);
-			else this.gap(`The requested file ${path} is not a concrete execution reference in this request.`);
+			else
+				this.gap(
+					"invalid_reference",
+					`The requested file ${path} is not a concrete execution reference in this request.`,
+				);
 		}
 		if (this.targets.size === 0)
-			this.gap("The reviewer needs more execution evidence, but no exact local code target could be identified.");
+			this.gap(
+				"unresolved_target",
+				"The reviewer needs more execution evidence, but no exact local code target could be identified.",
+			);
 		const seen = new Set<string>();
 		for (const [key, target] of this.targets) {
 			if (seen.has(key)) continue;
 			seen.add(key);
 			if (this.files.length >= MAX_FILES || Date.now() - this.workStarted > MAX_WORK_MS) {
-				this.gap("The directly referenced code exceeds the four-file or two-second inspection budget.");
+				this.gap(
+					"inspection_budget_exceeded",
+					"The directly referenced code exceeds the four-file or two-second inspection budget.",
+				);
 				break;
 			}
 			this.signal?.throwIfAborted();
@@ -476,13 +538,17 @@ export class ApprovalEvidence {
 						else if (setting[2]?.includes("/") && !/^(?:\/bin|\/usr\/bin)\//.test(setting[2]))
 							this.reference(setting[2], target.cwd, true, undefined);
 						else if (setting[1] === "onload-script")
-							this.gap("Project npm configuration loads additional code that could not be resolved.");
+							this.gap(
+								"code_loading_configuration",
+								"Project npm configuration loads additional code that could not be resolved.",
+							);
 					}
 					// Registry credentials are irrelevant to execution review and must not be sent.
 					file.source = executionSettings.join("\n");
 				} else if ([".yarnrc", ".yarnrc.yml"].includes(basename(target.path))) {
 					file.source = "Project Yarn configuration is present; executable settings were not resolved.";
 					this.gap(
+						"code_loading_configuration",
 						"Project Yarn configuration can change the executable or load plugins; those settings could not be inspected automatically.",
 					);
 				} else if (target.task !== undefined) {
@@ -494,7 +560,7 @@ export class ApprovalEvidence {
 						!manifest.scripts ||
 						typeof manifest.scripts !== "object"
 					) {
-						this.gap(`No task definitions were found for ${target.task}.`);
+						this.gap("task_unavailable", `No task definitions were found for ${target.task}.`);
 						continue;
 					}
 					const scripts = manifest.scripts as Record<string, unknown>;
@@ -506,7 +572,8 @@ export class ApprovalEvidence {
 							this.shell(command, target.cwd, 0);
 						}
 					}
-					if (!(target.task in selected)) this.gap(`The requested package task ${target.task} was not found.`);
+					if (!(target.task in selected))
+						this.gap("task_unavailable", `The requested package task ${target.task} was not found.`);
 					// Keep the full-file fingerprint, but send only relevant task definitions.
 					file.source = JSON.stringify({
 						scripts: selected,
@@ -522,11 +589,11 @@ export class ApprovalEvidence {
 				await this.prepare();
 			} catch (error) {
 				if (this.signal?.aborted) throw error;
-				this.gap(`Could not inspect ${target.path}: ${errorText(error)}`);
+				this.gap("source_unavailable", `Could not inspect ${target.path}: ${errorText(error)}`);
 			}
 		}
 		if (Date.now() - this.workStarted > MAX_WORK_MS)
-			this.gap("Evidence collection exceeded its two-second work budget.");
+			this.gap("inspection_budget_exceeded", "Evidence collection exceeded its two-second work budget.");
 		this.files.sort((a, b) => a.path.localeCompare(b.path));
 	}
 
