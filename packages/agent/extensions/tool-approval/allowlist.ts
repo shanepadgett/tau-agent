@@ -7,7 +7,6 @@ const ALWAYS_SKIP = new Set([
 	"tail",
 	"wc",
 	"ls",
-	"tree",
 	"pwd",
 	"echo",
 	"printf",
@@ -20,7 +19,6 @@ const ALWAYS_SKIP = new Set([
 	"fgrep",
 	"cut",
 	"tr",
-	"uniq",
 	"comm",
 	"cmp",
 	"paste",
@@ -48,7 +46,6 @@ const ALWAYS_SKIP = new Set([
 	"basename",
 	"readlink",
 	"realpath",
-	"file",
 	"stat",
 	"du",
 	"df",
@@ -61,7 +58,6 @@ const ALWAYS_SKIP = new Set([
 	"uptime",
 	"sleep",
 	"cd",
-	"bat",
 	"jq",
 ]);
 
@@ -170,17 +166,26 @@ function walkCommand(command: Command, state: WalkState): boolean {
 		case "rg":
 			return !hasRgVeto(args);
 		case "sort":
+			return !hasOutputFlag(args) && !hasLongOptionAbbreviation(args, "compress-program");
 		case "base64":
 		case "iconv":
 			return !hasOutputFlag(args);
+		case "file":
+			return !hasShortOption(args, "C") && !hasLongOptionAbbreviation(args, "compile");
+		case "tree":
+			return !hasShortOption(args, "o") && !hasLongOptionAbbreviation(args, "output");
+		case "uniq":
+			// A second positional argument is an output file.
+			return positionalCount(args) <= 1;
 		case "xxd":
-			return !hasShortOption(args, "r") && !hasLongOption(args, "revert");
+			// A second positional argument is an output file.
+			return !hasShortOption(args, "r") && !hasLongOption(args, "revert") && positionalCount(args) <= 1;
 		case "yq":
 			return !hasYqInplace(args);
 		case "sed":
 			return isSafeSed(args);
 		case "hostname":
-			return !hasPositional(args);
+			return positionalCount(args) === 0;
 		case "date":
 			return !hasShortOption(args, "s") && !hasLongOption(args, "set");
 		case "git":
@@ -330,7 +335,7 @@ function hasRgVeto(args: readonly string[]): boolean {
 }
 
 function hasOutputFlag(args: readonly string[]): boolean {
-	return hasShortOption(args, "o") || hasLongOption(args, "output");
+	return hasShortOption(args, "o") || hasLongOptionAbbreviation(args, "output");
 }
 
 function hasYqInplace(args: readonly string[]): boolean {
@@ -348,8 +353,10 @@ function isSafeSed(args: readonly string[]): boolean {
 	return true;
 }
 
-function hasPositional(args: readonly string[]): boolean {
+// Counts every non-option argument, including option values, so callers err toward review.
+function positionalCount(args: readonly string[]): number {
 	let endFlags = false;
+	let count = 0;
 	for (const arg of args) {
 		if (!endFlags) {
 			if (arg === "--") {
@@ -358,9 +365,9 @@ function hasPositional(args: readonly string[]): boolean {
 			}
 			if (arg.startsWith("-") && arg !== "-") continue;
 		}
-		return true;
+		count += 1;
 	}
-	return false;
+	return count;
 }
 
 function isSafeGit(args: readonly string[]): boolean {
@@ -492,6 +499,17 @@ function hasLongOption(args: readonly string[], name: string): boolean {
 	for (const arg of args) {
 		if (arg === "--") break;
 		if (isLongOption(arg, name)) return true;
+	}
+	return false;
+}
+
+// getopt_long accepts any unambiguous prefix, so `--comp=x` is `--compress-program=x`.
+function hasLongOptionAbbreviation(args: readonly string[], name: string): boolean {
+	for (const arg of args) {
+		if (arg === "--") break;
+		if (!arg.startsWith("--")) continue;
+		const given = arg.slice(2).split("=", 1)[0] ?? "";
+		if (given && name.startsWith(given)) return true;
 	}
 	return false;
 }

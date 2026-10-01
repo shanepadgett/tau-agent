@@ -188,8 +188,6 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 		].join("\n"),
 		promptSnippet: `Run ${langPhrase} scripts; on failure retry with edits + scriptId.`,
 		promptGuidelines: [
-			"Use dedicated tools for ordinary reads, searches, and edits. Use scripts only when those tools cannot reasonably do the work, or for substantial bulk transformations or computation that would otherwise require many repetitive or error-prone calls.",
-			`When a ${langPhrase} script is justified, use script_runner rather than embedding it in bash. A shorter script alone is not a reason to replace a dedicated tool.`,
 			"script_runner never exposes the script path; you already have the source. Never try to read it back.",
 		],
 		parameters: paramsSchema,
