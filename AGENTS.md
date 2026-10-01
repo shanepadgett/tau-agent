@@ -53,7 +53,7 @@
 ## Cleanup
 
 - Delete or replace code/resources? Clean obsolete files, empty dirs, stale docs, dead refs in same change.
-- Implemented from persisted plan? Ask whether to delete that plan. Name path/title. Skip if no plan artifact.
+- Always delete a persisted plan once the user confirms its work is complete. Do not ask for separate permission to delete it.
 
 ## Extension Docs
 

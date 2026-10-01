@@ -75,7 +75,10 @@ export class ApprovalEvidence {
 	private reference(path: string, cwd: string, required: boolean, task: string | undefined): void {
 		const absolute = resolve(cwd, path);
 		if (this.references.size >= MAX_REFERENCES && !this.references.has(absolute)) {
-			this.gap("inspection_budget_exceeded", "Too many execution references to inspect within the review budget.");
+			this.gap(
+				required ? "source_unavailable" : "inspection_budget_exceeded",
+				"Too many execution references to inspect within the review budget.",
+			);
 			return;
 		}
 		const target = { path: absolute, cwd, task };
@@ -177,7 +180,7 @@ export class ApprovalEvidence {
 					if (["env", "command", "exec", "sudo", "timeout", "nohup"].includes(executable)) {
 						this.gap(
 							"unresolved_target",
-							`Execution through ${executable} needs confirmation because its target was not resolved.`,
+							`Automatic inspection did not resolve execution through ${executable}; assess the visible inner command and whether any executable code remains hidden.`,
 						);
 						return currentCwd;
 					}
@@ -370,7 +373,7 @@ export class ApprovalEvidence {
 					}
 					if (module.startsWith(".") || !/^[\w.]+$/.test(module)) {
 						this.gap(
-							"unresolved_target",
+							"source_unavailable",
 							"A Python import could not be resolved without additional package context.",
 						);
 						continue;
@@ -420,17 +423,14 @@ export class ApprovalEvidence {
 				/(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)["']((?:\.|\/)[^"'\n]+)["']/g,
 			)) {
 				if (this.localImports.size >= MAX_REFERENCES) {
-					this.gap(
-						"inspection_budget_exceeded",
-						"Too many local import references to inspect within the review budget.",
-					);
+					this.gap("source_unavailable", "Too many local import references to inspect within the review budget.");
 					break;
 				}
 				const path = match[1];
 				if (!path) continue;
 				if (importCwd === undefined && !path.startsWith("/")) {
 					this.gap(
-						"unresolved_target",
+						"source_unavailable",
 						"Relative script_runner imports resolve in a temporary source directory; their code could not be inspected.",
 					);
 					continue;
@@ -472,7 +472,10 @@ export class ApprovalEvidence {
 			let found = false;
 			for (const path of paths) {
 				if (++this.importChecks > MAX_REFERENCES || Date.now() - this.workStarted > MAX_WORK_MS) {
-					this.gap("inspection_budget_exceeded", "Local import resolution exceeds the inspection budget.");
+					this.gap(
+						required ? "source_unavailable" : "inspection_budget_exceeded",
+						"Local import resolution exceeds the inspection budget.",
+					);
 					return;
 				}
 				this.signal?.throwIfAborted();
@@ -489,7 +492,7 @@ export class ApprovalEvidence {
 				}
 			}
 			if (!found && required)
-				this.gap("unresolved_target", `The local import ${key} could not be resolved to an exact source file.`);
+				this.gap("source_unavailable", `The local import ${key} could not be resolved to an exact source file.`);
 		}
 	}
 
