@@ -24,6 +24,7 @@ interface GenerationContext {
 }
 
 interface ModelFallbackOptions {
+	sessionId?: string;
 	statusKey?: string;
 	notifyOnFallback?: boolean;
 	maxAttempts?: number;
@@ -78,12 +79,13 @@ export async function generateValidated<T>(
 export async function generateToolValidated<T>(
 	ctx: GenerationContext,
 	candidates: readonly ModelCandidate[],
-	prompt: string,
+	prompt: string | readonly Message[],
 	tool: Tool,
 	validate: (input: unknown) => T,
 	correctionPrompt?: (error: Error, output: string) => string,
 	options?: ModelFallbackOptions,
 ): Promise<{ value: T; candidate: ModelCandidate }> {
+	const sessionId = options?.sessionId ?? randomUUID();
 	return withModelFallback(ctx, candidates, options, (candidate) =>
 		requestToolValidated(
 			ctx,
@@ -91,6 +93,7 @@ export async function generateToolValidated<T>(
 			prompt,
 			tool,
 			validate,
+			sessionId,
 			correctionPrompt,
 			options?.maxAttempts ?? MAX_TOOL_ATTEMPTS,
 		),
@@ -207,14 +210,17 @@ function validateSingleToolCall(tool: Tool, toolCalls: readonly { name: string; 
 async function requestToolValidated<T>(
 	ctx: GenerationContext,
 	candidate: ModelCandidate,
-	prompt: string,
+	prompt: string | readonly Message[],
 	tool: Tool,
 	validate: (input: unknown) => T,
+	sessionId: string,
 	correctionPrompt?: (error: Error, output: string) => string,
 	maxAttempts = MAX_TOOL_ATTEMPTS,
 ): Promise<T> {
-	const messages: Message[] = [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }];
-	const sessionId = randomUUID();
+	const messages: Message[] =
+		typeof prompt === "string"
+			? [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }]
+			: [...prompt];
 
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		const response = await completeCandidate(ctx, candidate, messages, sessionId, [tool]);
