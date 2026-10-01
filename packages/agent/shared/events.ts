@@ -81,19 +81,14 @@ interface TauEventAPI extends EmitEventAPI {
 
 type TauEventHandler<Name extends keyof TauAgentEvents> = (data: TauAgentEvents[Name]) => void | Promise<void>;
 
-interface TauEventSubscription {
-	stop(): void;
+// `pi.events` is a fresh wrapper per extension, so subscriptions are matched through the shared bus itself.
+// Each copy of this module (global and project installs) announces its subscription and stops any older one.
+const CLAIM_CHANNEL = "tau:subscription.claim";
+
+interface TauSubscriptionClaim {
+	owner: string;
+	name: string;
 }
-
-type TauEventSubscriptionRegistry = WeakMap<
-	ExtensionAPI["events"],
-	Map<string, Map<keyof TauAgentEvents, TauEventSubscription>>
->;
-
-// Global and project installs load separate module instances but share one pi.events bus.
-const registryKey = Symbol.for("tau-agent.eventSubscriptions");
-const registryHost = globalThis as typeof globalThis & { [registryKey]?: TauEventSubscriptionRegistry };
-const tauEventSubscriptions: TauEventSubscriptionRegistry = (registryHost[registryKey] ??= new WeakMap());
 
 export function emitTauEvent<Name extends keyof TauAgentEvents>(
 	pi: EmitEventAPI,
@@ -130,25 +125,21 @@ function subscribeToTauEvent<Name extends keyof TauAgentEvents>(
 ): () => void {
 	if (owner.length === 0) throw new Error("Tau event owner is required.");
 
-	const subscriptions = getOwnerSubscriptions(pi.events, owner);
-	subscriptions.get(name)?.stop();
-
 	let unsubscribe: (() => void) | undefined;
 	let disposed = false;
+	const claim: TauSubscriptionClaim = { owner, name };
 
 	function detach(): void {
 		unsubscribe?.();
 		unsubscribe = undefined;
 	}
 
-	const subscription: TauEventSubscription = {
-		stop() {
-			if (disposed) return;
-			disposed = true;
-			detach();
-			if (subscriptions.get(name) === subscription) subscriptions.delete(name);
-		},
-	};
+	function stop(): void {
+		if (disposed) return;
+		disposed = true;
+		detach();
+		stopClaimListener();
+	}
 
 	function attach(): void {
 		if (disposed) return;
@@ -156,32 +147,17 @@ function subscribeToTauEvent<Name extends keyof TauAgentEvents>(
 		unsubscribe = pi.events.on(name, handler as (data: unknown) => void);
 	}
 
-	subscriptions.set(name, subscription);
+	pi.events.emit(CLAIM_CHANNEL, claim);
+	const stopClaimListener = pi.events.on(CLAIM_CHANNEL, (other) => {
+		const { owner: otherOwner, name: otherName } = other as TauSubscriptionClaim;
+		if (other !== claim && otherOwner === owner && otherName === name) stop();
+	});
 	if (attachImmediately) attach();
 	pi.on("session_start", attach);
 	pi.on("session_shutdown", detach);
-	return subscription.stop;
+	return stop;
 }
 
 export function setTauFooterItem(pi: EmitEventAPI, item: TauFooterItem): void {
 	emitTauEvent(pi, "tau:footer-item", item);
-}
-
-function getOwnerSubscriptions(
-	events: ExtensionAPI["events"],
-	owner: string,
-): Map<keyof TauAgentEvents, TauEventSubscription> {
-	let busSubscriptions = tauEventSubscriptions.get(events);
-	if (!busSubscriptions) {
-		busSubscriptions = new Map();
-		tauEventSubscriptions.set(events, busSubscriptions);
-	}
-
-	let ownerSubscriptions = busSubscriptions.get(owner);
-	if (!ownerSubscriptions) {
-		ownerSubscriptions = new Map();
-		busSubscriptions.set(owner, ownerSubscriptions);
-	}
-
-	return ownerSubscriptions;
 }
