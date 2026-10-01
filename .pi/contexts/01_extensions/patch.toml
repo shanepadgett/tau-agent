@@ -1,8 +1,8 @@
 name = "Patch"
-description = "Structured multi-file create, replace, update, move, and delete tool replacing edit/write"
+description = "Structured multi-file create, replace, update, move, and delete tool, active for OpenAI and OpenAI Codex in place of edit/write"
 
 [extension-shell]
-description = "Register sequential patch tool with Codex-style input schema; suppress edit/write except xAI/Grok where patch is off and edit/write stay on; stream and return formatPatchSummary text with ApplyPatchSummary details; on tool_result emit tau:file-mutation.applied and mark partial/failed as isError; clear tool-row state and reconfigure tools on session_start and model_select"
+description = "Register sequential patch tool with Codex-style input schema; keep patch with edit/write suppressed on OpenAI and OpenAI Codex models and edit/write with patch off on every other provider; stream and return formatPatchSummary text with ApplyPatchSummary details; on tool_result emit tau:file-mutation.applied and mark partial/failed as isError; clear tool-row state and reconfigure tools on session_start and model_select"
 read = [
   "packages/agent/extensions/patch/index.ts",
   "packages/agent/extensions/patch/summary.ts",

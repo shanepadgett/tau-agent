@@ -7,6 +7,7 @@ import { renderPatchCall, renderPatchResult } from "./render.ts";
 import { formatPatchSummary } from "./summary.ts";
 
 const SUPPRESSED_TOOLS = new Set(["edit", "write"]);
+const PATCH_PROVIDERS = new Set(["openai", "openai-codex"]);
 
 const patchParams = Type.Object({
 	input: Type.String({
@@ -135,15 +136,15 @@ export default function patchExtension(pi: ExtensionAPI): void {
 	const rowState = createToolRowStateStore(pi, "patch.tool-row-state");
 	pi.registerTool(createPatchTool(rowState));
 
-	function configureMutationTools(model: { provider: string; id: string } | undefined): void {
+	function configureMutationTools(model: { provider: string } | undefined): void {
 		const active = new Set(pi.getActiveTools());
-		const usesGrok = model?.provider.toLowerCase() === "xai" || model?.id.toLowerCase().includes("grok") === true;
-		if (usesGrok) {
-			active.delete("patch");
-			for (const tool of SUPPRESSED_TOOLS) active.add(tool);
-		} else {
+		const usesPatch = model !== undefined && PATCH_PROVIDERS.has(model.provider.toLowerCase());
+		if (usesPatch) {
 			active.add("patch");
 			for (const tool of SUPPRESSED_TOOLS) active.delete(tool);
+		} else {
+			active.delete("patch");
+			for (const tool of SUPPRESSED_TOOLS) active.add(tool);
 		}
 		pi.setActiveTools([...active]);
 	}

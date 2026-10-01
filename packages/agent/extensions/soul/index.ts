@@ -40,7 +40,12 @@ export default function soulExtension(pi: ExtensionAPI): void {
 		const active = pi.getActiveTools();
 		const guidance = [
 			...new Set([
-				...(active.includes("bash") ? ["Use bash for file operations like ls, rg, find."] : []),
+				...(active.includes("bash")
+					? [
+							"Use bash for file operations like ls, rg, find.",
+							"Bash already runs in the working directory; do not cd into it.",
+						]
+					: []),
 				...active.flatMap((name) => options.toolGuidelines[name] ?? []),
 				...options.promptGuidelines,
 			]),

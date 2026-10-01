@@ -78,7 +78,7 @@ Adds `/manage-sessions` to browse saved sessions and `/sweep` to archive or dele
 
 ## patch
 
-Replaces separate edit/write operations with one multi-file `patch` tool. It can create, rewrite, edit, move, and delete files in one structured call. Fewer tool calls means fewer turns, and each avoided turn prevents the full chat context from being sent again. Tau keeps `patch` disabled and uses `edit` and `write` for xAI and Grok models.
+Replaces separate edit/write operations with one multi-file `patch` tool. It can create, rewrite, edit, move, and delete files in one structured call. Fewer tool calls means fewer turns, and each avoided turn prevents the full chat context from being sent again. Tau enables `patch` only for OpenAI and OpenAI Codex models and uses `edit` and `write` for every other provider.
 
 ## qna
 
@@ -114,7 +114,7 @@ Runs configured commands while keeping their output out of agent context when th
 
 ## soul
 
-Supplies Tau's communication, discussion, planning, execution, and coding instructions, plus tool guidance and context from other Tau extensions. The date and directory snapshot stay fixed until successful compaction. Other changes, such as an edited `AGENTS.md` after `/reload`, arrive as appended updates without rewriting earlier instructions.
+Supplies Tau's communication, discussion, planning, execution, and coding instructions, plus tool-use rules, tool guidance, and context from other Tau extensions. The date and directory snapshot stay fixed until successful compaction. Other changes, such as an edited `AGENTS.md` after `/reload`, arrive as appended updates without rewriting earlier instructions.
 
 ## stash
 

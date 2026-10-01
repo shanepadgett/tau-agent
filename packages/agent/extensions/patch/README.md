@@ -1,6 +1,6 @@
 # patch
 
-Replaces the built-in `edit` and `write` tools with one multi-file patch tool. The agent applies structured patches to create, edit, move, and delete files while this extension is active. For xAI and Grok models, Tau disables `patch` and leaves `edit` and `write` active because those models are unreliable with the patch format.
+Replaces the built-in `edit` and `write` tools with one multi-file patch tool. The agent applies structured patches to create, edit, move, and delete files while this extension is active. Tau enables `patch` only for OpenAI and OpenAI Codex models; every other provider keeps `edit` and `write` and loses `patch` because those models apply the patch format less reliably.
 
 ## What it does
 
