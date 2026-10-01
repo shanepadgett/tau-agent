@@ -106,7 +106,7 @@ Supplies Soul with the local date and root directory snapshot. Both remain fixed
 
 ## script-runner
 
-Gives the agent a first-class `script_runner` tool to execute Python 3, Node.js, and Deno scripts instead of bash. On failure it returns a `scriptId`; the agent retries with targeted `{oldText,newText}` edits against the script it already wrote rather than resending the whole script. Runtimes are detected from the environment (Python 3 via `python3`; `node` is the local Node.js runtime with `--experimental-strip-types`, Node 22.6+ — full Node APIs, TypeScript with erasable syntax or plain JavaScript; `deno` via `deno run -A` — full permissions, native TypeScript/JavaScript, Deno APIs). The tool registers only available runtimes and is hidden from the prompt if none are present.
+Gives the agent a first-class `script_runner` tool to execute Python 3, Node.js, and Deno scripts. Dedicated tools come first for ordinary reads, searches, and edits. Scripts are for work those tools cannot reasonably handle, or substantial bulk transformations and computation that would otherwise require many repetitive or error-prone calls; justified scripts use this tool rather than bash. On failure it returns a `scriptId`; the agent retries with targeted `{oldText,newText}` edits against the script it already wrote rather than resending the whole script. Runtimes are detected from the environment (Python 3 via `python3`; `node` is the local Node.js runtime with `--experimental-strip-types`, Node 22.6+ — full Node APIs, TypeScript with erasable syntax or plain JavaScript; `deno` via `deno run -A` — full permissions, native TypeScript/JavaScript, Deno APIs). The tool registers only available runtimes and is hidden from the prompt if none are present.
 
 ## silent-command-runner
 
@@ -115,6 +115,8 @@ Runs configured commands while keeping their output out of agent context when th
 ## soul
 
 Supplies Tau's communication, discussion, planning, execution, and coding instructions, plus tool-use rules, tool guidance, and context from other Tau extensions. The date and directory snapshot stay fixed until successful compaction. Other changes, such as an edited `AGENTS.md` after `/reload`, arrive as appended updates without rewriting earlier instructions.
+
+Tool-use guidance defaults to dedicated tools for ordinary file work, bash for shell commands, and scripts only when dedicated tools cannot reasonably do the work or when substantial bulk work would otherwise need many repetitive or error-prone calls.
 
 ## stash
 
@@ -133,6 +135,8 @@ Adds `/tau`, `/tau init [--global|--project]`, and `/tau doctor` for Tau setup a
 Reviews agent `bash` and `script_runner` requests before they run. Common read-only bash commands skip review. Visible, understood requests need one review; hidden local execution targets get bounded inspection and one final review, without repository exploration. Set `extensions.toolApproval.autoApprove` to run every reviewer-approved request without another confirmation. Those auto-approvals show a user-only marker. The reviewer approves routine, low-impact local and external-service work, including read-only Jira or Confluence requests, additive document creation without consequential side effects, and normal authentication with existing credentials. It asks before meaningful data loss, disruptive system or production changes, privilege or access changes, secret or sensitive-data disclosure, substantial payments, or consequential publication and workflows. Inspection gaps alone do not require confirmation; uninspected executable code, unresolved code loading, and missing information that leaves a substantial risk unresolved do. Approval explanations cover the effect, affected target, risk, and recovery difficulty in plain language. Changes to inspected files invalidate approval. Reviewer failures fall back to human approval and send an attention notification. In the terminal approval panel, press `n` to add a note to Approve or Reject before choosing. Rejection notes tell the agent why the request was blocked; approval notes reach it with the tool result without changing the request. Reject with a note to ask for a revised request.
 
 Approval decisions are saved privately in the session JSONL, including allowlist skips, review stages and models, inspected paths, evidence-gap categories, and user decisions. These records stay out of model context and do not copy scripts, arguments, file contents, or raw errors.
+
+Scoped project edits, builds, tests, and generated-file cleanup should be approved whether they use Python, Node, or bash. Reading, replacing, and writing project text is ordinary editing; computed data paths and a less suitable tool choice do not themselves require confirmation. Destructive changes to valuable databases, remote objects, backups, or unrelated work do. Clearly disposable local test data remains routine validation. Hidden executable code still requires inspection.
 
 ## tool-loader
 

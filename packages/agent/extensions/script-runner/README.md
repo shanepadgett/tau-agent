@@ -1,6 +1,6 @@
 # Script Runner
 
-Gives the agent a first-class `script_runner` tool for running Python 3, Node.js, and Deno scripts instead of falling back to bash. The agent picks whichever runtime is more efficient for the task.
+Gives the agent a first-class `script_runner` tool for running Python 3, Node.js, and Deno scripts. The agent uses dedicated tools for ordinary reads, searches, and edits. Scripts are for work those tools cannot reasonably handle, or substantial bulk transformations and computation that would otherwise require many repetitive or error-prone calls. When a script is justified, the agent uses this tool rather than embedding it in bash and picks the runtime that fits the task.
 
 When a run fails, the tool keeps the script and returns a `scriptId`. The agent retries with targeted `{oldText, newText}` edits against what it just wrote instead of resending the whole script, saving output tokens and keeping duplicate scripts out of context. Only the source the agent already sent is referenced; no script source file path is exposed.
 

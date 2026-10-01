@@ -42,7 +42,7 @@ export default function soulExtension(pi: ExtensionAPI): void {
 			...new Set([
 				...(active.includes("bash")
 					? [
-							"Use bash for file operations like ls, rg, find.",
+							"Use bash for shell commands such as builds and tests, and for ls, rg, or find when no suitable dedicated tool is available.",
 							"Bash already runs in the working directory; do not cd into it.",
 						]
 					: []),
