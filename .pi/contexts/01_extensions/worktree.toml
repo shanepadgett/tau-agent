@@ -2,7 +2,7 @@ name = "Worktree"
 description = "Separate feature folders, conversations, and safe worktree lifecycle"
 
 [workflow]
-description = "Register /worktree and its new/open/remove shortcuts; choose feature branch, conversation, and terminal; replace Pi sessions; publish footer; protect occupied workspaces"
+description = "Register /worktree and its new/open/remove shortcuts; choose feature branch, conversation, and terminal; replace Pi sessions; run configured setup command in new folders; protect occupied workspaces"
 read = [
   "packages/agent/extensions/worktree/index.ts",
   "packages/agent/extensions/worktree/panel.ts",

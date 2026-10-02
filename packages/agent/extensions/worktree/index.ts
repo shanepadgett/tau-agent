@@ -1,11 +1,12 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import { createGitRunner, type GitRunner } from "../../shared/git.ts";
-import { setTauFooterItem } from "../../shared/events.ts";
+import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { errorText } from "../../shared/text.ts";
 import { acquireWorkspace, type WorkspaceLease } from "./ownership.ts";
 import { showWorkspacePanel } from "./panel.ts";
 import { prepareWorkspaceSession } from "./sessions.ts";
+import worktreeSettings from "./settings.ts";
 import {
 	createWorkspace,
 	discoverWorkspaces,
@@ -36,7 +37,6 @@ export default function worktreeExtension(pi: ExtensionAPI): void {
 					...current.record,
 					sessionPath: ctx.sessionManager.getSessionFile() ?? null,
 				});
-				setTauFooterItem(pi, { id: "worktree", text: `${current.name} · isolated`, priority: 20 });
 			}
 		} catch (error) {
 			if (ownership.kind === "owned") {
@@ -48,7 +48,6 @@ export default function worktreeExtension(pi: ExtensionAPI): void {
 			}
 			const reason = errorText(error);
 			ownership = { kind: "blocked", reason };
-			setTauFooterItem(pi, { id: "worktree", text: "workspace unavailable", priority: 20 });
 			ctx.ui.notify(`${reason} Use /worktree to choose another workspace.`, "error");
 		}
 	});
@@ -72,7 +71,6 @@ export default function worktreeExtension(pi: ExtensionAPI): void {
 			ctx.ui.notify(`Could not release workspace ownership: ${errorText(error)}`, "warning");
 		} finally {
 			ownership = { kind: "outside" };
-			setTauFooterItem(pi, { id: "worktree" });
 		}
 	});
 
@@ -213,6 +211,7 @@ async function newWorkspace(
 		if (!choice) return;
 		base = choice;
 	}
+	const { setupCommand } = await loadTauExtensionSettings(ctx, worktreeSettings);
 	const baseCommit = await git.run(["rev-parse", "--verify", "--end-of-options", `${base}^{commit}`]);
 	const status = await git.run(["status", "--porcelain=v1", "--untracked-files=all"]);
 	const conversation = await ctx.ui.select("Conversation", ["Start a fresh chat", "Continue this chat"]);
@@ -228,7 +227,9 @@ async function newWorkspace(
 			status
 				? `${status.split("\n").filter(Boolean).length} unfinished file(s) will NOT be included (uncommitted changes and untracked files).`
 				: "Only committed files are included.",
-			"Install dependencies and configure local environment files in the new folder as needed.",
+			setupCommand
+				? `Setup command, run in the new folder before opening: ${setupCommand}`
+				: "Install dependencies and configure local environment files in the new folder as needed.",
 		].join("\n"),
 	);
 	if (!confirmed) return;
@@ -239,6 +240,31 @@ async function newWorkspace(
 		throw new Error(
 			`Workspace was created at ${record.path}, but could not be discovered. Reopen it with /worktree.`,
 		);
+	if (setupCommand) {
+		let succeeded = false;
+		while (!succeeded) {
+			ctx.ui.notify(`Running setup in ${workspace.path}: ${setupCommand}`, "info");
+			const result = await pi.exec("sh", ["-c", setupCommand], {
+				cwd: workspace.path,
+				signal: ctx.signal,
+				timeout: 600_000,
+			});
+			succeeded = result.code === 0;
+			if (succeeded) break;
+			const details = [result.stderr, result.stdout]
+				.filter(Boolean)
+				.join("\n")
+				.trim()
+				.split("\n")
+				.slice(-15)
+				.join("\n");
+			const retry = await ctx.ui.confirm(
+				"Setup failed. Retry?",
+				`${setupCommand} exited with code ${result.code} in ${workspace.path}.\n${details}\nChoose No to stop; the workspace remains available through /worktree.`,
+			);
+			if (!retry) return;
+		}
+	}
 	await openWorkspace(
 		pi,
 		ctx,

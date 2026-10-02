@@ -6,14 +6,14 @@
 - `/worktree new [name]`: choose a starting branch and a fresh or continued conversation, confirm the branch/base/path, then switch here or receive a command for a separate terminal.
 - `/worktree open <name>`: resume that workspace's session through Pi's public session replacement API.
 - `/worktree remove <name>`: inspect work at risk and confirm removal; keep its Git branch and saved conversations.
-- Show the feature name in Tau's footer. Use ordinary feature branches, not detached HEAD.
+- Run the optional `extensions.worktree.setupCommand` setting inside each new worktree before opening its chat; offer retry on failure. Use ordinary feature branches, not detached HEAD.
 - Apply-to-local, background orchestration, environment copying, and automatic deletion are later work, as discussed.
 
 ## Architecture
 
 Add `packages/agent/extensions/worktree/` with these boundaries:
 
-- `index.ts`: command dispatch, native creation/action dialogs, session lifecycle, footer, and cross-instance ownership checks.
+- `index.ts`: command dispatch, native creation/action dialogs, session lifecycle, setup command, and cross-instance ownership checks.
 - `workspaces.ts`: Git discovery/creation/removal and repository-scoped metadata. Reuse `GitRunner`; discover with `git worktree list --porcelain -z` and validate canonical paths.
 - `ownership.ts`: atomic workspace leases, shared by sessions and removal.
 - `sessions.ts`: prepare documented JSONL session files and resume with `ctx.switchSession()`. Continued chats copy only `ctx.sessionManager.getBranch()`, not all alternative histories. Fresh chats inherit the user's current model/thinking choice without making a model request.
@@ -34,7 +34,7 @@ Ownership is a per-workspace JSON file containing host, PID, and token, protecte
   -> Git + metadata operations
   -> prepareWorkspaceSession(ctx, workspace, fresh|continue)
   -> ctx.switchSession(path, { withSession })
-  -> session_start -> acquire lease -> update session association -> footer
+  -> session_start -> acquire lease -> update session association
 
 separate terminal
   -> show shell-quoted `cd <path> && pi --session <file>`

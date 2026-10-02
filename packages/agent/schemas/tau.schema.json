@@ -206,6 +206,17 @@
 						}
 					},
 					"additionalProperties": false
+				},
+				"worktree": {
+					"type": "object",
+					"properties": {
+						"setupCommand": {
+							"type": "string",
+							"default": "",
+							"description": "Shell command run inside each new worktree before its chat opens, for example npm ci --ignore-scripts. Empty runs nothing."
+						}
+					},
+					"additionalProperties": false
 				}
 			},
 			"additionalProperties": true,

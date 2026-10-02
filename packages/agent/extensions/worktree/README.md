@@ -9,7 +9,7 @@ Work on independent features in separate folders and Git branches without distur
 - `/worktree open <name>`: resume a workspace's saved chat.
 - `/worktree remove <name>`: review and remove a workspace Tau created. Its branch and saved conversations remain.
 
-New workspaces use `feature/<name>` branches and live under `~/worktrees/`, outside the repository. They include committed files from the selected starting point, not unfinished edits. Install dependencies and configure local environment files in each new folder as needed.
+New workspaces use `feature/<name>` branches and live under `~/worktrees/`, outside the repository. They include committed files from the selected starting point, not unfinished edits. Set `extensions.worktree.setupCommand` in Tau settings to install dependencies in each new folder before its chat opens, for example `npm ci --ignore-scripts`. If setup fails, you can retry it, and the folder stays available through `/worktree`. Without a setup command, install dependencies and configure local environment files yourself.
 
 Tau also lists worktrees created outside Tau. It can open them but does not remove them. A workspace in use by another Tau instance cannot be opened for competing edits or removed.
 
