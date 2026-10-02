@@ -176,6 +176,12 @@ export default function worktreeExtension(pi: ExtensionAPI): void {
 	});
 }
 
+function detectTabTerminal(): "cmux" | "Ghostty" | null {
+	if (process.env.CMUX_WORKSPACE_ID) return "cmux";
+	if (process.platform === "darwin" && process.env.TERM_PROGRAM === "ghostty") return "Ghostty";
+	return null;
+}
+
 async function newWorkspace(
 	pi: ExtensionAPI,
 	ctx: ExtensionCommandContext,
@@ -216,7 +222,12 @@ async function newWorkspace(
 	const status = await git.run(["status", "--porcelain=v1", "--untracked-files=all"]);
 	const conversation = await ctx.ui.select("Conversation", ["Start a fresh chat", "Continue this chat"]);
 	if (!conversation) return;
-	const destination = await ctx.ui.select("Open workspace", ["Switch here", "Open in a separate terminal"]);
+	const tabTerminal = detectTabTerminal();
+	const tabChoice = tabTerminal ? `Open in a new ${tabTerminal} tab` : "Open in a separate terminal";
+	const destination = await ctx.ui.select(
+		"Open workspace",
+		tabTerminal ? [tabChoice, "Switch here"] : ["Switch here", tabChoice],
+	);
 	if (!destination) return;
 	const confirmed = await ctx.ui.confirm(
 		`Create ${name}?`,
@@ -301,7 +312,8 @@ async function openWorkspace(
 		const quotedPath = `'${workspace.path.replace(/'/g, "'\\''")}'`;
 		const quotedSession = `'${sessionPath.replace(/'/g, "'\\''")}'`;
 		const command = `cd ${quotedPath} && pi --session ${quotedSession}`;
-		if (process.env.CMUX_WORKSPACE_ID) {
+		const tabTerminal = detectTabTerminal();
+		if (tabTerminal === "cmux") {
 			const created = await pi.exec(
 				"cmux",
 				["new-surface", "--working-directory", workspace.path, "--focus", "true"],
@@ -326,7 +338,7 @@ async function openWorkspace(
 				}
 			}
 			ctx.ui.notify("Could not open a cmux tab. Showing the command instead.", "warning");
-		} else if (process.platform === "darwin" && process.env.TERM_PROGRAM === "ghostty") {
+		} else if (tabTerminal === "Ghostty") {
 			const opened = await pi.exec(
 				"osascript",
 				[

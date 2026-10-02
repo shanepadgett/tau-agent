@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, open, unlink } from "node:fs/promises";
+import { link, mkdir, unlink } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { readJsonStatus, writeJsonObject } from "../../shared/settings/json.ts";
@@ -53,24 +53,32 @@ export async function workspaceOwner(store: string, path: string): Promise<strin
 }
 
 // All owner changes use the same short-lived exclusive claim, including stale-owner recovery.
-// A crashed claim fails closed and names the file to inspect instead of racing another claimant.
+// The claim file is created complete (written to a temp file, then hard-linked into place), so it
+// always names its holder. A claim whose holder process has died is removed and retaken.
 async function withOwnershipClaim<T>(storage: string, action: () => Promise<T>): Promise<T> {
 	const path = `${storage}.claim`;
-	let claim;
+	const temp = `${path}.${randomUUID()}.tmp`;
+	await writeJsonObject(temp, { host: hostname(), pid: process.pid, token: randomUUID() });
 	try {
-		claim = await open(path, "wx", 0o600);
-	} catch (error) {
-		if (error instanceof Error && "code" in error && error.code === "EEXIST") {
-			throw new Error(
-				`Workspace ownership is being updated. Retry; if it persists after all Tau processes exit, remove ${path}.`,
-			);
+		for (;;) {
+			try {
+				await link(temp, path);
+				break;
+			} catch (error) {
+				if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
+				const holder = await readOwner(path);
+				if (holder && ownerIsAlive(holder)) {
+					throw new Error("Workspace ownership is being updated by another Tau process. Retry in a moment.");
+				}
+				if (holder) await unlink(path);
+			}
 		}
-		throw error;
+	} finally {
+		await unlink(temp);
 	}
 	try {
 		return await action();
 	} finally {
-		await claim.close();
 		await unlink(path);
 	}
 }
