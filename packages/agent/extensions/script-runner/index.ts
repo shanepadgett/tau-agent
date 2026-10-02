@@ -188,6 +188,8 @@ export default function scriptRunnerExtension(pi: ExtensionAPI): void {
 		].join("\n"),
 		promptSnippet: `Run ${langPhrase} scripts; on failure retry with edits + scriptId.`,
 		promptGuidelines: [
+			"Use script_runner for custom Python, Node, or Deno code, even for one-off tasks. Never pass custom code to these runtimes through bash with -c/-e, a heredoc, a temporary source file, or a wrapper.",
+			"Use bash for direct shell commands, focused read-only filtering such as jq, existing project commands, and genuinely shell-specific process orchestration. Do not move custom code into bash to avoid review.",
 			"script_runner never exposes the script path; you already have the source. Never try to read it back.",
 		],
 		parameters: paramsSchema,

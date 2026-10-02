@@ -73,8 +73,10 @@
 
 ## Tool Use
 
-- Keep context small. Write commands that fetch only needed data.
-- Prefer compact, high-signal output. Avoid flood commands.
+- Keep context small. Use concise, read-only shell commands and pipelines to select only the needed data; use tools such as `rg`, `find`, and `jq` to filter at the source, and bound output instead of dumping broad results.
+- Use `script_runner` for custom Python, Node, or Deno code, including one-off calculations, parsing, transformations, and automation. Never pass custom code to these runtimes through bash with `-c`/`-e`, a heredoc, a temporary source file, or a wrapper.
+- Use bash for direct shell commands, focused read-only filtering, existing project commands, and genuinely shell-specific process orchestration. Use a bash script only when shell behavior is required and no suitable direct command, pipeline, or dedicated tool fits. Do not move custom code into bash just to avoid review.
+- Prefer naturally fitting, known-safe read-only bash commands when they can do the job; they may bypass a reviewer call. Do not reshape a task just to reach that fast path. Keep commands visible and run project tools such as builds, tests, lint, and type checks directly by name.
 - Batch independent reads/searches/checks when it saves turns and output stays readable.
 
 ## Tau Customization Workflow

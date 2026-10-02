@@ -106,7 +106,7 @@ Supplies Soul with the local date and root directory snapshot. Both remain fixed
 
 ## script-runner
 
-Gives the agent a first-class `script_runner` tool to execute Python 3, Node.js, and Deno scripts. Dedicated tools come first for ordinary reads, searches, and edits. Scripts are for work those tools cannot reasonably handle, or substantial bulk transformations and computation that would otherwise require many repetitive or error-prone calls; justified scripts use this tool rather than bash. On failure it returns a `scriptId`; the agent retries with targeted `{oldText,newText}` edits against the script it already wrote rather than resending the whole script. Runtimes are detected from the environment (Python 3 via `python3`; `node` is the local Node.js runtime with `--experimental-strip-types`, Node 22.6+ — full Node APIs, TypeScript with erasable syntax or plain JavaScript; `deno` via `deno run -A` — full permissions, native TypeScript/JavaScript, Deno APIs). The tool registers only available runtimes and is hidden from the prompt if none are present.
+Gives the agent a first-class `script_runner` tool for custom Python, Node.js, and Deno code, including one-off calculations, parsing, transformations, and automation. The agent uses dedicated tools for ordinary reads, searches, and edits; for shell-side inspection, it uses concise read-only commands and filters output at the source with tools such as `rg`, `find`, and `jq`. Custom code for these runtimes goes through `script_runner`, never bash snippets, heredocs, or temporary source files. Bash remains useful for direct shell commands, existing project commands, and tasks that genuinely need shell-specific behavior. Naturally fitting, known-safe read-only bash commands may bypass a reviewer call; custom code should not be moved into bash to reach that fast path. On failure, the tool returns a `scriptId`; the agent retries with targeted `{oldText,newText}` edits against the script it already wrote rather than resending the whole script. Runtimes are detected from the environment (Python 3 via `python3`; `node` is the local Node.js runtime with `--experimental-strip-types`, Node 22.6+ — full Node APIs, TypeScript with erasable syntax or plain JavaScript; `deno` via `deno run -A` — full permissions, native TypeScript/JavaScript, Deno APIs). The tool registers only available runtimes and is hidden from the prompt if none are present.
 
 ## silent-command-runner
 
@@ -116,7 +116,7 @@ Runs configured commands while keeping their output out of agent context when th
 
 Supplies Tau's communication, discussion, planning, execution, and coding instructions, plus tool-use rules, tool guidance, and context from other Tau extensions. The date and directory snapshot stay fixed until successful compaction. Other changes, such as an edited `AGENTS.md` after `/reload`, arrive as appended updates without rewriting earlier instructions.
 
-Tool-use guidance defaults to dedicated tools for ordinary file work, bash for shell commands, and scripts only when dedicated tools cannot reasonably do the work or when substantial bulk work would otherwise need many repetitive or error-prone calls.
+Tool-use guidance defaults to dedicated tools for ordinary file work, concise read-only bash commands and pipelines for shell-side inspection, and `script_runner` for custom Python, Node, or Deno code. It tells the agent to filter output at the source, keep commands visible, and avoid moving custom code into bash to reach the read-only fast path.
 
 ## stash
 
