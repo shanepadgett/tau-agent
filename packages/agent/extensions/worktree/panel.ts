@@ -1,5 +1,5 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { Key, truncateToWidth } from "@earendil-works/pi-tui";
+import { Key, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { rawHint, SelectableList, ToolPanel } from "@shanepadgett/tau-tui";
 import type { Workspace } from "./workspaces.ts";
 
@@ -7,7 +7,11 @@ export function showWorkspacePanel(
 	ctx: ExtensionCommandContext,
 	workspaces: readonly Workspace[],
 ): Promise<Workspace | "new" | undefined> {
+	const branchOf = (workspace: Workspace) => workspace.branch?.replace(/^refs\/heads\//, "") ?? "detached";
+	const nameWidth = Math.min(28, Math.max(0, ...workspaces.map((workspace) => visibleWidth(workspace.name))));
+	const branchWidth = Math.min(32, Math.max(0, ...workspaces.map((workspace) => visibleWidth(branchOf(workspace)))));
 	return ctx.ui.custom<Workspace | "new" | undefined>((tui, theme, _keys, done) => {
+		const cell = (text: string, cellWidth: number) => truncateToWidth(text, cellWidth, "…", true);
 		const list = new SelectableList(theme, {
 			items: workspaces,
 			emptyMessage: "No workspaces found.",
@@ -18,26 +22,22 @@ export function showWorkspacePanel(
 			maxVisible: 8,
 			renderItem: (workspace, state, width) => {
 				const status = workspace.missing
-					? "missing"
+					? theme.fg("error", "missing")
 					: workspace.changes
-						? `${workspace.changes} changed files`
-						: "clean";
+						? theme.fg("warning", `${workspace.changes} changed`)
+						: theme.fg("success", "clean");
 				const flags = [
-					workspace.current ? "here" : "",
-					workspace.owner && !workspace.current ? "in use" : "",
-					workspace.locked ? "locked" : "",
+					workspace.current ? theme.fg("accent", "here") : "",
+					workspace.owner && !workspace.current ? theme.fg("warning", "in use") : "",
+					workspace.locked ? theme.fg("dim", "locked") : "",
 				].filter(Boolean);
-				return [
-					truncateToWidth(theme.fg(state.active ? "accent" : "text", workspace.name), width, ""),
-					truncateToWidth(
-						theme.fg(
-							"dim",
-							`${workspace.branch?.replace(/^refs\/heads\//, "") ?? "detached"} · ${status}${flags.length ? ` · ${flags.join(" · ")}` : ""}`,
-						),
-						width,
-						"",
-					),
-				];
+				const line = [
+					theme.fg(state.active ? "accent" : "text", cell(workspace.name, nameWidth)),
+					theme.fg("dim", cell(branchOf(workspace), branchWidth)),
+					cell(status, 12),
+					...flags,
+				].join(theme.fg("dim", "  "));
+				return [truncateToWidth(line, width, "")];
 			},
 			onResult: (result) => {
 				if (result.kind === "cancel") done(undefined);
