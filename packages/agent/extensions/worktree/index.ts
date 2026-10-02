@@ -301,6 +301,56 @@ async function openWorkspace(
 		const quotedPath = `'${workspace.path.replace(/'/g, "'\\''")}'`;
 		const quotedSession = `'${sessionPath.replace(/'/g, "'\\''")}'`;
 		const command = `cd ${quotedPath} && pi --session ${quotedSession}`;
+		if (process.env.CMUX_WORKSPACE_ID) {
+			const created = await pi.exec(
+				"cmux",
+				["new-surface", "--working-directory", workspace.path, "--focus", "true"],
+				{
+					signal: ctx.signal,
+					timeout: 10_000,
+				},
+			);
+			const surface = created.stdout.match(/surface:\d+/)?.[0];
+			if (created.code === 0 && surface) {
+				const sent = await pi.exec("cmux", ["send", "--surface", surface, "--", `${command}\\n`], {
+					signal: ctx.signal,
+					timeout: 10_000,
+				});
+				if (sent.code === 0) {
+					await pi.exec("cmux", ["rename-tab", "--surface", surface, workspace.name], {
+						signal: ctx.signal,
+						timeout: 10_000,
+					});
+					ctx.ui.notify(`Opened ${workspace.name} in a new cmux tab.`, "info");
+					return;
+				}
+			}
+			ctx.ui.notify("Could not open a cmux tab. Showing the command instead.", "warning");
+		} else if (process.platform === "darwin" && process.env.TERM_PROGRAM === "ghostty") {
+			const opened = await pi.exec(
+				"osascript",
+				[
+					"-e",
+					"on run argv",
+					"-e",
+					'tell application "Ghostty"',
+					"-e",
+					"new tab in front window with configuration {initial working directory:item 1 of argv, initial input:(item 2 of argv) & linefeed}",
+					"-e",
+					"end tell",
+					"-e",
+					"end run",
+					workspace.path,
+					command,
+				],
+				{ signal: ctx.signal, timeout: 10_000 },
+			);
+			if (opened.code === 0) {
+				ctx.ui.notify(`Opened ${workspace.name} in a new Ghostty tab.`, "info");
+				return;
+			}
+			ctx.ui.notify("Could not open a Ghostty tab. Showing the command instead.", "warning");
+		}
 		await ctx.ui.editor("Run this in a second terminal", command);
 		return;
 	}

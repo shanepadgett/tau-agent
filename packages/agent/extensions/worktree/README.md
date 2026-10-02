@@ -1,6 +1,6 @@
 # Worktree
 
-Work on independent features in separate folders and Git branches without disturbing unfinished work. Each workspace has its own Pi conversation. Use a second terminal when you want two agents working at once.
+Work on independent features in separate folders and Git branches without disturbing unfinished work. Each workspace has its own Pi conversation. Use a second terminal when you want two agents working at once. In cmux the workspace opens as a new tab in your current cmux workspace; in Ghostty on macOS it opens as a new tab in the front window. Other terminals show the command to run.
 
 ## Commands
 
