@@ -34,7 +34,6 @@ export async function prepareWorkspaceSession(
 	if (!header || !sessionPath) throw new Error("Could not prepare a persistent workspace session.");
 	if (ctx.model) target.appendModelChange(ctx.model.provider, ctx.model.id);
 	target.appendThinkingLevelChange(thinkingLevel);
-	target.appendSessionInfo(workspace.name);
 	const branch = conversation === "continue" ? ctx.sessionManager.getBranch() : [];
 	const setup = target.getBranch();
 	const last = branch.at(-1);
