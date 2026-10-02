@@ -1,0 +1,35 @@
+name = "Worktree"
+description = "Separate feature folders, conversations, and safe worktree lifecycle"
+
+[workflow]
+description = "Register /worktree and its new/open/remove shortcuts; choose feature branch, conversation, and terminal; replace Pi sessions; publish footer; protect occupied workspaces"
+read = [
+  "packages/agent/extensions/worktree/index.ts",
+  "packages/agent/extensions/worktree/panel.ts",
+  "packages/agent/extensions/worktree/README.md",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/worktree/workspaces.ts",
+  "packages/agent/extensions/worktree/ownership.ts",
+  "packages/agent/extensions/worktree/sessions.ts",
+  "packages/agent/shared/git.ts",
+  "packages/agent/shared/events.ts",
+  "packages/agent/extensions/tau-help/help.md",
+]
+
+[storage-and-safety]
+description = "Discover Git worktrees, validate identity, persist task/session metadata, serialize active conversation branches, exclude concurrent owners, and confirm removal without losing branches or chats"
+read = [
+  "packages/agent/extensions/worktree/workspaces.ts",
+  "packages/agent/extensions/worktree/ownership.ts",
+  "packages/agent/extensions/worktree/sessions.ts",
+]
+show = []
+outline = []
+references = [
+  "packages/agent/extensions/worktree/index.ts",
+  "packages/agent/shared/settings/json.ts",
+  "packages/agent/shared/git.ts",
+]

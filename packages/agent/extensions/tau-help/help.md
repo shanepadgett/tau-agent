@@ -146,6 +146,10 @@ Keeps specialist tool groups out of every request as deferred tools and lets the
 
 Gives the agent compact `websearch`, `webfetch`, and `codesearch` tools for web and implementation research.
 
+## worktree
+
+Adds `/worktree` to browse isolated feature folders and their sessions. Use `/worktree new [name]` to choose a starting branch, a fresh or continued chat, and this window or a second terminal; `/worktree open <name>` to resume; `/worktree remove <name>` to review removal. New workspaces live outside the repository, use ordinary feature branches, and exclude uncommitted changes. Removal keeps branches and saved chats, refuses unfinished changes or workspaces in use, and warns before deleting ignored local files. Install dependencies and local configuration separately in each workspace.
+
 ## Prompts
 
 Prompt commands expand into instructions before the request reaches the agent.
