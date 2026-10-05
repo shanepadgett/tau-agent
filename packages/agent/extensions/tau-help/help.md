@@ -140,11 +140,11 @@ Scoped project edits, builds, tests, and generated-file cleanup should be approv
 
 ## tool-loader
 
-Keeps specialist tool groups out of every request. Deferred groups load through Pi's `tool_search`; codemode groups are called from code mode scripts. Tau registers `image` and `appshot` as deferred groups and `web` as a codemode group; project or global package extensions can add groups with `registerToolGroup()` from `@shanepadgett/tau-agent`. All models can load tools. Compatible models preserve the cached prefix; other models can incur a cache miss when tools are activated. Loading never triggers compaction.
+Keeps specialist tool groups out of every request. Deferred groups load through Pi's `tool_search`, which Tau keeps active while such groups exist; codemode groups are called from code mode scripts, and Tau keeps `codemode` active while such groups exist. Tau registers `image` and `appshot` as deferred groups and `web` as a codemode group; project or global package extensions can add groups with `registerToolGroup()` from `@shanepadgett/tau-agent`. All models can load tools. Compatible models preserve the cached prefix; other models can incur a cache miss when tools are activated. Loading never triggers compaction.
 
 ## web
 
-Gives the agent `websearch` and `webfetch` for web research, reached through code mode so raw results stay out of context. The tools are available when `codemode` is active.
+Gives the agent `websearch` and `webfetch` for web research, reached through code mode so raw results stay out of context. Tau keeps `codemode` active while the web group exists.
 
 ## worktree
 

@@ -67,7 +67,7 @@ Behavior:
 
 ## Tool groups
 
-Extensions can register tools as deferred or codemode tools, keeping their schemas out of the active tool set. Deferred tools load with Pi's built-in `tool_search`; codemode tools are listed by the codemode tool and called from code mode scripts. Tau keeps `tool_search` active whenever deferred tools exist.
+Extensions can register tools as deferred or codemode tools, keeping their schemas out of the active tool set. Deferred tools load with Pi's built-in `tool_search`; codemode tools are listed by the codemode tool and called from code mode scripts. Tau keeps `tool_search` active whenever deferred tools exist and `codemode` active whenever codemode tools exist.
 
 ```ts
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";

@@ -2,7 +2,7 @@ name = "Tool Loader"
 description = "Keep specialist tool groups out of every request, reachable through Pi's tool_search or code mode"
 
 [extension-runtime]
-description = "registerToolGroup registers tools with deferred or codemode exposure and a group namespace; at session_start activate tool_search when any deferred tool exists, or warn when the built-in extension is disabled; allow Pi to load tools on all models even when activation invalidates the cached prefix"
+description = "registerToolGroup registers tools with deferred or codemode exposure and a group namespace; at session_start activate tool_search when any deferred tool exists and codemode when any codemode tool exists, or warn when the matching built-in extension is disabled; allow Pi to load tools on all models even when activation invalidates the cached prefix"
 read = [
   "packages/agent/extensions/tool-loader/index.ts",
   "packages/agent/extensions/tool-loader/README.md",
