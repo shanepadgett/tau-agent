@@ -65,13 +65,13 @@ Behavior:
 - Missing, unreadable, or oversized files produce visible failed rows instead of rejecting.
 - Outlining requires Tau's Explore extension to be loaded.
 
-## Deferred tool groups
+## Tool groups
 
-Extensions can register tools as deferred tools, keeping their schemas out of the active tool set until the agent loads them with Pi's built-in `tool_search`. Tau keeps `tool_search` active whenever deferred tools exist.
+Extensions can register tools as deferred or codemode tools, keeping their schemas out of the active tool set. Deferred tools load with Pi's built-in `tool_search`; codemode tools are listed by the codemode tool and called from code mode scripts. Tau keeps `tool_search` active whenever deferred tools exist.
 
 ```ts
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { registerDeferredToolGroup } from "@shanepadgett/tau-agent";
+import { registerToolGroup } from "@shanepadgett/tau-agent";
 import { Type } from "typebox";
 
 const confluenceSearch = defineTool({
@@ -88,17 +88,18 @@ const confluenceSearch = defineTool({
 });
 
 export default function confluenceExtension(pi: ExtensionAPI): void {
-    registerDeferredToolGroup(pi, {
+    registerToolGroup(pi, {
         id: "confluence",
+        exposure: "deferred",
         description: "Search and read Confluence pages",
         tools: [confluenceSearch],
     });
 }
 ```
 
-`registerDeferredToolGroup()` registers each tool with `exposure: "deferred"` and a namespace made from `id` and `description`. Call it during extension initialization. Project-local and global package extensions use the same API. Tool names must be unique within the group.
+`registerToolGroup()` registers each tool with the given `exposure` and a namespace made from `id` and `description`. Call it during extension initialization. Project-local and global package extensions use the same API. Tool names must be unique within the group.
 
-Deferred loading affects model-visible tool schemas, not JavaScript package loading. Initialize expensive clients, authentication, and network connections inside tool execution when possible. Pi handles provider-specific deferred-tool behavior when `tool_search` loads a tool. On models that cannot take tool changes without replacing the cached prefix, Tau blocks `tool_search`.
+Group registration affects model-visible tool schemas, not JavaScript package loading. Initialize expensive clients, authentication, and network connections inside tool execution when possible. Pi handles provider-specific deferred-tool behavior when `tool_search` loads a tool. On models that cannot take tool changes without replacing the cached prefix, Tau blocks `tool_search`.
 
 ## Events
 

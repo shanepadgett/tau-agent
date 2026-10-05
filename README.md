@@ -31,7 +31,7 @@ Restart Pi or run `/reload` after installation.
 - **External references** — `/reference` keeps comparison repositories outside the working tree. Select one when it matters; Tau gives the agent the exact path and reason instead of letting it browse unrelated code.
 - **Git flow** — `/commit` builds and reviews semantic commit groups.
 - **Useful TUI flows** — Branch switching, session management, question panels, idea capture, stashed drafts, and status information live in Pi-native interfaces.
-- **Web and visual work** — Deferred web search/fetch/code-search tools, plus optional macOS window capture and image generation.
+- **Web and visual work** — Code-mode web search and fetch tools, plus optional macOS window capture and image generation.
 
 Run `/tau-help` inside Pi for the full extension list. Run `/tau init --global` or `/tau init --project` to set up Tau configuration.
 

@@ -179,7 +179,7 @@ export function createWebFetchTool(rowState: ToolRowStateStore) {
 		label: "Web Fetch",
 		annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 		description:
-			"Fetch a known HTTP(S) URL as Markdown, text, or HTML. Use webfetch when you already have a URL; use websearch for broad discovery and codesearch for implementation-oriented lookups. Use a separate research workflow when several searches, fetches, and synthesis are needed. Supports inline images, limits response bodies to 5 MB, and truncates text to 2,000 lines or 50 KB.",
+			"Fetch a known HTTP(S) URL as Markdown, text, or HTML. Use webfetch when you already have a URL; use websearch for broad discovery. Supports inline images, limits response bodies to 5 MB, and truncates text to 2,000 lines or 50 KB.",
 		parameters: webFetchParams,
 		async execute(_toolCallId, params, signal, onUpdate) {
 			return executeWebFetch(params, signal, onUpdate);

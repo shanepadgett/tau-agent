@@ -11,7 +11,7 @@ import { mkdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { type Static, Type } from "typebox";
 import { createToolRowStateStore, formatToolRowTitle } from "../../shared/tool-row-state.js";
-import { registerDeferredToolGroup } from "../../src/tool-loading/index.ts";
+import { registerToolGroup } from "../../src/tool-loading/index.ts";
 import { createNativeHelper, type RunHelper } from "./native-helper.ts";
 
 const MAX_PNG_BYTES = 12 * 1024 * 1024;
@@ -219,8 +219,9 @@ function registerAppshotTools(pi: ExtensionAPI, runHelper: RunHelper): void {
 		},
 	});
 
-	registerDeferredToolGroup(pi, {
+	registerToolGroup(pi, {
 		id: "appshot",
+		exposure: "deferred",
 		description: "macOS window discovery, capture, and activation",
 		tools: [listWindowsTool, screenshotWindowTool, activateAppTool],
 	});

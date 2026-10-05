@@ -7,6 +7,26 @@ import { callExa } from "./exa.ts";
 import { clampInteger, normalizeTimeout } from "./limits.ts";
 import { renderWebToolResult, truncateCallSummary, truncateToolOutput } from "./tool-output.ts";
 
+const SEARCH_START_INTERVAL_MS = 2000;
+
+function delay(ms: number, signal: AbortSignal | undefined): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const onAbort = () => {
+			clearTimeout(timer);
+			reject(new DOMException("Aborted while waiting for the search slot", "AbortError"));
+		};
+		const timer = setTimeout(() => {
+			signal?.removeEventListener("abort", onAbort);
+			resolve();
+		}, ms);
+		if (signal?.aborted) {
+			onAbort();
+			return;
+		}
+		signal?.addEventListener("abort", onAbort, { once: true });
+	});
+}
+
 const webSearchParams = Type.Object(
 	{
 		query: Type.String({ description: "Web search query" }),
@@ -32,12 +52,29 @@ interface WebSearchDetails {
 }
 
 export function createWebSearchTool(rowState: ToolRowStateStore) {
+	let tail: Promise<void> = Promise.resolve();
+	let lastStart = 0;
+
+	function schedule<T>(signal: AbortSignal | undefined, task: () => Promise<T>): Promise<T> {
+		const result = tail.then(async () => {
+			const wait = Math.max(0, lastStart + SEARCH_START_INTERVAL_MS - Date.now());
+			if (wait > 0) await delay(wait, signal);
+			lastStart = Date.now();
+			return task();
+		});
+		tail = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		return result;
+	}
+
 	return defineTool<typeof webSearchParams, WebSearchDetails | undefined>({
 		name: "websearch",
 		label: "Web Search",
 		annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 		description:
-			"Search the public web through Exa for current information and relevant pages. Use websearch for broad discovery, then webfetch for a known URL; use codesearch for implementation-oriented code and documentation context. Use a separate research workflow when several searches, fetches, and synthesis are needed. Output is truncated to 2,000 lines or 50 KB.",
+			"Search the public web through Exa for current information and relevant pages. Use websearch for broad discovery, then webfetch for a known URL. Output is truncated to 2,000 lines or 50 KB.",
 		parameters: webSearchParams,
 		async execute(_toolCallId, params, signal, onUpdate) {
 			const timeout = normalizeTimeout(params.timeout, 25);
@@ -51,13 +88,15 @@ export function createWebSearchTool(rowState: ToolRowStateStore) {
 			await onUpdate?.({ content: [{ type: "text", text: "Searching web..." }], details: undefined });
 			try {
 				const output =
-					(await callExa(
-						{
-							toolName: "web_search_exa",
-							arguments: { query: params.query, type, numResults, livecrawl, contextMaxCharacters },
-						},
-						signal,
-						timeout,
+					(await schedule(signal, () =>
+						callExa(
+							{
+								toolName: "web_search_exa",
+								arguments: { query: params.query, type, numResults, livecrawl, contextMaxCharacters },
+							},
+							signal,
+							timeout,
+						),
 					)) ?? "No search results found. Try a more specific query.";
 				const truncated = truncateToolOutput(output);
 				return {

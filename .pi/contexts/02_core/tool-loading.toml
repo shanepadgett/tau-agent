@@ -1,8 +1,8 @@
 name = "Tool Loading"
-description = "Public deferred specialist tool-group SDK and package export"
+description = "Public specialist tool-group SDK and package export"
 
 [registry-api]
-description = "Register validated deferred tool groups, discover group metadata across isolated extension modules through Pi's shared runtime event bus, and document the package-root API"
+description = "Register validated deferred or codemode tool groups, discover group metadata across isolated extension modules through Pi's shared runtime event bus, and document the package-root API"
 read = [
   "packages/agent/src/tool-loading/index.ts",
   "packages/agent/src/index.ts",

@@ -7,7 +7,7 @@ interface FetchResponse {
 }
 
 export interface ExaRequest {
-	toolName: "web_search_exa" | "get_code_context_exa";
+	toolName: "web_search_exa";
 	arguments: Record<string, unknown>;
 }
 

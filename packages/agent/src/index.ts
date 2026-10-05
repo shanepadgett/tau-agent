@@ -6,4 +6,4 @@ export {
 	type ImageProvider,
 } from "./image-generation/index.ts";
 export { prepareFileInjection } from "./file-injection/index.ts";
-export { registerDeferredToolGroup, type DeferredToolGroup } from "./tool-loading/index.ts";
+export { registerToolGroup, type ToolGroup } from "./tool-loading/index.ts";

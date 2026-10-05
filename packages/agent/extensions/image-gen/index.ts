@@ -1,12 +1,12 @@
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
 	generateImage,
-	registerDeferredToolGroup,
-	type DeferredToolGroup,
+	registerToolGroup,
 	type GeneratedImageResult,
 	type GenerateImageRequest,
 	type ImageGenerationContext,
 	type ImageProvider,
+	type ToolGroup,
 } from "@shanepadgett/tau-agent";
 import { type Static, Type } from "typebox";
 
@@ -33,8 +33,9 @@ type ImageGenParams = Static<typeof imageGenSchema>;
 type ImageGenDetails = Omit<GeneratedImageResult, "bytes">;
 
 export default function imageGenExtension(pi: ExtensionAPI): void {
-	registerDeferredToolGroup(pi, {
+	registerToolGroup(pi, {
 		id: "image",
+		exposure: "deferred",
 		description: "Raster image generation and editing",
 		tools: [
 			defineTool<typeof imageGenSchema, ImageGenDetails | undefined>({
@@ -84,5 +85,5 @@ export default function imageGenExtension(pi: ExtensionAPI): void {
 				},
 			}),
 		],
-	} satisfies DeferredToolGroup);
+	} satisfies ToolGroup);
 }
