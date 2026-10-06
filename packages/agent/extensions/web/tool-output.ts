@@ -1,28 +1,6 @@
-import {
-	DEFAULT_MAX_BYTES,
-	DEFAULT_MAX_LINES,
-	formatSize,
-	truncateHead,
-	type AgentToolResult,
-	type Theme,
-	type ToolRenderResultOptions,
-	type TruncationResult,
-} from "@earendil-works/pi-coding-agent";
+import { type AgentToolResult, type Theme, type ToolRenderResultOptions } from "@earendil-works/pi-coding-agent";
 import { type Component, Text } from "@earendil-works/pi-tui";
 import { renderToolOutputPreview } from "../../shared/text.ts";
-
-export function truncateToolOutput(text: string): { text: string; truncation?: TruncationResult } {
-	const truncation = truncateHead(text, { maxBytes: DEFAULT_MAX_BYTES, maxLines: DEFAULT_MAX_LINES });
-	if (!truncation.truncated) return { text: truncation.content };
-
-	return {
-		text:
-			truncation.content +
-			`\n\n[Output truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines ` +
-			`(${formatSize(truncation.outputBytes)} of ${formatSize(truncation.totalBytes)})]`,
-		truncation,
-	};
-}
 
 export function truncateCallSummary(text: string): string {
 	return text.length <= 90 ? text : `${text.slice(0, 89)}…`;

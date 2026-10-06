@@ -144,7 +144,9 @@ Keeps specialist tool groups out of every request. Deferred groups load through 
 
 ## web
 
-Gives the agent `websearch` and `webfetch` for web research, reached through code mode so raw results stay out of context. Tau keeps `codemode` active while the web group exists.
+Gives the agent `websearch` and `webfetch` for web research, reached through code mode so raw results stay out of context. `websearch` uses the active Codex, Anthropic, or Grok login and falls back to Exa; OpenCode Go and other providers use Exa directly. Search inputs are `query`, `maxSources`, `contextMaxCharacters`, and `timeout`. Tau keeps `codemode` active while the web group exists.
+
+`webfetch` preserves code blocks and tables in Markdown, resolves relative links against redirected page URLs, and retains complete overflow in session-scoped files. It supports text and inline images; PDFs and other binary downloads are unsupported.
 
 ## worktree
 

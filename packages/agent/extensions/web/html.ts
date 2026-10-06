@@ -1,67 +1,112 @@
-function decodeCodePoint(value: number): string {
-	if (!Number.isFinite(value) || value < 0 || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) {
-		return "";
-	}
-	return String.fromCodePoint(value);
-}
+import { DomUtils, Parser, parseDocument } from "htmlparser2";
+import TurndownService from "turndown";
+import { gfm } from "turndown-plugin-gfm";
 
-function decodeEntities(text: string): string {
-	return text
-		.replace(/&nbsp;/gi, " ")
-		.replace(/&amp;/gi, "&")
-		.replace(/&lt;/gi, "<")
-		.replace(/&gt;/gi, ">")
-		.replace(/&quot;/gi, '"')
-		.replace(/&apos;/gi, "'")
-		.replace(/&#39;/gi, "'")
-		.replace(/&#(\d+);/g, (_match, value: string) => decodeCodePoint(Number.parseInt(value, 10)))
-		.replace(/&#x([\da-f]+);/gi, (_match, value: string) => decodeCodePoint(Number.parseInt(value, 16)));
-}
-
-function removeNoise(html: string): string {
-	return html
-		.replace(/<(head|script|style|noscript|iframe|object|embed)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
-		.replace(/<(head|script|style|noscript|iframe|object|embed)\b[^>]*\/?\s*>/gi, "");
-}
-
-function normalize(text: string): string {
-	return decodeEntities(text)
-		.replace(/\r\n?/g, "\n")
-		.replace(/\t/g, " ")
-		.split("\n")
-		.map((line) => line.replace(/[^\S\n]+/g, " ").trim())
-		.join("\n")
-		.replace(/\n{3,}/g, "\n\n")
-		.trim();
-}
+const NOISE_TAGS = new Set(["head", "script", "style", "noscript", "iframe", "object", "embed"]);
+const BLOCK_TAGS = new Set([
+	"p",
+	"div",
+	"section",
+	"article",
+	"header",
+	"footer",
+	"main",
+	"aside",
+	"h1",
+	"h2",
+	"h3",
+	"h4",
+	"h5",
+	"h6",
+	"ul",
+	"ol",
+	"li",
+	"table",
+	"tr",
+	"pre",
+	"blockquote",
+]);
 
 export function htmlToText(html: string): string {
-	return normalize(
-		removeNoise(html)
-			.replace(/<br\s*\/?>/gi, "\n")
-			.replace(/<\/p\s*>/gi, "\n\n")
-			.replace(/<li\b[^>]*>/gi, "\n- ")
-			.replace(/<\/li\s*>/gi, "")
-			.replace(/<\/(div|section|article|header|footer|main|aside|tr|h[1-6]|ul|ol|table)\s*>/gi, "\n")
-			.replace(/<[^>]+>/g, " "),
-	);
+	let text = "";
+	let skipDepth = 0;
+	let preDepth = 0;
+	const parser = new Parser({
+		onopentag(name) {
+			if (skipDepth > 0 || NOISE_TAGS.has(name)) {
+				skipDepth++;
+				return;
+			}
+			if (BLOCK_TAGS.has(name) || name === "br") text += "\n";
+			if (name === "li") text += "- ";
+			if (name === "pre") preDepth++;
+		},
+		ontext(value) {
+			if (skipDepth === 0) text += preDepth > 0 ? value : value.replace(/\s+/g, " ");
+		},
+		onclosetag(name) {
+			if (skipDepth > 0) {
+				skipDepth--;
+				return;
+			}
+			if (name === "pre") preDepth--;
+			if (BLOCK_TAGS.has(name)) text += "\n";
+			if (name === "td" || name === "th") text += "\t";
+		},
+	});
+	parser.end(html);
+	return text.replace(/^\n+|\n+$/g, "");
 }
 
-export function htmlToMarkdown(html: string): string {
-	return normalize(
-		removeNoise(html)
-			.replace(
-				/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1\s*>/gi,
-				(_match, level: string, body: string) => `\n${"#".repeat(Number(level))} ${body}\n`,
-			)
-			.replace(/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a\s*>/gi, "[$2]($1)")
-			.replace(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1\s*>/gi, "**$2**")
-			.replace(/<(em|i)\b[^>]*>([\s\S]*?)<\/\1\s*>/gi, "*$2*")
-			.replace(/<code\b[^>]*>([\s\S]*?)<\/code\s*>/gi, "`$1`")
-			.replace(/<li\b[^>]*>/gi, "\n- ")
-			.replace(/<\/li\s*>/gi, "")
-			.replace(/<br\s*\/?>/gi, "\n")
-			.replace(/<\/(p|div|section|article|header|footer|main|aside|ul|ol|table|tr)\s*>/gi, "\n")
-			.replace(/<[^>]+>/g, " "),
-	);
+export function htmlToMarkdown(html: string, finalUrl: string): string {
+	const document = parseDocument(html);
+	let baseUrl = finalUrl;
+	const baseHref = DomUtils.findOne((node) => node.name === "base" && "href" in node.attribs, document.children)
+		?.attribs.href;
+	if (baseHref) {
+		try {
+			const base = new URL(baseHref, finalUrl);
+			if (base.protocol === "http:" || base.protocol === "https:") baseUrl = base.href;
+		} catch {
+			// Invalid base elements do not replace the fetched page's URL.
+		}
+	}
+	for (const node of DomUtils.findAll((element) => NOISE_TAGS.has(element.name), document.children)) {
+		DomUtils.removeElement(node);
+	}
+	for (const node of DomUtils.findAll(
+		(element) => element.name === "a" || element.name === "img",
+		document.children,
+	)) {
+		const attribute = node.name === "a" ? "href" : "src";
+		const value = node.attribs[attribute];
+		if (value === undefined) continue;
+		try {
+			node.attribs[attribute] = new URL(value, baseUrl).href;
+		} catch {
+			delete node.attribs[attribute];
+		}
+	}
+	const converter = new TurndownService({
+		headingStyle: "atx",
+		hr: "---",
+		bulletListMarker: "-",
+		codeBlockStyle: "fenced",
+		preformattedCode: true,
+		emDelimiter: "*",
+	});
+	converter.use(gfm);
+	converter.addRule("singleLineTableCells", {
+		filter: ["th", "td"],
+		replacement(content, node) {
+			const prefix = node.previousElementSibling === null ? "| " : " ";
+			// Physical line breaks end Markdown table rows; retain cell breaks as inline HTML.
+			const cell = content
+				.trim()
+				.replace(/\s*\r?\n+\s*/g, "<br>")
+				.replace(/(?<!\\)\|/g, "\\|");
+			return `${prefix}${cell} |`;
+		},
+	});
+	return converter.turndown(DomUtils.getOuterHTML(document));
 }
