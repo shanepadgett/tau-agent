@@ -82,7 +82,7 @@ Replaces separate edit/write operations with one multi-file `patch` tool. It can
 
 ## qna
 
-Adds `/qna` for when the agent has asked you several questions in chat and you want a friendly UI for answering them on your own terms. It is only active when you manually run the command.
+Adds `/qna [context]` to re-ask the agent's last question or set of questions through a structured UI. Optional context guides the framing. Supports single choice, multiple choice, yes/no, and typed answers, with optional recommendations and an Additional Context tab. It is only active when you manually run the command.
 
 ## ready
 

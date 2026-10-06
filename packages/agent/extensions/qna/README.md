@@ -8,7 +8,7 @@ Structured question UI for blocked agent decisions.
 
 ## Tools
 
-Registers `ask_question`, inactive by default. It is enabled for `/qna`, then disabled after `ask_question` returns or the agent turn ends.
+Registers `ask_question`, inactive by default and callable only by the model. It is enabled for `/qna`, then disabled after a successful answer or the agent turn ends. Invalid calls can be corrected during the same turn.
 
 Use only when missing user intent, preference, or constraint would materially change the next action. Supports:
 
@@ -17,7 +17,7 @@ Use only when missing user intent, preference, or constraint would materially ch
 - `input`: free-form typed answer
 - `confirm`: fixed yes/no
 
-Selectable questions require real options, recommendation values, and an honest recommendation reason. User can add notes to real options.
+Selectable questions require real options. Recommendations are optional for every question kind and include an honest tradeoff reason when supplied. User can add notes to real options.
 
 Every panel includes a final user-owned `Additional Context` tab. It is not part of the tool schema. Non-empty text returns as top-level `additionalContext`.
 
@@ -33,6 +33,7 @@ Every panel includes a final user-owned `Additional Context` tab. It is not part
 - `tab`/`←→` moves between questions and additional context.
 - `enter` advances through questions and submits from additional context. `alt+enter` submits anytime; unanswered questions are skipped.
 - Results render as a Markdown-style numbered question/answer list, plus an additional context section when supplied.
+- Oversized results sent to the agent retain complete sections and include a session-scoped file path for the full output.
 
 ## Layout
 

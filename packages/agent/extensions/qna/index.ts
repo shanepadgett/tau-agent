@@ -2,52 +2,65 @@ import { StringEnum, Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { emitAgentBlocked } from "../../shared/agent-blocked.ts";
+import { BoundedTextResultBuilder, type BoundedTextOverflowDetails } from "../../shared/bounded-text-result.ts";
+import { createTemporaryOutputStore, type TemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { normalizeParams, type QnaParams, type QnaResult } from "./model.ts";
 import { runQnaUi } from "./ui.ts";
 
 const TOOL_ASK_QUESTION = "ask_question";
 
-const optionSchema = Type.Object({
-	value: Type.String({ description: "Stable option value returned in result" }),
-	label: Type.String({ description: "Short user-facing option label" }),
-});
+type QnaToolDetails = QnaResult & { overflow: BoundedTextOverflowDetails };
 
-const recommendationSchema = Type.Object({
-	values: Type.Array(Type.String(), { description: "Recommended option values, chosen after options are written" }),
-	reason: Type.String({ description: "Honest tradeoff-based justification for recommendation" }),
-});
+const optionSchema = Type.Object(
+	{
+		value: Type.String({ minLength: 1, description: "Unique option value; use this, not label, in recommendations" }),
+		label: Type.String({ minLength: 1, description: "Short user-facing option label" }),
+	},
+	{ additionalProperties: false },
+);
 
-const askQuestionParamsSchema = Type.Object({
-	title: Type.Optional(Type.String({ description: "Short title for the question panel" })),
-	questions: Type.Array(
-		Type.Object({
-			id: Type.String({ description: "Unique question id" }),
-			prompt: Type.String({ description: "Question shown to the user" }),
-			kind: StringEnum(["select", "multi", "input", "confirm"] as const, {
-				description: "select: one choice; multi: several choices; input: typed answer; confirm: yes/no",
-			}),
-			options: Type.Optional(
-				Type.Array(optionSchema, { description: "Required for select/multi, forbidden for input/confirm" }),
-			),
-			recommendation: Type.Optional(recommendationSchema),
+const recommendationSchema = Type.Object(
+	{
+		values: Type.Array(Type.String({ minLength: 1 }), {
+			minItems: 1,
+			uniqueItems: true,
+			description:
+				"select: one option value; multi: one or more option values; confirm: one of 'yes'/'no'; input: one suggested text answer",
 		}),
-		{ description: "Focused questions. Prefer 1-3." },
-	),
-});
+		reason: Type.String({ minLength: 1, description: "Honest tradeoff-based justification" }),
+	},
+	{ additionalProperties: false },
+);
 
-const QNA_PROMPT = `Use ask_question to re-ask the question you just asked the user.
+const askQuestionParamsSchema = Type.Object(
+	{
+		title: Type.Optional(Type.String({ description: "Short title for the question panel" })),
+		questions: Type.Array(
+			Type.Object(
+				{
+					id: Type.String({ minLength: 1, description: "Unique question id; also used as the tab label" }),
+					prompt: Type.String({ minLength: 1, description: "Question shown to the user" }),
+					kind: StringEnum(["select", "multi", "input", "confirm"] as const, {
+						description:
+							"select: one choice; multi: combinable choices; input: typed answer; confirm: fixed yes/no",
+					}),
+					options: Type.Optional(
+						Type.Array(optionSchema, {
+							minItems: 1,
+							description: "Required for select/multi; omit for input/confirm",
+						}),
+					),
+					recommendation: Type.Optional(recommendationSchema),
+				},
+				{ additionalProperties: false },
+			),
+			{ minItems: 1, description: "Focused questions. Prefer 1-3." },
+		),
+	},
+	{ additionalProperties: false },
+);
 
-Do not blindly copy your previous wording or options. Reframe the question if needed so it follows ask_question quality rules:
-- options must be real, valid, defensible choices
-- do not include filler, strawmen, joke options, bad decoys, or preferred answer plus trash
-- use as many options as the real decision space needs: 2 is fine, 10 is fine, 3 is not special
-- if your previous options were weak, replace them
-- ground the reframed question in existing context; inspect repo or docs first only when current context is not enough
-- use select for one choice, multi for combinable choices, confirm for yes/no, input when choices would be fake
-- include recommendation only when you have a real one, with honest tradeoff reason
-- do not include a catch-all additional-context question; the UI always provides a final optional Additional Context tab
-- do not answer the question yourself
-- if there is no question to re-ask, say so without using tools`;
+const QNA_PROMPT = `Use ask_question to re-ask your last question or set of questions. Improve weak wording or options using existing context; inspect files only if needed. Do not answer for the user. If there is no question to re-ask, say so without using tools.`;
 
 function buildQnaPrompt(context: string): string {
 	const trimmed = context.trim();
@@ -58,32 +71,25 @@ Additional user context for framing the question:
 ${trimmed}`;
 }
 
-function createAskQuestionTool(pi: ExtensionAPI) {
-	return defineTool<typeof askQuestionParamsSchema, QnaResult>({
+function createAskQuestionTool(pi: ExtensionAPI, temporaryOutput: TemporaryOutputStore) {
+	return defineTool<typeof askQuestionParamsSchema, QnaToolDetails>({
 		name: "ask_question",
 		label: "Ask Question",
 		description:
-			"Ask user structured question only when missing intent, preference, or constraint blocks progress. Supports select, multi-select, yes/no, and free-form input. Choices must be real, valid, non-filler. Selectable questions require recommendation values plus honest reason after options. Do not use for routine chat, obvious choices, or avoidable analysis.",
-		promptSnippet:
-			"Ask structured questions only when a real user decision blocks progress; every choice must be valid, defensible, non-filler.",
+			"Re-ask the user's pending questions through structured UI when they invoke /qna. Submit all questions in one call; recommendations are optional.",
+		promptSnippet: "Structured question UI for /qna",
 		promptGuidelines: [
-			"Use ask_question only when missing user intent, preference, or constraint would materially change next action.",
-			"Do not use ask_question for routine chat, status updates, obvious decisions, or questions answerable from files/instructions.",
-			"If one path is clearly correct, do not use ask_question. Proceed and state assumption briefly.",
-			"When using ask_question choices, every option must be real, valid, and defensible. No filler, strawmen, joke options, bad decoys, or preferred answer plus junk.",
-			"When using ask_question choices, cover realistic decision space. Custom answer is safety valve, not excuse for weak options.",
-			"For ask_question select, multi-select, confirm, and recommended input: write options or suggested answer first, then recommendation values, then recommendation reason.",
-			"ask_question recommendation reason must explain tradeoff honestly. Do not manipulate user toward fake-obvious answer.",
-			"Use ask_question multi-select only when combining options is valid. Use select for one path. Use confirm for yes/no. Use input when choices would be fake; include an input recommendation only when you have a real suggested answer.",
-			"Ask fewest questions that unblock work. Prefer 1-3 focused questions. No surveys.",
-			"Do not add catch-all or additional-context questions; the UI always provides a final optional Additional Context tab.",
+			"For ask_question, ask only the pending user decisions, not routine chat or questions answerable from files. Prefer 1-3 focused questions.",
+			"Choices must cover the real decision space: no filler, strawmen, jokes, or bad decoys. Do not force a fixed option count or rely on custom answers to cover missing choices; use input when choices would be fake.",
+			"Write choices before recommending. Include recommendation only when you have a real one; explain its tradeoff honestly, without steering through weak alternatives.",
+			"Do not add custom-answer options or catch-all context questions; ask_question provides custom answers for select/multi and a final Additional Context tab.",
 		],
 		parameters: askQuestionParamsSchema,
+		exposure: "model-only",
 		executionMode: "sequential",
 
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const castParams = params as QnaParams;
-			const questions = normalizeParams(castParams);
+		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+			const questions = normalizeParams(params);
 			if (ctx.mode !== "tui" || !ctx.hasUI) {
 				ctx.abort();
 				throw new Error("ask_question aborted: interactive UI unavailable");
@@ -92,21 +98,45 @@ function createAskQuestionTool(pi: ExtensionAPI) {
 			ctx.ui.setWorkingVisible(false);
 			try {
 				emitAgentBlocked(pi, {
-					title: castParams.title || "Tau",
+					title: params.title || "Tau",
 					body: "Waiting for your answer",
 					source: "qna.ask_question",
 				});
 				const result = await ctx.ui.custom<QnaResult | undefined>((tui, theme, _keybindings, done) =>
-					runQnaUi(tui, theme, castParams.title, questions, done),
+					runQnaUi(tui, theme, params.title, questions, done),
 				);
 				if (!result) {
 					ctx.abort();
 					throw new Error("ask_question aborted by user");
 				}
-				return {
-					content: [{ type: "text", text: formatResult(result) }],
-					details: result,
-				};
+				const builder = new BoundedTextResultBuilder(temporaryOutput, "completeBlocks");
+				try {
+					for (const [index, answer] of Object.values(result.answers).entries()) {
+						signal?.throwIfAborted();
+						await builder.appendBlock(
+							undefined,
+							`Question ${index + 1}`,
+							formatAnswer(answer, index, (text) => text),
+						);
+					}
+					const additionalContext = result.additionalContext?.trim();
+					if (additionalContext) {
+						await builder.appendBlock(
+							undefined,
+							"Additional context",
+							`Additional context:\n${additionalContext}`,
+						);
+					}
+					signal?.throwIfAborted();
+					const bounded = await builder.finish();
+					return {
+						content: [{ type: "text", text: bounded.content }],
+						details: { ...result, overflow: bounded.overflow },
+					};
+				} catch (error) {
+					await builder.abort();
+					throw error;
+				}
 			} finally {
 				ctx.ui.setWorkingVisible(true);
 			}
@@ -124,7 +154,13 @@ function createAskQuestionTool(pi: ExtensionAPI) {
 
 		renderResult(result, _options, theme) {
 			const details = result.details;
-			if (!details) return new Text(theme.fg("warning", "ask_question returned no details"), 0, 0);
+			if (!details) {
+				const text = result.content
+					.filter((block) => block.type === "text")
+					.map((block) => block.text)
+					.join("\n");
+				return new Text(theme.fg("warning", text || "ask_question returned no details"), 0, 0);
+			}
 			return new Text(
 				formatResult(details, (text) => theme.bold(text)),
 				0,
@@ -136,6 +172,7 @@ function createAskQuestionTool(pi: ExtensionAPI) {
 
 export default function qnaExtension(pi: ExtensionAPI): void {
 	let qnaActive = false;
+	const temporaryOutput = createTemporaryOutputStore();
 
 	function syncQnaTools(): void {
 		const active = new Set(pi.getActiveTools());
@@ -144,20 +181,25 @@ export default function qnaExtension(pi: ExtensionAPI): void {
 		pi.setActiveTools([...active]);
 	}
 
-	pi.registerTool(createAskQuestionTool(pi));
+	pi.registerTool(createAskQuestionTool(pi, temporaryOutput));
 
-	pi.on("session_start", () => {
+	pi.on("session_start", async () => {
 		qnaActive = false;
 		syncQnaTools();
+		await temporaryOutput.shutdown();
+		await temporaryOutput.start();
 	});
 	pi.on("tool_result", (event) => {
-		if (event.toolName !== TOOL_ASK_QUESTION) return;
+		if (event.toolName !== TOOL_ASK_QUESTION || event.isError) return;
 		qnaActive = false;
 		syncQnaTools();
 	});
 	pi.on("agent_end", () => {
 		qnaActive = false;
 		syncQnaTools();
+	});
+	pi.on("session_shutdown", async () => {
+		await temporaryOutput.shutdown();
 	});
 
 	pi.registerCommand("qna", {

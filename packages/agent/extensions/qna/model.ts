@@ -234,11 +234,12 @@ function putAnswer(state: QnaState, questionId: string, answer: AnswerState): Qn
 
 function normalizeOptions(id: string, kind: QuestionKind, options: QnaOption[] | undefined): QnaOption[] {
 	if (kind === "confirm") {
-		if (options && options.length > 0) throw new Error(`ask_question confirm question ${id} cannot provide options`);
+		if (options !== undefined)
+			throw new Error(`ask_question confirm question ${id} must omit options; Yes/No are built in`);
 		return confirmOptions;
 	}
 	if (kind === "input") {
-		if (options && options.length > 0) throw new Error(`ask_question input question ${id} cannot provide options`);
+		if (options !== undefined) throw new Error(`ask_question input question ${id} must omit options`);
 		return [];
 	}
 	if (!options || options.length === 0) throw new Error(`ask_question ${kind} question ${id} needs options`);
@@ -261,10 +262,7 @@ function normalizeRecommendation(
 	options: QnaOption[],
 	recommendation: QnaRecommendation | undefined,
 ): QnaRecommendation | undefined {
-	if (!recommendation) {
-		if (kind === "input") return undefined;
-		throw new Error(`ask_question ${kind} question ${id} needs recommendation`);
-	}
+	if (!recommendation) return undefined;
 	const reason = clean(recommendation.reason);
 	if (!reason) throw new Error(`ask_question question ${id} recommendation needs reason`);
 	const values = recommendation.values.map(clean).filter(Boolean);
