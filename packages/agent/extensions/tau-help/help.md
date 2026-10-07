@@ -128,7 +128,7 @@ Adds `/tau-help` to show this guide as rendered Markdown in the chat.
 
 ## tau
 
-Adds `/tau`, `/tau init [--global|--project]`, and `/tau doctor` for Tau setup and diagnostics.
+Adds `/tau`, `/tau init [--global|--project]`, and `/tau doctor` for Tau setup and diagnostics. Startup and doctor report unsupported Pi versions with the required version and an installation command.
 
 ## tool-approval
 

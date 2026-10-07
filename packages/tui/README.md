@@ -10,7 +10,7 @@ Use these when Pi built-ins (`ctx.ui.select`, `SelectList`, …) are not enough 
 npm install @shanepadgett/tau-tui
 ```
 
-Peer dependencies: `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`.
+Peer dependencies: `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui`, both exactly **1.0.4**. Pi supplies these libraries when loading extensions; do not bundle another copy.
 
 ## Usage
 

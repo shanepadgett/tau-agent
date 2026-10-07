@@ -9,11 +9,14 @@ The agent prompt is Rok: direct, skeptical, careful with old code, and allergic 
 
 ## Install
 
-Install Tau from npm:
+This release supports Pi **1.0.4** exactly. Install the supported harness, then Tau:
 
 ```bash
+npm install -g @earendil-works/pi-coding-agent@1.0.4
 pi install npm:@shanepadgett/tau-agent
 ```
+
+If a tool manager supplies Pi, set its Pi version to 1.0.4 instead. Check `pi --version` where you launch Tau. Startup and `/tau doctor` report version mismatches when the Tau extension can load; Tau does not automatically install or upgrade Pi.
 
 Or install directly from this repository:
 
@@ -37,10 +40,10 @@ Run `/tau-help` inside Pi for the full extension list. Run `/tau init --global` 
 
 ## Packages
 
-| Package | Purpose |
-| --- | --- |
-| `@shanepadgett/tau-agent` | Pi extensions, prompts, skills, themes, and schemas |
-| `@shanepadgett/tau-tui` | Shared terminal UI components used by Tau extensions |
+| Package                   | Purpose                                              |
+| ------------------------- | ---------------------------------------------------- |
+| `@shanepadgett/tau-agent` | Pi extensions, prompts, skills, themes, and schemas  |
+| `@shanepadgett/tau-tui`   | Shared terminal UI components used by Tau extensions |
 
 ## Development
 

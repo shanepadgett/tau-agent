@@ -1,10 +1,21 @@
-import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { readFileSync } from "node:fs";
+import {
+	VERSION,
+	type ExtensionAPI,
+	type ExtensionCommandContext,
+	type ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { Value } from "typebox/value";
 import { readJsonStatus, writeJsonObject } from "../../shared/settings/json.ts";
 import { exists, globalTauSettingsPath, projectTauSettingsPath, TAU_SCHEMA_URL } from "../../shared/settings/paths.ts";
 import { discoverTauSettingsSpecs } from "../../shared/settings/specs.ts";
 
-type Finding = { level: "global" | "project"; message: string; startup: boolean };
+const manifest = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as {
+	peerDependencies: { "@earendil-works/pi-coding-agent": string };
+};
+const supportedPiVersion = manifest.peerDependencies["@earendil-works/pi-coding-agent"];
+
+type Finding = { level: "runtime" | "global" | "project"; message: string; startup: boolean };
 
 export default function tauExtension(pi: ExtensionAPI): void {
 	pi.registerCommand("tau", {
@@ -15,7 +26,12 @@ export default function tauExtension(pi: ExtensionAPI): void {
 	pi.on("session_start", async (event, ctx) => {
 		if (event.reason !== "startup" && event.reason !== "reload") return;
 		const findings = (await inspect(ctx)).filter((finding) => finding.startup);
-		if (findings.length > 0 && ctx.hasUI) ctx.ui.notify(renderDoctor(findings), "warning");
+		if (findings.length > 0 && ctx.hasUI)
+			ctx.ui.notify(
+				renderDoctor(findings),
+				findings.some((finding) => finding.level === "runtime") ? "error" : "warning",
+			);
+		else if (findings.some((finding) => finding.level === "runtime")) console.error(renderDoctor(findings));
 	});
 }
 
@@ -112,6 +128,13 @@ async function inspectPath(
 
 async function inspect(ctx: Pick<ExtensionContext, "cwd" | "isProjectTrusted">): Promise<Finding[]> {
 	const findings: Finding[] = [];
+	if (VERSION !== supportedPiVersion) {
+		findings.push({
+			level: "runtime",
+			message: `Tau requires Pi ${supportedPiVersion}; running Pi ${VERSION}. Update the Pi installation you launch (for a global install: npm install -g @earendil-works/pi-coding-agent@${supportedPiVersion}), then restart Pi.`,
+			startup: true,
+		});
+	}
 	const specs = await discoverTauSettingsSpecs(ctx.cwd);
 	const paths = [
 		{ level: "global" as const, path: globalTauSettingsPath(), trusted: true },
