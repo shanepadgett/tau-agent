@@ -10,6 +10,7 @@ export async function prepareWorkspaceSession(
 	repository: Repository,
 	workspace: Workspace,
 	conversation: "fresh" | "continue" | "resume",
+	association: "save" | "preserve",
 	thinkingLevel: NonNullable<ExtensionCommandContext["thinkingLevel"]>,
 ): Promise<string> {
 	if (conversation === "resume") {
@@ -47,6 +48,7 @@ export async function prepareWorkspaceSession(
 		flag: "wx",
 		mode: 0o600,
 	});
-	if (workspace.record) await saveWorkspaceRecord(repository, { ...workspace.record, sessionPath });
+	if (workspace.record && association === "save")
+		await saveWorkspaceRecord(repository, { ...workspace.record, sessionPath });
 	return sessionPath;
 }

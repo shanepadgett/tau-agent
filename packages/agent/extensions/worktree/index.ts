@@ -3,12 +3,13 @@ import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import { createGitRunner, type GitRunner } from "../../shared/git.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { errorText } from "../../shared/text.ts";
-import { acquireWorkspace, type WorkspaceLease } from "./ownership.ts";
+import { acquireWorkspace, registerWorkspaceSession, workspaceOwner } from "./ownership.ts";
 import { showWorkspacePanel } from "./panel.ts";
 import { prepareWorkspaceSession } from "./sessions.ts";
 import worktreeSettings from "./settings.ts";
 import {
 	createWorkspace,
+	cleanupMissingWorkspace,
 	discoverWorkspaces,
 	inspectRemoval,
 	removeWorkspace,
@@ -18,10 +19,8 @@ import {
 	type Workspace,
 } from "./workspaces.ts";
 
-type Ownership = { kind: "outside" } | { kind: "owned"; lease: WorkspaceLease } | { kind: "blocked"; reason: string };
-
 export default function worktreeExtension(pi: ExtensionAPI): void {
-	let ownership: Ownership = { kind: "outside" };
+	let releaseSession: (() => Promise<void>) | null = null;
 	pi.on("session_start", async (_event, ctx) => {
 		const git = createGitRunner(pi, ctx);
 		const root = await git.run(["rev-parse", "--show-toplevel"], { optional: true });
@@ -31,46 +30,33 @@ export default function worktreeExtension(pi: ExtensionAPI): void {
 			const current = workspaces.find((workspace) => workspace.current);
 			if (!current) throw new Error("Cannot identify this Git workspace.");
 			await validateWorkspace(git, repository, current);
-			ownership = { kind: "owned", lease: await acquireWorkspace(repository.store, current.path) };
-			if (current.record) {
+			const session = await registerWorkspaceSession(repository.store, current.path);
+			releaseSession = session.release;
+			if (session.otherOwner) {
+				ctx.ui.notify(
+					`Another Tau session is using this checkout (${session.otherOwner}). Concurrent edits, checks, and Git operations can interfere with each other. Use separate worktrees for independent edits.`,
+					"warning",
+				);
+			}
+			if (current.errors.length) ctx.ui.notify(current.errors.join("\n"), "warning");
+			if (current.record && !session.otherOwner) {
 				await saveWorkspaceRecord(repository, {
 					...current.record,
 					sessionPath: ctx.sessionManager.getSessionFile() ?? null,
 				});
 			}
 		} catch (error) {
-			if (ownership.kind === "owned") {
-				try {
-					await ownership.lease.release();
-				} catch (releaseError) {
-					ctx.ui.notify(`Could not release workspace ownership: ${errorText(releaseError)}`, "warning");
-				}
-			}
-			const reason = errorText(error);
-			ownership = { kind: "blocked", reason };
-			ctx.ui.notify(`${reason} Use /worktree to choose another workspace.`, "error");
+			ctx.ui.notify(`Worktree tracking failed: ${errorText(error)}`, "warning");
 		}
-	});
-
-	pi.on("tool_call", async () => {
-		if (ownership.kind === "outside") return;
-		if (ownership.kind === "owned" && (await ownership.lease.valid())) return;
-		return {
-			block: true,
-			reason:
-				ownership.kind === "blocked"
-					? ownership.reason
-					: "Workspace ownership was lost. Switch workspaces with /worktree before running tools.",
-		};
 	});
 
 	pi.on("session_shutdown", async (_event, ctx) => {
 		try {
-			if (ownership.kind === "owned") await ownership.lease.release();
+			if (releaseSession) await releaseSession();
 		} catch (error) {
-			ctx.ui.notify(`Could not release workspace ownership: ${errorText(error)}`, "warning");
+			ctx.ui.notify(`Could not release workspace session tracking: ${errorText(error)}`, "warning");
 		} finally {
-			ownership = { kind: "outside" };
+			releaseSession = null;
 		}
 	});
 
@@ -83,6 +69,7 @@ export default function worktreeExtension(pi: ExtensionAPI): void {
 				{ value: "new", label: "new", description: "Create a feature workspace" },
 				{ value: "open", label: "open", description: "Resume a workspace session" },
 				{ value: "remove", label: "remove", description: "Review and remove a workspace" },
+				{ value: "cleanup", label: "cleanup", description: "Clean up a missing worktree registration" },
 			].filter((item) => item.value.startsWith(value));
 		},
 		handler: async (args, ctx) => {
@@ -92,9 +79,9 @@ export default function worktreeExtension(pi: ExtensionAPI): void {
 			}
 			await ctx.waitForIdle();
 			const [action = "", ...rest] = args.trim().split(/\s+/);
-			if (action && !["new", "open", "remove"].includes(action)) {
+			if (action && !["new", "open", "remove", "cleanup"].includes(action)) {
 				ctx.ui.notify(
-					"Usage: /worktree, /worktree new [name], /worktree open <name>, /worktree remove <name>",
+					"Usage: /worktree, /worktree new [name], /worktree open <name>, /worktree remove <name>, /worktree cleanup <name>",
 					"error",
 				);
 				return;
@@ -131,21 +118,23 @@ export default function worktreeExtension(pi: ExtensionAPI): void {
 				let operation = action;
 				if (!operation) {
 					const choices = [
-						"Open session",
-						"Show terminal command",
+						...(!selected.missing ? ["Open session", "Show terminal command"] : []),
 						"Show details",
-						...(selected.record && !selected.current ? ["Remove workspace"] : []),
+						...(selected.missing && !selected.main ? ["Clean up missing registration"] : []),
+						...(selected.record && !selected.current && !selected.missing ? ["Remove workspace"] : []),
 					];
 					const choice = await ctx.ui.select(selected.name, choices);
 					if (!choice) return;
 					operation =
-						choice === "Open session"
-							? "open"
-							: choice === "Remove workspace"
-								? "remove"
-								: choice === "Show details"
-									? "details"
-									: "terminal";
+						choice === "Clean up missing registration"
+							? "cleanup"
+							: choice === "Open session"
+								? "open"
+								: choice === "Remove workspace"
+									? "remove"
+									: choice === "Show details"
+										? "details"
+										: "terminal";
 				}
 				if (operation === "details") {
 					await ctx.ui.select(selected.name, [
@@ -153,9 +142,32 @@ export default function worktreeExtension(pi: ExtensionAPI): void {
 						`Branch: ${selected.branch ?? "detached HEAD"}`,
 						`Current commit: ${selected.head}`,
 						`Starting commit: ${selected.record?.baseCommit ?? "not managed by Tau"}`,
-						`Owner: ${selected.owner ?? "available"}`,
+						`Active sessions: ${selected.owner ?? "none detected"}`,
+						`Folder status: ${selected.missing ? "missing" : "present"}`,
+						...selected.errors.map((error) => `Error: ${error}`),
 						"Close",
 					]);
+				} else if (operation === "cleanup") {
+					if (!selected.missing || selected.main || selected.current)
+						throw new Error("Select a missing linked worktree registration to clean up.");
+					if (selected.locked) throw new Error("This worktree is locked. Unlock it yourself before cleanup.");
+					const lease = await acquireWorkspace(repository.store, selected.path);
+					try {
+						const confirmed = await ctx.ui.confirm(
+							`Clean up ${selected.name}?`,
+							[
+								`Remove only the missing Git worktree registration and Tau workspace metadata for: ${selected.path}`,
+								"Keep branches and saved conversations. No other registrations will be removed.",
+								"WARNING: A missing folder may be on an unmounted drive. Restore or mount it instead if you intend to keep using this worktree.",
+							].join("\n"),
+						);
+						if (!confirmed) return;
+						if (!(await lease.valid())) throw new Error("Removal ownership was lost. Cleanup cancelled.");
+						await cleanupMissingWorkspace(git, repository, selected);
+						ctx.ui.notify(`Cleaned up ${selected.name}. Its branch and saved conversations remain.`, "info");
+					} finally {
+						await lease.release();
+					}
 				} else if (operation === "remove") {
 					await deleteWorkspace(ctx, git, repository, selected);
 				} else {
@@ -296,18 +308,36 @@ async function openWorkspace(
 	destination: "switch" | "terminal",
 	conversation: "fresh" | "continue" | "resume",
 ): Promise<void> {
-	if (workspace.current) {
+	if (workspace.current && destination === "switch") {
 		ctx.ui.notify("You are already in this workspace. Use its existing Pi instance.", "info");
 		return;
 	}
 	await validateWorkspace(git, repository, workspace);
-	const lease = await acquireWorkspace(repository.store, workspace.path);
-	let sessionPath: string;
+	let owner: string | null = null;
+	let association: "save" | "preserve" = "save";
 	try {
-		sessionPath = await prepareWorkspaceSession(ctx, repository, workspace, conversation, pi.getThinkingLevel());
-	} finally {
-		await lease.release();
+		owner = await workspaceOwner(repository.store, workspace.path);
+	} catch (error) {
+		ctx.ui.notify(`Cannot inspect active sessions: ${errorText(error)}. Opening a fresh chat.`, "warning");
+		conversation = "fresh";
+		association = "preserve";
 	}
+	if (owner) {
+		ctx.ui.notify(
+			"This checkout is already in use. Concurrent edits, checks, and Git operations can interfere. Opening a separate chat to avoid sharing its session file.",
+			"warning",
+		);
+		if (conversation === "resume") conversation = "fresh";
+		association = "preserve";
+	}
+	const sessionPath = await prepareWorkspaceSession(
+		ctx,
+		repository,
+		workspace,
+		conversation,
+		association,
+		pi.getThinkingLevel(),
+	);
 	if (destination === "terminal") {
 		const quotedPath = `'${workspace.path.replace(/'/g, "'\\''")}'`;
 		const quotedSession = `'${sessionPath.replace(/'/g, "'\\''")}'`;

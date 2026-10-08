@@ -23,13 +23,16 @@ export function showWorkspacePanel(
 			renderItem: (workspace, state, width) => {
 				const status = workspace.missing
 					? theme.fg("error", "missing")
-					: workspace.changes
-						? theme.fg("warning", `${workspace.changes} changed`)
-						: theme.fg("success", "clean");
+					: workspace.errors.length
+						? theme.fg("error", "error")
+						: workspace.changes
+							? theme.fg("warning", `${workspace.changes} changed`)
+							: theme.fg("success", "clean");
 				const flags = [
 					workspace.current ? theme.fg("accent", "here") : "",
 					workspace.owner && !workspace.current ? theme.fg("warning", "in use") : "",
 					workspace.locked ? theme.fg("dim", "locked") : "",
+					workspace.missing && workspace.errors.length ? theme.fg("error", "error") : "",
 				].filter(Boolean);
 				const line = [
 					theme.fg(state.active ? "accent" : "text", cell(workspace.name, nameWidth)),

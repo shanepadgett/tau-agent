@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
-import { mkdir, realpath, unlink } from "node:fs/promises";
+import { lstat, mkdir, realpath, rm, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { GitRunner } from "../../shared/git.ts";
 import { readJsonStatus, writeJsonObject } from "../../shared/settings/json.ts";
 import { workspaceOwner, workspaceStorage } from "./ownership.ts";
+import { errorText } from "../../shared/text.ts";
 
 export interface WorkspaceRecord {
 	name: string;
@@ -35,6 +36,7 @@ export interface Workspace {
 	changes: number | null;
 	owner: string | null;
 	record: WorkspaceRecord | null;
+	errors: string[];
 }
 
 export async function loadWorkspaceRecord(repository: Repository, path: string): Promise<WorkspaceRecord | null> {
@@ -84,24 +86,40 @@ export async function discoverWorkspaces(git: GitRunner): Promise<{ repository: 
 		if (!registeredPath || fields.includes("bare")) continue;
 		let path = resolve(registeredPath);
 		let missing = false;
+		const errors: string[] = [];
 		try {
 			path = await realpath(path);
 		} catch (error) {
-			if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
-			missing = true;
+			if (error instanceof Error && "code" in error && error.code === "ENOENT") missing = true;
+			else errors.push(`Cannot resolve folder: ${errorText(error)}`);
 		}
 		const branch = fields.find((field) => field.startsWith("branch "))?.slice(7) ?? null;
 		const head = fields.find((field) => field.startsWith("HEAD "))?.slice(5) ?? "";
-		const record = await loadWorkspaceRecord(repository, path);
+		let record: WorkspaceRecord | null = null;
+		try {
+			record = await loadWorkspaceRecord(repository, path);
+		} catch (error) {
+			errors.push(errorText(error));
+		}
 		let changes: number | null = null;
 		if (!missing) {
-			const status = await git.run(["status", "--porcelain=v1", "-z", "--untracked-files=all"], { cwd: path });
-			const entries = status.split("\0").filter(Boolean);
-			changes = 0;
-			for (let index = 0; index < entries.length; index++) {
-				changes++;
-				if (/^[RC]|^.[RC]/.test(entries[index] ?? "")) index++;
+			try {
+				const status = await git.run(["status", "--porcelain=v1", "-z", "--untracked-files=all"], { cwd: path });
+				const entries = status.split("\0").filter(Boolean);
+				changes = 0;
+				for (let index = 0; index < entries.length; index++) {
+					changes++;
+					if (/^[RC]|^.[RC]/.test(entries[index] ?? "")) index++;
+				}
+			} catch (error) {
+				errors.push(`Cannot inspect changes: ${errorText(error)}`);
 			}
+		}
+		let owner: string | null = null;
+		try {
+			owner = await workspaceOwner(repository.store, path);
+		} catch (error) {
+			errors.push(errorText(error));
 		}
 		workspaces.push({
 			id: path,
@@ -114,8 +132,9 @@ export async function discoverWorkspaces(git: GitRunner): Promise<{ repository: 
 			locked: fields.some((field) => field === "locked" || field.startsWith("locked ")),
 			missing,
 			changes,
-			owner: await workspaceOwner(repository.store, path),
+			owner,
 			record,
+			errors,
 		});
 	}
 	const main = workspaces.find((workspace) => workspace.main);
@@ -166,6 +185,7 @@ export async function inspectRemoval(
 		throw new Error("Switch to another workspace before removing this checkout.");
 	if (!workspace.record) throw new Error("Tau only removes workspaces it created.");
 	if (workspace.locked) throw new Error("This worktree is locked. Unlock it yourself before removal.");
+	if (workspace.errors.length) throw new Error(workspace.errors.join("\n"));
 	await validateWorkspace(git, repository, workspace);
 	const branch = await git.run(["symbolic-ref", "-q", "HEAD"], { cwd: workspace.path, optional: true });
 	if (branch !== workspace.record.branch)
@@ -191,4 +211,31 @@ export async function inspectRemoval(
 export async function removeWorkspace(git: GitRunner, repository: Repository, workspace: Workspace): Promise<void> {
 	await git.run(["worktree", "remove", workspace.path], { timeout: 120_000 });
 	await unlink(`${workspaceStorage(repository.store, workspace.path)}.json`);
+	await rm(`${workspaceStorage(repository.store, workspace.path)}.sessions`, { recursive: true, force: true });
+}
+
+export async function cleanupMissingWorkspace(
+	git: GitRunner,
+	repository: Repository,
+	workspace: Workspace,
+): Promise<void> {
+	const discovered = await discoverWorkspaces(git);
+	if (discovered.repository.commonDir !== repository.commonDir)
+		throw new Error("Repository identity changed. Cleanup cancelled.");
+	const current = discovered.workspaces.find((item) => item.path === workspace.path);
+	if (!current || !current.missing || current.main || current.current)
+		throw new Error("Registration changed or the folder is no longer missing. Review it again with /worktree.");
+	if (current.branch !== workspace.branch || current.head !== workspace.head)
+		throw new Error("Registration changed during confirmation. Review it again with /worktree.");
+	if (current.locked) throw new Error("This worktree is locked. Unlock it yourself before cleanup.");
+	// lstat also rejects a dangling symlink: cleanup must not delete an existing filesystem entry.
+	try {
+		await lstat(current.path);
+		throw new Error("The workspace folder exists. Cleanup cancelled.");
+	} catch (error) {
+		if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+	}
+	await git.run(["worktree", "remove", current.path]);
+	await rm(`${workspaceStorage(repository.store, current.path)}.json`, { force: true });
+	await rm(`${workspaceStorage(repository.store, current.path)}.sessions`, { recursive: true, force: true });
 }
