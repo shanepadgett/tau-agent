@@ -5,12 +5,12 @@ A [Pi](https://github.com/earendil-works/pi) package for coding with less wasted
 
 ## Install
 
-Requires **Node.js 22.19+** and **Pi 1.0.4 exactly**.
+Requires **Node.js 22.19+** and **Pi 1.1.0 exactly**.
 
 Install the supported Pi version first:
 
 ```bash
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.0.4
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.1.0
 ```
 
 Then install Tau using **one** of these options.

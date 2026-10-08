@@ -6,13 +6,13 @@ The package also exports programmatic Tau capabilities for trusted Pi extensions
 
 ## Install
 
-This release supports Pi **1.0.4** exactly. Install that harness version before installing Tau:
+This release supports Pi **1.1.0** exactly. Install that harness version before installing Tau:
 
 ```bash
-npm install -g @earendil-works/pi-coding-agent@1.0.4
+npm install -g @earendil-works/pi-coding-agent@1.1.0
 ```
 
-If a tool manager supplies Pi, set its Pi version to 1.0.4 instead. Check `pi --version` in the directory where you launch Tau. Pi supplies the harness libraries; Tau does not install a separate copy. Startup and `/tau doctor` report version mismatches when the Tau extension can load.
+If a tool manager supplies Pi, set its Pi version to 1.1.0 instead. Check `pi --version` in the directory where you launch Tau. Pi supplies the harness libraries; Tau does not install a separate copy. Startup and `/tau doctor` report version mismatches when the Tau extension can load.
 
 ```bash
 pi install npm:@shanepadgett/tau-agent
