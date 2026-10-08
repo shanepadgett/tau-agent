@@ -695,7 +695,12 @@ class CommitFlowPanel implements Component, Focusable {
 		const completed = this.phase.completed;
 		this.startWorking("Pushing", false);
 		try {
-			await this.git.run(["push"], { cwd: this.root, timeout: PUSH_TIMEOUT_MS });
+			const branchRef = await this.git.run(["symbolic-ref", "--quiet", "HEAD"], { cwd: this.root });
+			const upstream = await this.git.run(["for-each-ref", "--format=%(upstream)", branchRef], {
+				cwd: this.root,
+			});
+			const args = upstream ? ["push"] : ["push", "--set-upstream", "origin", branchRef];
+			await this.git.run(args, { cwd: this.root, timeout: PUSH_TIMEOUT_MS });
 			this.stopWorking();
 			this.ctx.ui.notify(
 				`Committed and pushed ${completed.length} commit(s): ${completed.map((item) => item.hash).join(", ")}`,

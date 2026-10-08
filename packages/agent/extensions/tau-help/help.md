@@ -38,7 +38,7 @@ Requests Codex priority processing (Fast mode) for every `gpt-6-luna` request on
 
 ## commit
 
-Adds `/commit` for semantic commit grouping, review, and committing selected repository changes.
+Adds `/commit` for semantic commit grouping, review, and committing selected repository changes. It asks before pushing; branches without an upstream are pushed to `origin` with tracking set automatically.
 
 ## cost-report
 
