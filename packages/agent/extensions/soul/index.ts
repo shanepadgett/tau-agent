@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { getDocsPath, getExamplesPath, getReadmePath, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { emitTauEvent } from "../../shared/events.ts";
 import { collectPromptSources } from "../../shared/prompt-contributions.ts";
@@ -14,7 +17,17 @@ Pi documentation:
 - Extensions: docs/extensions.md and examples/extensions/; themes: docs/themes.md; skills: docs/skills.md; prompt templates: docs/prompt-templates.md; TUI: docs/tui.md; keybindings: docs/keybindings.md; SDK: docs/sdk.md; providers: docs/custom-provider.md; models: docs/models.md; packages: docs/packages.md; environment: docs/environment-variables.md.
 - Read the relevant documentation and follow related Markdown references before implementing Pi integrations.`;
 
-export default function soulExtension(pi: ExtensionAPI): void {
+export default async function soulExtension(pi: ExtensionAPI): Promise<void> {
+	const userInstructionsPath = join(homedir(), ".agents", "AGENTS.md");
+	let userInstructions = "";
+	try {
+		const content = (await readFile(userInstructionsPath, "utf8")).replace(/^\uFEFF/, "");
+		if (content.trim()) {
+			userInstructions = `<user_instructions path="${userInstructionsPath}">\n${content}\n</user_instructions>`;
+		}
+	} catch (error) {
+		if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+	}
 	pi.on("before_agent_start", async (event, ctx) => {
 		const options = event.systemPromptOptions;
 
@@ -59,6 +72,7 @@ export default function soulExtension(pi: ExtensionAPI): void {
 		};
 		add("documentation", DOCUMENTATION);
 		add("tool-guidance", guidance);
+		add("user-instructions", userInstructions);
 		if (options.customPrompt) add("additional-instructions", options.customPrompt);
 		for (const source of sources) {
 			add(source.section, source.refresh === "append" ? await source.read(ctx) : (captured[source.key] ?? ""));

@@ -116,6 +116,8 @@ Runs configured commands while keeping their output out of agent context when th
 
 Supplies Tau's communication, discussion, planning, execution, and coding instructions, plus tool-use rules, tool guidance, and context from other Tau extensions. The date and directory snapshot stay fixed until successful compaction. Other changes, such as an edited `AGENTS.md` after `/reload`, arrive as appended updates without rewriting earlier instructions.
 
+Loads `~/.agents/AGENTS.md` as a separate user-level instructions section when the extension initializes, alongside Pi's global and project instructions. Content stays fixed until `/reload`; missing or empty files add no instructions.
+
 Tool-use guidance defaults to dedicated tools for ordinary file work, concise read-only bash commands and pipelines for shell-side inspection, and `script_runner` for custom Python, Node, or Deno code. It tells the agent to filter output at the source, keep commands visible, and avoid moving custom code into bash to reach the read-only fast path.
 
 ## stash
