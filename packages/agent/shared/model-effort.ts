@@ -34,7 +34,7 @@ const MODEL_PREFERENCES: Record<ModelEffort, readonly ProviderPreference[]> = {
 		{ provider: "openai-codex", models: [{ model: "gpt-6-luna", reasoning: "medium" }] },
 		{ provider: "openai", models: [{ model: "gpt-6-luna", reasoning: "medium" }] },
 		{ provider: "xai", models: [{ model: "grok-4.7", reasoning: "medium" }] },
-		{ provider: "anthropic", models: [{ model: "claude-sonnet-5-5", reasoning: "medium" }] },
+		{ provider: "anthropic", models: [{ model: "claude-haiku-5-5", reasoning: "medium" }] },
 		{
 			provider: "opencode-go",
 			models: [
