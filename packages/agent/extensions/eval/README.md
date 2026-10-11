@@ -6,7 +6,7 @@ When a run fails, the tool keeps the script and returns a `scriptId`. The agent 
 
 Long output shows the tail and a path to the complete output in a temporary file for the active session.
 
-Code previews show the first 10 source lines with syntax highlighting while the agent writes the call. Expand the tool row to see all received code. Retry previews show removed and added lines with the same preview limit. Results appear below a spaced Output or Error divider, separate from the code preview and its overflow count. Input and output keep separate line counts, with one expansion hint at the end of the completed result when either preview hides lines.
+Code previews show the first 10 wrapped screen rows with syntax highlighting while the agent writes the call. The limit follows the terminal width, including when a source line is long. Expand the tool row to see all received code. Retry previews show removed and added lines with the same preview limit. Results appear below a spaced Output or Error divider, separate from the code preview and its overflow count. Input counts wrapped rows and output counts source lines, with one expansion hint at the end of the completed result when either preview hides content. The agent is instructed to prefer readable scripts with the language's usual indentation and line breaks so failed runs are easy to edit.
 
 Each call runs in a fresh process; variables and imports do not persist between calls.
 
