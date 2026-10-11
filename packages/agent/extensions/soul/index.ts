@@ -55,7 +55,7 @@ export default async function soulExtension(pi: ExtensionAPI): Promise<void> {
 			...new Set([
 				...(active.includes("bash")
 					? [
-							"Use bash for shell commands such as builds and tests, and for ls, rg, or find when no suitable dedicated tool is available.",
+							"Use bash for shell commands and for ls, rg, or find when no suitable dedicated tool is available.",
 							"Bash already runs in the working directory; do not cd into it.",
 						]
 					: []),

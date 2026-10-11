@@ -54,7 +54,8 @@ export default defineTauExtensionSettings({
 				Type.Integer({
 					default: 51200,
 					minimum: 1,
-					description: "Maximum raw stdout/stderr bytes sent to the agent.",
+					description:
+						"Maximum stdout/stderr bytes per stream retained in expanded failure details; model output uses shared limits.",
 				}),
 			),
 			afterWrite: Type.Optional(
@@ -66,7 +67,8 @@ export default defineTauExtensionSettings({
 			afterRun: Type.Optional(
 				Type.Array(commandSchema, {
 					default: [],
-					description: "Read-only checks run before the agent run settles; failures continue the run.",
+					description:
+						"Read-only final checks run by run_checks, with automatic settlement fallback when verification is missing or stale.",
 				}),
 			),
 		},

@@ -114,7 +114,7 @@ Gives the agent a first-class `script_runner` tool for custom Python, Node.js, a
 
 ## silent-command-runner
 
-Configure `extensions.silentCommandRunner.afterWrite` for silent fixes after modifying tools finish and `afterRun` for read-only checks before the agent run settles. Fixes run once after an outer codemode call, not after each nested tool. Use unquoted `{files}` in an `afterWrite` command to pass changed-file paths safely. Check failures send output to the agent and continue the run. Disable the extension through Pi's extension controls.
+Configure `extensions.silentCommandRunner.afterWrite` for silent fixes after modifying tools finish and `afterRun` for final read-only checks through the agent's no-argument `run_checks` tool. Use readable check names and optional `details` descriptions; results show names rather than shell commands. The agent calls it after all work, immediately before its final answer, directly or last within codemode after awaiting all writes. Nested checks finish pending fixes first. Failures return through the tool so it can batch repairs and check again. Any later write-capable call, including a nested call in the same script, invalidates verification. Missing or stale verification triggers automatic settlement checks; fallback failures continue the run. Fixes otherwise run once after an outer codemode call, not after each nested tool. Use unquoted `{files}` in an `afterWrite` command to pass changed-file paths safely. Disable the extension through Pi's extension controls.
 
 To save tokens, route your repository's checks through reporting scripts invoked by Mise, npm, or your task runner. Keep tool-specific parsing in your repository and emit actionable failures without banners, progress, or passing results. Preserve locations, error codes, assertion differences, failing exit codes, and an explicit fallback with a full-log reference for unknown failures. Silent Command Runner stays generic.
 
@@ -136,7 +136,7 @@ Adds `/tau-help` to show this guide as rendered Markdown in the chat.
 
 ## tau
 
-Adds `/tau`, `/tau init [--global|--project]`, and `/tau doctor` for Tau setup and diagnostics. Startup and doctor report unsupported Pi versions with the required version and an installation command.
+Adds `/tau`, `/tau init [--global|--project]`, and `/tau doctor` for Tau setup and diagnostics. Startup and doctor report Pi versions below the supported minimum, or unsupported prereleases, with an installation command. Newer stable Pi versions satisfy the requirement.
 
 ## tool-approval
 

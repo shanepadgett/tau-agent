@@ -1,8 +1,18 @@
 import { createHash } from "node:crypto";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, readdir, rm, stat } from "node:fs/promises";
 import { resolve } from "node:path";
-import { type ExecResult, type ExtensionAPI, keyText, type Theme } from "@earendil-works/pi-coding-agent";
+import {
+	defineTool,
+	keyText,
+	type ExecResult,
+	type ExtensionAPI,
+	type ExtensionContext,
+	type Theme,
+} from "@earendil-works/pi-coding-agent";
 import { Box, Text } from "@earendil-works/pi-tui";
+import { Type } from "typebox";
+import { BoundedTextResultBuilder, type BoundedTextOverflowDetails } from "../../shared/bounded-text-result.ts";
+import { createTemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { registerPromptSource } from "../../shared/prompt-contributions.ts";
 import { matchGlob, posixPath } from "../../shared/glob.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
@@ -69,6 +79,11 @@ interface Settings {
 
 type Snapshot = Map<string, string>;
 
+interface WriteSnapshot {
+	projectRoot: string;
+	files: Snapshot;
+}
+
 interface OutputTail {
 	content: string;
 	truncated: boolean;
@@ -90,24 +105,54 @@ interface FailureDetails {
 	failed: FailedCommandDetails[];
 }
 
+interface CheckDetails extends FailureDetails {
+	passed: string[];
+	overflow: BoundedTextOverflowDetails;
+}
+
 export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	let settings: Settings = normalizeSettings(silentCommandRunnerSettings.defaults);
 	let turnStart = Date.now();
 	let turnPaths = new Set<string>();
 	let abortController: AbortController | undefined;
 	let sessionActive = false;
-	const snapshots = new Map<string, { projectRoot: string; files: Snapshot }>();
+	let runActive = false;
+	let writeRevision = 0;
+	let checkedRevision: number | undefined;
+	const pendingFailedNames = new Set<string>();
+	const temporaryOutput = createTemporaryOutputStore();
+	const snapshots = new Map<string, WriteSnapshot>();
 	const fixedHashes: Snapshot = new Map();
 	const fixerControllers = new Set<AbortController>();
 	let fixerQueue: Promise<void> = Promise.resolve();
+
+	let checkTool = defineTool({
+		name: "run_checks",
+		label: "Repository Checks",
+		description: formatCheckToolDescription(settings.afterRun),
+		parameters: Type.Object({}, { additionalProperties: false }),
+		exposure: "hidden",
+		executionMode: "sequential",
+		annotations: { readOnlyHint: true },
+		async execute(_toolCallId, _params, signal, _onUpdate, ctx) {
+			return await runChangedCommands(ctx.cwd, ctx.ui.notify, signal);
+		},
+	});
+	pi.registerTool(checkTool);
 
 	pi.registerMessageRenderer<FailureDetails>(MESSAGE_TYPE, (message, { expanded }, theme) =>
 		renderFailure(asFailureDetails(message.details), expanded, theme),
 	);
 
 	pi.on("session_start", async (_event, ctx) => {
-		settings = normalizeSettings(await loadTauExtensionSettings(ctx, silentCommandRunnerSettings));
+		await refreshSettings(ctx);
+		await temporaryOutput.shutdown();
+		await temporaryOutput.start();
 		sessionActive = true;
+		runActive = false;
+		writeRevision = 0;
+		checkedRevision = undefined;
+		pendingFailedNames.clear();
 		turnStart = Date.now();
 		turnPaths = new Set();
 		snapshots.clear();
@@ -119,39 +164,49 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		section: "automatic-checks",
 		refresh: "append",
 		async read(ctx) {
-			settings = normalizeSettings(await loadTauExtensionSettings(ctx, silentCommandRunnerSettings));
-			if (settings.afterWrite.length === 0 && settings.afterRun.length === 0) return "";
-			return [
-				...(settings.afterWrite.length
-					? [
-							"Do not manually run these automatic post-write commands. They run silently after modifying tools finish, once per outer codemode call. Do not claim they passed; end-of-run checks report remaining problems.",
-							...settings.afterWrite.map(formatSilentCheckCommand),
-						]
-					: []),
-				...(settings.afterRun.length ? [formatSilentCheckPrompt(settings.afterRun)] : []),
-			].join("\n");
+			await refreshSettings(ctx);
+			return settings.afterWrite.length
+				? `Configured fixes run automatically after modifying tools finish; do not run them manually or claim checks passed from them: ${formatCommandNames(settings.afterWrite)}.`
+				: "";
 		},
 	});
 
 	pi.on("agent_start", async (_event, ctx) => {
+		// Pi emits agent_start again for continuations inside the same unsettled run.
+		if (runActive) return;
+		runActive = true;
 		await fixerQueue;
 		snapshots.clear();
 		fixedHashes.clear();
 		turnStart = Date.now();
+		writeRevision = 0;
+		checkedRevision = undefined;
+		pendingFailedNames.clear();
 		turnPaths =
 			settings.afterRun.length > 0 ? new Set(await walkFiles(await resolveProjectRoot(ctx.cwd))) : new Set();
 	});
 
+	pi.on("agent_settled", () => {
+		runActive = false;
+	});
+
 	pi.on("tool_call", async (event, ctx) => {
-		if (!sessionActive || settings.afterWrite.length === 0) return;
-		// Any descendant belongs to the outer snapshot, including nested orchestrators.
-		if ([...snapshots.keys()].some((id) => event.toolCallId.startsWith(`${id}/`))) return;
+		if (!sessionActive) return;
+		if (event.toolName === "run_checks") {
+			const ancestor = [...snapshots].find(([id]) => event.toolCallId.startsWith(`${id}/`));
+			if (ancestor) await flushFixes(ancestor[1], ctx);
+			return;
+		}
 		const tool = pi.getAllTools().find((entry) => entry.name === event.toolName);
 		if (
 			!WRITE_TOOLS.has(event.toolName) &&
 			(READ_TOOLS.has(event.toolName) || tool?.annotations?.readOnlyHint === true)
 		)
 			return;
+		writeRevision += 1;
+		// Descendant writes share the outer fixer snapshot, but invalidate verification individually.
+		if ([...snapshots.keys()].some((id) => event.toolCallId.startsWith(`${id}/`))) return;
+		if (settings.afterWrite.length === 0) return;
 		await fixerQueue;
 		if (!sessionActive) return;
 		const projectRoot = await resolveProjectRoot(ctx.cwd);
@@ -165,72 +220,32 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		const snapshot = snapshots.get(event.toolCallId);
 		if (!snapshot) return;
 		// Keep the snapshot registered until processing completes so descendants stay grouped.
-		fixerQueue = fixerQueue
-			.then(async () => {
-				if (!sessionActive || ctx.signal?.aborted) return;
-				const current = await snapshotFiles(snapshot.projectRoot, settings.afterWrite);
-				const changed = [...current]
-					.filter(([path, hash]) => hash !== snapshot.files.get(path) && hash !== fixedHashes.get(path))
-					.map(([path]) => path);
-				if (changed.length === 0) return;
-				const controller = new AbortController();
-				fixerControllers.add(controller);
-				const cancel = () => controller.abort();
-				ctx.signal?.addEventListener("abort", cancel, { once: true });
-				if (ctx.signal?.aborted) controller.abort();
-				try {
-					for (const command of settings.afterWrite) {
-						if (!sessionActive || controller.signal.aborted) return;
-						const files = changed.filter((path) => matchesCommand(path, command));
-						if (files.length === 0) continue;
-						try {
-							await runCommand(
-								pi,
-								snapshot.projectRoot,
-								command,
-								controller.signal,
-								0,
-								files.map((path) => resolve(snapshot.projectRoot, path)),
-							);
-						} catch {
-							// Final checks own failure reporting; a failed fixer must not stop the next one.
-						}
-					}
-					const after = await snapshotFiles(snapshot.projectRoot, settings.afterWrite);
-					for (const path of changed) {
-						const hash = after.get(path);
-						if (hash === undefined) fixedHashes.delete(path);
-						else fixedHashes.set(path, hash);
-					}
-				} finally {
-					ctx.signal?.removeEventListener("abort", cancel);
-					fixerControllers.delete(controller);
-				}
-			})
-			.catch((error: unknown) => {
-				if (sessionActive && !ctx.signal?.aborted)
-					ctx.ui.notify(`silent-command-runner: ${errorMessage(error)}`, "error");
-			})
-			.finally(() => snapshots.delete(event.toolCallId));
-		await fixerQueue;
+		try {
+			await flushFixes(snapshot, ctx);
+		} catch (error) {
+			if (sessionActive && !ctx.signal?.aborted)
+				ctx.ui.notify(`silent-command-runner: ${errorMessage(error)}`, "error");
+		} finally {
+			snapshots.delete(event.toolCallId);
+		}
 	});
 
 	// The last boundary before the run settles: failures continue the run instead of starting a new one.
 	pi.on("agent_before_settle", async (event, ctx) => {
-		if (event.outcome !== "completed") return undefined;
+		if (event.outcome !== "completed" || checkedRevision === writeRevision || settings.afterRun.length === 0)
+			return undefined;
 		try {
-			await fixerQueue;
-			const failures = await runChangedCommands(ctx.cwd, ctx.ui.notify);
-			if (!failures || failures.length === 0) return undefined;
+			const result = await runChangedCommands(ctx.cwd, ctx.ui.notify, ctx.signal);
+			if (result.details.failed.length === 0) return undefined;
 			return {
 				entries: [
 					...event.entries,
 					{
 						type: "custom_message" as const,
 						customType: MESSAGE_TYPE,
-						content: formatAgentMessage(failures),
+						content: result.content,
 						display: true,
-						details: { failed: [...failures] } satisfies FailureDetails,
+						details: result.details,
 					},
 				],
 				continue: true,
@@ -241,72 +256,153 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		}
 	});
 
-	pi.on("session_shutdown", () => {
+	pi.on("session_shutdown", async () => {
 		sessionActive = false;
+		runActive = false;
 		abortController?.abort();
 		abortController = undefined;
 		turnPaths = new Set();
 		for (const controller of fixerControllers) controller.abort();
 		snapshots.clear();
 		fixedHashes.clear();
+		await temporaryOutput.shutdown();
 	});
 
-	async function collectCommandFailures(
-		projectRoot: string,
-		changed: readonly CommandConfig[],
-		notify: (message: string, type?: "info" | "warning" | "error") => void,
-	): Promise<FailedCommandDetails[] | undefined> {
-		const failures: FailedCommandDetails[] = [];
-		const controller = new AbortController();
-		abortController = controller;
-		try {
-			for (const command of changed) {
-				if (changed.length > 1) notify(`silent-command-runner: running ${command.name}`, "info");
-				let result: FailedCommandDetails;
-				try {
-					result = await runCommand(pi, projectRoot, command, controller.signal, settings.maxOutputBytes, []);
-				} catch (error: unknown) {
-					if (controller.signal.aborted) return undefined;
-					throw error;
+	async function flushFixes(snapshot: WriteSnapshot, ctx: ExtensionContext): Promise<void> {
+		const task = fixerQueue.then(async () => {
+			if (!sessionActive || ctx.signal?.aborted) return;
+			const current = await snapshotFiles(snapshot.projectRoot, settings.afterWrite);
+			const changed = [...current]
+				.filter(([path, hash]) => hash !== snapshot.files.get(path) && hash !== fixedHashes.get(path))
+				.map(([path]) => path);
+			if (changed.length === 0) return;
+			const controller = new AbortController();
+			fixerControllers.add(controller);
+			const cancel = () => controller.abort();
+			ctx.signal?.addEventListener("abort", cancel, { once: true });
+			if (ctx.signal?.aborted) controller.abort();
+			try {
+				for (const command of settings.afterWrite) {
+					if (!sessionActive || controller.signal.aborted) return;
+					const files = changed.filter((path) => matchesCommand(path, command));
+					if (files.length === 0) continue;
+					try {
+						await runCommand(
+							pi,
+							snapshot.projectRoot,
+							command,
+							controller.signal,
+							files.map((path) => resolve(snapshot.projectRoot, path)),
+						);
+					} catch {
+						// Final checks own failure reporting; a failed fixer must not stop the next one.
+					}
 				}
-				if (controller.signal.aborted) return undefined;
-				if (result.code !== 0 || result.killed) failures.push(result);
+				const after = await snapshotFiles(snapshot.projectRoot, settings.afterWrite);
+				for (const path of changed) {
+					const hash = after.get(path);
+					if (hash === undefined) fixedHashes.delete(path);
+					else fixedHashes.set(path, hash);
+				}
+				snapshot.files = after;
+			} finally {
+				ctx.signal?.removeEventListener("abort", cancel);
+				fixerControllers.delete(controller);
 			}
-		} finally {
-			if (abortController === controller) abortController = undefined;
+		});
+		// Callers handle failures; the queue must remain usable for subsequent tools.
+		fixerQueue = task.catch(() => {});
+		await task;
+	}
+
+	async function refreshSettings(ctx: ExtensionContext): Promise<void> {
+		const next = normalizeSettings(await loadTauExtensionSettings(ctx, silentCommandRunnerSettings));
+		if (JSON.stringify(next.afterRun) !== JSON.stringify(settings.afterRun)) checkedRevision = undefined;
+		settings = next;
+		const description = formatCheckToolDescription(settings.afterRun);
+		const exposure = settings.afterRun.length ? "direct" : "hidden";
+		if (checkTool.description !== description || checkTool.exposure !== exposure) {
+			checkTool = { ...checkTool, description, exposure };
+			pi.registerTool(checkTool);
 		}
-		return failures;
 	}
 
 	async function runChangedCommands(
 		cwd: string,
 		notify: (message: string, type?: "info" | "warning" | "error") => void,
-	): Promise<FailedCommandDetails[] | undefined> {
-		if (settings.afterRun.length === 0) return undefined;
-
-		const projectRoot = await resolveProjectRoot(cwd);
-		const paths = await walkFiles(projectRoot);
-		const changed = await scanChangedCommands(projectRoot, settings.afterRun, paths, turnPaths, turnStart);
-		if (!sessionActive || changed.length === 0) return undefined;
-
-		notify(
-			changed.length === 1
-				? `silent-command-runner: running ${changed[0]?.name ?? "command"}`
-				: `silent-command-runner: running ${changed.length} commands`,
-			"info",
-		);
-
-		const failures = await collectCommandFailures(projectRoot, changed, notify);
-		if (failures === undefined || !sessionActive) return undefined;
-		const failedNames = new Set(failures.map((failure) => failure.name));
-		const passed = changed.filter((command) => !failedNames.has(command.name));
-		if (passed.length > 0) notify(`silent-command-runner: passed ${formatCommandNames(passed)}`, "info");
-		if (failures.length > 0) {
-			// Only files the agent changes after this report can trigger another check and continuation.
-			turnStart = Date.now();
-			turnPaths = new Set(paths);
+		signal: AbortSignal | undefined,
+	): Promise<{ content: { type: "text"; text: string }[]; details: CheckDetails; isError: boolean }> {
+		const controller = new AbortController();
+		const cancel = () => controller.abort();
+		signal?.addEventListener("abort", cancel, { once: true });
+		if (signal?.aborted || !sessionActive) controller.abort();
+		abortController = controller;
+		const output = new BoundedTextResultBuilder(temporaryOutput, "tail");
+		try {
+			await fixerQueue;
+			controller.signal.throwIfAborted();
+			const revision = writeRevision;
+			const projectRoot = await resolveProjectRoot(cwd);
+			const paths = await walkFiles(projectRoot);
+			const changed = await scanChangedCommands(projectRoot, settings.afterRun, paths, turnPaths, turnStart);
+			const selected = settings.afterRun.filter(
+				(command) => changed.includes(command) || pendingFailedNames.has(command.name),
+			);
+			const failed: FailedCommandDetails[] = [];
+			const passed: string[] = [];
+			for (const command of selected) {
+				controller.signal.throwIfAborted();
+				notify(`silent-command-runner: running ${command.name}`, "info");
+				const result = await runCommand(pi, projectRoot, command, controller.signal, []);
+				controller.signal.throwIfAborted();
+				if (result.code !== 0 || result.killed) {
+					pendingFailedNames.add(command.name);
+					await output.append(`${formatAgentFailure(result)}\n\n`);
+					failed.push({
+						...result,
+						stdout: tailBytes(result.stdout.content, settings.maxOutputBytes),
+						stderr: tailBytes(result.stderr.content, settings.maxOutputBytes),
+					});
+				} else {
+					pendingFailedNames.delete(command.name);
+					passed.push(command.name);
+				}
+			}
+			if (selected.length === 0) await output.append("No checks apply to the changes in this run.");
+			if (passed.length > 0) {
+				const summary = `The following checks passed: ${passed.join(", ")}`;
+				await output.append(summary);
+				notify(summary, "info");
+			}
+			if (failed.length > 0) {
+				await output.append(
+					`${passed.length ? "\n" : ""}The following checks failed: ${failed.map((failure) => failure.name).join(", ")}\nComplete all repairs, then call run_checks before summarizing the requested work.`,
+				);
+			}
+			controller.signal.throwIfAborted();
+			const result = await output.finish();
+			if (controller.signal.aborted || writeRevision !== revision) {
+				if (result.overflow.temporaryPath) await rm(result.overflow.temporaryPath, { force: true });
+				controller.signal.throwIfAborted();
+				throw new Error("Files may have changed during checks; call run_checks again.");
+			}
+			checkedRevision = revision;
+			if (failed.length > 0) {
+				turnStart = Date.now();
+				turnPaths = new Set(paths);
+			}
+			return {
+				content: [{ type: "text", text: result.content }],
+				details: { failed, passed, overflow: result.overflow },
+				isError: failed.length > 0,
+			};
+		} catch (error) {
+			await output.abort();
+			throw error;
+		} finally {
+			signal?.removeEventListener("abort", cancel);
+			if (abortController === controller) abortController = undefined;
 		}
-		return failures;
 	}
 }
 
@@ -356,21 +452,12 @@ async function snapshotFiles(projectRoot: string, commands: readonly CommandConf
 	return files;
 }
 
-function formatSilentCheckPrompt(commands: readonly CommandConfig[]): string {
+function formatCheckToolDescription(commands: readonly CommandConfig[]): string {
 	return [
-		"Do not manually run the commands listed below. They run automatically after matching changes. Complete the work and finish normally; treat it as correct unless a failure is reported. Do not announce pending validation, hedge completion because of these commands, or tell the user that checks will run or rerun. If a failure is reported, fix it and describe the correction, then finish normally. Do not claim commands passed without evidence. Targeted checks outside this list remain allowed when needed.",
-		"Automatic commands:",
-		...commands.map(formatSilentCheckCommand),
-	].join("\n");
-}
-
-function formatSilentCheckCommand(command: CommandConfig): string {
-	return [
-		`- ${command.name}: ${command.command}`,
-		...(command.details ? [`  details: ${command.details}`] : []),
-		`  cwd: ${command.cwd}`,
-		`  triggers: ${command.includeGlobs.join(", ")}`,
-		...(command.excludeGlobs.length ? [`  excludes: ${command.excludeGlobs.join(", ")}`] : []),
+		"Call this tool ONLY after all implementation, investigation, builds, and focused testing are complete, immediately before your final answer. Never use it for intermediate validation. Never run registered checks or their equivalents manually. If checks fail, complete all repairs before calling it again. Any later write-capable call invalidates the result.",
+		"You may call it last in the same codemode script as your final edits: await all writes, then text(await tools.run_checks({})). Pending automatic fixes finish before checks.",
+		"During development, use builds and focused tests only when needed to proceed; batch them at meaningful boundaries. Focused tests from registered suites are allowed, not full-suite runs.",
+		`Checks: ${commands.length ? commands.map((command) => `${command.name}${command.details ? `: ${command.details}` : ""}`).join("; ") : "none configured"}`,
 	].join("\n");
 }
 
@@ -434,7 +521,6 @@ async function runCommand(
 	projectRoot: string,
 	command: CommandConfig,
 	signal: AbortSignal,
-	maxOutputBytes: number,
 	files: readonly string[],
 ): Promise<FailedCommandDetails> {
 	const start = Date.now();
@@ -456,16 +542,22 @@ async function runCommand(
 	const cwd = resolve(projectRoot, command.cwd);
 	const envArgs = Object.entries(command.env).map(([key, value]) => `${key}=${value}`);
 	const shellArgs = ["-lc", command.command.replaceAll("{files}", '"$@"'), "tau-silent-command", ...files];
-	const result = await pi.exec(
-		envArgs.length ? "env" : "sh",
-		envArgs.length ? [...envArgs, "sh", ...shellArgs] : shellArgs,
-		{
-			cwd,
-			signal,
-			timeout: command.timeoutMs,
-		},
-	);
-	return commandDetails(command, cwd, result, Date.now() - start, maxOutputBytes);
+	let result: ExecResult;
+	try {
+		result = await pi.exec(
+			envArgs.length ? "env" : "sh",
+			envArgs.length ? [...envArgs, "sh", ...shellArgs] : shellArgs,
+			{
+				cwd,
+				signal,
+				timeout: command.timeoutMs,
+			},
+		);
+	} catch (error) {
+		signal.throwIfAborted();
+		result = { code: 1, killed: false, stdout: "", stderr: errorMessage(error) };
+	}
+	return commandDetails(command, cwd, result, Date.now() - start);
 }
 
 function formatCommandNames(commands: readonly CommandConfig[]): string {
@@ -477,7 +569,6 @@ function commandDetails(
 	cwd: string,
 	result: ExecResult,
 	durationMs: number,
-	maxOutputBytes: number,
 ): FailedCommandDetails {
 	return {
 		name: command.name,
@@ -487,8 +578,8 @@ function commandDetails(
 		code: result.code,
 		killed: result.killed,
 		durationMs,
-		stdout: tailBytes(result.stdout, maxOutputBytes),
-		stderr: tailBytes(result.stderr, maxOutputBytes),
+		stdout: { content: result.stdout, truncated: false },
+		stderr: { content: result.stderr, truncated: false },
 	};
 }
 
@@ -496,14 +587,6 @@ function tailBytes(value: string, maxBytes: number): OutputTail {
 	const buffer = Buffer.from(value);
 	if (buffer.byteLength <= maxBytes) return { content: value, truncated: false };
 	return { content: buffer.subarray(buffer.byteLength - maxBytes).toString("utf8"), truncated: true };
-}
-
-function formatAgentMessage(failures: readonly FailedCommandDetails[]): string {
-	return [
-		`silent-command-runner failed: ${failures.length} command${failures.length === 1 ? "" : "s"}`,
-		...failures.map(formatAgentFailure),
-		"Fix the reported failures without manually rerunning these commands. Describe the correction and finish normally; do not announce validation or reruns.",
-	].join("\n\n");
 }
 
 function formatAgentFailure(failure: FailedCommandDetails): string {
