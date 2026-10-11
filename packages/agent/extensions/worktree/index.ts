@@ -22,10 +22,14 @@ import {
 export default function worktreeExtension(pi: ExtensionAPI): void {
 	let releaseSession: (() => Promise<void>) | null = null;
 	pi.on("session_start", async (_event, ctx) => {
-		const git = createGitRunner(pi, ctx);
-		const root = await git.run(["rev-parse", "--show-toplevel"], { optional: true });
-		if (!root) return;
 		try {
+			if (releaseSession) {
+				await releaseSession();
+				releaseSession = null;
+			}
+			const git = createGitRunner(pi, ctx);
+			const root = await git.run(["rev-parse", "--show-toplevel"], { optional: true });
+			if (!root) return;
 			const { repository, workspaces } = await discoverWorkspaces(git);
 			const current = workspaces.find((workspace) => workspace.current);
 			if (!current) throw new Error("Cannot identify this Git workspace.");

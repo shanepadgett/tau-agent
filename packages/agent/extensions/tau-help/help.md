@@ -162,6 +162,8 @@ Gives the agent `websearch` and `webfetch` for web research, reached through cod
 
 Adds `/worktree` to browse isolated feature folders and their sessions. Use `/worktree new [name]` to choose a starting branch, a fresh or continued chat, and this window or a second terminal; `/worktree open <name>` to resume; `/worktree remove <name>` to review removal; `/worktree cleanup <name>` to review cleanup of one missing registration, including external worktrees. The list shows missing folders and errors; select **Show details** for explanations. Concurrent sessions in one checkout warn instead of blocking tools; opening an occupied checkout starts a separate chat. New workspaces live outside the repository, use ordinary feature branches, and exclude uncommitted changes. Removal and cleanup keep branches and saved chats and refuse workspaces in use. Removal also refuses unfinished changes and warns before deleting ignored local files. Cleanup warns about unmounted drives and never prunes other registrations. Set `extensions.worktree.setupCommand` in Tau settings to run a command, such as `npm ci --ignore-scripts`, in each new workspace before its chat opens.
 
+Session startup clears abandoned tracking automatically. Live same-host processes do not expire; session records from another hostname expire after 24 hours and can stop detecting long-running sessions under that hostname. Exclusive removal locks do not expire by age.
+
 ## Prompts
 
 Prompt commands expand into instructions before the request reaches the agent.

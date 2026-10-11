@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
-import { link, mkdir, readdir, rmdir, unlink } from "node:fs/promises";
+import { link, mkdir, readdir, rmdir, stat, unlink } from "node:fs/promises";
 import { hostname } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { readJsonStatus, writeJsonObject } from "../../shared/settings/json.ts";
 
@@ -10,6 +10,8 @@ interface Owner {
 	pid: number;
 	token: string;
 }
+
+const STALE_SESSION_MS = 24 * 60 * 60 * 1000;
 
 export interface WorkspaceLease {
 	valid(): Promise<boolean>;
@@ -47,11 +49,7 @@ function ownerIsAlive(owner: Owner): boolean {
 	}
 }
 
-export async function workspaceOwner(store: string, path: string): Promise<string | null> {
-	const storage = workspaceStorage(store, path);
-	const owners: string[] = [];
-	const owner = await readOwner(`${storage}.owner.json`);
-	if (owner && ownerIsAlive(owner)) owners.push(`${owner.host}, process ${owner.pid}`);
+async function workspaceSessions(storage: string): Promise<{ path: string; owner: Owner; alive: boolean }[]> {
 	let files: string[];
 	try {
 		files = await readdir(`${storage}.sessions`);
@@ -59,9 +57,35 @@ export async function workspaceOwner(store: string, path: string): Promise<strin
 		if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
 		files = [];
 	}
+	const sessions: { path: string; owner: Owner; alive: boolean }[] = [];
 	for (const file of files) {
-		const session = await readOwner(join(`${storage}.sessions`, file));
-		if (session && ownerIsAlive(session)) owners.push(`${session.host}, process ${session.pid}`);
+		if (!file.endsWith(".json")) continue;
+		const path = join(`${storage}.sessions`, file);
+		const owner = await readOwner(path);
+		if (!owner) continue;
+		let alive = ownerIsAlive(owner);
+		if (owner.host !== hostname()) {
+			// Hostnames can change after a network switch. Only advisory session records
+			// expire; exclusive removal leases and ownership claims do not.
+			try {
+				alive = Date.now() - (await stat(path)).mtimeMs < STALE_SESSION_MS;
+			} catch (error) {
+				if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+				continue;
+			}
+		}
+		sessions.push({ path, owner, alive });
+	}
+	return sessions;
+}
+
+export async function workspaceOwner(store: string, path: string): Promise<string | null> {
+	const storage = workspaceStorage(store, path);
+	const owners: string[] = [];
+	const owner = await readOwner(`${storage}.owner.json`);
+	if (owner && ownerIsAlive(owner)) owners.push(`${owner.host}, process ${owner.pid}`);
+	for (const session of await workspaceSessions(storage)) {
+		if (session.alive) owners.push(`${session.owner.host}, process ${session.owner.pid}`);
 	}
 	return owners.length ? owners.join("; ") : null;
 }
@@ -135,8 +159,27 @@ export async function registerWorkspaceSession(
 	const otherOwner = await withOwnershipClaim(storage, async () => {
 		const removal = await readOwner(`${storage}.owner.json`);
 		if (removal && ownerIsAlive(removal)) throw new Error("Workspace removal is in progress. Retry in a moment.");
-		const owner = await workspaceOwner(store, path);
+		for (const session of await workspaceSessions(storage)) {
+			if (!session.alive) await unlink(session.path);
+		}
 		await mkdir(directory, { recursive: true, mode: 0o700 });
+		// Atomic writes can leave incomplete temporary files after a crash. Restrict
+		// cleanup to this workspace and allow a full day for concurrent writes.
+		for (const [folder, prefix] of [
+			[store, `${basename(storage)}.claim.`],
+			[directory, ""],
+		] as const) {
+			for (const file of await readdir(folder)) {
+				if (!file.startsWith(prefix) || !file.endsWith(".tmp")) continue;
+				const temp = join(folder, file);
+				try {
+					if (Date.now() - (await stat(temp)).mtimeMs >= STALE_SESSION_MS) await unlink(temp);
+				} catch (error) {
+					if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+				}
+			}
+		}
+		const owner = await workspaceOwner(store, path);
 		await writeJsonObject(sessionPath, { host: hostname(), pid: process.pid, token });
 		return owner;
 	});
