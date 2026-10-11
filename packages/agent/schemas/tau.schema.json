@@ -16,9 +16,17 @@
 					"type": "object",
 					"properties": {
 						"push": {
-							"type": "boolean",
-							"default": false,
-							"description": "Push automatically after /commit lands instead of asking."
+							"anyOf": [
+								{
+									"type": "boolean"
+								},
+								{
+									"type": "string",
+									"const": "ask"
+								}
+							],
+							"default": "ask",
+							"description": "Push after /commit: true pushes automatically, false never pushes or asks, \"ask\" prompts (default)."
 						}
 					},
 					"additionalProperties": false
