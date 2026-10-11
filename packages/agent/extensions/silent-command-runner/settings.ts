@@ -4,8 +4,9 @@ import { defineTauExtensionSettings } from "../../shared/settings/define.ts";
 const commandSchema = Type.Object(
 	{
 		name: Type.String({ description: "Short command name shown in notifications and failure messages." }),
-		enabled: Type.Optional(Type.Boolean({ default: true, description: "Enable this command." })),
-		command: Type.String({ description: "Shell command run with sh -lc after matching files change." }),
+		command: Type.String({
+			description: "Shell command run with sh -lc. In afterWrite, use unquoted {files} for changed-file arguments.",
+		}),
 		cwd: Type.Optional(
 			Type.String({ default: ".", description: "Command working directory, relative to project root." }),
 		),
@@ -29,26 +30,26 @@ const commandSchema = Type.Object(
 	{ additionalProperties: false },
 );
 
+type CommandSettings = {
+	name: string;
+	command: string;
+	cwd?: string;
+	env?: Record<string, string>;
+	details?: string;
+	includeGlobs?: string[];
+	excludeGlobs?: string[];
+	timeoutMs?: number;
+};
+
 export default defineTauExtensionSettings({
 	key: "silentCommandRunner",
 	defaults: {
-		enabled: true as boolean,
 		maxOutputBytes: 51200 as number,
-		commands: [] as Array<{
-			name: string;
-			enabled?: boolean;
-			command: string;
-			cwd?: string;
-			env?: Record<string, string>;
-			details?: string;
-			includeGlobs?: string[];
-			excludeGlobs?: string[];
-			timeoutMs?: number;
-		}>,
+		afterWrite: [] as CommandSettings[],
+		afterRun: [] as CommandSettings[],
 	},
 	schema: Type.Object(
 		{
-			enabled: Type.Optional(Type.Boolean({ default: true, description: "Enable silent command runner." })),
 			maxOutputBytes: Type.Optional(
 				Type.Integer({
 					default: 51200,
@@ -56,8 +57,17 @@ export default defineTauExtensionSettings({
 					description: "Maximum raw stdout/stderr bytes sent to the agent.",
 				}),
 			),
-			commands: Type.Optional(
-				Type.Array(commandSchema, { default: [], description: "Commands run after matched files change." }),
+			afterWrite: Type.Optional(
+				Type.Array(commandSchema, {
+					default: [],
+					description: "Silent commands run in order after a modifying tool changes matching files.",
+				}),
+			),
+			afterRun: Type.Optional(
+				Type.Array(commandSchema, {
+					default: [],
+					description: "Read-only checks run before the agent run settles; failures continue the run.",
+				}),
 			),
 		},
 		{ additionalProperties: false },

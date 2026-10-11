@@ -143,18 +143,13 @@
 				"silentCommandRunner": {
 					"type": "object",
 					"properties": {
-						"enabled": {
-							"type": "boolean",
-							"default": true,
-							"description": "Enable silent command runner."
-						},
 						"maxOutputBytes": {
 							"type": "integer",
 							"default": 51200,
 							"minimum": 1,
 							"description": "Maximum raw stdout/stderr bytes sent to the agent."
 						},
-						"commands": {
+						"afterWrite": {
 							"type": "array",
 							"items": {
 								"type": "object",
@@ -167,14 +162,9 @@
 										"type": "string",
 										"description": "Short command name shown in notifications and failure messages."
 									},
-									"enabled": {
-										"type": "boolean",
-										"default": true,
-										"description": "Enable this command."
-									},
 									"command": {
 										"type": "string",
-										"description": "Shell command run with sh -lc after matching files change."
+										"description": "Shell command run with sh -lc. In afterWrite, use unquoted {files} for changed-file arguments."
 									},
 									"cwd": {
 										"type": "string",
@@ -222,7 +212,72 @@
 								"additionalProperties": false
 							},
 							"default": [],
-							"description": "Commands run after matched files change."
+							"description": "Silent commands run in order after a modifying tool changes matching files."
+						},
+						"afterRun": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"required": [
+									"name",
+									"command"
+								],
+								"properties": {
+									"name": {
+										"type": "string",
+										"description": "Short command name shown in notifications and failure messages."
+									},
+									"command": {
+										"type": "string",
+										"description": "Shell command run with sh -lc. In afterWrite, use unquoted {files} for changed-file arguments."
+									},
+									"cwd": {
+										"type": "string",
+										"default": ".",
+										"description": "Command working directory, relative to project root."
+									},
+									"env": {
+										"type": "object",
+										"patternProperties": {
+											"^.*$": {
+												"type": "string"
+											}
+										},
+										"description": "Extra environment values."
+									},
+									"details": {
+										"type": "string",
+										"description": "Free-text explanation of what this command checks or runs."
+									},
+									"includeGlobs": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										},
+										"default": [
+											"**/*"
+										],
+										"description": "Project-relative files that trigger this command."
+									},
+									"excludeGlobs": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										},
+										"default": [],
+										"description": "Project-relative files ignored for this command."
+									},
+									"timeoutMs": {
+										"type": "integer",
+										"default": 120000,
+										"minimum": 1,
+										"description": "Command timeout in milliseconds."
+									}
+								},
+								"additionalProperties": false
+							},
+							"default": [],
+							"description": "Read-only checks run before the agent run settles; failures continue the run."
 						}
 					},
 					"additionalProperties": false

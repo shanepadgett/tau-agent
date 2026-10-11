@@ -373,8 +373,8 @@ function scanSilentRunner(fs: FsIndex): ReadyRow {
 	}
 	const silentConfigured =
 		/"silentCommandRunner"\s*:/.test(fs.tauSettingsText) &&
-		/"commands"\s*:\s*\[/.test(fs.tauSettingsText) &&
-		!/"commands"\s*:\s*\[\s*\]/.test(fs.tauSettingsText);
+		/"afterRun"\s*:\s*\[/.test(fs.tauSettingsText) &&
+		!/"afterRun"\s*:\s*\[\s*\]/.test(fs.tauSettingsText);
 	return row({
 		id: "verify.silent",
 		area: "verify",
@@ -382,9 +382,9 @@ function scanSilentRunner(fs: FsIndex): ReadyRow {
 		status: silentConfigured ? "pass" : "weak",
 		evidence: [".pi/tau/settings.json"],
 		note: silentConfigured
-			? "silentCommandRunner has configured commands."
-			: "silentCommandRunner section present but commands look empty.",
-		next: silentConfigured ? undefined : "Configure extensions.silentCommandRunner.commands for post-edit verify.",
+			? "silentCommandRunner has configured afterRun checks."
+			: "silentCommandRunner section present but afterRun checks look empty.",
+		next: silentConfigured ? undefined : "Configure extensions.silentCommandRunner.afterRun for end-of-run verification.",
 	});
 }
 

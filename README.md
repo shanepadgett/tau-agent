@@ -30,7 +30,7 @@ pi install git:github.com/shanepadgett/tau-agent
 ## What saves context
 
 - **[Soul](packages/agent/extensions/soul/README.md)** supplies the agent's working instructions: direct communication, explicit planning, scoped changes, and focused tool use. Stable instructions stay in place across turns; updates append where the model supports it, preserving the cached prompt prefix.
-- **[Silent Command Runner](packages/agent/extensions/silent-command-runner/README.md)** runs your configured checks after matching edits. Passing output stays out of the conversation. Failures send the agent the command output so it can fix the problem.
+- **[Silent Command Runner](packages/agent/extensions/silent-command-runner/README.md)** silently fixes matching files after modifying tools finish, then runs read-only checks before the agent run settles. Check failures send the agent the command output so it can fix the problem.
 - **[Explore](packages/agent/extensions/explore/README.md)** reads source structure: declaration outlines, selected bodies, imports, and callers. Large supported files return an outline by default rather than their entire contents. Pi keeps `ls`, `find`, `grep`, and `read`; Explore adds focused ways to inspect code.
 - **[Tool Loader](packages/agent/extensions/tool-loader/README.md)** keeps specialist tool definitions out of ordinary coding requests. Image and macOS tools load when needed; web tools run through code mode so the agent can filter results before they enter context. Cache preservation when loading tools depends on the model.
 - **[Script Runner](packages/agent/extensions/script-runner/README.md)** runs custom Python, Node.js, and Deno code using installed runtimes. Failed scripts can be retried with targeted edits rather than sending the whole script again.
@@ -45,7 +45,7 @@ Tau works with defaults, but automatic checks need your project's commands. Run 
 {
   "extensions": {
     "silentCommandRunner": {
-      "commands": [
+      "afterRun": [
         {
           "name": "typecheck",
           "command": "npm run typecheck",

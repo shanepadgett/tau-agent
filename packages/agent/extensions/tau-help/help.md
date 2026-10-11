@@ -114,7 +114,7 @@ Gives the agent a first-class `script_runner` tool for custom Python, Node.js, a
 
 ## silent-command-runner
 
-Runs configured commands while keeping their output out of agent context when that is useful.
+Configure `extensions.silentCommandRunner.afterWrite` for silent fixes after modifying tools finish and `afterRun` for read-only checks before the agent run settles. Fixes run once after an outer codemode call, not after each nested tool. Use unquoted `{files}` in an `afterWrite` command to pass changed-file paths safely. Check failures send output to the agent and continue the run. Disable the extension through Pi's extension controls.
 
 ## soul
 

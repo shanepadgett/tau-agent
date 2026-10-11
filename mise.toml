@@ -64,20 +64,28 @@ description = "Check Tau settings schema drift"
 run = "node --experimental-strip-types packages/agent/scripts/generate-tau-schema.ts --check"
 
 [tasks."check:fmt"]
-description = "Format TypeScript with Oxfmt"
-run = "oxfmt --write 'packages/**/*.ts' '.pi/extensions/**/*.ts'"
+description = "Check TypeScript formatting with Oxfmt"
+run = "oxfmt --check 'packages/**/*.ts' '.pi/extensions/**/*.ts'"
 
 [tasks."check:lint"]
 description = "Lint TypeScript with Oxlint"
-run = "oxlint --fix --format=agent packages .pi/extensions"
+run = "oxlint --format=agent packages .pi/extensions"
+
+[tasks."fix:lint"]
+description = "Apply safe Oxlint fixes to supplied files"
+run = "oxlint --fix --format=agent"
+
+[tasks."fix:fmt"]
+description = "Format supplied files with Oxfmt"
+run = "oxfmt --write"
 
 [tasks."check:style"]
-description = "Format and lint TypeScript"
+description = "Check TypeScript formatting and lint"
 depends = ["check:fmt", "check:lint"]
 
 [tasks."check:markdown"]
 description = "Run Markdown checks"
-run = "./node_modules/.bin/markdownlint-cli2 --fix --config packages/agent/extensions/md-lint/markdownlint-cli2.jsonc"
+run = "./node_modules/.bin/markdownlint-cli2 --config packages/agent/extensions/md-lint/markdownlint-cli2.jsonc"
 
 [tasks."check:types"]
 description = "Run TypeScript checks"

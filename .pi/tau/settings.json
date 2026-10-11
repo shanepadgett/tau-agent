@@ -5,7 +5,21 @@
 			"editor": "code"
 		},
 		"silentCommandRunner": {
-			"commands": [
+			"afterWrite": [
+				{
+					"name": "fix:lint",
+					"command": "mise run fix:lint -- {files}",
+					"details": "Applies safe Oxlint fixes to changed TypeScript files.",
+					"includeGlobs": ["packages/**/*.ts", ".pi/extensions/**/*.ts"]
+				},
+				{
+					"name": "fix:fmt",
+					"command": "mise run fix:fmt -- {files}",
+					"details": "Formats changed TypeScript files with Oxfmt after lint fixes.",
+					"includeGlobs": ["packages/**/*.ts", ".pi/extensions/**/*.ts"]
+				}
+			],
+			"afterRun": [
 				{
 					"name": "check:mise",
 					"command": "mise run check:mise",
@@ -32,7 +46,7 @@
 				{
 					"name": "check:fmt",
 					"command": "mise run check:fmt",
-					"details": "Formats TypeScript with Oxfmt (writes fixes).",
+					"details": "Checks TypeScript formatting with Oxfmt without writing fixes.",
 					"includeGlobs": [
 						"packages/**/*.ts",
 						".pi/extensions/**/*.ts",
@@ -42,7 +56,7 @@
 				{
 					"name": "check:lint",
 					"command": "mise run check:lint",
-					"details": "Lints TypeScript with Oxlint (applies safe fixes).",
+					"details": "Checks TypeScript with Oxlint without applying fixes.",
 					"includeGlobs": [
 						"packages/**/*.ts",
 						".pi/extensions/**/*.ts",
