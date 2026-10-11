@@ -31,7 +31,7 @@ const WRITE_TOOLS = new Set([
 	"edit",
 	"bash",
 	"powershell",
-	"script_runner",
+	"eval",
 	"codemode",
 	"image_gen",
 	"screenshot_window",
@@ -505,10 +505,10 @@ async function snapshotFiles(projectRoot: string, commands: readonly CommandConf
 
 function formatCheckInstructions(commands: readonly CommandConfig[]): string {
 	return [
-		"Required repository verification: You MUST call run_checks after all implementation, investigation, builds, and focused testing are complete, immediately before your final summary. Do not send the final summary first or rely on automatic settlement checks to satisfy this requirement. Never use run_checks for intermediate validation.",
-		"Never manually run any repository check listed below or its equivalent, during development or final verification. This includes their task-runner commands, direct binaries, wrappers, and alternate flags through bash, script_runner, or codemode. Configured formatting, lint, type checking, full test suites, dependency/schema validation, dead-code checks, and duplicate-code checks belong exclusively to run_checks.",
+		"Required repository verification for runs with file edits: Call run_checks only when you have edited repository files during the current run, including additions, modifications, moves, or deletions. Skip it for discussion, read-only investigation, and in-memory eval or codemode work that does not edit repository files. Calling a write-capable tool alone does not require checks. For runs with file edits, you MUST call run_checks after all implementation, investigation, builds, and focused testing are complete, immediately before your final summary. Do not send the final summary first or rely on automatic settlement checks to satisfy this requirement. Never use run_checks for intermediate validation.",
+		"Never manually run any repository check listed below or its equivalent, during development or final verification. This includes their task-runner commands, direct binaries, wrappers, and alternate flags through bash, eval, or codemode. Configured formatting, lint, type checking, full test suites, dependency/schema validation, dead-code checks, and duplicate-code checks belong exclusively to run_checks.",
 		"During development, builds and focused tests are allowed only when needed for the work in progress; batch them at meaningful boundaries. The focused-test exception allows a relevant subset of a registered suite, never the full suite. Do not use a build or another command name to bypass the restriction on configured checks.",
-		"If checks fail, complete all repairs, then call run_checks again before your final summary. Any later write-capable call invalidates the result, even if it changes nothing; finish that work and call run_checks again. Summarize the requested work only after verification is current.",
+		"If checks fail, complete all repairs, then call run_checks again before your final summary. In a run with file edits, any later write-capable call invalidates the result, even if it changes nothing; finish that work and call run_checks again. Summarize file-editing work only after verification is current.",
 		"You may call it last in the same codemode script as your final edits: await all writes, then text(await tools.run_checks({})). Pending automatic fixes finish before checks.",
 		`Checks: ${commands.length ? commands.map((command) => `${command.name} [${command.command}]${command.details ? `: ${command.details}` : ""}`).join("; ") : "none configured"}`,
 	].join("\n");

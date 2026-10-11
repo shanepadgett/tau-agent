@@ -55,14 +55,14 @@ export class ApprovalEvidence {
 	constructor(
 		cwd: string,
 		signal: AbortSignal | undefined,
-		toolName: "bash" | "script_runner",
+		toolName: "bash" | "eval",
 		input: Record<string, unknown>,
 	) {
 		this.cwd = cwd;
 		this.signal = signal;
 		if (toolName === "bash" && typeof input.command === "string") this.shell(input.command, cwd, 0);
-		if (toolName === "script_runner" && typeof input.script === "string") {
-			// script_runner stages source in a new temporary directory, not in the project.
+		if (toolName === "eval" && typeof input.script === "string") {
+			// eval stages source in a new temporary directory, not in the project.
 			this.source(input.script, undefined, cwd, input.language === "python3" ? ".py" : ".js");
 		}
 	}
@@ -431,7 +431,7 @@ export class ApprovalEvidence {
 				if (importCwd === undefined && !path.startsWith("/")) {
 					this.gap(
 						"source_unavailable",
-						"Relative script_runner imports resolve in a temporary source directory; their code could not be inspected.",
+						"Relative eval imports resolve in a temporary source directory; their code could not be inspected.",
 					);
 					continue;
 				}

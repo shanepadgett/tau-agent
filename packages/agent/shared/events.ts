@@ -40,8 +40,8 @@ export type TauAgentEvents = {
 		request: FileInjectionRequest;
 		accept(preparation: Promise<PreparedFileInjection[]>): void;
 	};
-	/** @internal Script runner's live source store, used to review the code it will execute. */
-	"tau:script-runner.source-store": {
+	/** @internal Eval's live source store, used to review the code it will execute. */
+	"tau:eval.source-store": {
 		accept(store: ScriptSourceStore): void;
 	};
 	"tau:footer-item": {

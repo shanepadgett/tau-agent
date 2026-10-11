@@ -1,5 +1,5 @@
 name = "Silent Command Runner"
-description = "Silent post-write fixes and end-of-run checks with Soul guidance, pass notifications, and failure continuations"
+description = "Silent post-write fixes and end-of-run checks with Soul guidance requiring run_checks only for repository-editing runs, pass notifications, and failure continuations"
 
 [extension-runtime]
 description = "Load silentCommandRunner settings and register append-only Soul guidance; snapshot matching file hashes before modifying tools; await serialized afterWrite fixes after tool_result, grouping descendants under their outer call and passing changed paths through shell positional arguments; snapshot project file set and time on agent_start; on agent_before_settle run matching afterRun checks via pi.exec sh -lc; pass notifies only; failures append a tau:silent-command-runner message and continue the run; reset the check baseline after failures; abort processes on shutdown"

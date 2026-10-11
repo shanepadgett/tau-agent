@@ -14,7 +14,11 @@ export function truncAt(text: string, cap: number): string {
 	return text.length > cap ? `${text.slice(0, cap)}\n(truncated)` : text;
 }
 
-export function renderToolOutputPreview(text: string, expanded: boolean, theme: Theme): string {
+export function renderToolOutputPreview(
+	text: string,
+	expanded: boolean,
+	theme: Theme,
+): { text: string; truncated: boolean } {
 	const lines = text.split("\n");
 	while (lines.at(-1) === "") lines.pop();
 
@@ -22,11 +26,13 @@ export function renderToolOutputPreview(text: string, expanded: boolean, theme: 
 	const displayLines = expanded ? lines : lines.slice(0, TOOL_OUTPUT_PREVIEW_LINES);
 	const remaining = totalLines - displayLines.length;
 	const output = displayLines.map((line) => theme.fg("toolOutput", line)).join("\n");
-	if (remaining <= 0) return output;
+	if (remaining <= 0) return { text: output, truncated: false };
 
-	return (
-		`${output}${theme.fg("muted", `\n... (${remaining} more lines, ${totalLines} total,`)} ` +
-		keyHint("app.tools.expand", "to expand") +
-		theme.fg("muted", ")")
-	);
+	return {
+		text:
+			`${output}${theme.fg("muted", `\n... (${remaining} more lines, ${totalLines} total,`)} ` +
+			keyHint("app.tools.expand", "to expand") +
+			theme.fg("muted", ")"),
+		truncated: true,
+	};
 }

@@ -106,10 +106,10 @@ export function renderExploreResult(
 		const summary = theme.fg("muted", `${count} ${noun}${bytes}`);
 		const preview = renderToolOutputPreview(output, false, theme);
 		text.setText(
-			preview ? `${summary}\n${preview}` : `${summary} (` + keyHint("app.tools.expand", "to expand") + ")",
+			preview.text ? `${summary}\n${preview.text}` : `${summary} (` + keyHint("app.tools.expand", "to expand") + ")",
 		);
 		return text;
 	}
-	text.setText(renderToolOutputPreview(output, true, theme));
+	text.setText(renderToolOutputPreview(output, true, theme).text);
 	return text;
 }

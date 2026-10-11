@@ -1,4 +1,4 @@
-type Language = "python3" | "node" | "deno";
+type Language = "python3" | "node";
 
 interface StoredScript {
 	language: Language;
@@ -23,8 +23,8 @@ export function createScriptSourceStore(): ScriptSourceStore {
 	const store: ScriptSourceStore = {
 		resolve(input) {
 			const language = input.language;
-			if (language !== "python3" && language !== "node" && language !== "deno") {
-				throw new Error("Invalid script_runner language.");
+			if (language !== "python3" && language !== "node") {
+				throw new Error("Invalid eval language.");
 			}
 			const scriptId = input.scriptId;
 			if (scriptId !== undefined && typeof scriptId !== "string") {
@@ -79,7 +79,7 @@ export function createScriptSourceStore(): ScriptSourceStore {
 			if (approved === undefined) return;
 			approvals.delete(toolCallId);
 			if (approved !== JSON.stringify(input)) {
-				throw new Error("script_runner request changed after approval; blocked.");
+				throw new Error("eval request changed after approval; blocked.");
 			}
 		},
 		clearApprovals() {

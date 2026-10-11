@@ -9,7 +9,7 @@
 
 ## Architecture and boundaries
 
-Expand Silent Command Runner, using Pi's awaited `tool_call` and `tool_result` handlers. No new extension or public event is needed. Snapshot project-relative paths and SHA-256 content hashes for matching globs before write-capable calls. Track snapshots by call ID; ignore descendants of tracked calls. Known tools include patch, write, edit, bash, powershell, script_runner, codemode, image_gen, and screenshot_window; custom tools without an explicit read-only annotation are also eligible.
+Expand Silent Command Runner, using Pi's awaited `tool_call` and `tool_result` handlers. No new extension or public event is needed. Snapshot project-relative paths and SHA-256 content hashes for matching globs before write-capable calls. Track snapshots by call ID; ignore descendants of tracked calls. Known tools include patch, write, edit, bash, powershell, eval, codemode, image_gen, and screenshot_window; custom tools without an explicit read-only annotation are also eligible.
 
 `Settings = { maxOutputBytes, afterWrite: CommandConfig[], afterRun: CommandConfig[] }`. Commands retain name, shell command, cwd, env, details, globs, and timeout. An unquoted `{files}` placeholder expands to shell positional arguments containing absolute changed paths; filenames are never interpolated into shell source. Commands without the placeholder retain project-wide behavior.
 

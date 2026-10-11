@@ -282,7 +282,7 @@ A failed copy leaves no partial files and no record, so the next launch offers a
 ## Distribution phases
 
 1. **npm global:** `npm i -g @shanepadgett/tau` (Node ≥22.19).
-2. **Bun binary** with a `curl` installer and Homebrew. Pi's `build:binary` layout applies directly. Needs embedded WASM, a fix for `script-runner` (uses `process.execPath` as `node`), and per-platform signing.
+2. **Bun binary** with a `curl` installer and Homebrew. Pi's `build:binary` layout applies directly. Needs embedded WASM, a fix for `eval` (uses `process.execPath` as `node`), and per-platform signing.
 
 ## Implementation order
 

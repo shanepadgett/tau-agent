@@ -92,7 +92,7 @@ function createDefinition(spec: ToolPreviewSpec, warning: boolean): ToolDefiniti
 		},
 		renderResult(result, { expanded }, theme, _context) {
 			return new Text(
-				renderToolOutputPreview(textContent(result.content), expanded || spec.isError === true, theme),
+				renderToolOutputPreview(textContent(result.content), expanded || spec.isError === true, theme).text,
 				0,
 				0,
 			);

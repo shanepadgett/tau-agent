@@ -25,6 +25,6 @@ export function renderWebToolResult(
 	}
 
 	const output = renderToolOutputPreview(firstText.text, options.expanded || context.isError, theme);
-	text.setText(output ? `\n${output}` : "");
+	text.setText(output.text ? `\n${output.text}` : "");
 	return text;
 }
