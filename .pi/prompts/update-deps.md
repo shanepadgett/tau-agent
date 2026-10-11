@@ -14,6 +14,7 @@ Updates deps. Never blind bumps. Every change discussed with user. Analyze first
 - Skip this monorepo's own packages (`@shanepadgett/*` and other workspace packages that are the repo).
 - Args present → those pins only. Else full inventory.
 - Ignore transitive-only unless a direct pin forces it.
+- Pi peer minimums are compatibility contracts, not outdated pins. Leave them unchanged during routine updates; synchronized root Pi development pins may advance independently.
 
 ## Workflow
 
@@ -26,7 +27,11 @@ Updates deps. Never blind bumps. Every change discussed with user. Analyze first
 5. Present findings. No manifest/lockfile/code edits yet.
 6. Decide with user per package or explicit user-chosen batches. Nothing without approval.
 7. Apply only approved bumps and approved follow-on code. Leave unapproved pins.
-8. Refresh lockfiles. Run normal validation for touched surface.
+8. Refresh lockfiles. Finish all work, then call `run_checks` before the final summary. Do not run registered checks or their equivalents manually.
+
+## Pi compatibility
+
+Follow `AGENTS.md`'s Pi Compatibility rules. For Pi updates, report the current supported minimum separately from development pins. Review adopted APIs and behavior changes against that minimum; prefer capability detection and safe fallbacks, including module-load safety for newer exports. Do not raise the minimum merely because Pi released a breaking version or development pins moved. If required behavior cannot be preserved safely, explain the incompatibility and request explicit approval to raise the minimum. Update both published peer ranges and both installation guides only for an approved minimum change.
 
 ## Release notes
 

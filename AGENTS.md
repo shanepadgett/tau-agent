@@ -5,11 +5,19 @@
 - Extension tool changes need user `/reload` before testing.
 - Keep active work files under `docs/plans/`. Tracked dir. Use `packages/agent/docs/` only for Tau Agent user docs.
 - Read `docs/standards/agent-runtime.md` before adding or changing extension model selection, thinking levels, or fallback policy.
-- When updating Pi dependencies, update the required Pi version and install commands in both `README.md` and `packages/agent/README.md` in the same change. Keep them aligned with the root development dependency pins and both published packages' Pi peer dependency pins.
+- Keep Pi development pins separate from the supported minimum; follow the Pi Compatibility rules below.
+
+## Pi Compatibility
+
+- Root Pi development dependencies stay exactly pinned and synchronized. Both published packages use aligned `>=x.y.z` Pi peer minimums, which the development pins must satisfy.
+- Routine dependency updates and Tau releases do not raise the Pi minimum. Raise it only when an adopted API or required behavior cannot work safely at the current minimum, with user approval and a documented reason. An upstream breaking release alone does not justify dropping older hosts.
+- Prefer capability detection and safe fallbacks for newer Pi APIs within the supported range. Preserve correctness, cache safety, cancellation, and security; do not silently drop required behavior. If no safe fallback exists, discuss raising the minimum before implementation.
+- Check API availability at the minimum, not only in the installed development version. Do not unconditionally import newer named exports or depend on newer types to prove older runtime support. Keep compatibility handling at the Pi integration boundary, not spread across callers. Do not add branches for hosts below the declared minimum.
+- When the minimum changes, update both published manifests, `README.md`, `packages/agent/README.md`, and their install commands together. Keep routine development-pin updates independent of those minimums.
 
 ## Scope and Behavior
 
-- No backward compatibility unless asked.
+- Pi compatibility follows the declared supported range. No other backward compatibility unless asked.
 - Do not remove intentional behavior without asking.
 - No optional properties, parameters, or branches for hypothetical callers.
 - Minimal to zero helper functions unless reducing duplicate code.

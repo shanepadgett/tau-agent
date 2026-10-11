@@ -15,8 +15,8 @@ Use that path for:
 Rules:
 
 - Keep Pi package dev dependencies pinned exactly to the reference versions.
-- Keep peer dependency strategy as-is unless the user asks.
+- Keep published Pi peer minimums independent of development pins. Follow `AGENTS.md`'s Pi Compatibility rules; do not raise the minimum without an API requirement that lacks a safe fallback and explicit user approval.
 - Keep TypeScript, Biome, Node, and `typebox` aligned when safe.
 - Do not change package manager, relax checks, or delete local behavior without asking.
 - If dependency versions changed, run `npm install --ignore-scripts`.
-- Run `mise run check` after edits.
+- Finish all work, then call `run_checks` before the final summary; do not run registered checks or their equivalents manually.

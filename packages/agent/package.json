@@ -40,6 +40,7 @@
 		"htmlparser2": "12.0.0",
 		"image-size": "2.0.4",
 		"markdownlint-cli2": "0.22.1",
+		"semver": "7.8.5",
 		"smol-toml": "1.9.0",
 		"turndown": "7.2.4",
 		"turndown-plugin-gfm": "1.0.2",
@@ -47,9 +48,9 @@
 		"web-tree-sitter": "0.26.12"
 	},
 	"peerDependencies": {
-		"@earendil-works/pi-ai": "1.1.0",
-		"@earendil-works/pi-coding-agent": "1.1.0",
-		"@earendil-works/pi-tui": "1.1.0",
+		"@earendil-works/pi-ai": ">=1.1.0",
+		"@earendil-works/pi-coding-agent": ">=1.1.0",
+		"@earendil-works/pi-tui": ">=1.1.0",
 		"typebox": "*"
 	},
 	"pi": {
@@ -70,6 +71,7 @@
 		"node": ">=22.19.0"
 	},
 	"devDependencies": {
+		"@types/semver": "7.8.0",
 		"@types/turndown": "5.0.6"
 	}
 }

@@ -5,6 +5,7 @@ import {
 	type ExtensionCommandContext,
 	type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import { minVersion, satisfies } from "semver";
 import { Value } from "typebox/value";
 import { readJsonStatus, writeJsonObject } from "../../shared/settings/json.ts";
 import { exists, globalTauSettingsPath, projectTauSettingsPath, TAU_SCHEMA_URL } from "../../shared/settings/paths.ts";
@@ -13,7 +14,7 @@ import { discoverTauSettingsSpecs } from "../../shared/settings/specs.ts";
 const manifest = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as {
 	peerDependencies: { "@earendil-works/pi-coding-agent": string };
 };
-const supportedPiVersion = manifest.peerDependencies["@earendil-works/pi-coding-agent"];
+const supportedPiRange = manifest.peerDependencies["@earendil-works/pi-coding-agent"];
 
 type Finding = { level: "runtime" | "global" | "project"; message: string; startup: boolean };
 
@@ -128,10 +129,12 @@ async function inspectPath(
 
 async function inspect(ctx: Pick<ExtensionContext, "cwd" | "isProjectTrusted">): Promise<Finding[]> {
 	const findings: Finding[] = [];
-	if (VERSION !== supportedPiVersion) {
+	if (!satisfies(VERSION, supportedPiRange)) {
+		const minimumPiVersion = minVersion(supportedPiRange);
+		if (!minimumPiVersion) throw new Error(`Invalid Pi peer range: ${supportedPiRange}`);
 		findings.push({
 			level: "runtime",
-			message: `Tau requires Pi ${supportedPiVersion}; running Pi ${VERSION}. Update the Pi installation you launch (for a global install: npm install -g @earendil-works/pi-coding-agent@${supportedPiVersion}), then restart Pi.`,
+			message: `Tau requires Pi ${supportedPiRange}; running Pi ${VERSION}. Update the Pi installation you launch (for a global install: npm install -g @earendil-works/pi-coding-agent@${minimumPiVersion.version}), then restart Pi.`,
 			startup: true,
 		});
 	}

@@ -6,13 +6,13 @@ The package also exports programmatic Tau capabilities for trusted Pi extensions
 
 ## Install
 
-This release supports Pi **1.1.0** exactly. Install that harness version before installing Tau:
+Requires stable Pi **1.1.0 or newer**. If Pi is not installed, install the minimum supported version (or a newer stable version):
 
 ```bash
 npm install -g @earendil-works/pi-coding-agent@1.1.0
 ```
 
-If a tool manager supplies Pi, set its Pi version to 1.1.0 instead. Check `pi --version` in the directory where you launch Tau. Pi supplies the harness libraries; Tau does not install a separate copy. Startup and `/tau doctor` report version mismatches when the Tau extension can load.
+If a tool manager supplies Pi, keep any stable version at or above 1.1.0. Check `pi --version` in the directory where you launch Tau. Pi supplies the harness libraries; Tau does not install a separate copy. Startup and `/tau doctor` report unsupported versions when the Tau extension can load. Routine Tau releases and development dependency updates do not raise the Pi minimum.
 
 ```bash
 pi install npm:@shanepadgett/tau-agent
@@ -49,7 +49,7 @@ mise run check
 pi -e .
 ```
 
-When updating Pi, change the root development dependency pins and the Pi peer pins in both published packages together, then update the installation examples. `npm run check:package-sources` verifies the pins before publishing. The runtime check reads the agent package's declared Pi peer version.
+Keep root Pi development dependencies exactly pinned and synchronized, independently of the published `>=1.1.0` peer minimums. Prefer safe capability-based fallbacks for newer APIs; raise the minimum only when required behavior cannot work safely on older supported hosts. If that happens, update both published packages and both installation guides together. `npm run check:package-sources` verifies that development pins satisfy aligned peer minimums before publishing. The runtime check reads the agent package's declared Pi peer range.
 
 ## Docs
 
