@@ -32,7 +32,8 @@ export function registerRouting(
 			{
 				route: {
 					type: "choice",
-					instructions: "Which kind of work does this prompt start?",
+					instructions:
+						"Which work type does this prompt start? Choose by the scope and difficulty of the requested work. For UI design, prefer simple-design unless the prompt clearly establishes major design scope. Requests to brainstorm, be creative, show renderings, or redesign something do not by themselves justify complex-design. When uncertain between these two work types, choose simple-design.",
 					criteria: Object.fromEntries(
 						Object.entries(getSettings().routing.routes).map(([name, route]) => [name, route.description]),
 					),

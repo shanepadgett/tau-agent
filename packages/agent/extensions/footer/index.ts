@@ -99,9 +99,12 @@ export default function footerExtension(pi: ExtensionAPI): void {
 							? ""
 							: decisionStatus;
 					const separator = theme.fg("dim", " • ");
-					const topLeft = [`${route ? `auto:${route} · ` : ""}${model} (${thinking})`, decisionModel]
+					const workType = route ? `${theme.fg("accent", theme.bold(route))}${theme.fg("dim", " · ")}` : "";
+					const topLeft = [
+						`${workType}${theme.fg("dim", `${model} (${thinking})`)}`,
+						decisionModel ? theme.fg("dim", decisionModel) : "",
+					]
 						.filter(Boolean)
-						.map((text) => theme.fg("dim", text))
 						.join(separator);
 					const sessionUsage = sessionCost(currentCtx);
 					const session = formatCost(sessionUsage.cost);

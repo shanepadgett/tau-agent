@@ -290,7 +290,7 @@
 											},
 											"additionalProperties": false
 										},
-										"design": {
+										"simple-design": {
 											"type": "object",
 											"properties": {
 												"description": {
@@ -348,7 +348,7 @@
 											},
 											"additionalProperties": false
 										},
-										"newDesign": {
+										"complex-design": {
 											"type": "object",
 											"properties": {
 												"description": {

@@ -52,6 +52,8 @@ At the hard cutoff, the agent must compact before using other tools. Failures ar
 
 Uses Jev or Luna to approve routine tool requests, remind the agent to answer questions first, and select a model for the work. Routing uses ChatGPT and Claude subscription logins; choosing a model yourself stops automatic routing for that session.
 
+Design work defaults to Sonnet under `simple-design` for bounded component design, including creative redesigns. `complex-design` uses Opus for substantial whole-page design, multi-screen experiences, design systems, or major interaction changes across a workflow.
+
 Configure these features under `extensions.decisions`. Set `enabled` to `false` to disable them, or choose `auto`, `jev`, or `luna` for `classifier`. Missing credentials or failed decisions do not stop work.
 
 ## explore
@@ -60,7 +62,7 @@ Lets the agent inspect code structure, find declarations and references, and fol
 
 ## footer
 
-Shows models, context usage, cache-hit rate, costs, and project status. Use `/footer` to toggle it, `/footer on` or `/footer off` to set visibility, and `/footer refresh` to refresh it.
+Shows the highlighted work type, models, context usage, cache-hit rate, costs, and project status. Use `/footer` to toggle it, `/footer on` or `/footer off` to set visibility, and `/footer refresh` to refresh it.
 
 ## handoff
 

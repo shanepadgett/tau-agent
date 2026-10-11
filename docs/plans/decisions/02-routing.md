@@ -14,7 +14,7 @@ Pick the agent model and thinking level from the kind of work the first prompt s
 - **Routing by type of work, not effort tier.** Routing owns its own route table. This is an exception to `docs/standards/agent-runtime.md` for the main agent model; update that standard when implementing. Helper models, such as the reviewer and compaction, stay on effort tiers.
 - **Subscription logins only.** The providers are `openai-codex` (ChatGPT subscription) and `anthropic` with a Claude subscription login, checked with `modelRegistry.isUsingOAuth(model)`. API keys are never used: not the `openai` provider, and not `anthropic` with an API key.
 - **Fallback** is the `general` route.
-- **Footer** shows that automatic selection is in use.
+- **Footer** highlights the selected work type before the model, without an `auto:` prefix.
 - **Direct model calls, no virtual model.** Routing calls `pi.setModel()` and `pi.setThinkingLevel()` once. Pi's per-request virtual-model routing is not needed when the model is fixed after the first prompt.
 - **An explicit choice wins.** If the user picks a model before the session's first prompt, routing does not run in that session.
 
@@ -45,14 +45,14 @@ before_agent_start (eligible)
 | `quick` | Small, clear changes to an existing system, even if a few clarifying questions are needed | `openai-codex/gpt-6-luna` | max |
 | `general` | General coding and debugging | `openai-codex/gpt-6.1-sol` | high |
 | `frontend` | Implementation involving front-end work | `anthropic/claude-sonnet-5-5` | high |
-| `design` | UI and design-system work within an existing design system: tweaks and small reinventions | `anthropic/claude-sonnet-5-5` | high |
-| `newDesign` | Hard UI and design-system work: entirely new paradigms | `anthropic/claude-opus-5-5` | high |
+| `simple-design` | Bounded component design and redesign, including creative ideation, alternative representations, and new interactions | `anthropic/claude-sonnet-5-5` | high |
+| `complex-design` | Substantial whole-page design, multi-screen experiences, design systems, or major interaction models spanning a workflow or product | `anthropic/claude-opus-5-5` | high |
 | `writing` | Prose, docs, wording | `anthropic/claude-sonnet-5-5` | medium |
 | `architecture` | Software architecture and code planning | `anthropic/claude-opus-5-5` | high |
 
 ### Fallbacks when a subscription is missing
 
-| Logged in | Claude routes (`frontend`, `design`, `newDesign`, `writing`, `architecture`) | `general` | `quick` |
+| Logged in | Claude routes (`frontend`, `simple-design`, `complex-design`, `writing`, `architecture`) | `general` | `quick` |
 | --- | --- | --- | --- |
 | Both | As in the table above | Sol, high | Luna, max |
 | ChatGPT only | Sol, high | Sol, high | Luna, max |
@@ -70,7 +70,7 @@ interface Route {
 ## Classification
 
 - State: `{ prompt }` for the first prompt.
-- One `choice` question, `route`: "Which kind of work does this prompt start?" Its options are the route names, with their descriptions as criteria.
+- One `choice` question, `route`: "Which work type does this prompt start?" Its options are the route names, with their descriptions as criteria. UI design prefers `simple-design` unless the prompt clearly establishes major design scope. Creative wording alone does not justify `complex-design`; uncertainty between these design types resolves to `simple-design`.
 - Use the highest-probability route when it is at least 0.5. Otherwise use `general`.
 - No decision, or a route whose provider lacks a subscription login, also uses `general`.
 
@@ -78,7 +78,7 @@ Before shipping, validate the wording against the 40 first prompts in the spike'
 
 ## Footer
 
-The Tau footer already shows `ctx.model`, which is the routed model after `setModel()`. It adds an `auto:<route>` marker before the model, for example `auto:frontend · anthropic/claude-sonnet-5-5 (high)`.
+The Tau footer already shows `ctx.model`, which is the routed model after `setModel()`. It highlights the work type in bold accent color before the model, for example `frontend · anthropic/claude-sonnet-5-5 (high)`.
 
 - The footer learns the route from the `tau:decisions.route` event.
 - On resume, it reads the latest `tau.decisions.route` entry on the branch.

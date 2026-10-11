@@ -9,7 +9,10 @@ export interface Route {
 	thinking: ThinkingLevel;
 }
 
-const routes: Record<"quick" | "general" | "frontend" | "design" | "newDesign" | "writing" | "architecture", Route> = {
+const routes: Record<
+	"quick" | "general" | "frontend" | "simple-design" | "complex-design" | "writing" | "architecture",
+	Route
+> = {
 	quick: {
 		description: "Small, clear changes to an existing system, even if a few clarifying questions are needed",
 		provider: "openai-codex",
@@ -28,14 +31,16 @@ const routes: Record<"quick" | "general" | "frontend" | "design" | "newDesign" |
 		model: "claude-sonnet-5-5",
 		thinking: "high",
 	},
-	design: {
-		description: "UI and design-system tweaks and small reinventions within an existing design system",
+	"simple-design": {
+		description:
+			"Bounded UI design and redesign: individual components, controls, indicators, bars, dialogs, and small groups of related elements. Includes creative ideation, alternative representations, mockups, and new interactions within that bounded scope. Novelty alone does not make a task complex design work.",
 		provider: "anthropic",
 		model: "claude-sonnet-5-5",
 		thinking: "high",
 	},
-	newDesign: {
-		description: "Hard UI and design-system work: entirely new paradigms",
+	"complex-design": {
+		description:
+			"Major UI design and redesign: whole pages or screens requiring substantial composition and visual hierarchy, multi-screen experiences, new design systems, or fundamentally new interaction models spanning a workflow or product. Requires substantial design scope, not merely a novel treatment of one component.",
 		provider: "anthropic",
 		model: "claude-opus-5-5",
 		thinking: "high",

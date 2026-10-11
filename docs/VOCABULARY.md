@@ -10,6 +10,8 @@
 
 **Agent turn:** One model response cycle inside an agent run: model response plus any tool calls from that response.
 
+**Work type:** The kind of work used to select the agent model, such as `simple-design`, `complex-design`, or `writing`. Called a route in the routing code. The footer highlights the selected work type before the model.
+
 **Final assistant message:** Assistant response that ends an agent run. Usually has no tool calls.
 
 ## Tools
