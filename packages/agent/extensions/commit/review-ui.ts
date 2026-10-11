@@ -57,6 +57,11 @@ type FlowPhase =
 	| { kind: "working"; cancellable: boolean }
 	| { kind: "review"; mode: ReviewMode }
 	| {
+			kind: "confirm-push";
+			list: SelectableList<{ id: string; label: string }>;
+			rows: readonly CommitProgressRow[];
+	  }
+	| {
 			kind: "committing";
 			groups: readonly CommitGroup[];
 			rows: CommitProgressRow[];
@@ -236,6 +241,11 @@ class CommitFlowPanel implements Component, Focusable {
 		}
 		if (this.working || this.phase.kind === "working") return;
 		if (this.phase.kind === "committing") return;
+		if (this.phase.kind === "confirm-push") {
+			this.phase.list.handleInput(data);
+			this.syncPanel();
+			return;
+		}
 		if (this.phase.kind === "failed") {
 			if (
 				getKeybindings().matches(data, "tui.select.confirm") ||
@@ -509,29 +519,40 @@ class CommitFlowPanel implements Component, Focusable {
 				});
 			});
 			if (!this.autoPush) {
-				this.ctx.ui.notify(
-					`Committed ${landed.length} commit(s): ${landed.map((item) => item.hash).join(", ")}`,
-					"info",
-				);
-				this.close();
+				const list = new SelectableList(this.theme, {
+					items: [
+						{ id: "no", label: "No, keep commits local" },
+						{ id: "yes", label: "Yes, push now" },
+					],
+					emptyMessage: "",
+					selection: { kind: "single", primaryLabel: "select" },
+					actions: [],
+					cancelLabel: "skip push",
+					maxVisible: 2,
+					renderItem: (item, state, width) => [
+						truncateToWidth(this.theme.fg(state.active ? "accent" : "text", item.label), width, ""),
+					],
+					onResult: (result) => {
+						if (result.kind === "primary" && result.items[0]?.id === "yes") {
+							void this.pushCommits(landed);
+							return;
+						}
+						this.ctx.ui.notify(
+							`Committed ${landed.length} commit(s): ${landed.map((item) => item.hash).join(", ")}`,
+							"info",
+						);
+						this.close();
+					},
+				});
+				this.setPhase({
+					kind: "confirm-push",
+					list,
+					rows: landed.map((item) => ({ subject: item.subject, state: "done", hash: item.hash })),
+				});
+				emitAgentBlocked(this.pi, { body: "Waiting for push confirmation", source: "commit.push" });
 				return;
 			}
-			this.startWorking("Pushing", false);
-			try {
-				await pushCurrentBranch(this.git, this.root);
-				this.stopWorking();
-				this.ctx.ui.notify(
-					`Committed and pushed ${landed.length} commit(s): ${landed.map((item) => item.hash).join(", ")}`,
-					"info",
-				);
-			} catch (error) {
-				this.stopWorking();
-				this.ctx.ui.notify(
-					`Committed ${landed.length} commit(s): ${landed.map((item) => item.hash).join(", ")}; push failed: ${errorText(error)}`,
-					"error",
-				);
-			}
-			this.close();
+			await this.pushCommits(landed);
 		} catch (error) {
 			const partial = error instanceof PartialCommitError ? error.completed : [];
 			const message = error instanceof PartialCommitError ? error.message : errorText(error);
@@ -556,6 +577,25 @@ class CommitFlowPanel implements Component, Focusable {
 		editor.setText(value);
 		editor.focused = this._focused;
 		return editor;
+	}
+
+	private async pushCommits(landed: readonly CommitMarker[]): Promise<void> {
+		this.startWorking("Pushing", false);
+		try {
+			await pushCurrentBranch(this.git, this.root);
+			this.stopWorking();
+			this.ctx.ui.notify(
+				`Committed and pushed ${landed.length} commit(s): ${landed.map((item) => item.hash).join(", ")}`,
+				"info",
+			);
+		} catch (error) {
+			this.stopWorking();
+			this.ctx.ui.notify(
+				`Committed ${landed.length} commit(s): ${landed.map((item) => item.hash).join(", ")}; push failed: ${errorText(error)}`,
+				"error",
+			);
+		}
+		this.close();
 	}
 
 	private showInvalidCommitMessage(value: string, error: unknown): void {
@@ -625,12 +665,14 @@ class CommitFlowPanel implements Component, Focusable {
 	private syncFocus(): void {
 		const review = this.phase.kind === "review" && !this.working ? this.phase.mode : undefined;
 		this.groupList.focused = this._focused && review?.kind === "groups";
+		if (this.phase.kind === "confirm-push") this.phase.list.focused = this._focused;
 		if (review?.kind === "message") review.editor.focused = this._focused;
 		if (review?.kind === "note") review.input.focused = this._focused;
 	}
 
 	private activeBody(): Component | undefined {
 		if (this.working) return this.working;
+		if (this.phase.kind === "confirm-push") return this.phase.list;
 		if (this.phase.kind !== "review") return undefined;
 		if (this.phase.mode.kind === "message") return this.phase.mode.editor;
 		if (this.phase.mode.kind === "note") return this.phase.mode.input;
@@ -644,6 +686,9 @@ class CommitFlowPanel implements Component, Focusable {
 			return lines[0] === "" ? lines.slice(1) : lines;
 		}
 		if (this.phase.kind === "working") return [];
+		if (this.phase.kind === "confirm-push") {
+			return [...this.renderProgressBody(width, this.phase.rows, ""), "", ...this.phase.list.render(width)];
+		}
 		if (this.phase.kind === "committing") {
 			return this.renderProgressBody(width, this.phase.rows, this.phase.detail);
 		}
@@ -712,6 +757,7 @@ class CommitFlowPanel implements Component, Focusable {
 		if (this.working || this.phase.kind === "working") return "Commit";
 		if (this.phase.kind === "committing") return "Committing";
 		if (this.phase.kind === "failed") return "Commit failed";
+		if (this.phase.kind === "confirm-push") return "Push now?";
 		if (this.phase.mode.kind === "message") return "Edit commit";
 		if (this.phase.mode.kind === "note") return "Regenerate";
 		return "Commit plan";
@@ -730,6 +776,7 @@ class CommitFlowPanel implements Component, Focusable {
 			return [bindingHint("tui.select.cancel", "cancel")];
 		}
 		if (this.working || this.phase.kind === "working" || this.phase.kind === "committing") return [];
+		if (this.phase.kind === "confirm-push") return this.phase.list.getKeyHints();
 		if (this.phase.kind === "failed") {
 			return [bindingHint("tui.select.confirm", "dismiss")];
 		}

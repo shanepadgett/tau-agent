@@ -14,7 +14,7 @@ Generate a semantic commit plan from current repository changes, review it, then
 
 Grouping is fixed: files cannot be moved between commits in the review UI. If the grouping is wrong, regenerate the plan with a note describing what to change. Message editing and per-message regeneration stay available.
 
-Set `extensions.commit.push` to push automatically after the commits land. When it is false, `/commit` stops after committing and leaves pushing to you.
+Set `extensions.commit.push` to push automatically after the commits land. When it is false, `/commit` asks whether to push, with “No” selected by default. Decline or dismiss the question to keep the commits local. Without an interactive UI, it stops after committing.
 
 If the current branch has no upstream, pushing runs `git push --set-upstream origin <branch>` to establish tracking. Branches with an upstream use normal `git push` behavior.
 
