@@ -152,6 +152,7 @@ export default function evalExtension(pi: ExtensionAPI): void {
 		promptSnippet: `Run ${langPhrase} scripts; on failure retry with edits + scriptId.`,
 		promptGuidelines: [
 			"Use eval for custom Python or Node code, even for one-off tasks. Never pass custom code to these runtimes through bash with -c/-e, a heredoc, a temporary source file, or a wrapper.",
+			"Prefer readable scripts with the language's usual indentation and line breaks so failed runs are easy to edit.",
 			"Use bash for direct shell commands, focused read-only filtering such as jq, existing project commands, and genuinely shell-specific process orchestration. Do not move custom code into bash to avoid review.",
 			"eval never exposes the script path; you already have the source. Never try to read it back.",
 		],
@@ -194,7 +195,6 @@ export default function evalExtension(pi: ExtensionAPI): void {
 		},
 		renderCall(args, theme, context) {
 			context.state.inputOverflow = false;
-			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
 			let header = theme.fg("toolTitle", theme.bold("eval"));
 			if (typeof args.language === "string") {
 				header += ` ${theme.fg("muted", languageLabel(args.language))}`;
@@ -216,10 +216,8 @@ export default function evalExtension(pi: ExtensionAPI): void {
 			).map((line) => line.replace(/\r/g, "").replace(/\t/g, "   "));
 			while (lines.at(-1) === "") lines.pop();
 			if (lines.length === 0) {
-				text.setText(header);
-				return text;
+				return new Text(header, 0, 0);
 			}
-			const displayLines = context.expanded ? lines : lines.slice(0, 10);
 			const language =
 				args.language === "python3"
 					? getLanguageFromPath("_run.py")
@@ -228,25 +226,39 @@ export default function evalExtension(pi: ExtensionAPI): void {
 						: undefined;
 			const body =
 				edits.length > 0
-					? displayLines.join("\n")
+					? lines.join("\n")
 					: language
-						? highlightCode(displayLines.join("\n"), language).join("\n")
-						: displayLines.map((line) => theme.fg("toolOutput", line)).join("\n");
-			const remaining = lines.length - displayLines.length;
-			context.state.inputOverflow = remaining > 0;
-			let output = body ? `${header}\n\n${body}` : header;
-			if (remaining > 0) {
-				output += theme.fg("muted", `\n... (${remaining} more lines, ${lines.length} total`);
-				if (context.isPartial) {
-					output += theme.fg("muted", ", ") + keyHint("app.tools.expand", "to expand");
-				}
-				output += theme.fg("muted", ")");
-			}
-			text.setText(output);
-			return text;
+						? highlightCode(lines.join("\n"), language).join("\n")
+						: lines.map((line) => theme.fg("toolOutput", line)).join("\n");
+			const headerText = new Text(header, 0, 0);
+			const bodyText = new Text(body, 0, 0);
+			const overflowText = new Text("", 0, 0);
+			return {
+				render(width) {
+					const rows = bodyText.render(width);
+					const displayRows = context.expanded ? rows : rows.slice(0, 10);
+					const remaining = rows.length - displayRows.length;
+					context.state.inputOverflow = remaining > 0;
+					let overflow = "";
+					if (remaining > 0) {
+						overflow = theme.fg("muted", `... (${remaining} more rows, ${rows.length} total`);
+						if (context.isPartial) {
+							overflow += theme.fg("muted", ", ") + keyHint("app.tools.expand", "to expand");
+						}
+						overflow += theme.fg("muted", ")");
+					}
+					overflowText.setText(overflow);
+					return [...headerText.render(width), "", ...displayRows, ...overflowText.render(width)];
+				},
+				invalidate() {
+					headerText.invalidate();
+					bodyText.invalidate();
+					overflowText.invalidate();
+				},
+			};
 		},
 		renderResult(result, options, theme, context) {
-			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+			const text = new Text("", 0, 0);
 			if (options.isPartial) {
 				text.setText("");
 				return text;
@@ -257,12 +269,19 @@ export default function evalExtension(pi: ExtensionAPI): void {
 				.join("\n");
 			const divider = theme.fg("muted", context.isError ? "── Error ──" : "── Output ──");
 			const preview = renderToolOutputPreview(output, options.expanded || context.isError, theme);
-			const expandHint =
-				!options.expanded && context.state.inputOverflow && !preview.truncated
-					? `\n${keyHint("app.tools.expand", "to expand")}`
-					: "";
-			text.setText(`\n${divider}\n\n${preview.text}${expandHint}`);
-			return text;
+			return {
+				render(width) {
+					const expandHint =
+						!options.expanded && context.state.inputOverflow && !preview.truncated
+							? `\n${keyHint("app.tools.expand", "to expand")}`
+							: "";
+					text.setText(`\n${divider}\n\n${preview.text}${expandHint}`);
+					return text.render(width);
+				},
+				invalidate() {
+					text.invalidate();
+				},
+			};
 		},
 	});
 
