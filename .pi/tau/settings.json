@@ -111,9 +111,6 @@
 					]
 				}
 			]
-		},
-		"worktree": {
-			"setupCommand": "npm ci --ignore-scripts"
 		}
 	}
 }

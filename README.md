@@ -73,7 +73,7 @@ For settings shared across projects, use `/tau init --global`. See the [Silent C
 | `/handoff <goal>` | Prepare a fresh linked session with an opening prompt you can review. |
 | `/commit` | Group, review, and commit selected Git changes. |
 | `/reference` | Manage comparison repositories outside the working tree. |
-| `/worktree` | Create and resume isolated feature workspaces and their sessions. |
+| `/wt` | Copy this checkout into a new worktree; use `list` to switch sessions or `clean` to review removal. |
 
 Tau also includes session management, question panels, web research, image generation, and optional macOS window capture. The [command guide](packages/agent/extensions/tau-help/help.md) covers the full set.
 

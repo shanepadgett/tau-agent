@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto";
-import { lstat, mkdir, realpath, rm, unlink } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { constants } from "node:fs";
+import { cp, lstat, mkdir, readFile, realpath, rm, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { GitRunner } from "../../shared/git.ts";
 import { readJsonStatus, writeJsonObject } from "../../shared/settings/json.ts";
@@ -67,23 +68,33 @@ export async function saveWorkspaceRecord(repository: Repository, record: Worksp
 	await writeJsonObject(`${workspaceStorage(repository.store, record.path)}.json`, { version: 1, ...record });
 }
 
-export async function discoverWorkspaces(git: GitRunner): Promise<{ repository: Repository; workspaces: Workspace[] }> {
+export async function discoverRepository(git: GitRunner): Promise<{ repository: Repository; registrations: string[] }> {
 	const root = await realpath(await git.run(["rev-parse", "--show-toplevel"]));
 	const commonDir = await realpath(await git.run(["rev-parse", "--path-format=absolute", "--git-common-dir"]));
 	const key = createHash("sha256").update(commonDir).digest("hex");
+	const output = await git.run(["worktree", "list", "--porcelain", "-z"]);
+	const registrations = output.split("\0\0").filter((block) => block && !block.split("\0").includes("bare"));
+	const main = registrations[0]
+		?.split("\0")
+		.find((field) => field.startsWith("worktree "))
+		?.slice(9);
+	if (!main) throw new Error("No non-bare Git worktree found.");
 	const repository: Repository = {
 		root,
 		commonDir,
 		store: join(getAgentDir(), "tau", "worktrees", key),
-		folder: "",
+		folder: join(homedir(), "worktrees", `${basename(main)}-${key.slice(0, 8)}`),
 	};
-	const output = await git.run(["worktree", "list", "--porcelain", "-z"]);
-	const blocks = output.split("\0\0").filter(Boolean);
+	return { repository, registrations };
+}
+
+export async function discoverWorkspaces(git: GitRunner): Promise<{ repository: Repository; workspaces: Workspace[] }> {
+	const { repository, registrations } = await discoverRepository(git);
 	const workspaces: Workspace[] = [];
-	for (const block of blocks) {
+	for (const block of registrations) {
 		const fields = block.split("\0");
 		const registeredPath = fields.find((field) => field.startsWith("worktree "))?.slice(9);
-		if (!registeredPath || fields.includes("bare")) continue;
+		if (!registeredPath) continue;
 		let path = resolve(registeredPath);
 		let missing = false;
 		const errors: string[] = [];
@@ -123,12 +134,12 @@ export async function discoverWorkspaces(git: GitRunner): Promise<{ repository: 
 		}
 		workspaces.push({
 			id: path,
-			name: record?.name ?? (workspaces.length === 0 ? "Local checkout" : basename(path)),
+			name: record?.name ?? (workspaces.length === 0 ? "Main checkout" : basename(path)),
 			path,
 			branch,
 			head,
 			main: workspaces.length === 0,
-			current: path === root,
+			current: path === repository.root,
 			locked: fields.some((field) => field === "locked" || field.startsWith("locked ")),
 			missing,
 			changes,
@@ -137,9 +148,6 @@ export async function discoverWorkspaces(git: GitRunner): Promise<{ repository: 
 			errors,
 		});
 	}
-	const main = workspaces.find((workspace) => workspace.main);
-	if (!main) throw new Error("No non-bare Git worktree found.");
-	repository.folder = join(homedir(), "worktrees", `${basename(main.path)}-${key.slice(0, 8)}`);
 	return { repository, workspaces };
 }
 
@@ -157,23 +165,102 @@ export async function validateWorkspace(git: GitRunner, repository: Repository, 
 export async function createWorkspace(
 	git: GitRunner,
 	repository: Repository,
-	name: string,
-	baseCommit: string,
+	signal: AbortSignal | undefined,
 ): Promise<WorkspaceRecord> {
-	const branch = `feature/${name}`;
-	const path = join(repository.folder, name);
+	const baseCommit = await git.run(["rev-parse", "--verify", "HEAD^{commit}"], { cwd: repository.root });
+	const sourceBranch = await git.run(["symbolic-ref", "--short", "-q", "HEAD"], {
+		cwd: repository.root,
+		optional: true,
+	});
+	const source = (sourceBranch || `detached-${baseCommit.slice(0, 7)}`)
+		.replace(/^wt\//, "")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.slice(0, 40)
+		.replace(/^-|-$/g, "");
+	const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
+	const name = `${source || "checkout"}-${stamp}-${randomUUID().slice(0, 6)}`;
+	const branch = `wt/${name}`;
+	signal?.throwIfAborted();
 	await mkdir(repository.folder, { recursive: true });
-	await git.run(["worktree", "add", "-b", branch, path, baseCommit], { timeout: 120_000 });
-	const record = { name, path: await realpath(path), branch: `refs/heads/${branch}`, baseCommit, sessionPath: null };
+	const path = join(await realpath(repository.folder), name);
+	const destination = relative(repository.root, path);
+	if (
+		destination !== ".." &&
+		!destination.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) &&
+		!isAbsolute(destination)
+	)
+		throw new Error("The worktree destination must be outside the source checkout.");
+	const sourceIndex = await git.run(["rev-parse", "--path-format=absolute", "--git-path", "index"], {
+		cwd: repository.root,
+	});
+	const index = await readIndex(sourceIndex);
+	const sharedPath = await git.run(["rev-parse", "--path-format=absolute", "--shared-index-path"], {
+		cwd: repository.root,
+	});
+	const sharedIndex = sharedPath ? await readFile(resolve(repository.root, sharedPath)) : null;
+	signal?.throwIfAborted();
+	// Start empty so tracked deletions, sparse checkouts, and untracked files are
+	// copied exactly as they exist, rather than overlaid onto a clean checkout.
+	await git.run(["worktree", "add", "--no-checkout", "-b", branch, path, baseCommit], {
+		cwd: repository.root,
+		timeout: 120_000,
+	});
 	try {
+		await cp(repository.root, path, {
+			recursive: true,
+			mode: constants.COPYFILE_FICLONE,
+			preserveTimestamps: true,
+			verbatimSymlinks: true,
+			filter: (sourcePath) => {
+				signal?.throwIfAborted();
+				if (sourcePath === join(repository.root, ".git")) return false;
+				if (basename(sourcePath) === ".git")
+					throw new Error(
+						`Cannot safely copy nested Git metadata at ${sourcePath}. Nested repositories and initialized submodules must be handled separately.`,
+					);
+				return true;
+			},
+		});
+		const currentIndex = await readIndex(sourceIndex);
+		const currentHead = await git.run(["rev-parse", "HEAD"], { cwd: repository.root });
+		if (
+			currentHead !== baseCommit ||
+			(index === null ? currentIndex !== null : currentIndex === null || !index.equals(currentIndex))
+		)
+			throw new Error(
+				"The source HEAD or staging index changed while copying. Retry when other Git operations have finished.",
+			);
+		const targetIndex = await git.run(["rev-parse", "--path-format=absolute", "--git-path", "index"], { cwd: path });
+		// Preserve the index bytes, including partial staging, conflict stages,
+		// intent-to-add, and sparse/split-index extensions. Never hard-link them.
+		if (sharedIndex) await writeFile(join(dirname(targetIndex), basename(sharedPath)), sharedIndex, { mode: 0o600 });
+		if (index) await writeFile(targetIndex, index, { mode: 0o600 });
+		signal?.throwIfAborted();
+		const record = {
+			name,
+			path: await realpath(path),
+			branch: `refs/heads/${branch}`,
+			baseCommit,
+			sessionPath: null,
+		};
 		await saveWorkspaceRecord(repository, record);
+		return record;
 	} catch (error) {
 		throw new Error(
-			`Created ${record.path} on ${branch}, but could not save its metadata. The workspace remains available through /worktree.`,
+			`Could not finish copying ${path} on ${branch}: ${errorText(error)}. The source is unchanged. The incomplete worktree remains registered; inspect it with /wt list before using it.`,
 			{ cause: error },
 		);
 	}
-	return record;
+}
+
+async function readIndex(path: string): Promise<Buffer | null> {
+	try {
+		return await readFile(path);
+	} catch (error) {
+		if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+		throw error;
+	}
 }
 
 export async function inspectRemoval(
@@ -201,10 +288,15 @@ export async function inspectRemoval(
 		.filter((ref) => ref && ref !== branch);
 	const head = await git.run(["rev-parse", "HEAD"], { cwd: workspace.path });
 	const uniqueCommits = Number(await git.run(["rev-list", "--count", head, "--not", ...refs]));
+	const signature = createHash("sha256").update(`${head}\0${branch}\0${status}\0${ignored}`);
+	for (const file of ignored.split("\0").filter(Boolean)) {
+		const info = await lstat(join(workspace.path, file));
+		signature.update(`\0${file}\0${info.mode}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`);
+	}
 	return {
 		ignored: ignored.split("\0").filter(Boolean).length,
 		uniqueCommits,
-		signature: createHash("sha256").update(`${head}\0${branch}\0${status}\0${ignored}`).digest("hex"),
+		signature: signature.digest("hex"),
 	};
 }
 
@@ -224,9 +316,9 @@ export async function cleanupMissingWorkspace(
 		throw new Error("Repository identity changed. Cleanup cancelled.");
 	const current = discovered.workspaces.find((item) => item.path === workspace.path);
 	if (!current || !current.missing || current.main || current.current)
-		throw new Error("Registration changed or the folder is no longer missing. Review it again with /worktree.");
+		throw new Error("Registration changed or the folder is no longer missing. Review it again with /wt list.");
 	if (current.branch !== workspace.branch || current.head !== workspace.head)
-		throw new Error("Registration changed during confirmation. Review it again with /worktree.");
+		throw new Error("Registration changed during confirmation. Review it again with /wt list.");
 	if (current.locked) throw new Error("This worktree is locked. Unlock it yourself before cleanup.");
 	// lstat also rejects a dangling symlink: cleanup must not delete an existing filesystem entry.
 	try {

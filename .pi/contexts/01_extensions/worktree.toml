@@ -2,7 +2,7 @@ name = "Worktree"
 description = "Separate feature folders, conversations, and safe worktree lifecycle"
 
 [workflow]
-description = "Register /worktree and its new/open/remove shortcuts; choose feature branch, conversation, and terminal; replace Pi sessions; run configured setup command in new folders; protect occupied workspaces"
+description = "Register /wt, /wt list, and /wt clean; copy the current checkout onto an automatically named branch; continue chats in cmux tabs or replace Pi sessions; protect occupied workspaces"
 read = [
   "packages/agent/extensions/worktree/index.ts",
   "packages/agent/extensions/worktree/panel.ts",
@@ -20,7 +20,7 @@ references = [
 ]
 
 [storage-and-safety]
-description = "Discover Git worktrees, validate identity, persist task/session metadata, serialize active conversation branches, exclude concurrent owners, and confirm removal without losing branches or chats"
+description = "Discover Git worktrees, clone local files and staging state, validate identity, persist workspace/session metadata, serialize active conversation branches, and confirm individual or batch removal without losing branches or chats"
 read = [
   "packages/agent/extensions/worktree/workspaces.ts",
   "packages/agent/extensions/worktree/ownership.ts",

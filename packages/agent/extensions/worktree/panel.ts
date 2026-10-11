@@ -1,23 +1,23 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { Key, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { rawHint, SelectableList, ToolPanel } from "@shanepadgett/tau-tui";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { SelectableList, ToolPanel } from "@shanepadgett/tau-tui";
 import type { Workspace } from "./workspaces.ts";
 
 export function showWorkspacePanel(
 	ctx: ExtensionCommandContext,
 	workspaces: readonly Workspace[],
-): Promise<Workspace | "new" | undefined> {
+): Promise<Workspace | undefined> {
 	const branchOf = (workspace: Workspace) => workspace.branch?.replace(/^refs\/heads\//, "") ?? "detached";
 	const nameWidth = Math.min(28, Math.max(0, ...workspaces.map((workspace) => visibleWidth(workspace.name))));
 	const branchWidth = Math.min(32, Math.max(0, ...workspaces.map((workspace) => visibleWidth(branchOf(workspace)))));
-	return ctx.ui.custom<Workspace | "new" | undefined>((tui, theme, _keys, done) => {
+	return ctx.ui.custom<Workspace | undefined>((tui, theme, _keys, done) => {
 		const cell = (text: string, cellWidth: number) => truncateToWidth(text, cellWidth, "…", true);
 		const list = new SelectableList(theme, {
 			items: workspaces,
 			emptyMessage: "No workspaces found.",
 			selection: { kind: "single", primaryLabel: "actions" },
 			filter: { searchText: (workspace) => `${workspace.name} ${workspace.branch ?? "detached"} ${workspace.path}` },
-			actions: [{ id: "new", key: Key.ctrl("n"), hint: rawHint("ctrl+n", "new") }],
+			actions: [],
 			cancelLabel: "close",
 			maxVisible: 8,
 			renderItem: (workspace, state, width) => {
@@ -44,13 +44,12 @@ export function showWorkspacePanel(
 			},
 			onResult: (result) => {
 				if (result.kind === "cancel") done(undefined);
-				else if (result.kind === "action") done("new");
-				else done(result.items[0]);
+				else if (result.kind === "primary") done(result.items[0]);
 			},
 		});
 		const config = {
 			title: "Worktrees",
-			secondary: "One folder and branch per feature",
+			secondary: "Switch between the main checkout and worktree sessions",
 			body: list,
 			footer: { kind: "hints" as const, hints: list.getKeyHints() },
 		};
