@@ -1,9 +1,26 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { ToolRowVisualState } from "./tool-row-state.js";
+import type { DecisionClient, DecisionRoute, DecisionUsage } from "./decisions.ts";
 import type { ScriptSourceStore } from "./script-source.ts";
 import type { FileInjectionRequest, PreparedFileInjection } from "../src/file-injection/index.ts";
 
 export type TauAgentEvents = {
+	/** @internal Runtime-scoped classifier client. */
+	"tau:decisions.client": { accept(client: DecisionClient): void };
+	"tau:decisions.usage": DecisionUsage;
+	"tau:decisions.route": DecisionRoute | null;
+	/** @internal Register routing work before the note starts the next request. */
+	"tau:compaction.handoff": {
+		note: string;
+		ctx: ExtensionContext;
+		signal: AbortSignal;
+		waitFor(promise: Promise<void>): void;
+	};
+	"tau:compaction.level": {
+		level: "normal" | "notice" | "warning" | "forced" | "compacting";
+		tokens: number | null;
+		thresholds: { notice: number; warning: number; forced: number } | null;
+	};
 	/** @internal Soul's runtime-scoped prompt contributors. Each source becomes one named Pi prompt section. */
 	"tau:prompt.sources": {
 		accept(source: {
@@ -160,4 +177,10 @@ function subscribeToTauEvent<Name extends keyof TauAgentEvents>(
 
 export function setTauFooterItem(pi: EmitEventAPI, item: TauFooterItem): void {
 	emitTauEvent(pi, "tau:footer-item", item);
+}
+
+export function decisionClientFrom(pi: EmitEventAPI): DecisionClient | undefined {
+	const clients: DecisionClient[] = [];
+	emitTauEvent(pi, "tau:decisions.client", { accept: (client) => clients.push(client) });
+	return clients.length === 1 ? clients[0] : undefined;
 }

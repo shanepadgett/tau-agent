@@ -1,195 +1,171 @@
 # Tau
 
-Tau is a coding agent built to be a reliable partner during software work. It cares about quality code, explicit standards, efficient token use, and decisions that hold up after the chat ends. Extensions add focused capabilities; prompts expand into instructions for the next request.
+Tau is a coding agent. Use slash commands for the features below; the agent uses tools as needed while working.
 
 ## appshot
 
-Gives the agent macOS window discovery, screenshots, and app activation tools for visual validation. Requires macOS 14 and Screen & System Audio Recording permission.
+Lets the agent find, capture, and activate macOS windows to check an interface. Requires macOS 14 and Screen & System Audio Recording permission.
 
 ## aside
 
-Adds `/aside <question>` for a one-off question to the current model without putting the question or answer in the conversation. Choose the current conversation branch or no context. A thinking widget clears when the answer opens. Run `/aside` to reopen the latest answer and `/aside clear` to cancel or clear it.
+Use `/aside <question>` to ask the current model without adding the exchange to your conversation. Choose whether to include conversation context. `/aside` reopens the latest answer; `/aside clear` cancels or clears it.
 
 ## attention
 
-Shows attention state when Tau needs the user to look at the chat, finishes a compaction, or summarizes an abandoned branch.
+Signals when Tau needs your attention, finishes compaction, or summarizes an abandoned branch.
 
 ## auto-name
 
-Names sessions from their first request so saved sessions remain findable.
+Names sessions from their first request so you can find them later.
 
 ## branch
 
-Adds `/branch` to create and switch Git branches from the TUI. Switching
-confirms first, then removes untracked files with `git clean -fd` while keeping
-ignored files. Press `Ctrl+F` in the picker to fetch remotes and refresh.
+Use `/branch` to create or switch Git branches. Switching asks for confirmation and deletes untracked files with `git clean -fd`, but keeps ignored files. `Ctrl+F` fetches remotes and refreshes the picker.
 
 ## cache-diagnostics
 
-Records private prompt-cache fingerprints without storing prompt content. Run `/cache-debug` after suspicious cache misses to write a bounded investigation report under `~/.pi/agent/cache-diagnostics/reports/`.
+Use `/cache-debug` to investigate prompt-cache misses. Reports are saved under `~/.pi/agent/cache-diagnostics/reports/` without storing prompt content.
 
 ## clear-screen
 
-Adds `/clear-screen` to clear terminal output without changing the session.
+Use `/clear-screen` to clear terminal output without changing the session.
 
 ## codex-priority
 
-Requests Codex priority processing (Fast mode) for every `gpt-6-luna` request on the `openai-codex` provider, including the agent loop, compaction, tool approval, auto-naming, commit, and handoff. It has no command or setting. Cost uses OpenAI's 2.5x Fast mode rate for GPT-6 models. Do not run another extension that overlays `openai-codex` or sets `service_tier`.
+Automatically requests Fast mode for `gpt-6-luna` on `openai-codex`. Fast mode costs 2.5 times the standard rate. Do not combine it with another extension that changes `openai-codex` or `service_tier`.
 
 ## commit
 
-Adds `/commit` for semantic commit grouping, message review, and committing repository changes. Set `extensions.commit.push` to `"ask"` (default) to offer a push in the commit panel with “No” selected, `true` to push automatically, or `false` to skip pushing and the question. Branches without an upstream are pushed to `origin` with tracking set automatically.
+Use `/commit` to group changes, review messages, and commit. `extensions.commit.push` controls pushing: `"ask"` by default, `true` to push automatically, or `false` to skip. Pushing a branch without an upstream sets tracking on `origin`.
 
 ## cost-report
 
-Adds `/cost-report` to build an HTML spend report from local session usage. Pick a time frame (past 7 days, current week, current month, year to date, or a specific month) and scope (current project or all sessions). Tau scans sessions, writes under `~/.pi/tau/cost-reports/`, opens the file, and notifies with the path. Empty windows warn without writing a file.
+Use `/cost-report` to view spending for a chosen period and either the current project or all sessions. The HTML report opens automatically and is saved under `~/.pi/tau/cost-reports/`. Totals include decision-model spending.
 
 ## compaction
 
-Writes compaction summaries (automatic, `/compact`, and overflow recovery) with a cheaper model from the same provider as the session, so Opus, GPT-6.1 Sol, and Astra sessions do not pay their own rates to summarize themselves. Summaries never cross providers, and a notice names the model that wrote each one. When no cheaper model fits, Pi's default compaction runs.
+Tau automatically replaces long conversation history with a checkpoint so work can continue. Use `/compact` to do this manually. Configure `extensions.compaction.selfCompact` to disable proactive compaction or change its thresholds.
+
+At the hard cutoff, the agent must compact before using other tools. Failures are reported; a failed self-compaction keeps that restriction until a retry succeeds.
 
 ## context
 
-Adds `/context` to browse and inject reusable repository work scopes from `.pi/contexts`. Selecting entries injects them once into the conversation: `read` paths as complete files, `show` targets as current declaration slices, `outline` paths as Explore structures, and one hidden note listing `references` plus instructions to treat the injected material as current. Run `/context` again to inject more. Edit catalog files by hand when work scopes change. Domain folders are `NN_slug` tabs (ordered by the two-digit prefix; UI shows the slug), TOML files are concepts, and TOML sections are selectable entries.
+Use `/context` to choose reusable project information to add to the conversation. Run it again to add more. Define these scopes in `.pi/contexts` TOML files, grouped in `NN_slug` folders.
+
+## decisions
+
+Uses Jev or Luna to approve routine tool requests, remind the agent to answer questions first, and select a model for the work. Routing uses ChatGPT and Claude subscription logins; choosing a model yourself stops automatic routing for that session.
+
+Configure these features under `extensions.decisions`. Set `enabled` to `false` to disable them, or choose `auto`, `jev`, or `luna` for `classifier`. Missing credentials or failed decisions do not stop work.
 
 ## explore
 
-Structural source tools on in-process tree-sitter (WASM), available on every Node-supported platform. Registers `outline`, `show`, `discover`, `ast_search`, `deps`, `reverse_deps`, `callers`, `callees`, `references`, `implementations`, `impact`, and `context`; `show` takes a top-level `targets` array of path + name objects (+ line when needed). Pi keeps `ls` / `find` / `grep` / `read`. Large full `read`/autoread of registered source (including Markdown) returns outline by default (`explore.read.*`); ranged `read` or `show` for bodies. Disable with `explore.read.enabled: false`.
+Lets the agent inspect code structure, find declarations and references, and follow calls and dependencies. It can request a specific function or range instead of reading a whole file. Large file reads may show an outline first.
 
 ## footer
 
-Adds `/footer` to toggle and refresh Tau’s status footer.
+Shows models, context usage, cache-hit rate, costs, and project status. Use `/footer` to toggle it, `/footer on` or `/footer off` to set visibility, and `/footer refresh` to refresh it.
 
 ## handoff
 
-Adds `/handoff <goal>` to start a fresh linked session from the current conversation. Tau generates an opening prompt, autoreads the relevant project files it already knows about, and leaves the prompt in the editor for review instead of submitting it.
+Use `/handoff <goal>` to start a fresh linked session. Tau prepares a prompt with relevant project files and leaves it in the editor for you to review and send.
 
 ## ideas
 
-Adds `/ideas` to log rough ideas or open the ideas browser.
+Use `/ideas` to save ideas or browse saved ones.
 
 ## image-gen
 
-Gives the agent an OpenAI GPT Image and xAI Grok Imagine generation and editing tool. It follows the parent model by default and can override the provider per request. Run `/login openai-codex` or `/login xai` before use. Generated images are saved for inspection.
+Lets the agent generate and edit images with OpenAI or xAI. Run `/login openai-codex` or `/login xai` first. The tool follows the conversation's provider by default; you can ask for a different one. Generated images are saved for inspection.
 
 ## manage-sessions
 
-Adds `/manage-sessions` to browse saved sessions and `/sweep` to archive or delete the current session after starting a new one.
+Use `/manage-sessions` to browse saved sessions. `/sweep` starts a new session, then lets you archive or delete the previous one.
 
 ## md-lint
 
-Formats Markdown files automatically. After a tool call changes a Markdown file, Tau runs markdownlint fixes with a packaged default ruleset silently in the background, without stopping the agent or entering its context. A repository's own markdownlint config overrides the packaged rules, and `extensions.mdLint` settings control the extension (`enabled`, `ignoreGlobs`).
+Automatically formats Markdown after edits, using your repository's Markdown lint configuration when present. Configure or disable it under `extensions.mdLint`.
 
 ## patch
 
-Replaces separate edit/write operations with one multi-file `patch` tool. It can create, rewrite, edit, move, and delete files in one structured call. Fewer tool calls means fewer turns, and each avoided turn prevents the full chat context from being sent again. Tau enables `patch` only for OpenAI and OpenAI Codex models and uses `edit` and `write` for every other provider.
+Lets the agent create, edit, move, or delete several files in one operation. Used with OpenAI and OpenAI Codex; other providers use separate edit and write tools.
 
 ## qna
 
-Adds `/qna [context]` to re-ask the agent's last question or set of questions through a structured UI. Optional context guides the framing. Supports single choice, multiple choice, yes/no, and typed answers, with optional recommendations and an Additional Context tab. It is only active when you manually run the command.
+Use `/qna` to answer the agent's last questions in a form. It supports choices and typed answers. `/qna <context>` adds guidance for framing the questions. It runs only when you invoke it.
 
 ## ready
 
-Adds `/ready` to scan agent-readiness rails (cold start, toolchain, verify, lint/entropy, policy, standards, context, and related signals). Choose Markdown or HTML; Tau writes a timestamped report under `.pi/tau/ready/` and notifies with the path. Scan-only in v1 — no model judgment and no scores.
+Use `/ready` to scan how well a repository supports agent work, including setup, checks, standards, and context. Choose a Markdown or HTML report, saved under `.pi/tau/ready/`. The scan does not score the repository.
 
 ## review
 
-Adds `/review [direction]` for an isolated simplify, architecture, or correctness review. With no direction, it reviews current Git changes. Free-form direction reviews the requested part of the repository even when the working tree is clean. Choose a review type and logged-in provider, then Tau writes the result as Markdown under `.pi/tau/reviews/` without adding it to the parent agent context.
+Use `/review` to review current Git changes, or `/review <direction>` to review a specified part of the repository. Choose a review type and logged-in provider. Results are saved under `.pi/tau/reviews/` without adding the review to the main conversation.
 
 ## reference
 
-Adds `/reference` to manage separate repositories kept outside the current project for inspiration or comparison. Add one with `/reference new <git-url>`, update it, switch its referenced branch, or open it in an editor. Select references and explain why they matter; Tau then puts their paths and that reason into the editor for the agent. References stay outside the project so the agent does not wander into unrelated code unless you explicitly point it there.
+Use `/reference` to manage separate repositories for comparison or inspiration. `/reference new <git-url>` adds one. Select references and explain why they matter; Tau puts their paths and your explanation in the editor for the agent.
 
 ## run-summary
 
-Shows a compact display-only marker after each run with wall time and model cost. It does not enter agent context.
+Shows elapsed time and model cost after each run.
 
 ## runtime-context
 
-Supplies Soul with the local date and root directory snapshot. Both remain fixed across turns, reload, and resume, and refresh after successful compaction.
+Gives the agent the local date and a list of top-level project files and folders. This information refreshes after successful compaction.
 
 ## eval
 
-Gives the agent a first-class `eval` tool for custom Python and Node.js code, including one-off calculations, parsing, transformations, and automation. The agent uses dedicated tools for ordinary reads, searches, and edits; for shell-side inspection, it uses concise read-only commands and filters output at the source with tools such as `rg`, `find`, and `jq`. Custom code for these runtimes goes through `eval`, never bash snippets, heredocs, or temporary source files. Bash remains useful for direct shell commands, existing project commands, and tasks that genuinely need shell-specific behavior. Naturally fitting, known-safe read-only bash commands may bypass a reviewer call; custom code should not be moved into bash to reach that fast path. On failure, the tool returns a `scriptId`; the agent retries with targeted `{oldText,newText}` edits against the script it already wrote rather than resending the whole script. Runtimes are detected from the environment (Python 3 via `python3`; `node` is the local Node.js runtime with `--experimental-strip-types`, Node 22.6+ — full Node APIs, TypeScript with erasable syntax or plain JavaScript). The tool registers only available runtimes and is hidden from the prompt if none are present.
-
-Each call runs in a fresh process. Code previews show the first 10 wrapped screen rows with syntax highlighting as the agent writes the call, followed by a remaining-row count. The limit follows the terminal width, including long source lines. Expand the tool row to see all received code. Retry previews show removed and added lines with the same preview limit. A spaced Output or Error divider separates the result from the input preview. Input counts wrapped rows and output counts source lines; completed calls show one expansion hint at the end of the result when either preview hides content. The agent is instructed to prefer readable scripts with the language's usual indentation and line breaks so failed runs are easy to edit.
+Lets the agent run Python or Node.js code for calculations, data processing, and automation. Each call runs in a fresh process. You can expand the tool result to inspect its code and output. Requires `python3` or Node.js 22.6 or newer.
 
 ## silent-command-runner
 
-Configure `extensions.silentCommandRunner.afterWrite` for silent fixes after modifying tools finish and `afterRun` for final read-only checks through the agent's no-argument `run_checks` tool. Use readable check names and optional `details` descriptions; results show names rather than shell commands. Both system guidance and the tool description require the agent to call it only in runs that edit repository files, after all work and immediately before its final summary, directly or last within codemode after awaiting all writes. Discussion, read-only investigation, and in-memory execution without repository edits skip the tool; a write-capable tool call alone does not require it. They list configured check names, commands, and details and forbid manual runs of those checks or equivalents; needed builds and relevant focused tests are allowed, but full suites are not. Nested checks finish pending fixes first. Failures return through the tool so it can batch repairs and check again. In a file-editing run, any later write-capable call, including a nested call in the same script, invalidates verification. Missing or stale verification triggers applicable automatic settlement checks as a safety net, not a substitute for the required call after file edits; fallback failures continue the run. Fixes otherwise run once after an outer codemode call, not after each nested tool. Use unquoted `{files}` in an `afterWrite` command to pass changed-file paths safely. Disable the extension through Pi's extension controls.
-
-Check progress appears in the tool row for direct calls and in a temporary widget for codemode calls and automatic settlement checks. Tool calls show their final result without duplicate notifications; automatic settlement checks still notify about passed checks.
-
-To save tokens, route your repository's checks through reporting scripts invoked by Mise, npm, or your task runner. Keep tool-specific parsing in your repository and emit actionable failures without banners, progress, or passing results. Preserve locations, error codes, assertion differences, failing exit codes, and an explicit fallback with a full-log reference for unknown failures. Silent Command Runner stays generic.
+Runs configured fixes after file changes and checks before the agent reports finished work. Configure commands under `extensions.silentCommandRunner.afterWrite` and `afterRun`. Use `{files}` in an `afterWrite` command for the changed paths. Disable the extension through Pi's extension controls.
 
 ## soul
 
-Supplies Tau's communication, discussion, planning, execution, and coding instructions, plus tool-use rules, tool guidance, and context from other Tau extensions. The date and directory snapshot stay fixed until successful compaction. Other changes, such as an edited `AGENTS.md` after `/reload`, arrive as appended updates without rewriting earlier instructions.
-
-Loads `~/.agents/AGENTS.md` as a separate user-level instructions section when the extension initializes, alongside Pi's global and project instructions. Content stays fixed until `/reload`; missing or empty files add no instructions.
-
-Tool-use guidance defaults to dedicated tools for ordinary file work, concise read-only bash commands and pipelines for shell-side inspection, and `eval` for custom Python or Node code. It tells the agent to filter output at the source, keep commands visible, and avoid moving custom code into bash to reach the read-only fast path.
+Guides how Tau communicates, plans, and works. It also loads personal instructions from `~/.agents/AGENTS.md`. Use `/reload` after changing instruction files.
 
 ## stash
 
-Adds `Alt+S` to stash the current prompt draft and `/pop` to browse stashed drafts and put one back in the editor.
+Press `Alt+S` to stash your prompt draft. Use `/pop` to browse drafts and restore one to the editor.
 
 ## tau-help
 
-Adds `/tau-help` to show this guide as rendered Markdown in the chat.
+Use `/tau-help` to open this guide in the chat.
 
 ## tau
 
-Adds `/tau`, `/tau init [--global|--project]`, and `/tau doctor` for Tau setup and diagnostics. Startup and doctor report Pi versions below the supported minimum, or unsupported prereleases, with an installation command. Newer stable Pi versions satisfy the requirement.
+Use `/tau` for Tau setup, `/tau init [--global|--project]` to initialize it, and `/tau doctor` to check the installation. Unsupported Pi versions are reported with an installation command.
 
 ## tool-approval
 
-Reviews agent `bash` and `eval` requests before they run. Common read-only bash commands skip review. Visible, understood requests need one review; hidden local execution targets get bounded inspection and one final review, without repository exploration. Set `extensions.toolApproval.autoApprove` to run every reviewer-approved request without another confirmation. Those auto-approvals show a user-only marker. The reviewer approves routine, low-impact local and external-service work, including read-only Jira or Confluence requests, additive document creation without consequential side effects, and normal authentication with existing credentials. It asks before meaningful data loss, disruptive system or production changes, privilege or access changes, secret or sensitive-data disclosure, substantial payments, or consequential publication and workflows. Code the reviewer cannot inspect is not a reason to ask; it decides from what the request visibly does. Approval explanations cover the effect, affected target, risk, and recovery difficulty in plain language. Changes to inspected files invalidate approval. Reviewer failures fall back to human approval and send an attention notification. In the terminal approval panel, press `n` to add a note to Approve or Reject before choosing. Rejection notes tell the agent why the request was blocked; approval notes reach it with the tool result without changing the request. Reject with a note to ask for a revised request.
+Reviews the agent's shell and code requests before they run. Common read-only shell commands skip review; routine requests may be approved automatically. Sensitive actions, such as production changes, publishing, payments, or deleting valuable data, require your approval.
 
-Approval decisions are saved privately in the session JSONL, including allowlist skips, review stages and models, inspected paths, evidence-gap categories, and user decisions. These records stay out of model context and do not copy scripts, arguments, file contents, or raw errors.
-
-Scoped project edits, builds, tests, and generated-file cleanup should be approved whether they use Python, Node, or bash. Reading, replacing, and writing project text is ordinary editing; computed data paths and a less suitable tool choice do not themselves require confirmation. Destructive changes to valuable databases, remote objects, backups, or unrelated work do. Clearly disposable local test data remains routine validation.
+Set `extensions.toolApproval.autoApprove` to let approved requests run without another confirmation. In the approval panel, press `n` to attach a note to approval or rejection. Reject with a note when you want the agent to revise its request. If automatic review fails, Tau asks you to decide.
 
 ## tool-loader
 
-Keeps specialist tool groups out of every request. Deferred groups load through Pi's `tool_search`, which Tau keeps active while such groups exist; codemode groups are called from code mode scripts, and Tau keeps `codemode` active while such groups exist. Tau registers `image` and `appshot` as deferred groups and `web` as a codemode group; project or global package extensions can add groups with `registerToolGroup()` from `@shanepadgett/tau-agent`. All models can load tools. Compatible models preserve the cached prefix; other models can incur a cache miss when tools are activated. Loading never triggers compaction.
+Loads specialist tools when the agent needs them instead of including every tool in every request. Loading tools can cause a prompt-cache miss on some models.
 
 ## web
 
-Gives the agent `websearch` and `webfetch` for web research, reached through code mode so raw results stay out of context. `websearch` uses the active Codex, Anthropic, or Grok login and falls back to Exa; OpenCode Go and other providers use Exa directly. Search inputs are `query`, `maxSources`, `contextMaxCharacters`, and `timeout`. Tau keeps `codemode` active while the web group exists.
-
-`webfetch` preserves code blocks and tables in Markdown, resolves relative links against redirected page URLs, and retains complete overflow in session-scoped files. It supports text and inline images; PDFs and other binary downloads are unsupported.
+Lets the agent search the web and fetch pages. Search uses an available Codex, Anthropic, or Grok login, with Exa as a fallback. Page fetching supports text and images, but not PDFs or other binary downloads.
 
 ## worktree
 
-Adds `/wt` to immediately copy the current checkout into an automatically named worktree and continue the chat in its own session. It starts from current `HEAD`, carries unfinished edits and staging state, and copies dependencies and ignored local files using copy-on-write where available or ordinary copies otherwise. The source stays untouched. In cmux it opens a named tab; elsewhere it switches here. No name, setup prompts, or setup command are needed. Nested Git metadata, including initialized submodules, is refused; incomplete copies are reported and not opened.
+Use `/wt` to copy your current checkout, including unfinished edits, into a new worktree and continue in its own session. The source checkout stays untouched. Checkouts containing nested Git repositories or initialized submodules are not supported.
 
-Use `/wt list` to browse main and linked worktrees, switch sessions, open another tab, show details, or review individual removal and missing-registration cleanup. External worktrees can be opened, but Tau does not delete their folders. Use `/wt clean` to preview unused, clean Tau worktrees and remove them after one confirmation. Removal skips occupied, current, main, missing, locked, dirty, external, and unreadable workspaces; keeps branches and saved chats; and warns before deleting ignored local files. Changes during confirmation cancel that workspace's removal. Missing-registration cleanup warns about unmounted drives and never prunes other registrations. Opening an occupied checkout starts a separate chat; concurrent edits and Git operations can still interfere.
+Use `/wt list` to browse and switch worktrees. `/wt clean` previews unused, clean Tau worktrees and asks before removing them. Cleanup keeps branches and saved chats, warns before deleting ignored files, and skips dirty or occupied worktrees. Tau does not delete external worktree folders.
 
-Session startup clears abandoned tracking automatically. Live same-host processes do not expire; session records from another hostname expire after 24 hours and can stop detecting long-running sessions under that hostname. Exclusive removal locks do not expire by age.
+Opening an occupied checkout starts another chat there; concurrent edits and Git operations can interfere. Occupancy tracking from another machine expires after 24 hours, so it may not detect longer-running sessions there.
 
 ## Prompts
 
-Prompt commands expand into instructions before the request reaches the agent.
+Prompt commands add instructions to your next request.
 
-### cavemanify
-
-`/cavemanify` makes prose short, blunt, and direct.
-
-### implement
-
-`/implement` provides the implementation workflow for an approved change.
-
-### interview
-
-`/interview` drives practical questions when a request is underspecified.
-
-### plan-feature
-
-`/plan-feature` explores a feature and produces a scoped plan before editing.
-
-### plan-implementation
-
-`/plan-implementation` turns an approved plan into concrete implementation steps.
-
-Keep this file updated when an extension or prompt is added, removed, renamed, or its basic usage changes.
+- `/cavemanify` requests short, blunt prose.
+- `/implement` starts implementation of an approved change.
+- `/interview` asks questions to clarify a request.
+- `/plan-feature` explores a feature and plans the work.
+- `/plan-implementation` turns an approved plan into implementation steps.

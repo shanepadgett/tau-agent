@@ -1,6 +1,6 @@
 # Footer Extension
 
-Replaces Pi’s default footer with Tau’s compact two-line footer.
+Replaces Pi’s default footer with Tau’s three-row footer.
 
 ## Commands
 
@@ -14,10 +14,15 @@ Replaces Pi’s default footer with Tau’s compact two-line footer.
 ## Layout
 
 ```text
-git • provider/model (thinking)                S $0.18 · D $2.43
-cwd • session                                  footer items
+auto:route • provider/model (thinking) • provider/classifier     [••••·--?---!-|------] • CH98% • S|$0.18 D|$2.43
+cwd • session                                        other extension statuses
+git branch (changes)                                 footer items
 ```
 
 Other Tau extensions can publish bottom-right items with `setTauFooterItem()` from `shared/events.ts (or public event bus docs)`.
 
 No polling. Git and daily cost refresh on lifecycle events or `/footer refresh`.
+
+Automatic routing adds `auto:<route>` before the model. The classifier appears beside it once as `provider/model`, with the same dim style as the main model. The context bar precedes cache-hit rate, with session and daily costs at the far right. Costs include decision calls.
+
+The context bar shows cached, used, and free space, with markers for compaction thresholds. Colored dots show usage progressing from green to yellow to red. A NOTICE, WARNING, or FORCED tag identifies the current level. Self-compaction progress appears above the editor.

@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import { join, relative } from "node:path";
 import type { ExtensionAPI, ExtensionContext, Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { onTauEvent } from "../../shared/events.ts";
+import { onTauEvent, onTauEventImmediately, type TauAgentEvents } from "../../shared/events.ts";
 import { loadTauExtensionSettings, updateTauExtensionSettings } from "../../shared/settings/load.ts";
 import footerSettings from "./settings.ts";
 
@@ -44,6 +44,23 @@ export default function footerExtension(pi: ExtensionAPI): void {
 	let dailyCost: number | undefined;
 	let dailyRefresh: Promise<void> | undefined;
 	const items = new Map<string, FooterItem>();
+	let route: string | null = null;
+	let compactionLevel: TauAgentEvents["tau:compaction.level"] | null = null;
+	onTauEventImmediately(pi, "footer.routing", "tau:decisions.route", (selection) => {
+		route = selection?.route ?? null;
+		render();
+	});
+	onTauEventImmediately(pi, "footer.compaction", "tau:compaction.level", (level) => {
+		compactionLevel = level;
+		render();
+	});
+	function restoreRoute(ctx: ExtensionContext) {
+		const latest = [...ctx.sessionManager.getBranch()]
+			.reverse()
+			.find((entry) => entry.type === "custom" && entry.customType === "tau.decisions.route");
+		const data = latest?.type === "custom" ? asRecord(latest.data) : undefined;
+		route = typeof data?.route === "string" ? data.route : null;
+	}
 
 	function render(): void {
 		requestRender?.();
@@ -77,21 +94,24 @@ export default function footerExtension(pi: ExtensionAPI): void {
 					const model = currentCtx.model ? `${currentCtx.model.provider}/${currentCtx.model.id}` : "no-model";
 					const thinking = pi.getThinkingLevel();
 					const separator = theme.fg("dim", " • ");
-					const topLeft = [theme.fg("dim", gitText(git)), theme.fg("dim", `${model} (${thinking})`)]
+					const topLeft = [
+						`${route ? `auto:${route} · ` : ""}${model} (${thinking})`,
+						footerData.getExtensionStatuses().get("decisions") ?? "",
+					]
 						.filter(Boolean)
+						.map((text) => theme.fg("dim", text))
 						.join(separator);
 					const sessionUsage = sessionCost(currentCtx);
 					const session = formatCost(sessionUsage.cost);
 					const daily = dailyCost === undefined ? "$?" : formatCost(dailyCost);
-					const topRight = statsText(theme, currentCtx, sessionUsage, session, daily);
-					const bottomLeft = [shortenPath(currentCtx.cwd), sessionName(currentCtx)].filter(Boolean).join(" • ");
-					const bottomRight = [extensionStatusesText(footerData.getExtensionStatuses()), footerItemsText(items)]
-						.filter(Boolean)
-						.join(" • ");
+					const topRight = statsText(theme, currentCtx, sessionUsage, session, daily, compactionLevel);
+					const middleLeft = [shortenPath(currentCtx.cwd), sessionName(currentCtx)].filter(Boolean).join(" • ");
+					const middleRight = extensionStatusesText(footerData.getExtensionStatuses());
 
 					return [
 						renderSplit(width, topLeft, topRight),
-						renderSplit(width, theme.fg("dim", bottomLeft), theme.fg("dim", bottomRight)),
+						renderSplit(width, theme.fg("dim", middleLeft), theme.fg("dim", middleRight)),
+						renderSplit(width, theme.fg("dim", gitText(git)), theme.fg("dim", footerItemsText(items))),
 					];
 				},
 			} satisfies Component & { dispose(): void; invalidate(): void };
@@ -202,11 +222,13 @@ export default function footerExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
+		restoreRoute(ctx);
 		const settings = await loadTauExtensionSettings(ctx, footerSettings);
 		setEnabled(ctx, settings.enabled);
 		onStateChange(ctx);
 	});
 	pi.on("session_tree", (_event, ctx) => {
+		restoreRoute(ctx);
 		onStateChange(ctx, false);
 	});
 	pi.on("model_select", (_event, ctx) => {
@@ -224,6 +246,8 @@ export default function footerExtension(pi: ExtensionAPI): void {
 		unsubscribeFooterItems = undefined;
 		requestRender = undefined;
 		activeCtx = undefined;
+		route = null;
+		compactionLevel = null;
 		footerInstalled = false;
 		ctx.ui.setFooter(undefined);
 	});
@@ -295,6 +319,10 @@ function isConflict(x: string | undefined, y: string | undefined): boolean {
 function sessionCost(ctx: Pick<ExtensionContext, "sessionManager">): UsageSummary {
 	let usage = zeroUsage();
 	for (const entry of ctx.sessionManager.getEntries()) {
+		if (entry.type === "custom" && entry.customType === "tau.decisions.usage") {
+			usage.cost += numberOrZero(asRecord(entry.data)?.cost);
+			continue;
+		}
 		if (entry.type === "message" && entry.message.role === "assistant") {
 			usage = addUsage(usage, normalizeUsage(entry.message.usage), true);
 			continue;
@@ -310,26 +338,65 @@ function sessionCost(ctx: Pick<ExtensionContext, "sessionManager">): UsageSummar
 	return usage;
 }
 
-function statsText(theme: Theme, ctx: ExtensionContext, usage: UsageSummary, session: string, daily: string): string {
-	const tokens = [
-		`↑${formatTokens(usage.input)}`,
-		`↓${formatTokens(usage.output)}`,
-		`R${formatTokens(usage.cacheRead)}`,
-		`W${formatTokens(usage.cacheWrite)}`,
-	];
-	if ((usage.cacheRead || usage.cacheWrite) && usage.latestCacheHitRate !== undefined)
-		tokens.push(`CH${usage.latestCacheHitRate.toFixed(1)}%`);
-	return [contextText(theme, ctx), theme.fg("dim", tokens.join(" ")), theme.fg("dim", `S|${session} D|${daily}`)]
+function statsText(
+	theme: Theme,
+	ctx: ExtensionContext,
+	usage: UsageSummary,
+	session: string,
+	daily: string,
+	level: TauAgentEvents["tau:compaction.level"] | null,
+): string {
+	return [
+		contextText(theme, ctx, level),
+		usage.latestCacheHitRate === undefined ? "" : theme.fg("dim", `CH${usage.latestCacheHitRate.toFixed(1)}%`),
+		theme.fg("dim", `S|${session} D|${daily}`),
+	]
 		.filter(Boolean)
 		.join(theme.fg("dim", " • "));
 }
 
-function contextText(theme: Theme, ctx: ExtensionContext): string {
+function contextText(
+	theme: Theme,
+	ctx: ExtensionContext,
+	level: TauAgentEvents["tau:compaction.level"] | null,
+): string {
 	const usage = ctx.getContextUsage();
 	const contextWindow = usage?.contextWindow ?? ctx.model?.contextWindow ?? 0;
 	const percentValue = typeof usage?.percent === "number" ? usage.percent : undefined;
-	const percent = percentValue === undefined ? "?" : `${percentValue.toFixed(1)}%`;
-	return `${theme.fg(contextPercentColor(percentValue), percent)}${theme.fg("dim", `/${formatTokens(contextWindow)}`)}`;
+	const thresholds = level?.thresholds;
+	const tag = level && level.level !== "normal" && level.level !== "compacting" ? ` ${level.level.toUpperCase()}` : "";
+	const currentTokens = usage?.tokens ?? level?.tokens ?? null;
+	const latest = [...ctx.sessionManager.buildSessionProjection().messages]
+		.reverse()
+		.find((message) => message.role === "assistant");
+	const cachedTokens =
+		latest?.role === "assistant" && currentTokens !== null
+			? Math.max(0, Math.min(currentTokens, latest.usage.cacheRead))
+			: 0;
+	const usedCells =
+		contextWindow > 0 && currentTokens !== null ? Math.min(20, Math.ceil((currentTokens / contextWindow) * 20)) : 0;
+	const cachedCells = contextWindow > 0 ? Math.min(usedCells, Math.floor((cachedTokens / contextWindow) * 20)) : 0;
+	const color: ThemeColor =
+		level?.level === "forced" ? "error" : level?.level === "warning" ? "warning" : contextPercentColor(percentValue);
+	const bar = Array.from({ length: 20 }, (_value, index) => {
+		let cell =
+			currentTokens === null || contextWindow <= 0 ? "?" : index < cachedCells ? "•" : index < usedCells ? "·" : "-";
+		let cellColor: ThemeColor = color;
+		if (thresholds && contextWindow > 0) {
+			cellColor = "success";
+			for (const [name, marker, afterColor] of [
+				["notice", "?", "warning"],
+				["warning", "!", "error"],
+				["forced", "|", "error"],
+			] as const) {
+				const position = Math.max(0, Math.min(19, Math.floor((thresholds[name] / contextWindow) * 20)));
+				if (position === index) cell = marker;
+				if (index > position) cellColor = afterColor;
+			}
+		}
+		return theme.fg(cell === "•" || cell === "·" ? cellColor : "dim", cell);
+	}).join("");
+	return `${theme.fg("dim", "[")}${bar}${theme.fg("dim", `]${tag}`)}`;
 }
 
 function contextPercentColor(percent: number | undefined): ThemeColor {
@@ -337,14 +404,6 @@ function contextPercentColor(percent: number | undefined): ThemeColor {
 	if (percent > 80) return "error";
 	if (percent > 50) return "warning";
 	return "dim";
-}
-
-function formatTokens(count: number): string {
-	if (count < 1000) return `${Math.round(count)}`;
-	if (count < 10_000) return `${(count / 1000).toFixed(1)}k`;
-	if (count < 1_000_000) return `${Math.round(count / 1000)}k`;
-	if (count < 10_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-	return `${Math.round(count / 1_000_000)}M`;
 }
 
 async function scanDailyCost(): Promise<number> {
@@ -368,6 +427,14 @@ async function scanDailyCost(): Promise<number> {
 function usageIdentityFromEntry(
 	entry: Record<string, unknown>,
 ): { usageValue: unknown; timestamp: number; identity: unknown[] } | undefined {
+	if (entry.type === "custom" && entry.customType === "tau.decisions.usage") {
+		const data = asRecord(entry.data);
+		return {
+			usageValue: { cost: { total: numberOrZero(data?.cost) } },
+			timestamp: timestampMs(undefined, entry.timestamp),
+			identity: [entry.customType, entry.id, data?.model, data?.feature],
+		};
+	}
 	if (entry.type === "message") {
 		const message = asRecord(entry.message);
 		if (!message) return undefined;
@@ -514,7 +581,7 @@ function footerItemsText(items: ReadonlyMap<string, FooterItem>): string {
 
 function extensionStatusesText(statuses: ReadonlyMap<string, string>): string {
 	return [...statuses]
-		.filter(([, text]) => text.trim())
+		.filter(([key, text]) => key !== "decisions" && text.trim())
 		.sort(([left], [right]) => left.localeCompare(right))
 		.map(([, text]) => text.trim())
 		.join(" • ");

@@ -31,6 +31,506 @@
 					},
 					"additionalProperties": false
 				},
+				"compaction": {
+					"type": "object",
+					"properties": {
+						"selfCompact": {
+							"type": "object",
+							"properties": {
+								"enabled": {
+									"type": "boolean",
+									"default": true
+								},
+								"noticeTokens": {
+									"type": "integer",
+									"minimum": 1,
+									"default": 100000
+								},
+								"warningTokens": {
+									"type": "integer",
+									"minimum": 2,
+									"default": 150000
+								},
+								"forcedTokens": {
+									"type": "integer",
+									"minimum": 3,
+									"default": 200000
+								}
+							},
+							"additionalProperties": false
+						}
+					},
+					"additionalProperties": false
+				},
+				"decisions": {
+					"type": "object",
+					"properties": {
+						"enabled": {
+							"type": "boolean",
+							"default": true
+						},
+						"classifier": {
+							"anyOf": [
+								{
+									"type": "string",
+									"const": "auto"
+								},
+								{
+									"type": "string",
+									"const": "jev"
+								},
+								{
+									"type": "string",
+									"const": "luna"
+								}
+							],
+							"default": "auto"
+						},
+						"approval": {
+							"type": "object",
+							"properties": {
+								"enabled": {
+									"type": "boolean",
+									"default": true
+								}
+							},
+							"additionalProperties": false
+						},
+						"answerFirst": {
+							"type": "object",
+							"properties": {
+								"enabled": {
+									"type": "boolean",
+									"default": true
+								}
+							},
+							"additionalProperties": false
+						},
+						"routing": {
+							"type": "object",
+							"properties": {
+								"enabled": {
+									"type": "boolean",
+									"default": true
+								},
+								"routes": {
+									"type": "object",
+									"properties": {
+										"quick": {
+											"type": "object",
+											"properties": {
+												"description": {
+													"type": "string",
+													"minLength": 1
+												},
+												"provider": {
+													"anyOf": [
+														{
+															"type": "string",
+															"const": "openai-codex"
+														},
+														{
+															"type": "string",
+															"const": "anthropic"
+														}
+													]
+												},
+												"model": {
+													"type": "string",
+													"minLength": 1
+												},
+												"thinking": {
+													"anyOf": [
+														{
+															"type": "string",
+															"const": "off"
+														},
+														{
+															"type": "string",
+															"const": "minimal"
+														},
+														{
+															"type": "string",
+															"const": "low"
+														},
+														{
+															"type": "string",
+															"const": "medium"
+														},
+														{
+															"type": "string",
+															"const": "high"
+														},
+														{
+															"type": "string",
+															"const": "xhigh"
+														},
+														{
+															"type": "string",
+															"const": "max"
+														}
+													]
+												}
+											},
+											"additionalProperties": false
+										},
+										"general": {
+											"type": "object",
+											"properties": {
+												"description": {
+													"type": "string",
+													"minLength": 1
+												},
+												"provider": {
+													"anyOf": [
+														{
+															"type": "string",
+															"const": "openai-codex"
+														},
+														{
+															"type": "string",
+															"const": "anthropic"
+														}
+													]
+												},
+												"model": {
+													"type": "string",
+													"minLength": 1
+												},
+												"thinking": {
+													"anyOf": [
+														{
+															"type": "string",
+															"const": "off"
+														},
+														{
+															"type": "string",
+															"const": "minimal"
+														},
+														{
+															"type": "string",
+															"const": "low"
+														},
+														{
+															"type": "string",
+															"const": "medium"
+														},
+														{
+															"type": "string",
+															"const": "high"
+														},
+														{
+															"type": "string",
+															"const": "xhigh"
+														},
+														{
+															"type": "string",
+															"const": "max"
+														}
+													]
+												}
+											},
+											"additionalProperties": false
+										},
+										"frontend": {
+											"type": "object",
+											"properties": {
+												"description": {
+													"type": "string",
+													"minLength": 1
+												},
+												"provider": {
+													"anyOf": [
+														{
+															"type": "string",
+															"const": "openai-codex"
+														},
+														{
+															"type": "string",
+															"const": "anthropic"
+														}
+													]
+												},
+												"model": {
+													"type": "string",
+													"minLength": 1
+												},
+												"thinking": {
+													"anyOf": [
+														{
+															"type": "string",
+															"const": "off"
+														},
+														{
+															"type": "string",
+															"const": "minimal"
+														},
+														{
+															"type": "string",
+															"const": "low"
+														},
+														{
+															"type": "string",
+															"const": "medium"
+														},
+														{
+															"type": "string",
+															"const": "high"
+														},
+														{
+															"type": "string",
+															"const": "xhigh"
+														},
+														{
+															"type": "string",
+															"const": "max"
+														}
+													]
+												}
+											},
+											"additionalProperties": false
+										},
+										"design": {
+											"type": "object",
+											"properties": {
+												"description": {
+													"type": "string",
+													"minLength": 1
+												},
+												"provider": {
+													"anyOf": [
+														{
+															"type": "string",
+															"const": "openai-codex"
+														},
+														{
+															"type": "string",
+															"const": "anthropic"
+														}
+													]
+												},
+												"model": {
+													"type": "string",
+													"minLength": 1
+												},
+												"thinking": {
+													"anyOf": [
+														{
+															"type": "string",
+															"const": "off"
+														},
+														{
+															"type": "string",
+															"const": "minimal"
+														},
+														{
+															"type": "string",
+															"const": "low"
+														},
+														{
+															"type": "string",
+															"const": "medium"
+														},
+														{
+															"type": "string",
+															"const": "high"
+														},
+														{
+															"type": "string",
+															"const": "xhigh"
+														},
+														{
+															"type": "string",
+															"const": "max"
+														}
+													]
+												}
+											},
+											"additionalProperties": false
+										},
+										"newDesign": {
+											"type": "object",
+											"properties": {
+												"description": {
+													"type": "string",
+													"minLength": 1
+												},
+												"provider": {
+													"anyOf": [
+														{
+															"type": "string",
+															"const": "openai-codex"
+														},
+														{
+															"type": "string",
+															"const": "anthropic"
+														}
+													]
+												},
+												"model": {
+													"type": "string",
+													"minLength": 1
+												},
+												"thinking": {
+													"anyOf": [
+														{
+															"type": "string",
+															"const": "off"
+														},
+														{
+															"type": "string",
+															"const": "minimal"
+														},
+														{
+															"type": "string",
+															"const": "low"
+														},
+														{
+															"type": "string",
+															"const": "medium"
+														},
+														{
+															"type": "string",
+															"const": "high"
+														},
+														{
+															"type": "string",
+															"const": "xhigh"
+														},
+														{
+															"type": "string",
+															"const": "max"
+														}
+													]
+												}
+											},
+											"additionalProperties": false
+										},
+										"writing": {
+											"type": "object",
+											"properties": {
+												"description": {
+													"type": "string",
+													"minLength": 1
+												},
+												"provider": {
+													"anyOf": [
+														{
+															"type": "string",
+															"const": "openai-codex"
+														},
+														{
+															"type": "string",
+															"const": "anthropic"
+														}
+													]
+												},
+												"model": {
+													"type": "string",
+													"minLength": 1
+												},
+												"thinking": {
+													"anyOf": [
+														{
+															"type": "string",
+															"const": "off"
+														},
+														{
+															"type": "string",
+															"const": "minimal"
+														},
+														{
+															"type": "string",
+															"const": "low"
+														},
+														{
+															"type": "string",
+															"const": "medium"
+														},
+														{
+															"type": "string",
+															"const": "high"
+														},
+														{
+															"type": "string",
+															"const": "xhigh"
+														},
+														{
+															"type": "string",
+															"const": "max"
+														}
+													]
+												}
+											},
+											"additionalProperties": false
+										},
+										"architecture": {
+											"type": "object",
+											"properties": {
+												"description": {
+													"type": "string",
+													"minLength": 1
+												},
+												"provider": {
+													"anyOf": [
+														{
+															"type": "string",
+															"const": "openai-codex"
+														},
+														{
+															"type": "string",
+															"const": "anthropic"
+														}
+													]
+												},
+												"model": {
+													"type": "string",
+													"minLength": 1
+												},
+												"thinking": {
+													"anyOf": [
+														{
+															"type": "string",
+															"const": "off"
+														},
+														{
+															"type": "string",
+															"const": "minimal"
+														},
+														{
+															"type": "string",
+															"const": "low"
+														},
+														{
+															"type": "string",
+															"const": "medium"
+														},
+														{
+															"type": "string",
+															"const": "high"
+														},
+														{
+															"type": "string",
+															"const": "xhigh"
+														},
+														{
+															"type": "string",
+															"const": "max"
+														}
+													]
+												}
+											},
+											"additionalProperties": false
+										}
+									},
+									"additionalProperties": false
+								}
+							},
+							"additionalProperties": false
+						}
+					},
+					"additionalProperties": false
+				},
 				"explore": {
 					"type": "object",
 					"properties": {

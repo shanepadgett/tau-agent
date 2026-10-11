@@ -315,6 +315,7 @@ export function renderCostReportHtml(report: CostReport): string {
 			<div class="rounded border border-stone-300 bg-white px-4 py-4 text-center dark:border-stone-700 dark:bg-stone-900">
 				<div class="text-3xl font-semibold tracking-tight tabular sm:text-4xl">${money(report.totalCost)}</div>
 				<div class="mt-1 text-sm text-stone-600 dark:text-stone-400">Total spend</div>
+				<div class="mt-1 text-xs text-stone-600 dark:text-stone-400">Decision models: ${money(report.models.filter((model) => model.key.startsWith("decisions:")).reduce((sum, model) => sum + model.cost, 0))}</div>
 			</div>
 			<div class="rounded border border-stone-300 bg-white px-4 py-4 text-center dark:border-stone-700 dark:bg-stone-900">
 				<div class="text-3xl font-semibold tracking-tight tabular sm:text-4xl">${report.sessionCount}</div>

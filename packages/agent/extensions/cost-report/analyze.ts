@@ -272,6 +272,30 @@ function analyzeSession(info: SessionInfo, range: ReportRange): AnalyzedSession 
 
 	for (const entry of entries) {
 		if (entry.type !== "message") {
+			if (entry.type === "custom" && entry.customType === "tau.decisions.usage") {
+				const data = asRecord(entry.data);
+				const spend = numberOrZero(data?.cost);
+				const ts = timestampMs(undefined, entry.timestamp);
+				if (spend <= 0 || ts === undefined || !inRange(ts, range)) continue;
+				const identity = typeof data?.model === "string" ? data.model : "unknown/unknown";
+				const [provider, ...modelId] = identity.split("/");
+				const model = modelId.join("/");
+				const key = `decisions:${identity}`;
+				const bucket = modelBuckets.get(key);
+				if (bucket) bucket.cost += spend;
+				else
+					modelBuckets.set(key, {
+						key,
+						label: `Decisions · ${model}`,
+						provider: provider ?? "unknown",
+						model,
+						cost: spend,
+						tokens: 0,
+					});
+				cost += spend;
+				dayCosts.set(localDateKey(ts), (dayCosts.get(localDateKey(ts)) ?? 0) + spend);
+				if (ts < startedAtMs) startedAtMs = ts;
+			}
 			if ((entry.type === "compaction" || entry.type === "branch_summary") && entry.usage) {
 				const ts = timestampMs(undefined, entry.timestamp);
 				if (ts === undefined || !inRange(ts, range)) continue;
