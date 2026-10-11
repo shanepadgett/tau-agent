@@ -12,6 +12,17 @@
 		"extensions": {
 			"type": "object",
 			"properties": {
+				"commit": {
+					"type": "object",
+					"properties": {
+						"push": {
+							"type": "boolean",
+							"default": false,
+							"description": "Push automatically after /commit lands instead of asking."
+						}
+					},
+					"additionalProperties": false
+				},
 				"explore": {
 					"type": "object",
 					"properties": {

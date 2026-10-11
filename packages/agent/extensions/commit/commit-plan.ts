@@ -120,6 +120,8 @@ export function requireCommitMessage(rawMessage: string): string {
 		/^(feat|fix|docs|refactor|test|chore|perf|ci|build|revert)(\([a-z0-9]+(?:-[a-z0-9]+)*\))?(!)?: .+$/,
 	);
 	if (!match) throw new Error("Commit subject must be a valid conventional commit message.");
+	if (subject.endsWith(".")) throw new Error("Commit subject must not end with a period.");
+	if (subject.length > 100) throw new Error("Commit subject must be 100 characters or fewer.");
 
 	const body = bodyLines.join("\n");
 	if (!match[3]) {
@@ -208,8 +210,9 @@ function buildPlanPrompt(
 		"3. If one message would be misleading, split off only files with a clearly different purpose.",
 		"4. Keep README/docs/tests/prompts/UI text with the code change they describe or verify.",
 		"5. Do not split by file type, directory, or conventional commit type alone.",
-		"6. Every dirty file must belong to one of the commits.",
-		"7. Use the minimum number of commits that preserves meaning.",
+		"6. Keep lockfiles and generated files with the code change that caused them; never give them their own commit.",
+		"7. Every dirty file must belong to one of the commits.",
+		"8. Use the minimum number of commits that preserves meaning.",
 		"Rules:",
 		"- Prefer fewer coherent commits over tidy-looking categories.",
 		"- Use each dirty file exactly once.",
@@ -220,7 +223,8 @@ function buildPlanPrompt(
 		"- Subject must be one concise imperative line, no trailing period, max 100 characters.",
 		"- Prefer exactly one line for non-breaking changes.",
 		"- Assess public compatibility before choosing each message.",
-		"- Removing, renaming, or changing documented behavior for published exports, commands, tools, settings, schemas, or public events is breaking.",
+		"- Breaking means downstream code must be edited to keep working: removed or renamed exports, changed signatures, changed event payloads, or changed schema or settings shapes.",
+		"- Output text, formatting, TUI layout, and internal behavior changes are never breaking, even for documented commands and tools.",
 		"- For breaking changes, prefer ! plus one body paragraph starting with BREAKING CHANGE:.",
 		"Recent commit subjects are style guidance. User intent explains why. File evidence is authoritative.",
 		"When regenerating, use the previous plan and user note to understand what to change; do not copy mistakes.",
@@ -255,7 +259,8 @@ function buildMessagePrompt(
 		"Prefer lowercase kebab-case scopes only when useful; omit for broad or unrelated changes.",
 		"For non-breaking changes, output one subject line and no body.",
 		"Assess public compatibility before choosing the message.",
-		"Removing, renaming, or changing documented behavior for published exports, commands, tools, settings, schemas, or public events is breaking.",
+		"Breaking means downstream code must be edited to keep working: removed or renamed exports, changed signatures, changed event payloads, or changed schema or settings shapes.",
+		"Output text, formatting, TUI layout, and internal behavior changes are never breaking, even for documented commands and tools.",
 		"For breaking changes, use ! plus one body paragraph starting with BREAKING CHANGE:.",
 		"Do not wrap the message in markdown or code fences.",
 		"",

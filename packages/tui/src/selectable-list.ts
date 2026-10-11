@@ -146,15 +146,6 @@ export class SelectableList<T extends SelectableListItem> implements Component, 
 		this.emitSelectionChange();
 	}
 
-	setSelectedIds(ids: readonly string[]): void {
-		const validIds = new Set(this.items.map((item) => item.id));
-		this.selected.clear();
-		for (const id of ids) {
-			if (validIds.has(id)) this.selected.add(id);
-		}
-		this.emitSelectionChange();
-	}
-
 	getCurrentItem(): T | undefined {
 		return this.filteredItems()[this.cursor];
 	}

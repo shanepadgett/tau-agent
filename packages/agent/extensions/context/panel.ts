@@ -84,7 +84,7 @@ export class ContextPanel implements Component {
 		}
 		if (matchesKey(data, Key.ctrl("c"))) {
 			for (const [tab, tabList] of this.lists) {
-				tabList.setSelectedIds([]);
+				tabList.clearSelection();
 				this.selected.set(tab, []);
 			}
 			return true;

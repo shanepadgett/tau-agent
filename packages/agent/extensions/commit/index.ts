@@ -1,9 +1,11 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { createGitRunner, loadRepoStatus } from "../../shared/git.ts";
+import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { errorText } from "../../shared/text.ts";
 import { type CommitPlanState, generatePlan } from "./commit-plan.ts";
 import { assertCommittableState, computeWorktreeSignature, loadChangeSet } from "./git-change-set.ts";
-import { executeCommitPlan, PartialCommitError, runCommitFlow } from "./review-ui.ts";
+import { executeCommitPlan, PartialCommitError, pushCurrentBranch, runCommitFlow } from "./review-ui.ts";
+import commitSettings from "./settings.ts";
 
 const COMMIT_MARKER_TYPE = "tau.commit";
 
@@ -36,9 +38,10 @@ async function runCommit(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promis
 		ctx.ui.notify("Commit review UI requires TUI mode.", "error");
 		return;
 	}
+	const settings = await loadTauExtensionSettings(ctx, commitSettings);
 
 	if (ctx.hasUI) {
-		await runCommitFlow(pi, ctx, git, repo.root, COMMIT_MARKER_TYPE);
+		await runCommitFlow(pi, ctx, git, repo.root, COMMIT_MARKER_TYPE, { push: settings.push });
 		return;
 	}
 
@@ -55,10 +58,25 @@ async function runCommit(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promis
 			ctx.ui.notify("No commit groups to execute.", "info");
 			return;
 		}
-		ctx.ui.notify(
-			`Committed ${completed.length} commit(s): ${completed.map((item) => item.hash).join(", ")}`,
-			"info",
-		);
+		if (!settings.push) {
+			ctx.ui.notify(
+				`Committed ${completed.length} commit(s): ${completed.map((item) => item.hash).join(", ")}`,
+				"info",
+			);
+			return;
+		}
+		try {
+			await pushCurrentBranch(git, repo.root);
+			ctx.ui.notify(
+				`Committed and pushed ${completed.length} commit(s): ${completed.map((item) => item.hash).join(", ")}`,
+				"info",
+			);
+		} catch (error) {
+			ctx.ui.notify(
+				`Committed ${completed.length} commit(s): ${completed.map((item) => item.hash).join(", ")}; push failed: ${errorText(error)}`,
+				"error",
+			);
+		}
 	} catch (error) {
 		if (error instanceof PartialCommitError) {
 			ctx.ui.notify(
