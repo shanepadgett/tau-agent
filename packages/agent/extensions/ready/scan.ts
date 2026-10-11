@@ -136,7 +136,6 @@ async function buildFsIndex(root: string): Promise<FsIndex> {
 		".eslintrc.json",
 		".eslintrc.yml",
 		".pi/tau/settings.json",
-		".pi/contexts",
 	];
 
 	await Promise.all(
@@ -153,8 +152,6 @@ async function buildFsIndex(root: string): Promise<FsIndex> {
 	for (const name of workflowNames) files.add(`.github/workflows/${name}`);
 	const extensionNames = await listNames(join(root, ".pi/extensions"));
 	for (const name of extensionNames) files.add(`.pi/extensions/${name}`);
-	const contextTop = await listNames(join(root, ".pi/contexts"));
-	for (const name of contextTop) files.add(`.pi/contexts/${name}`);
 
 	const packageScripts = await readPackageScriptBlob(root);
 	const miseText =
@@ -206,7 +203,6 @@ async function scanGeneral(fs: FsIndex): Promise<ReadyRow[]> {
 		...scanVerify(fs, miseTasks, npmScripts),
 		...(await scanPolicy(fs, policy)),
 		...scanStandards(fs),
-		...scanContextCatalog(fs),
 		...(await scanMarkers(fs, policy)),
 		scanHarnessGates(),
 		scanSideEffectVerbs(fs, npmScripts),
@@ -465,36 +461,6 @@ function scanStandards(fs: FsIndex): ReadyRow[] {
 					note: "No docs/standards or .pi/standards tree detected.",
 					next: "Add work-type standards outside AGENTS.md (UI, API, extensions, …).",
 				}),
-	];
-}
-
-function scanContextCatalog(fs: FsIndex): ReadyRow[] {
-	if (fs.files.has(".pi/contexts")) {
-		const children = [...fs.files].filter((path) => path.startsWith(".pi/contexts/") && path !== ".pi/contexts");
-		return [
-			row({
-				id: "context.catalog",
-				area: "context",
-				title: "Context catalog",
-				status: children.length > 0 ? "pass" : "weak",
-				evidence: children.length > 0 ? children.slice(0, 12) : [".pi/contexts"],
-				note:
-					children.length > 0
-						? "`.pi/contexts` has entries (pack quality not judged in scan)."
-						: "`.pi/contexts` exists but looks empty at top level.",
-				next: children.length > 0 ? undefined : "Add domain/concept work packs under .pi/contexts.",
-			}),
-		];
-	}
-	return [
-		row({
-			id: "context.catalog",
-			area: "context",
-			title: "Context catalog",
-			status: "missing",
-			note: "No `.pi/contexts` catalog detected.",
-			next: "Create job-shaped context packs for sticky work areas.",
-		}),
 	];
 }
 

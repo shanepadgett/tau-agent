@@ -48,10 +48,6 @@ Tau automatically replaces long conversation history with a checkpoint so work c
 
 At the hard cutoff, the agent must compact before using other tools. Failures are reported; a failed self-compaction keeps that restriction until a retry succeeds.
 
-## context
-
-Use `/context` to choose reusable project information to add to the conversation. Run it again to add more. Define these scopes in `.pi/contexts` TOML files, grouped in `NN_slug` folders.
-
 ## decisions
 
 Uses Jev or Luna to approve routine tool requests, remind the agent to answer questions first, and select a model for the work. Routing uses ChatGPT and Claude subscription logins; choosing a model yourself stops automatic routing for that session.

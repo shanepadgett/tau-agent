@@ -9,7 +9,6 @@ export type ReadyAreaId =
 	| "lint-entropy"
 	| "policy"
 	| "standards"
-	| "context"
 	| "reuse"
 	| "markers"
 	| "harness"
@@ -42,7 +41,6 @@ export const AREA_LABELS: Record<ReadyAreaId, string> = {
 	"lint-entropy": "Lint and entropy",
 	policy: "Policy",
 	standards: "Standards",
-	context: "Context",
 	reuse: "Reuse",
 	markers: "Markers",
 	harness: "Harness gates",
@@ -56,7 +54,6 @@ export const AREA_ORDER: ReadyAreaId[] = [
 	"lint-entropy",
 	"policy",
 	"standards",
-	"context",
 	"reuse",
 	"markers",
 	"harness",

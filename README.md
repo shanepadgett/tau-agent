@@ -69,7 +69,6 @@ For settings shared across projects, use `/tau init --global`. See the [Silent C
 | --- | --- |
 | `/review` | Run a separate simplify, architecture, or correctness review without adding the report to the coding conversation. |
 | `/aside <question>` | Ask a one-off question without adding the question or answer to the conversation. |
-| `/context` | Select reusable project context from `.pi/contexts`. |
 | `/handoff <goal>` | Prepare a fresh linked session with an opening prompt you can review. |
 | `/commit` | Group, review, and commit selected Git changes. |
 | `/reference` | Manage comparison repositories outside the working tree. |
@@ -81,7 +80,6 @@ Tau also includes session management, question panels, web research, image gener
 
 ## Documentation
 
-- [Project context](packages/agent/docs/context.md) — organize reusable repository context.
 - [Extending Tau](packages/agent/docs/extending-tau-agent.md) — public APIs and integration.
 
 ## Development

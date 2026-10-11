@@ -1,8 +1,0 @@
-name = "Writing preferences"
-description = "User-facing prose guidance"
-
-[skill]
-description = "Writing and editing instructions"
-read = ["packages/agent/skills/writing-preferences/SKILL.md"]
-outline = []
-references = []

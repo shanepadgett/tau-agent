@@ -53,6 +53,5 @@ Keep root Pi development dependencies exactly pinned and synchronized, independe
 
 ## Docs
 
-- [Context management](./docs/context.md) — repository context structure and taxonomy
 - [Extending Tau Agent](./docs/extending-tau-agent.md) — public events and integration
 - [TUI](./docs/tui.md) — shared UI components

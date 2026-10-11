@@ -1,8 +1,0 @@
-name = "Repository guidance"
-description = "Repository-wide instructions for agents and contributors"
-
-[instructions]
-description = "Repository-wide agent guidance"
-read = ["AGENTS.md"]
-outline = []
-references = []

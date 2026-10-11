@@ -1,8 +1,0 @@
-name = "Image Generation"
-description = "Reusable public image-generation API and provider transport"
-
-[runtime]
-description = "Public image-generation API, package exports, orchestration, and provider transport"
-read = []
-outline = ["packages/agent/src/image-generation/client.ts", "packages/agent/src/image-generation/index.ts", "packages/agent/src/index.ts"]
-references = ["packages/agent/src/image-generation/constants.ts"]

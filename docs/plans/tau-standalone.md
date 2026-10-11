@@ -244,11 +244,11 @@ tau (first launch)
   write transfer record → main()
 ```
 
-A failed copy leaves no partial files and no record, so the next launch offers again. `tau import-pi --project` copies a repo's `.pi/contexts`, `.pi/extensions`, `.pi/prompts`, `.pi/skills`, `.pi/mcp.json`, `.pi/settings.json`, and `.pi/tau/` into `.tau/`.
+A failed copy leaves no partial files and no record, so the next launch offers again. `tau import-pi --project` copies a repo's `.pi/extensions`, `.pi/prompts`, `.pi/skills`, `.pi/mcp.json`, `.pi/settings.json`, and `.pi/tau/` into `.tau/`.
 
 ## Tau code changes required
 
-- **Hardcoded paths:** replace `.pi` and `~/.pi/agent` with `CONFIG_DIR_NAME` and `getAgentDir()` in `shared/settings/paths.ts`, `shared/jsonl-store.ts`, `extensions/context/definitions.ts`, `extensions/context/index.ts`, `extensions/footer/index.ts`, `extensions/ready/index.ts`, and `extensions/ready/scan.ts`.
+- **Hardcoded paths:** replace `.pi` and `~/.pi/agent` with `CONFIG_DIR_NAME` and `getAgentDir()` in `shared/settings/paths.ts`, `shared/jsonl-store.ts`, `extensions/footer/index.ts`, `extensions/ready/index.ts`, and `extensions/ready/scan.ts`.
 - **Bundling breakers:**
   - `shared/settings/specs.ts` discovers settings modules by file glob and dynamic import. Replace with a static registry, which also feeds schema generation.
   - `tau-help` reads `help.md` and `docs/` relative to `import.meta.url`.

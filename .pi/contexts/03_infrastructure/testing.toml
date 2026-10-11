@@ -1,9 +1,0 @@
-name = "Test infrastructure"
-description = "Vitest configuration for the retained test suites"
-
-[testing]
-description = "Configure Vitest for the remaining Explore and Patch tests"
-read = ["vitest.config.ts"]
-show = []
-outline = []
-references = []
