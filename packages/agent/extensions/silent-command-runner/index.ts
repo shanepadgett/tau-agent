@@ -20,6 +20,8 @@ import { resolveProjectRoot } from "../../shared/settings/paths.ts";
 import silentCommandRunnerSettings from "./settings.ts";
 
 const MESSAGE_TYPE = "tau:silent-command-runner";
+const CHECK_WIDGET_KEY = "tau:silent-command-runner:checks";
+const checkParams = Type.Object({}, { additionalProperties: false });
 const DEFAULT_MAX_OUTPUT_BYTES = 51200;
 const DEFAULT_TIMEOUT_MS = 120000;
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -126,16 +128,39 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	const fixerControllers = new Set<AbortController>();
 	let fixerQueue: Promise<void> = Promise.resolve();
 
-	let checkTool = defineTool({
+	let checkTool = defineTool<typeof checkParams, CheckDetails | { progress: string } | undefined>({
 		name: "run_checks",
 		label: "Repository Checks",
-		description: formatCheckToolDescription(settings.afterRun),
-		parameters: Type.Object({}, { additionalProperties: false }),
+		description: formatCheckInstructions(settings.afterRun),
+		parameters: checkParams,
 		exposure: "hidden",
 		executionMode: "sequential",
 		annotations: { readOnlyHint: true },
-		async execute(_toolCallId, _params, signal, _onUpdate, ctx) {
-			return await runChangedCommands(ctx.cwd, ctx.ui.notify, signal);
+		async execute(toolCallId, _params, signal, onUpdate, ctx) {
+			// Pi shows nested calls in their parent's row, without rendering their partial results.
+			if (toolCallId.includes("/")) return await runChecksWithWidget(ctx, signal);
+			return await runChangedCommands(
+				ctx.cwd,
+				(progress) => onUpdate?.({ content: [], details: { progress } }),
+				signal,
+			);
+		},
+		renderCall(_args, theme, context) {
+			const text = context.lastComponent instanceof Text ? context.lastComponent : new Text("", 0, 0);
+			text.setText(theme.fg("toolTitle", theme.bold("Repository checks")));
+			return text;
+		},
+		renderResult(result, options, theme, context) {
+			const text = context.lastComponent instanceof Text ? context.lastComponent : new Text("", 0, 0);
+			const output =
+				options.isPartial && result.details && "progress" in result.details
+					? result.details.progress
+					: result.content
+							.filter((item) => item.type === "text")
+							.map((item) => item.text)
+							.join("\n");
+			text.setText(theme.fg(context.isError ? "error" : "muted", output));
+			return text;
 		},
 	});
 	pi.registerTool(checkTool);
@@ -145,6 +170,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	);
 
 	pi.on("session_start", async (_event, ctx) => {
+		ctx.ui.setWidget(CHECK_WIDGET_KEY, undefined);
 		await refreshSettings(ctx);
 		await temporaryOutput.shutdown();
 		await temporaryOutput.start();
@@ -165,9 +191,13 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		refresh: "append",
 		async read(ctx) {
 			await refreshSettings(ctx);
-			return settings.afterWrite.length
-				? `Configured fixes run automatically after modifying tools finish; do not run them manually or claim checks passed from them: ${formatCommandNames(settings.afterWrite)}.`
-				: "";
+			const instructions: string[] = [];
+			if (settings.afterWrite.length)
+				instructions.push(
+					`Configured fixes run automatically after modifying tools finish; do not run them manually or claim checks passed from them: ${formatCommandNames(settings.afterWrite)}.`,
+				);
+			if (settings.afterRun.length) instructions.push(formatCheckInstructions(settings.afterRun));
+			return instructions.join("\n\n");
 		},
 	});
 
@@ -235,7 +265,9 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		if (event.outcome !== "completed" || checkedRevision === writeRevision || settings.afterRun.length === 0)
 			return undefined;
 		try {
-			const result = await runChangedCommands(ctx.cwd, ctx.ui.notify, ctx.signal);
+			const result = await runChecksWithWidget(ctx, ctx.signal);
+			if (result.details.passed.length > 0)
+				ctx.ui.notify(`The following checks passed: ${result.details.passed.join(", ")}`, "info");
 			if (result.details.failed.length === 0) return undefined;
 			return {
 				entries: [
@@ -256,8 +288,9 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		}
 	});
 
-	pi.on("session_shutdown", async () => {
+	pi.on("session_shutdown", async (_event, ctx) => {
 		sessionActive = false;
+		ctx.ui.setWidget(CHECK_WIDGET_KEY, undefined);
 		runActive = false;
 		abortController?.abort();
 		abortController = undefined;
@@ -319,7 +352,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		const next = normalizeSettings(await loadTauExtensionSettings(ctx, silentCommandRunnerSettings));
 		if (JSON.stringify(next.afterRun) !== JSON.stringify(settings.afterRun)) checkedRevision = undefined;
 		settings = next;
-		const description = formatCheckToolDescription(settings.afterRun);
+		const description = formatCheckInstructions(settings.afterRun);
 		const exposure = settings.afterRun.length ? "direct" : "hidden";
 		if (checkTool.description !== description || checkTool.exposure !== exposure) {
 			checkTool = { ...checkTool, description, exposure };
@@ -327,9 +360,26 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		}
 	}
 
+	async function runChecksWithWidget(ctx: ExtensionContext, signal: AbortSignal | undefined) {
+		try {
+			return await runChangedCommands(
+				ctx.cwd,
+				(progress) => {
+					ctx.ui.setWidget(
+						CHECK_WIDGET_KEY,
+						(_tui, theme) => new Text(theme.fg("muted", `Repository checks: ${progress}`), 0, 0),
+					);
+				},
+				signal,
+			);
+		} finally {
+			ctx.ui.setWidget(CHECK_WIDGET_KEY, undefined);
+		}
+	}
+
 	async function runChangedCommands(
 		cwd: string,
-		notify: (message: string, type?: "info" | "warning" | "error") => void,
+		reportProgress: (progress: string) => void,
 		signal: AbortSignal | undefined,
 	): Promise<{ content: { type: "text"; text: string }[]; details: CheckDetails; isError: boolean }> {
 		const controller = new AbortController();
@@ -339,6 +389,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		abortController = controller;
 		const output = new BoundedTextResultBuilder(temporaryOutput, "tail");
 		try {
+			controller.signal.throwIfAborted();
+			reportProgress("Preparing checks…");
 			await fixerQueue;
 			controller.signal.throwIfAborted();
 			const revision = writeRevision;
@@ -352,7 +404,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			const passed: string[] = [];
 			for (const command of selected) {
 				controller.signal.throwIfAborted();
-				notify(`silent-command-runner: running ${command.name}`, "info");
+				reportProgress(`Running ${command.name} · ${passed.length + failed.length + 1}/${selected.length}`);
 				const result = await runCommand(pi, projectRoot, command, controller.signal, []);
 				controller.signal.throwIfAborted();
 				if (result.code !== 0 || result.killed) {
@@ -372,7 +424,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			if (passed.length > 0) {
 				const summary = `The following checks passed: ${passed.join(", ")}`;
 				await output.append(summary);
-				notify(summary, "info");
 			}
 			if (failed.length > 0) {
 				await output.append(
@@ -452,12 +503,14 @@ async function snapshotFiles(projectRoot: string, commands: readonly CommandConf
 	return files;
 }
 
-function formatCheckToolDescription(commands: readonly CommandConfig[]): string {
+function formatCheckInstructions(commands: readonly CommandConfig[]): string {
 	return [
-		"Call this tool ONLY after all implementation, investigation, builds, and focused testing are complete, immediately before your final answer. Never use it for intermediate validation. Never run registered checks or their equivalents manually. If checks fail, complete all repairs before calling it again. Any later write-capable call invalidates the result.",
+		"Required repository verification: You MUST call run_checks after all implementation, investigation, builds, and focused testing are complete, immediately before your final summary. Do not send the final summary first or rely on automatic settlement checks to satisfy this requirement. Never use run_checks for intermediate validation.",
+		"Never manually run any repository check listed below or its equivalent, during development or final verification. This includes their task-runner commands, direct binaries, wrappers, and alternate flags through bash, script_runner, or codemode. Configured formatting, lint, type checking, full test suites, dependency/schema validation, dead-code checks, and duplicate-code checks belong exclusively to run_checks.",
+		"During development, builds and focused tests are allowed only when needed for the work in progress; batch them at meaningful boundaries. The focused-test exception allows a relevant subset of a registered suite, never the full suite. Do not use a build or another command name to bypass the restriction on configured checks.",
+		"If checks fail, complete all repairs, then call run_checks again before your final summary. Any later write-capable call invalidates the result, even if it changes nothing; finish that work and call run_checks again. Summarize the requested work only after verification is current.",
 		"You may call it last in the same codemode script as your final edits: await all writes, then text(await tools.run_checks({})). Pending automatic fixes finish before checks.",
-		"During development, use builds and focused tests only when needed to proceed; batch them at meaningful boundaries. Focused tests from registered suites are allowed, not full-suite runs.",
-		`Checks: ${commands.length ? commands.map((command) => `${command.name}${command.details ? `: ${command.details}` : ""}`).join("; ") : "none configured"}`,
+		`Checks: ${commands.length ? commands.map((command) => `${command.name} [${command.command}]${command.details ? `: ${command.details}` : ""}`).join("; ") : "none configured"}`,
 	].join("\n");
 }
 
