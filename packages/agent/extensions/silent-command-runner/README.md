@@ -40,4 +40,12 @@ Fixer output and ordinary command failures stay out of the conversation. Configu
 
 Both arrays support `name`, `command`, `cwd` (relative to the project root), `env`, `details`, `includeGlobs`, `excludeGlobs`, and `timeoutMs`. Commands default to a 120-second timeout and match all project files except generated/cache directories. `maxOutputBytes` controls failure output sent to the agent. Remove an array entry to stop a command; use Pi's extension controls to disable the extension. Run `/reload` after changing extension code or settings.
 
+## Reduce check-output tokens
+
+Route your repository's checks through reporting scripts, then invoke those scripts from Mise, npm, or your task runner. Silent Command Runner runs arbitrary commands; your repository owns the tool-specific output handling.
+
+Prefer each tool's structured output or a dedicated reporter. Emit compact, actionable failures: file locations, rule or error codes, explanations, and assertion differences. Remove passing results, banners, timings, and progress output before they reach the agent. This saves tokens without hiding what needs fixing.
+
+Preserve failing exit codes and distinguish formatting differences from formatter errors. For unrecognized failures, emit an explicit fallback and retain the full output in a log referenced by the report. Do not discard unknown stderr or truncate before parsing. Keep successful checks quiet.
+
 Markdown formatting remains provided by the separate `md-lint` extension.

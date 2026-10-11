@@ -116,6 +116,8 @@ Gives the agent a first-class `script_runner` tool for custom Python, Node.js, a
 
 Configure `extensions.silentCommandRunner.afterWrite` for silent fixes after modifying tools finish and `afterRun` for read-only checks before the agent run settles. Fixes run once after an outer codemode call, not after each nested tool. Use unquoted `{files}` in an `afterWrite` command to pass changed-file paths safely. Check failures send output to the agent and continue the run. Disable the extension through Pi's extension controls.
 
+To save tokens, route your repository's checks through reporting scripts invoked by Mise, npm, or your task runner. Keep tool-specific parsing in your repository and emit actionable failures without banners, progress, or passing results. Preserve locations, error codes, assertion differences, failing exit codes, and an explicit fallback with a full-log reference for unknown failures. Silent Command Runner stays generic.
+
 ## soul
 
 Supplies Tau's communication, discussion, planning, execution, and coding instructions, plus tool-use rules, tool guidance, and context from other Tau extensions. The date and directory snapshot stay fixed until successful compaction. Other changes, such as an edited `AGENTS.md` after `/reload`, arrive as appended updates without rewriting earlier instructions.
