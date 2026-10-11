@@ -139,9 +139,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		fixedHashes.clear();
 		turnStart = Date.now();
 		turnPaths =
-			settings.afterRun.length > 0
-				? new Set(await walkFiles(await resolveProjectRoot(ctx.cwd)))
-				: new Set();
+			settings.afterRun.length > 0 ? new Set(await walkFiles(await resolveProjectRoot(ctx.cwd))) : new Set();
 	});
 
 	pi.on("tool_call", async (event, ctx) => {
@@ -152,7 +150,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		if (
 			!WRITE_TOOLS.has(event.toolName) &&
 			(READ_TOOLS.has(event.toolName) || tool?.annotations?.readOnlyHint === true)
-		) return;
+		)
+			return;
 		await fixerQueue;
 		if (!sessionActive) return;
 		const projectRoot = await resolveProjectRoot(ctx.cwd);
@@ -166,49 +165,53 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		const snapshot = snapshots.get(event.toolCallId);
 		if (!snapshot) return;
 		// Keep the snapshot registered until processing completes so descendants stay grouped.
-		fixerQueue = fixerQueue.then(async () => {
-			if (!sessionActive || ctx.signal?.aborted) return;
-			const current = await snapshotFiles(snapshot.projectRoot, settings.afterWrite);
-			const changed = [...current.keys()].filter(
-				(path) => current.get(path) !== snapshot.files.get(path) && current.get(path) !== fixedHashes.get(path),
-			);
-			if (changed.length === 0) return;
-			const controller = new AbortController();
-			fixerControllers.add(controller);
-			const cancel = () => controller.abort();
-			ctx.signal?.addEventListener("abort", cancel, { once: true });
-			if (ctx.signal?.aborted) controller.abort();
-			try {
-				for (const command of settings.afterWrite) {
-					if (!sessionActive || controller.signal.aborted) return;
-					const files = changed.filter((path) => matchesCommand(path, command));
-					if (files.length === 0) continue;
-					try {
-						await runCommand(
-							pi,
-							snapshot.projectRoot,
-							command,
-							controller.signal,
-							0,
-							files.map((path) => resolve(snapshot.projectRoot, path)),
-						);
-					} catch {
-						// Final checks own failure reporting; a failed fixer must not stop the next one.
+		fixerQueue = fixerQueue
+			.then(async () => {
+				if (!sessionActive || ctx.signal?.aborted) return;
+				const current = await snapshotFiles(snapshot.projectRoot, settings.afterWrite);
+				const changed = [...current]
+					.filter(([path, hash]) => hash !== snapshot.files.get(path) && hash !== fixedHashes.get(path))
+					.map(([path]) => path);
+				if (changed.length === 0) return;
+				const controller = new AbortController();
+				fixerControllers.add(controller);
+				const cancel = () => controller.abort();
+				ctx.signal?.addEventListener("abort", cancel, { once: true });
+				if (ctx.signal?.aborted) controller.abort();
+				try {
+					for (const command of settings.afterWrite) {
+						if (!sessionActive || controller.signal.aborted) return;
+						const files = changed.filter((path) => matchesCommand(path, command));
+						if (files.length === 0) continue;
+						try {
+							await runCommand(
+								pi,
+								snapshot.projectRoot,
+								command,
+								controller.signal,
+								0,
+								files.map((path) => resolve(snapshot.projectRoot, path)),
+							);
+						} catch {
+							// Final checks own failure reporting; a failed fixer must not stop the next one.
+						}
 					}
+					const after = await snapshotFiles(snapshot.projectRoot, settings.afterWrite);
+					for (const path of changed) {
+						const hash = after.get(path);
+						if (hash === undefined) fixedHashes.delete(path);
+						else fixedHashes.set(path, hash);
+					}
+				} finally {
+					ctx.signal?.removeEventListener("abort", cancel);
+					fixerControllers.delete(controller);
 				}
-				const after = await snapshotFiles(snapshot.projectRoot, settings.afterWrite);
-				for (const path of changed) {
-					const hash = after.get(path);
-					if (hash === undefined) fixedHashes.delete(path);
-					else fixedHashes.set(path, hash);
-				}
-			} finally {
-				ctx.signal?.removeEventListener("abort", cancel);
-				fixerControllers.delete(controller);
-			}
-		}).catch((error: unknown) => {
-			if (sessionActive && !ctx.signal?.aborted) ctx.ui.notify(`silent-command-runner: ${errorMessage(error)}`, "error");
-		}).finally(() => snapshots.delete(event.toolCallId));
+			})
+			.catch((error: unknown) => {
+				if (sessionActive && !ctx.signal?.aborted)
+					ctx.ui.notify(`silent-command-runner: ${errorMessage(error)}`, "error");
+			})
+			.finally(() => snapshots.delete(event.toolCallId));
 		await fixerQueue;
 	});
 
@@ -340,7 +343,12 @@ async function snapshotFiles(projectRoot: string, commands: readonly CommandConf
 	for (const path of await walkFiles(projectRoot)) {
 		if (!commands.some((command) => matchesCommand(path, command))) continue;
 		try {
-			files.set(path, createHash("sha256").update(await readFile(resolve(projectRoot, path))).digest("hex"));
+			files.set(
+				path,
+				createHash("sha256")
+					.update(await readFile(resolve(projectRoot, path)))
+					.digest("hex"),
+			);
 		} catch (error: unknown) {
 			if (!isRecord(error) || error.code !== "ENOENT") throw error;
 		}

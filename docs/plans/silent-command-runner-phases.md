@@ -34,3 +34,5 @@ Inspect installed command interfaces and resulting diffs; use existing automatic
 ## Implementation status
 
 Implemented the two settings arrays, awaited post-write fixes, codemode grouping, safe changed-file arguments, cancellation, and repository migration. Schema synchronization regenerated the schema. Mise dry-run confirmed that supplied paths, including a path containing spaces, are passed as separate formatter arguments. Live extension behavior requires user `/reload` before verification.
+
+After user reload, simplified changed-file detection to use each snapshot entry's hash directly instead of repeated Map lookups. Wrote that change through an outer codemode call with an unreassigned `let`, missing spaces, and a missing semicolon. Reading the file after the call confirmed automatic conversion to `const` and correctly formatted multiline code. No manual fix commands or test files were used.

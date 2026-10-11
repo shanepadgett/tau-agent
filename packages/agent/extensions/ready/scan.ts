@@ -384,7 +384,9 @@ function scanSilentRunner(fs: FsIndex): ReadyRow {
 		note: silentConfigured
 			? "silentCommandRunner has configured afterRun checks."
 			: "silentCommandRunner section present but afterRun checks look empty.",
-		next: silentConfigured ? undefined : "Configure extensions.silentCommandRunner.afterRun for end-of-run verification.",
+		next: silentConfigured
+			? undefined
+			: "Configure extensions.silentCommandRunner.afterRun for end-of-run verification.",
 	});
 }
 
