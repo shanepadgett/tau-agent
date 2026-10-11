@@ -1,15 +1,18 @@
 import { Type } from "typebox";
 import { defineTauExtensionSettings } from "../../shared/settings/define.ts";
 
+export type CommitPushPolicy = boolean | "ask";
+
 export default defineTauExtensionSettings({
 	key: "commit",
-	defaults: { push: false as boolean },
+	defaults: { push: "ask" as CommitPushPolicy },
 	schema: Type.Object(
 		{
 			push: Type.Optional(
-				Type.Boolean({
-					default: false,
-					description: "Push automatically after /commit lands instead of asking.",
+				Type.Union([Type.Boolean(), Type.Literal("ask")], {
+					default: "ask",
+					description:
+						'Push after /commit: true pushes automatically, false never pushes or asks, "ask" prompts (default).',
 				}),
 			),
 		},

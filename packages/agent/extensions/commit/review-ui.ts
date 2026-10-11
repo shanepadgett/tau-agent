@@ -35,6 +35,7 @@ import {
 	loadChangeSet,
 	stageFilesOnly,
 } from "./git-change-set.ts";
+import type { CommitPushPolicy } from "./settings.ts";
 
 const MAX_GROUPS = 10;
 const PUSH_TIMEOUT_MS = 120_000;
@@ -86,11 +87,11 @@ export async function runCommitFlow(
 	git: GitRunner,
 	root: string,
 	markerType: string,
-	options?: { push?: boolean },
+	options: { push: CommitPushPolicy },
 ): Promise<void> {
 	await ctx.ui.custom<void>(
 		(tui, theme, _keybindings, done) =>
-			new CommitFlowPanel(pi, ctx, tui, theme, git, root, markerType, options?.push ?? false, done),
+			new CommitFlowPanel(pi, ctx, tui, theme, git, root, markerType, options.push, done),
 	);
 }
 
@@ -166,7 +167,7 @@ class CommitFlowPanel implements Component, Focusable {
 	private readonly git: GitRunner;
 	private readonly root: string;
 	private readonly markerType: string;
-	private readonly autoPush: boolean;
+	private readonly pushPolicy: CommitPushPolicy;
 	private readonly done: () => void;
 	private readonly panelConfig: ToolPanelConfig;
 	private readonly panel: ToolPanel;
@@ -188,7 +189,7 @@ class CommitFlowPanel implements Component, Focusable {
 		git: GitRunner,
 		root: string,
 		markerType: string,
-		autoPush: boolean,
+		pushPolicy: CommitPushPolicy,
 		done: () => void,
 	) {
 		this.pi = pi;
@@ -198,7 +199,7 @@ class CommitFlowPanel implements Component, Focusable {
 		this.git = git;
 		this.root = root;
 		this.markerType = markerType;
-		this.autoPush = autoPush;
+		this.pushPolicy = pushPolicy;
 		this.done = done;
 		this.groupList = this.createGroupList([]);
 		this.body = {
@@ -518,7 +519,15 @@ class CommitFlowPanel implements Component, Focusable {
 							: `Committed ${update.hash ?? ""}`.trim(),
 				});
 			});
-			if (!this.autoPush) {
+			if (this.pushPolicy === false) {
+				this.ctx.ui.notify(
+					`Committed ${landed.length} commit(s): ${landed.map((item) => item.hash).join(", ")}`,
+					"info",
+				);
+				this.close();
+				return;
+			}
+			if (this.pushPolicy === "ask") {
 				const list = new SelectableList(this.theme, {
 					items: [
 						{ id: "no", label: "No, keep commits local" },

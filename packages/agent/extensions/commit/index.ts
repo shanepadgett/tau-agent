@@ -58,7 +58,7 @@ async function runCommit(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promis
 			ctx.ui.notify("No commit groups to execute.", "info");
 			return;
 		}
-		if (!settings.push) {
+		if (settings.push !== true) {
 			ctx.ui.notify(
 				`Committed ${completed.length} commit(s): ${completed.map((item) => item.hash).join(", ")}`,
 				"info",
