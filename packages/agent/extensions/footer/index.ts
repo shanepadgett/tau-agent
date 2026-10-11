@@ -93,11 +93,13 @@ export default function footerExtension(pi: ExtensionAPI): void {
 					const git = gitByCwd.get(currentCtx.cwd);
 					const model = currentCtx.model ? `${currentCtx.model.provider}/${currentCtx.model.id}` : "no-model";
 					const thinking = pi.getThinkingLevel();
+					const decisionStatus = footerData.getExtensionStatuses().get("decisions") ?? "";
+					const decisionModel =
+						decisionStatus === "decisions off" || decisionStatus.startsWith("decisions unavailable")
+							? ""
+							: decisionStatus;
 					const separator = theme.fg("dim", " • ");
-					const topLeft = [
-						`${route ? `auto:${route} · ` : ""}${model} (${thinking})`,
-						footerData.getExtensionStatuses().get("decisions") ?? "",
-					]
+					const topLeft = [`${route ? `auto:${route} · ` : ""}${model} (${thinking})`, decisionModel]
 						.filter(Boolean)
 						.map((text) => theme.fg("dim", text))
 						.join(separator);

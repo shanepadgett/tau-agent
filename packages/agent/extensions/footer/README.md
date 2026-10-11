@@ -23,6 +23,6 @@ Other Tau extensions can publish bottom-right items with `setTauFooterItem()` fr
 
 No polling. Git and daily cost refresh on lifecycle events or `/footer refresh`.
 
-Automatic routing adds `auto:<route>` before the model. The classifier appears beside it once as `provider/model`, with the same dim style as the main model. The context bar precedes cache-hit rate, with session and daily costs at the far right. Costs include decision calls.
+Automatic routing adds `auto:<route>` before the current model. The classifier appears beside it as `provider/model` when available. The context bar precedes cache-hit rate, with session and daily costs at the far right. Costs include decision calls.
 
 The context bar shows cached, used, and free space, with markers for compaction thresholds. Colored dots show usage progressing from green to yellow to red. A NOTICE, WARNING, or FORCED tag identifies the current level. Self-compaction progress appears above the editor.
