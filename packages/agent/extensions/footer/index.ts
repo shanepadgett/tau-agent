@@ -375,28 +375,47 @@ function contextText(
 		latest?.role === "assistant" && currentTokens !== null
 			? Math.max(0, Math.min(currentTokens, latest.usage.cacheRead))
 			: 0;
+	if (thresholds && contextWindow > thresholds.forced) {
+		// Linear track from 0 to the forced threshold, then a log-scaled tail from forced to the context window.
+		const tokens = currentTokens ?? 0;
+		const usedCells = Math.min(16, Math.ceil((tokens / thresholds.forced) * 16));
+		const cachedCells = Math.min(usedCells, Math.floor((cachedTokens / thresholds.forced) * 16));
+		const noticeCell = Math.max(1, Math.min(14, Math.round((thresholds.notice / thresholds.forced) * 16)));
+		const warningCell = Math.max(
+			noticeCell + 1,
+			Math.min(15, Math.round((thresholds.warning / thresholds.forced) * 16)),
+		);
+		const wallColor: ThemeColor = tokens >= thresholds.forced ? "error" : "dim";
+		let bar = theme.fg("dim", "|");
+		for (let index = 0; index < 16; index++) {
+			if (index === noticeCell) bar += theme.fg(tokens >= thresholds.notice ? "warning" : "dim", "?");
+			if (index === warningCell) bar += theme.fg(tokens >= thresholds.warning ? "error" : "dim", "!");
+			const cellColor: ThemeColor = index >= warningCell ? "error" : index >= noticeCell ? "warning" : "success";
+			bar +=
+				currentTokens === null
+					? theme.fg("dim", "?")
+					: index < cachedCells
+						? theme.fg(cellColor, "•")
+						: index < usedCells
+							? theme.fg(cellColor, "·")
+							: theme.fg("dim", "-");
+		}
+		bar += theme.fg(wallColor, "|");
+		for (let index = 0; index < 4; index++) {
+			const start = thresholds.forced * (contextWindow / thresholds.forced) ** (index / 4);
+			bar += tokens > start ? theme.fg("error", "▓") : theme.fg("dim", "░");
+		}
+		return `${bar}${theme.fg("dim", `|${tag}`)}`;
+	}
 	const usedCells =
 		contextWindow > 0 && currentTokens !== null ? Math.min(20, Math.ceil((currentTokens / contextWindow) * 20)) : 0;
 	const cachedCells = contextWindow > 0 ? Math.min(usedCells, Math.floor((cachedTokens / contextWindow) * 20)) : 0;
 	const color: ThemeColor =
 		level?.level === "forced" ? "error" : level?.level === "warning" ? "warning" : contextPercentColor(percentValue);
 	const bar = Array.from({ length: 20 }, (_value, index) => {
-		let cell =
+		const cell =
 			currentTokens === null || contextWindow <= 0 ? "?" : index < cachedCells ? "•" : index < usedCells ? "·" : "-";
-		let cellColor: ThemeColor = color;
-		if (thresholds && contextWindow > 0) {
-			cellColor = "success";
-			for (const [name, marker, afterColor] of [
-				["notice", "?", "warning"],
-				["warning", "!", "error"],
-				["forced", "|", "error"],
-			] as const) {
-				const position = Math.max(0, Math.min(19, Math.floor((thresholds[name] / contextWindow) * 20)));
-				if (position === index) cell = marker;
-				if (index > position) cellColor = afterColor;
-			}
-		}
-		return theme.fg(cell === "•" || cell === "·" ? cellColor : "dim", cell);
+		return theme.fg(cell === "•" || cell === "·" ? color : "dim", cell);
 	}).join("");
 	return `${theme.fg("dim", "[")}${bar}${theme.fg("dim", `]${tag}`)}`;
 }
