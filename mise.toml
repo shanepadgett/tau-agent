@@ -2,7 +2,6 @@
 node = "24.18.0"
 "npm:oxfmt" = "0.62.0"
 "npm:oxlint" = "1.77.0"
-"npm:markdownlint-cli2" = "0.22.1"
 "npm:fallow" = "2.100.0"
 "npm:tree-sitter-cli" = "0.26.11"
 
@@ -78,7 +77,7 @@ depends = ["check:fmt", "check:lint"]
 
 [tasks."check:markdown"]
 description = "Run Markdown checks"
-run = "markdownlint-cli2 --fix"
+run = "./node_modules/.bin/markdownlint-cli2 --fix --config packages/agent/extensions/md-lint/markdownlint-cli2.jsonc"
 
 [tasks."check:types"]
 description = "Run TypeScript checks"

@@ -76,6 +76,10 @@ Gives the agent an OpenAI GPT Image and xAI Grok Imagine generation and editing 
 
 Adds `/manage-sessions` to browse saved sessions and `/sweep` to archive or delete the current session after starting a new one.
 
+## md-lint
+
+Formats Markdown files automatically. After a tool call changes a Markdown file, Tau runs markdownlint fixes with a packaged default ruleset silently in the background, without stopping the agent or entering its context. A repository's own markdownlint config overrides the packaged rules, and `extensions.mdLint` settings control the extension (`enabled`, `ignoreGlobs`).
+
 ## patch
 
 Replaces separate edit/write operations with one multi-file `patch` tool. It can create, rewrite, edit, move, and delete files in one structured call. Fewer tool calls means fewer turns, and each avoided turn prevents the full chat context from being sent again. Tau enables `patch` only for OpenAI and OpenAI Codex models and uses `edit` and `write` for every other provider.

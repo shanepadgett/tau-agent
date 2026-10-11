@@ -92,12 +92,6 @@
 						".pi/extensions/**/*.ts",
 						".fallowrc.jsonc"
 					]
-				},
-				{
-					"name": "check:markdown",
-					"command": "mise run check:markdown",
-					"details": "Markdown linting and fixes through markdownlint-cli2.",
-					"includeGlobs": ["**/*.md", ".markdownlint-cli2.jsonc"]
 				}
 			]
 		},

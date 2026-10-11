@@ -58,6 +58,42 @@
 					},
 					"additionalProperties": false
 				},
+				"mdLint": {
+					"type": "object",
+					"properties": {
+						"enabled": {
+							"type": "boolean",
+							"default": true,
+							"description": "Enable automatic Markdown formatting."
+						},
+						"ignoreGlobs": {
+							"type": "array",
+							"items": {
+								"type": "string",
+								"description": "Project-relative Markdown path to ignore."
+							},
+							"default": [
+								".git/**",
+								"node_modules/**",
+								"dist/**",
+								"build/**",
+								"coverage/**",
+								"out/**",
+								".cache/**",
+								".next/**",
+								".turbo/**",
+								".parcel-cache/**",
+								".pi/sessions/**",
+								".pi/cache/**",
+								".pi/tmp/**",
+								".pi/temp/**",
+								".pi/logs/**"
+							],
+							"description": "Markdown files ignored by automatic formatting."
+						}
+					},
+					"additionalProperties": false
+				},
 				"modelFallback": {
 					"type": "object",
 					"properties": {

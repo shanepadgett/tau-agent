@@ -1,0 +1,64 @@
+{
+	// Packaged default configuration for Markdown linting and fixes.
+	// Used by the md-lint extension (via --config on the programmatic main) and
+	// by the mise check:markdown task. A repository's own .markdownlint-cli2.jsonc
+	// overrides anything here.
+	"globs": [
+		"**/*.md"
+	],
+	"ignores": [
+		".git/**",
+		"node_modules/**",
+		"dist/**",
+		"build/**",
+		"coverage/**",
+		"out/**",
+		".cache/**",
+		".next/**",
+		".turbo/**",
+		".parcel-cache/**",
+		".pi/sessions/**",
+		".pi/cache/**",
+		".pi/tmp/**",
+		".pi/temp/**",
+		".pi/logs/**"
+	],
+	"gitignore": true,
+	"frontMatter": "^---[^]*?---[\\r\\n]+",
+	"config": {
+		"default": true,
+		"MD003": {
+			"style": "atx"
+		},
+		"MD007": {
+			"indent": 2
+		},
+		"MD013": false,
+		"MD024": {
+			"siblings_only": true
+		},
+		"MD026": {
+			"punctuation": ".,;:"
+		},
+		"MD031": {
+			"list_items": false
+		},
+		"MD033": {
+			"allowed_elements": ["a", "br", "details", "img", "kbd", "sub", "summary", "sup"]
+		},
+		"MD041": false,
+		"MD046": {
+			"style": "fenced"
+		},
+		"MD048": {
+			"style": "backtick"
+		},
+		"MD049": {
+			"style": "asterisk"
+		},
+		"MD050": {
+			"style": "asterisk"
+		},
+		"MD055": false
+	}
+}
