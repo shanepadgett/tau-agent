@@ -44,7 +44,9 @@ Use `/cost-report` to view spending for a chosen period and either the current p
 
 ## compaction
 
-Tau automatically replaces long conversation history with a checkpoint so work can continue. Use `/compact` to do this manually. Configure `extensions.compaction.selfCompact` to disable proactive compaction or change its thresholds.
+Tau automatically replaces long conversation history with a checkpoint so work can continue. Use `/compact` to do this manually. Configure `extensions.compaction.selfCompact` to change its thresholds. Settings changes require `/reload`.
+
+Set `extensions.compaction.selfCompact.enabled` to `false` to disable all Tau compaction behavior, including its tool, instructions, handoff recovery, and post-compaction model routing. Manual and automatic compaction then use Pi's built-in behavior and configured recent-token retention. The footer continues showing context usage.
 
 Each newly reached context stage is delivered once per checkpoint. Notice is informational and lets active work continue. Warning asks the agent to finish its current bounded work unit, then compact before starting another substantial unit.
 

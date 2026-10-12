@@ -13,7 +13,6 @@ import { Loader } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { emitTauEvent, type TauAgentEvents } from "../../shared/events.ts";
 import { registerPromptSource } from "../../shared/prompt-contributions.ts";
-import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import settingsSpec from "./settings.ts";
 import { summarize } from "./summary.ts";
 
@@ -60,8 +59,19 @@ function hasMaterial(ctx: ExtensionContext): boolean {
 	});
 }
 
-export function registerSelfCompaction(pi: ExtensionAPI): void {
-	let settings = settingsSpec.defaults;
+export function registerSelfCompaction(
+	pi: ExtensionAPI,
+	initialCtx: ExtensionContext,
+	initialSettings: typeof settingsSpec.defaults,
+): void {
+	const { noticeTokens, warningTokens, forcedTokens } = initialSettings.selfCompact;
+	const settings =
+		noticeTokens >= warningTokens || warningTokens >= forcedTokens ? settingsSpec.defaults : initialSettings;
+	if (settings !== initialSettings)
+		initialCtx.ui.notify(
+			"Self-compaction thresholds must increase: notice < warning < forced. Using defaults.",
+			"warning",
+		);
 	let state: State = { phase: "watching", cycle: 0, nudged: false, forced: false };
 	let lifetime = new AbortController();
 	let lastLevel: string = "";
@@ -124,23 +134,12 @@ export function registerSelfCompaction(pi: ExtensionAPI): void {
 		}
 		lastLevel = "";
 	}
-	async function refresh(ctx: ExtensionContext) {
-		settings = await loadTauExtensionSettings(ctx, settingsSpec);
-		const { noticeTokens, warningTokens, forcedTokens } = settings.selfCompact;
-		if (noticeTokens >= warningTokens || warningTokens >= forcedTokens) {
-			settings = { selfCompact: { ...settingsSpec.defaults.selfCompact, enabled: settings.selfCompact.enabled } };
-			ctx.ui.notify(
-				"Self-compaction thresholds must increase: notice < warning < forced. Using defaults.",
-				"warning",
-			);
-		}
-	}
 	function level(ctx: ExtensionContext): Level {
 		const tokens = ctx.getContextUsage()?.tokens ?? null;
 		const window = ctx.model?.contextWindow ?? 0;
 		const reserve = SettingsManager.create(ctx.cwd).getCompactionReserveTokens(ctx.model);
 		const cap = Math.floor(Math.min(window * 0.9, window - reserve - 1));
-		if (!settings.selfCompact.enabled || cap < 3) return { level: "normal", tokens, thresholds: null };
+		if (cap < 3) return { level: "normal", tokens, thresholds: null };
 		const forced = Math.min(settings.selfCompact.forcedTokens, cap);
 		const warning = Math.min(settings.selfCompact.warningTokens, forced - 1);
 		const notice = Math.min(settings.selfCompact.noticeTokens, warning - 1);
@@ -221,9 +220,7 @@ export function registerSelfCompaction(pi: ExtensionAPI): void {
 		section: "context-management",
 		refresh: "append",
 		async read() {
-			return settings.selfCompact.enabled
-				? "Manage context through self_compact. Context notice is informational: continue active work without compacting solely because of the notice. At warning, finish the current bounded work unit, then compact before starting another substantial unit; if only the final answer remains, send it. At the hard cutoff, call self_compact immediately. Follow the latest context stage or settlement reminder. Call alone with a short current handoff: the user's request and authorization limits, unfinished work, immediate blockers, unanswered questions, and exact NEXT ACTION last. Aim for 500–1,500 characters; maximum 24,000. The handoff is preserved verbatim once inside the checkpoint; durable context is summarized separately."
-				: "";
+			return "Manage context through self_compact. Context notice is informational: continue active work without compacting solely because of the notice. At warning, finish the current bounded work unit, then compact before starting another substantial unit; if only the final answer remains, send it. At the hard cutoff, call self_compact immediately. Follow the latest context stage or settlement reminder. Call alone with a short current handoff: the user's request and authorization limits, unfinished work, immediate blockers, unanswered questions, and exact NEXT ACTION last. Aim for 500–1,500 characters; maximum 24,000. The handoff is preserved verbatim once inside the checkpoint; durable context is summarized separately.";
 		},
 	});
 	pi.registerTool({
@@ -238,7 +235,6 @@ export function registerSelfCompaction(pi: ExtensionAPI): void {
 		),
 		async execute(toolCallId, params, signal, _update, ctx) {
 			if (signal?.aborted || lifetime.signal.aborted) throw new Error("Self-compaction cancelled");
-			if (!settings.selfCompact.enabled) throw new Error("Self-compaction is disabled");
 			if (state.phase !== "watching") throw new Error("A compaction note is already pending");
 			if (!params.note_to_self.trim()) throw new Error("The note must not be blank");
 			if (!hasMaterial(ctx)) throw new Error("Nothing new to compact beyond the current checkpoint");
@@ -261,7 +257,6 @@ export function registerSelfCompaction(pi: ExtensionAPI): void {
 	pi.on("tool_call", (event, ctx) => {
 		if (state.phase !== "watching")
 			return { block: true, terminate: true, reason: "Compaction is pending. Wait for your saved note." };
-		if (!settings.selfCompact.enabled) return;
 		const current = publish(ctx);
 		if (event.toolName === "self_compact") return;
 		const assistant = [...ctx.sessionManager.buildSessionProjection().messages]
@@ -402,7 +397,7 @@ export function registerSelfCompaction(pi: ExtensionAPI): void {
 			);
 			return;
 		}
-		if (!settings.selfCompact.enabled || state.nudged || ctx.hasPendingMessages() || event.continue) return;
+		if (state.nudged || ctx.hasPendingMessages() || event.continue) return;
 		const current = publish(ctx);
 		if ((current.level === "warning" || current.level === "forced") && hasMaterial(ctx)) {
 			state.nudged = true;
@@ -482,11 +477,10 @@ export function registerSelfCompaction(pi: ExtensionAPI): void {
 		lastLevel = "";
 		publish(ctx);
 	});
-	pi.on("session_start", async (_event, ctx) => {
+	pi.on("session_start", (_event, ctx) => {
 		lifetime.abort();
 		clearProgress();
 		lifetime = new AbortController();
-		await refresh(ctx);
 		restore(ctx);
 		publish(ctx);
 	});
@@ -497,8 +491,7 @@ export function registerSelfCompaction(pi: ExtensionAPI): void {
 		restore(ctx);
 		publish(ctx);
 	});
-	pi.on("before_agent_start", async (_event, ctx) => {
-		await refresh(ctx);
+	pi.on("before_agent_start", (_event, ctx) => {
 		restore(ctx);
 		const current = publish(ctx);
 		if (ctx.signal?.aborted || lifetime.signal.aborted || !hasMaterial(ctx)) return;
@@ -520,4 +513,6 @@ export function registerSelfCompaction(pi: ExtensionAPI): void {
 		lifetime.abort();
 		clearProgress();
 	});
+	restore(initialCtx);
+	publish(initialCtx);
 }
