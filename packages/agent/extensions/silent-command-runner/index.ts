@@ -101,7 +101,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	let runActive = false;
 	let writeRevision = 0;
 	let checkedRevision: number | undefined;
-	const pendingFailedNames = new Set<string>();
 	const temporaryOutput = createTemporaryOutputStore();
 	const snapshots = new Map<string, WriteSnapshot>();
 	const fixedHashes: Snapshot = new Map();
@@ -157,7 +156,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		runActive = false;
 		writeRevision = 0;
 		checkedRevision = 0;
-		pendingFailedNames.clear();
 		runBaseline = new Map();
 		changedPaths.clear();
 		snapshots.clear();
@@ -189,7 +187,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		fixedHashes.clear();
 		writeRevision = 0;
 		checkedRevision = 0;
-		pendingFailedNames.clear();
 		changedPaths.clear();
 		runBaseline = await snapshotFiles(await resolveProjectRoot(ctx.cwd), settings.afterRun, ctx.signal);
 	});
@@ -240,13 +237,9 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		}
 	});
 
-	// The last boundary before the run settles: failures continue the run instead of starting a new one.
+	// Missing or stale checks run once; failures give the agent a chance to repair or report a blocker.
 	pi.on("agent_before_settle", async (event, ctx) => {
-		if (
-			event.outcome !== "completed" ||
-			(checkedRevision === writeRevision && pendingFailedNames.size === 0) ||
-			settings.afterRun.length === 0
-		)
+		if (event.outcome !== "completed" || checkedRevision === writeRevision || settings.afterRun.length === 0)
 			return undefined;
 		try {
 			const result = await runChecksWithWidget(ctx, ctx.signal);
@@ -422,9 +415,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			const projectRoot = await resolveProjectRoot(cwd);
 			const current = await snapshotFiles(projectRoot, settings.afterRun, controller.signal);
 			recordChanges(runBaseline, current, changedPaths);
-			const selected = settings.afterRun.filter(
-				(command) =>
-					[...changedPaths].some((path) => command.scope.matches(path)) || pendingFailedNames.has(command.name),
+			const selected = settings.afterRun.filter((command) =>
+				[...changedPaths].some((path) => command.scope.matches(path)),
 			);
 			const failed: FailedCommandDetails[] = [];
 			const passed: string[] = [];
@@ -434,7 +426,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 				const result = await runCommand(pi, projectRoot, command, controller.signal, []);
 				controller.signal.throwIfAborted();
 				if (result.code !== 0 || result.killed) {
-					pendingFailedNames.add(command.name);
 					await output.append(`${formatAgentFailure(result)}\n\n`);
 					failed.push({
 						...result,
@@ -442,7 +433,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 						stderr: tailBytes(result.stderr.content, settings.maxOutputBytes),
 					});
 				} else {
-					pendingFailedNames.delete(command.name);
 					passed.push(command.name);
 				}
 			}
@@ -453,7 +443,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			}
 			if (failed.length > 0) {
 				await output.append(
-					`${passed.length ? "\n" : ""}The following checks failed: ${failed.map((failure) => failure.name).join(", ")}\nComplete all repairs, then call checks before summarizing the requested work.`,
+					`${passed.length ? "\n" : ""}The following checks failed: ${failed.map((failure) => failure.name).join(", ")}\nRepair failures within the approved scope, then call checks after any further writes. If blocked or a fix needs permission, report the failures and ask the user.`,
 				);
 			}
 			controller.signal.throwIfAborted();
@@ -464,10 +454,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 				throw new Error("Files may have changed during checks; call checks again.");
 			}
 			checkedRevision = revision;
-			if (failed.length > 0) {
-				runBaseline = current;
-				changedPaths.clear();
-			}
 			return {
 				content: [{ type: "text", text: result.content }],
 				details: { failed, passed, overflow: result.overflow },
@@ -552,7 +538,7 @@ function formatCheckInstructions(commands: readonly CommandConfig[]): string {
 		"Required repository verification for runs with file edits: Call checks only when you have edited repository files during the current run, including additions, modifications, moves, or deletions. Skip it for discussion, read-only investigation, and in-memory eval or codemode work that does not edit repository files. Calling a write-capable tool alone does not require checks. For runs with file edits, you MUST call checks after all implementation, investigation, builds, and focused testing are complete, immediately before your final summary. Do not send the final summary first or rely on automatic settlement checks to satisfy this requirement. Never use checks for intermediate validation.",
 		"Never manually run any repository check listed below or its equivalent, during development or final verification. This includes their task-runner commands, direct binaries, wrappers, and alternate flags through bash, eval, or codemode. Configured formatting, lint, type checking, full test suites, dependency/schema validation, dead-code checks, and duplicate-code checks belong exclusively to checks.",
 		"During development, builds and focused tests are allowed only when needed for the work in progress; batch them at meaningful boundaries. The focused-test exception allows a relevant subset of a registered suite, never the full suite. Do not use a build or another command name to bypass the restriction on configured checks.",
-		"If checks fail, complete all repairs, then call checks again before your final summary. In a run with file edits, any later write-capable call invalidates the result, even if it changes nothing; finish that work and call checks again. Summarize file-editing work only after verification is current.",
+		"A completed checks call counts as current whether commands pass or fail. Repair failures within the approved scope; if blocked or a fix needs permission, report the failures and ask the user. In a run with file edits, any later write-capable call invalidates the result, even if it changes nothing; finish that work and call checks again. Summarize file-editing work only after checks are current, and report unresolved failures clearly.",
 		"You may call it last in the same codemode script as your final edits: await all writes, then text(await tools.checks({})). Pending automatic fixes finish before checks.",
 		`Checks: ${commands.length ? commands.map((command) => `${command.name} [${command.command}]${command.details ? `: ${command.details}` : ""}`).join("; ") : "none configured"}`,
 	].join("\n");
