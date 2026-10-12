@@ -146,7 +146,7 @@ Loads specialist tools when the agent needs them instead of including every tool
 
 ## vocabulary
 
-Gives the agent consistent product terms from `.pi/tau/vocabulary.json`. Ask it to look up or manage vocabulary; it loads the deferred tool when needed. Before saving a change, discuss and agree on the product concept and definition. Terms are not collected automatically and should not describe implementation details. Saved changes enter the prompt at the next agent run.
+Injects only product term names and brief tool-discovery guidance from `.pi/tau/vocabulary.json` into the prompt. Definitions stay in the file and are available through the deferred tool. Ask the agent to look up or manage vocabulary. Before saving a change, discuss and agree on the product concept and definition. Terms are not collected automatically and should not describe implementation details. Changes to term names enter the prompt at the next agent run.
 
 ## web
 

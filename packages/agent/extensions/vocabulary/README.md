@@ -1,6 +1,6 @@
 # Vocabulary
 
-Vocabulary gives the agent consistent product terms for a repository. Terms and short definitions live in `.pi/tau/vocabulary.json` at the project root and appear automatically in a dedicated prompt section. Missing or empty vocabulary adds no section.
+Vocabulary gives the agent consistent product terms for a repository. Terms and short definitions live in `.pi/tau/vocabulary.json` at the project root. Only term names and brief tool-discovery guidance appear automatically in the prompt; definitions are available through the deferred tool. Missing or empty vocabulary adds no section.
 
 Ask the agent to look up or manage vocabulary. It loads the deferred `vocabulary` tool through `tool_search` and can list, read, create, update, or delete terms. Updates can rename a term and replace its definition.
 
@@ -19,6 +19,6 @@ You can also edit the file directly:
 }
 ```
 
-Term lookup is case-insensitive. Empty definitions, duplicate terms, and invalid documents are rejected. Terms appear alphabetically, and file formatting or entry order does not change the prompt. Saved changes refresh the prompt section at the next agent run; unchanged vocabulary preserves the existing cached instructions. Cache behavior for updates and deferred-tool loading depends on the provider.
+Term lookup is case-insensitive. Empty definitions, duplicate terms, and invalid documents are rejected. Term names appear alphabetically. File formatting, entry order, and definition-only changes do not change the prompt. Changes to term names refresh the prompt section at the next agent run. Cache behavior for updates and deferred-tool loading depends on the provider.
 
 Run `/reload` after installing or changing this extension.

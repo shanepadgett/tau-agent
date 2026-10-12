@@ -49,7 +49,7 @@ export default function vocabularyExtension(pi: ExtensionAPI): void {
 			if (terms.length === 0) return "";
 			return [
 				"Use these product terms consistently:",
-				...terms.map(({ term, definition }) => `- ${term}: ${definition}`),
+				...terms.map(({ term }) => `- ${term}`),
 				"",
 				"To manage vocabulary, use tool_search to load vocabulary; discuss and agree on every change with the user before saving it.",
 			].join("\n");
