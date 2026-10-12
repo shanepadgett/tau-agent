@@ -13,7 +13,6 @@ Decisions to make later. Each line is the question and what brings it up. When t
 - Crash risk: a tool can succeed and the process die before its result is saved, so a rebuild could rerun it. Recording a tool-started entry would show the crash as an interrupted tool. Comes up at build step 4, since it bears on "no background task recovery".
 - One SQLite database file per session, or one shared file. Comes up at build step 3.
 - OS keychain storage, encryption at rest, several accounts per provider, or per-project credentials. Comes up when a user or enterprise asks for one.
-- Full Linux acceptance of the check suite; only 12 focused cases ran in a Linux arm64/glibc container. Comes up when CI is set up or a check behaves differently on Linux.
 - Whether Fallow follows dynamically loaded default exports. Comes up when the extension host loads modules by path.
 - The exact 49/50-token duplicate thresholds. Comes up when a duplicate report looks wrong near the threshold.
 - Whether development hooks rerun checks after a live session's files change. Comes up when a hook misses a change in a live session.

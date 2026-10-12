@@ -32,7 +32,6 @@ depends = [
   "fallow:dupes",
   "test",
   "test:rules",
-  "test:checks",
 ]
 
 [tasks."check:mise"]
@@ -76,9 +75,6 @@ run = "bun tools/report-failures.ts bun-test -- bun test ./src ./tests --only-fa
 description = "Lint rule unit tests under Node"
 run = "bun tools/report-failures.ts node-test -- node --test --test-reporter=dot \"tools/lint/**/*.test.ts\""
 
-[tasks."test:checks"]
-description = "Check infrastructure integration tests, run before commits"
-run = "bun tools/report-failures.ts bun-test -- bun test ./tools/checks --only-failures --pass-with-no-tests"
 
 [tasks.docs]
 description = "Copy version-matched dependency docs into docs/reference/copies/ and rebuild the index"

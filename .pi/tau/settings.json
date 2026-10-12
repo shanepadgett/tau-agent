@@ -221,14 +221,6 @@
           ],
           "excludeGlobs": ["**/*.md"]
         }
-      ],
-      "beforeCommit": [
-        {
-          "name": "Check infrastructure tests",
-          "command": "mise run test:checks",
-          "details": "Verify actual check commands, documentation copying and development-hook configuration.",
-          "timeoutMs": 600000
-        }
       ]
     }
   }

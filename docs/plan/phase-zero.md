@@ -1,6 +1,6 @@
 # Phase zero: check infrastructure
 
-Status: implementation complete; acceptance coverage and remaining verification are recorded below. The Fallow blockers are resolved ([Resolved](#resolved)). No further spikes. Fallow covers dead code, boundaries and duplicates only. [tooling.md](tooling.md) holds the agreed tool choices. [The code plan](work/check-infrastructure.md) and [integration acceptance cases](work/check-acceptance.md) hold the implementation detail.
+Status: complete. The acceptance harness it built in `tools/checks/` was later removed as more code than it was worth: checks now run only on the real repository, and the custom lint rules keep their unit tests. The rest of this file records what phase zero decided and measured.
 
 ## Shape
 
@@ -26,7 +26,6 @@ flowchart LR
 | Type/lint policy | Add root TS/Oxlint config and plugin | Compiler owns types/Effect; Oxlint owns other lint |
 | Architecture/dead code | Add Fallow config | Zones follow architecture.md; explicit roots, public SDK and dynamic entries |
 | Development automation | Add repository settings using the existing hook structure | Selected-file safe fixes; matching whole-project checks |
-| Check acceptance | Add integration flow | Real child processes against temporary projects, not mocked tools |
 | Dependency reference docs | Add manifest and `docs` task | Copy version-matched docs into committed `docs/reference/copies/`; `check:reference` verifies them offline |
 
 ## Installation inventory
@@ -95,9 +94,9 @@ Peak memory, measured through `Bun.Subprocess.resourceUsage()` on 200 generated 
 | macOS arm64 | 183.5 MiB / 117 ms | 189.0 MiB / 165 ms |
 | Linux arm64/glibc container | 174.2 MiB / 3370 ms | 180.2 MiB / 214 ms |
 
-These are bounded-fixture measurements, not a production or CI budget; the Linux type command includes cold Mise startup. The retained resource case reports its measurements only when it fails.
+These are bounded-fixture measurements, not a production or CI budget; the Linux type command includes cold Mise startup.
 
-Not tested yet, and moved to [deferred.md](deferred.md): full Linux acceptance, dynamically loaded application default exports, exact 49/50-token duplicate boundaries, and live development-host session invalidation. Hook tests validate configuration and documented shell behavior rather than launching a live agent session. Editor integration, x64/musl, arbitrary dynamic API aliases, framework callbacks and application-scale performance remain limits from the acceptance plan.
+Not tested yet, and moved to [deferred.md](deferred.md): dynamically loaded application default exports, exact 49/50-token duplicate boundaries, and live development-host session invalidation. Hook tests validate configuration and documented shell behavior rather than launching a live agent session. Editor integration, x64/musl, arbitrary dynamic API aliases, framework callbacks and application-scale performance remain limits from the acceptance plan.
 
 ## Resolved
 
