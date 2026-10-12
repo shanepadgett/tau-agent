@@ -369,7 +369,6 @@ function contextText(
 	const contextWindow = usage?.contextWindow ?? ctx.model?.contextWindow ?? 0;
 	const percentValue = typeof usage?.percent === "number" ? usage.percent : undefined;
 	const thresholds = level?.thresholds;
-	const tag = level && level.level !== "normal" && level.level !== "compacting" ? ` ${level.level.toUpperCase()}` : "";
 	const currentTokens = usage?.tokens ?? level?.tokens ?? null;
 	const latest = [...ctx.sessionManager.buildSessionProjection().messages]
 		.reverse()
@@ -408,7 +407,7 @@ function contextText(
 			const start = thresholds.forced * (contextWindow / thresholds.forced) ** (index / 4);
 			bar += tokens > start ? theme.fg("error", "▓") : theme.fg("dim", "░");
 		}
-		return `${bar}${theme.fg("dim", `|${tag}`)}`;
+		return `${bar}${theme.fg("dim", "|")}`;
 	}
 	const usedCells =
 		contextWindow > 0 && currentTokens !== null ? Math.min(20, Math.ceil((currentTokens / contextWindow) * 20)) : 0;
@@ -420,7 +419,7 @@ function contextText(
 			currentTokens === null || contextWindow <= 0 ? "?" : index < cachedCells ? "•" : index < usedCells ? "·" : "-";
 		return theme.fg(cell === "•" || cell === "·" ? color : "dim", cell);
 	}).join("");
-	return `${theme.fg("dim", "[")}${bar}${theme.fg("dim", `]${tag}`)}`;
+	return `${theme.fg("dim", "[")}${bar}${theme.fg("dim", "]")}`;
 }
 
 function contextPercentColor(percent: number | undefined): ThemeColor {
