@@ -1,0 +1,11 @@
+{
+	"name": "effect-spike",
+	"private": true,
+	"dependencies": {
+		"effect": "4.0.3"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.4.2",
+		"typescript": "^7.0.2"
+	}
+}
