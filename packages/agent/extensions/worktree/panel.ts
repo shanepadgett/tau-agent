@@ -1,7 +1,38 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { SelectableList, ToolPanel } from "@shanepadgett/tau-tui";
+import { Input, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { bindingHint, SelectableList, ToolPanel } from "@shanepadgett/tau-tui";
 import type { Workspace } from "./workspaces.ts";
+
+export function showWorkspaceNameInput(ctx: ExtensionCommandContext): Promise<string | undefined> {
+	return ctx.ui.custom<string | undefined>((tui, theme, _keys, done) => {
+		const input = new Input({ placeholder: "e.g. fix-cache-bug", placeholderStyle: (text) => theme.fg("dim", text) });
+		input.onSubmit = (value) => done(value);
+		input.onEscape = () => done(undefined);
+		const panel = new ToolPanel(theme, {
+			title: "New worktree",
+			secondary: "Name becomes a lowercase, hyphenated folder and wt/<name> branch.",
+			body: input,
+			footer: {
+				kind: "hints",
+				hints: [bindingHint("tui.input.submit", "create"), bindingHint("tui.select.cancel", "cancel")],
+			},
+		});
+		return {
+			render: (width) => panel.render(width),
+			invalidate: () => panel.invalidate(),
+			handleInput: (data) => {
+				input.handleInput(data);
+				tui.requestRender();
+			},
+			get focused() {
+				return input.focused;
+			},
+			set focused(value: boolean) {
+				input.focused = value;
+			},
+		};
+	});
+}
 
 export function showWorkspacePanel(
 	ctx: ExtensionCommandContext,

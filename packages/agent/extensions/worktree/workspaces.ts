@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { cp, lstat, mkdir, readFile, realpath, rm, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -165,21 +165,10 @@ export async function validateWorkspace(git: GitRunner, repository: Repository, 
 export async function createWorkspace(
 	git: GitRunner,
 	repository: Repository,
+	name: string,
 	signal: AbortSignal | undefined,
 ): Promise<WorkspaceRecord> {
 	const baseCommit = await git.run(["rev-parse", "--verify", "HEAD^{commit}"], { cwd: repository.root });
-	const sourceBranch = await git.run(["symbolic-ref", "--short", "-q", "HEAD"], {
-		cwd: repository.root,
-		optional: true,
-	});
-	const source = (sourceBranch || `detached-${baseCommit.slice(0, 7)}`)
-		.replace(/^wt\//, "")
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "-")
-		.slice(0, 40)
-		.replace(/^-|-$/g, "");
-	const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
-	const name = `${source || "checkout"}-${stamp}-${randomUUID().slice(0, 6)}`;
 	const branch = `wt/${name}`;
 	signal?.throwIfAborted();
 	await mkdir(repository.folder, { recursive: true });
@@ -191,6 +180,12 @@ export async function createWorkspace(
 		!isAbsolute(destination)
 	)
 		throw new Error("The worktree destination must be outside the source checkout.");
+	try {
+		await lstat(path);
+		throw new Error(`A worktree folder already exists at ${path}. Choose another name.`);
+	} catch (error) {
+		if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+	}
 	const sourceIndex = await git.run(["rev-parse", "--path-format=absolute", "--git-path", "index"], {
 		cwd: repository.root,
 	});

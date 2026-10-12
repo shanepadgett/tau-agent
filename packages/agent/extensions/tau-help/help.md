@@ -152,7 +152,7 @@ Lets the agent search the web and fetch pages. Search uses an available Codex, A
 
 ## worktree
 
-Use `/wt` to copy your current checkout, including unfinished edits, into a new worktree and continue in its own session. The source checkout stays untouched. Checkouts containing nested Git repositories or initialized submodules are not supported.
+Use `/wt` to name a new worktree, copy your current checkout including unfinished edits, and continue in its own session. Tau converts the name to lowercase hyphenated form and creates its branch under `wt/`. The source checkout stays untouched. Checkouts containing nested Git repositories or initialized submodules are not supported.
 
 Use `/wt list` to browse and switch worktrees. `/wt clean` previews unused, clean Tau worktrees and asks before removing them. Cleanup keeps branches and saved chats, warns before deleting ignored files, and skips dirty or occupied worktrees. Tau does not delete external worktree folders.
 

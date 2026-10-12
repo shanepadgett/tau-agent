@@ -3,7 +3,7 @@ import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import { createGitRunner, type GitRunner } from "../../shared/git.ts";
 import { errorText } from "../../shared/text.ts";
 import { acquireWorkspace, registerWorkspaceSession, workspaceOwner, type WorkspaceLease } from "./ownership.ts";
-import { showWorkspacePanel } from "./panel.ts";
+import { showWorkspaceNameInput, showWorkspacePanel } from "./panel.ts";
 import { prepareWorkspaceSession } from "./sessions.ts";
 import {
 	createWorkspace,
@@ -64,7 +64,7 @@ export default function worktreeExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.registerCommand("wt", {
-		description: "Copy this checkout into a new worktree; list or clean workspaces",
+		description: "Create a named worktree from this checkout; list or clean workspaces",
 		getArgumentCompletions(prefix): AutocompleteItem[] | null {
 			const value = prefix.trimStart();
 			if (/\s/.test(value)) return null;
@@ -186,8 +186,19 @@ async function newWorkspace(
 	git: GitRunner,
 	repository: Repository,
 ): Promise<void> {
+	const input = await showWorkspaceNameInput(ctx);
+	if (input === undefined) return;
+	const name = input
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-|-$/g, "");
+	if (!name) {
+		ctx.ui.notify("Worktree name must contain letters or numbers.", "error");
+		return;
+	}
 	ctx.ui.notify("Copying this checkout into a new worktree…", "info");
-	const record = await createWorkspace(git, repository, ctx.signal);
+	const record = await createWorkspace(git, repository, name, ctx.signal);
 	const workspace: Workspace = {
 		id: record.path,
 		name: record.name,

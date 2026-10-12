@@ -1,10 +1,10 @@
 # Worktree
 
-Use `/wt` to continue your current work in a separate folder, branch, and Pi conversation without a setup interview. In cmux, it opens a named tab in your current cmux workspace. Outside cmux, it switches this terminal to the new workspace.
+Use `/wt` to continue your current work in a separately named folder, branch, and Pi conversation. Tau asks for a worktree name and uses its lowercase, hyphenated form. In cmux, it opens a named tab in your current cmux workspace. Outside cmux, it switches this terminal to the new workspace.
 
 ## Commands
 
-- `/wt`: create a worktree from the current checkout's `HEAD`, copy unfinished edits and staging state, and continue this chat in a separate session. Branch names are generated from the source branch, timestamp, and a unique suffix, such as `wt/main-20261011-153024-a1b2c3`.
+- `/wt`: enter a name, then create a worktree from the current checkout's `HEAD`, copy unfinished edits and staging state, and continue this chat in a separate session. The folder uses the lowercase, hyphenated name, and the branch is named `wt/<name>`, such as `wt/fix-cache-bug`.
 - `/wt list`: browse the main checkout and linked worktrees. Switch here, resume saved chats, open another tab, show details, or review individual removal. Externally created worktrees can be opened too. Ghostty on macOS also supports opening a new tab from the list; other terminals show a command to run.
 - `/wt clean`: preview removal of unused, clean worktrees Tau created, then confirm once. Occupied, current, main, missing, Git-locked, external, dirty, and unreadable workspaces are skipped. Branches and saved conversations remain.
 
