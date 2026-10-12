@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { runCase, task, TIMEOUT, type Case } from "./check-case.ts";
-import { createWorkspace } from "./workspace.ts";
+import { createWorkspace, documented } from "./workspace.ts";
 
 const lint = task("check:lint");
 
@@ -48,7 +48,9 @@ export const wrap = (start: number) =>
   });
 `;
 
-const SPACING = `export const first = 1;
+const SPACING = `/** Exercises the checks on a small sample module. */
+
+export const first = 1;
 export const second = 2;
 export const third = () => {
   return first + second;
@@ -56,7 +58,9 @@ export const third = () => {
 export const fourth = 4;
 `;
 
-const SPACED = `export const first = 1;
+const SPACED = `/** Exercises the checks on a small sample module. */
+
+export const first = 1;
 export const second = 2;
 
 export const third = () => {
@@ -77,6 +81,7 @@ const cases: readonly Case[] = [
     expected: {
       exitCode: 1,
       diagnostics: [
+        "src/core/rules.ts:1:1: error tau(require-file-doc)",
         "src/core/rules.ts:2:38: error tau(require-assertion-justification)",
         "src/core/rules.ts:4:41: error tau(no-chained-assertions)",
         "src/core/rules.ts:5:23: error tau(no-unknown-parameters)",
@@ -102,6 +107,7 @@ const cases: readonly Case[] = [
     expected: {
       exitCode: 1,
       diagnostics: [
+        "src/core/notes.ts:1:1: error tau(require-file-doc)",
         "src/core/notes.ts:3:1: error tau(no-commented-code)",
         "src/core/notes.ts:4:1: error tau(no-internal-references)",
         "src/core/notes.ts:6:1: error tau(no-restating-jsdoc)",
@@ -168,6 +174,7 @@ export const first = (values: readonly string[]) => values[0]!;
     expected: {
       exitCode: 1,
       diagnostics: [
+        "src/core/flow.ts:1:1: error tau(require-file-doc)",
         "src/core/flow.ts:2:3: error eslint(no-nested-ternary)",
         "src/core/flow.ts:6:5: error eslint(no-else-return)",
         "src/core/flow.ts:12:43: error eslint(no-magic-numbers)",
@@ -184,7 +191,7 @@ export const first = (values: readonly string[]) => values[0]!;
   },
   {
     name: "lint accepts code that reads well",
-    files: {
+    files: documented({
       "src/core/clear.ts": `export const clamp = (value: number, limit: number) => {
   if (value < 0) return 0;
   if (value > limit) return limit;
@@ -197,7 +204,7 @@ export const identity = <T>(value: T) => value;
 
 export type Counts = Record<string, number>;
 `,
-    },
+    }),
     command: lint,
     expected: { exitCode: 0, diagnostics: [] },
   },
@@ -210,8 +217,8 @@ export type Counts = Record<string, number>;
     expected: {
       exitCode: 1,
       diagnostics: [
-        "src/core/spacing.ts:3:1: error tau(require-readable-spacing)",
-        "src/core/spacing.ts:6:1: error tau(require-readable-spacing)",
+        "src/core/spacing.ts:5:1: error tau(require-readable-spacing)",
+        "src/core/spacing.ts:8:1: error tau(require-readable-spacing)",
       ],
     },
   },

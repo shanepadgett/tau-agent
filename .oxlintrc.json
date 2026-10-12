@@ -44,6 +44,7 @@
         "tau/no-commented-code": "error",
         "tau/no-internal-references": "error",
         "tau/no-restating-jsdoc": "error",
+        "tau/require-file-doc": "error",
         "tau/error-needs-cause": "error",
         "tau/prefer-effect-fn": "error",
         // Effect rules the compiler does not cover. The tag rules run only in modules that import Effect.

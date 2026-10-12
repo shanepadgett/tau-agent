@@ -9,11 +9,14 @@ type HookCommand = {
   readonly excludeGlobs?: readonly string[];
 };
 
+type CommitCommand = { readonly name: string; readonly command: string };
+
 const settings: {
   readonly extensions: {
     readonly silentCommandRunner: {
       readonly afterWrite: readonly HookCommand[];
       readonly afterRun: readonly HookCommand[];
+      readonly beforeCommit: readonly CommitCommand[];
     };
   };
 } = await Bun.file(new URL("../../.pi/tau/settings.json", import.meta.url)).json();
@@ -57,7 +60,6 @@ describe("development hooks", () => {
       "docs/reference/sources.json",
       ".gitignore",
     ]) {
-      expect(selected(path)).toContain("mise run test:checks");
       expect(selected(path)).toContain("mise run check:fmt");
       expect(selected(path)).not.toContain("mise run check:types");
     }
@@ -69,7 +71,6 @@ describe("development hooks", () => {
       "mise run check:lint",
       "mise run check:types",
       "mise run test",
-      "mise run test:checks",
       "mise run fallow:dead-code",
     ]);
 
@@ -95,27 +96,26 @@ describe("development hooks", () => {
     }
   });
 
-  test("run application tests for application changes and check tests for check changes", () => {
+  test("run fast tests after agent runs and the check-infrastructure flow before commits", () => {
     for (const path of ["src/core/agent.ts", "tests/events.test.ts"]) {
       expect(selected(path)).toContain("mise run test");
+      expect(selected(path)).not.toContain("mise run test:rules");
+    }
+
+    expect(selected("tools/lint/tau-plugin.ts")).toContain("mise run test:rules");
+    expect(selected("tools/lint/tau-plugin.ts")).not.toContain("mise run test");
+
+    for (const path of ["package.json", "bun.lock", "mise.toml"]) {
+      expect(selected(path)).toContain("mise run test");
+      expect(selected(path)).toContain("mise run test:rules");
+    }
+
+    for (const path of ["tools/checks/checks.test.ts", ".oxlintrc.json", ".pi/tau/settings.json"]) {
       expect(selected(path)).not.toContain("mise run test:checks");
     }
 
-    for (const path of [
-      "tools/lint/tau-plugin.ts",
-      "tools/checks/checks.test.ts",
-      ".oxlintrc.json",
-      ".fallowrc.jsonc",
-      ".pi/tau/settings.json",
-    ]) {
-      expect(selected(path)).toContain("mise run test:checks");
-      expect(selected(path)).not.toContain("mise run test");
-    }
-
-    for (const path of ["package.json", "bun.lock", "mise.toml", "tsconfig.json"]) {
-      expect(selected(path)).toContain("mise run test");
-      expect(selected(path)).toContain("mise run test:checks");
-    }
+    expect(hooks.afterRun.map((hook) => hook.command)).not.toContain("mise run test:checks");
+    expect(hooks.beforeCommit.map((hook) => hook.command)).toEqual(["mise run test:checks"]);
   });
 
   test("order lint fixes before formatting and accept each code extension", () => {

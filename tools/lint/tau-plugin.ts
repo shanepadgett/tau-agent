@@ -18,7 +18,7 @@ import {
   noInOperator,
   noRuntimeTypeof,
 } from "./expression-rules.ts";
-import { noRestatingJsdoc } from "./jsdoc-rules.ts";
+import { noRestatingJsdoc, requireFileDoc } from "./jsdoc-rules.ts";
 import { noGenericFilenames } from "./no-generic-filenames.ts";
 import { noModuleLet } from "./no-module-let.ts";
 import { noVagueIdentifiers } from "./naming-rules.ts";
@@ -63,6 +63,7 @@ const plugin: Plugin = {
     "no-yieldless-gen": noYieldlessGen,
     "prefer-effect-fn": preferEffectFn,
     "require-assertion-justification": requireAssertionJustification,
+    "require-file-doc": requireFileDoc,
     "require-readable-spacing": requireReadableSpacing,
   },
 };

@@ -95,9 +95,9 @@ Peak memory, measured through `Bun.Subprocess.resourceUsage()` on 200 generated 
 | macOS arm64 | 183.5 MiB / 117 ms | 189.0 MiB / 165 ms |
 | Linux arm64/glibc container | 174.2 MiB / 3370 ms | 180.2 MiB / 214 ms |
 
-These are bounded-fixture measurements, not a production or CI budget; the Linux type command includes cold Mise startup. The retained resource case reports new measurements on each run.
+These are bounded-fixture measurements, not a production or CI budget; the Linux type command includes cold Mise startup. The retained resource case reports its measurements only when it fails.
 
-Not tested yet: full Linux acceptance, dynamically loaded application default exports, exact 49/50-token duplicate boundaries, and live development-host session invalidation. Hook tests validate configuration and documented shell behavior rather than launching a live agent session. Editor integration, x64/musl, arbitrary dynamic API aliases, framework callbacks and application-scale performance remain limits from the acceptance plan.
+Not tested yet, and moved to [deferred.md](deferred.md): full Linux acceptance, dynamically loaded application default exports, exact 49/50-token duplicate boundaries, and live development-host session invalidation. Hook tests validate configuration and documented shell behavior rather than launching a live agent session. Editor integration, x64/musl, arbitrary dynamic API aliases, framework callbacks and application-scale performance remain limits from the acceptance plan.
 
 ## Resolved
 

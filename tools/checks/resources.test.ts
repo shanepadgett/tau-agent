@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { createWorkspace, type Files } from "./workspace.ts";
+import { createWorkspace, documented, type Files } from "./workspace.ts";
 
 const FILE_COUNT = 200;
 
 /** Bounded Effect-heavy modules, generated only inside the temporary workspace. */
-const project: Files = {
+const project: Files = documented({
   "src/ai/message.ts": "export type Message = { readonly text: string; readonly index: number };\n",
   ...Object.fromEntries(
     Array.from({ length: FILE_COUNT }, (_, index) => [
@@ -20,7 +20,7 @@ export const reply = Effect.fn("reply-${index}")(function* (text: string) {
 `,
     ]),
   ),
-};
+});
 
 test("records separate type and lint peak memory on a bounded Effect fixture", async () => {
   await using workspace = await createWorkspace(project);
@@ -28,11 +28,11 @@ test("records separate type and lint peak memory on a bounded Effect fixture", a
   for (const name of ["check:types", "check:lint"]) {
     const started = performance.now();
     const result = await workspace.run(["mise", "run", name]);
-    expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
-    expect(result.maxRSS).toBeGreaterThan(0);
 
-    console.log(
-      `${process.platform}/${process.arch} ${name}: ${FILE_COUNT} Effect modules, peak ${(result.maxRSS / 1024 ** 2).toFixed(1)} MiB, ${(performance.now() - started).toFixed(0)} ms`,
-    );
+    // Measurements appear only in a failure message, so passing runs stay silent.
+    const measurement = `${process.platform}/${process.arch} ${name}: ${FILE_COUNT} Effect modules, peak ${(result.maxRSS / 1024 ** 2).toFixed(1)} MiB, ${(performance.now() - started).toFixed(0)} ms`;
+
+    expect(result.exitCode, `${measurement}\n${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.maxRSS, measurement).toBeGreaterThan(0);
   }
 }, 60_000);

@@ -181,24 +181,11 @@
           "timeoutMs": 300000
         },
         {
-          "name": "Check infrastructure tests",
-          "command": "mise run test:checks",
-          "details": "Verify actual check commands, documentation copying, development-hook configuration and lint rules.",
-          "includeGlobs": [
-            "tools/**",
-            "package.json",
-            "bun.lock",
-            "mise.toml",
-            "tsconfig.json",
-            ".oxlintrc.json",
-            ".oxfmtrc.json",
-            ".fallowrc.jsonc",
-            ".gitignore",
-            ".pi/tau/settings.json",
-            "docs/reference/sources.json"
-          ],
-          "excludeGlobs": ["**/*.md"],
-          "timeoutMs": 300000
+          "name": "Lint rule tests",
+          "command": "mise run test:rules",
+          "details": "Run the Tau lint rules' unit tests.",
+          "includeGlobs": ["tools/lint/**", "package.json", "bun.lock", "mise.toml"],
+          "excludeGlobs": ["**/*.md"]
         },
         {
           "name": "Dead code and import boundaries",
@@ -233,6 +220,14 @@
             "mise.toml"
           ],
           "excludeGlobs": ["**/*.md"]
+        }
+      ],
+      "beforeCommit": [
+        {
+          "name": "Check infrastructure tests",
+          "command": "mise run test:checks",
+          "details": "Verify actual check commands, documentation copying and development-hook configuration.",
+          "timeoutMs": 600000
         }
       ]
     }

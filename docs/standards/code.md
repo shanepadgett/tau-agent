@@ -51,6 +51,7 @@ Read the Effect reference before writing Effect code. These rules cover how we u
 
 ## Comments and messages
 
+- Start every file in `src/` with a doc comment of one or two plain sentences saying what the file is for and when to use it, such as "Opens SQLite files and runs write transactions that hold the lock across async work." Do not list its contents.
 - Comment why: a constraint, a tradeoff, a surprise, or an approach that failed. If a comment says what the code does, rename or extract instead.
 - Describe the code as it is now. No history ("previously", "now uses", "changed to").
 - Document an exported symbol only when its name and signature leave out something a caller needs: a guarantee, a failure, a unit.

@@ -21,6 +21,17 @@ const CONFIGURATION = [
 
 export type Files = Readonly<Record<string, string>>;
 
+const FIXTURE_DOC = "/** Exercises the checks on a small sample module. */\n\n";
+
+/** Gives every `src/` file the file doc lint requires, for fixtures that test something else. */
+export const documented = (files: Files): Files =>
+  Object.fromEntries(
+    Object.entries(files).map(([path, content]) => [
+      path,
+      path.startsWith("src/") && !content.startsWith("/**") ? `${FIXTURE_DOC}${content}` : content,
+    ]),
+  );
+
 export type CommandResult = {
   readonly exitCode: number;
   readonly stdout: string;

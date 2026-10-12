@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { runCase, task, TIMEOUT, type Case } from "./check-case.ts";
-import { createWorkspace, type Files, type Workspace, type WorkspaceOptions } from "./workspace.ts";
+import {
+  createWorkspace,
+  documented,
+  type Files,
+  type Workspace,
+  type WorkspaceOptions,
+} from "./workspace.ts";
 
 const MANIFEST: {
   readonly dependencies: Readonly<Record<string, string>>;
@@ -34,7 +40,7 @@ const ENTRIES: WorkspaceOptions = {
 };
 
 /** A small project with every layer, every allowed import edge and one test. */
-const PROJECT: Files = {
+const PROJECT: Files = documented({
   "src/ai/model.ts": `export type Message = { readonly text: string };
 
 export const model = (text: string): Message => ({ text });
@@ -45,14 +51,18 @@ export const model = (text: string): Message => ({ text });
 `,
   "src/sandbox/script.ts": `export const evaluate = (source: string) => source.length;
 `,
-  "src/session/store.ts": `import { Database } from "bun:sqlite";
-import { model, type Message } from "../ai/model.ts";
+  "src/database/connection.ts": `import { Database } from "bun:sqlite";
 
-export const remember = (text: string): Message => {
+export const openMemory = () => {
   const database = new Database(":memory:");
   database.close();
-  return model(text);
+  return ":memory:";
 };
+`,
+  "src/session/store.ts": `import { model, type Message } from "../ai/model.ts";
+import { openMemory } from "../database/connection.ts";
+
+export const remember = (text: string): Message => model(\`\${text} \${openMemory()}\`);
 `,
   "src/core/agent.ts": `import { Context, Effect, Layer } from "effect";
 import type { Message } from "../ai/model.ts";
@@ -86,12 +96,13 @@ export const version = "0.0.0";
 `,
   "src/host/settings.ts": `import { model } from "../ai/model.ts";
 import { start } from "../core/agent.ts";
+import { openMemory } from "../database/connection.ts";
 import { remember } from "../session/store.ts";
 import { reply } from "@shanepadgett/tau";
 
 export const home = () => process.env["HOME"] ?? "";
 
-export const host = { model, start, remember, reply };
+export const host = { model, start, openMemory, remember, reply };
 `,
   "src/extensions/greeting.ts": `import { reply } from "@shanepadgett/tau";
 
@@ -111,6 +122,13 @@ const message = await Effect.runPromise(Effect.provide(greet(), chat.layer));
 console.log(message.text, home(), host);
 `,
   "tests/integration/events.test.ts": `import { expect, test } from "bun:test";
+import { BunFileSystem } from "@effect/platform-bun";
+import { model } from "../../src/ai/model.ts";
+
+test("builds a message with a platform layer available", () => {
+  expect(model("hello").text).toBe("hello");
+  expect(BunFileSystem.layer).toBeDefined();
+});
 
 test("awaits the event", async () => {
   const target = new EventTarget();
@@ -123,7 +141,7 @@ test("awaits the event", async () => {
   expect(await fired).toBe("done");
 });
 `,
-};
+});
 
 /** A function of 99 tokens over 8 lines, above the duplicate thresholds. */
 const copy = (
@@ -189,7 +207,10 @@ export const run = () => {
     command: task("check:lint"),
     expected: {
       exitCode: 1,
-      diagnostics: ["src/core/agent.ts:5:3: error typescript(no-floating-promises)"],
+      diagnostics: [
+        "src/core/agent.ts:1:1: error tau(require-file-doc)",
+        "src/core/agent.ts:5:3: error typescript(no-floating-promises)",
+      ],
     },
   },
   {
@@ -250,6 +271,7 @@ export const reflect = () => {
     expected: {
       exitCode: 1,
       diagnostics: [
+        "src/core/restricted.ts:1:1: error tau(require-file-doc)",
         "src/core/restricted.ts:3:27: error tau(no-env)",
         "src/core/restricted.ts:4:26: error tau(no-effect-run)",
         "src/core/restricted.ts:5:26: error tau(no-console)",
@@ -262,11 +284,11 @@ export const reflect = () => {
   },
   {
     name: "lint allows restricted APIs in their layer",
-    files: {
+    files: documented({
       ...PROJECT,
       "src/ai/http.ts": `export const get = () => fetch("https://example.com");
 `,
-    },
+    }),
     options: ENTRIES,
     command: task("check:lint"),
     expected: { exitCode: 0, diagnostics: [] },
@@ -291,14 +313,16 @@ export const advance = () => (position += 1);
       exitCode: 1,
       diagnostics: [
         "src/core/state.ts:1:1: error tau(no-module-let)",
+        "src/core/state.ts:1:1: error tau(require-file-doc)",
         "src/core/state.ts:2:8: error tau(no-module-let)",
         "src/session/cursor.ts:1:1: error tau(no-module-let)",
+        "src/session/cursor.ts:1:1: error tau(require-file-doc)",
       ],
     },
   },
   {
     name: "lint allows function-local let and host module state",
-    files: {
+    files: documented({
       "src/core/counter.ts": `export const count = (items: readonly number[]) => {
   let total = 0;
   for (const item of items) total += item;
@@ -312,7 +336,7 @@ export const load = () => {
   return loaded;
 };
 `,
-    },
+    }),
     command: task("check:lint"),
     expected: { exitCode: 0, diagnostics: [] },
   },
@@ -340,7 +364,9 @@ test("sleeps", async () => {
       exitCode: 1,
       diagnostics: [
         "src/core/utils.ts:1:1: error tau(no-generic-filenames)",
+        "src/core/utils.ts:1:1: error tau(require-file-doc)",
         "src/session/helpers/index.ts:1:1: error tau(no-generic-filenames)",
+        "src/session/helpers/index.ts:1:1: error tau(require-file-doc)",
         "tests/integration/mocked.test.ts:3:6: error tau(no-module-mock)",
         "tests/integration/mocked.test.ts:4:6: error tau(no-module-mock)",
         "tests/integration/mocked.test.ts:5:6: error tau(no-module-mock)",
@@ -359,7 +385,7 @@ test("sleeps", async () => {
     expected: { exitCode: 0, diagnostics: [] },
   },
   {
-    name: "fallow rejects forbidden, type-only and self-reference imports and SQLite outside session",
+    name: "fallow rejects forbidden, type-only and self-reference imports and SQLite outside database",
     files: {
       ...PROJECT,
       "src/workspace/leak.ts": `import { Database } from "bun:sqlite";
@@ -377,7 +403,7 @@ console.log(leak());
     expected: {
       exitCode: 1,
       diagnostics: [
-        "policy-violation:src/workspace/leak.ts:1:bun:sqlite banned by tau-imports/sqlite-in-session",
+        "policy-violation:src/workspace/leak.ts:1:bun:sqlite banned by tau-imports/sqlite-in-database",
         "boundary-violation:src/workspace/leak.ts:2:src/workspace/leak.ts -> src/ai/model.ts (workspace -> ai)",
         "boundary-violation:src/workspace/leak.ts:3:src/workspace/leak.ts -> src/sdk/index.ts (workspace -> sdk)",
       ],
@@ -561,6 +587,50 @@ describe("lint fixes", () => {
       const result = await workspace.run(task("fix:lint", path));
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain(`${path}:2:3: error typescript(no-floating-promises)`);
+    },
+    TIMEOUT,
+  );
+});
+
+describe("failure output", () => {
+  test(
+    "passing checks print nothing",
+    async () => {
+      await using workspace = await createWorkspace(PROJECT, ENTRIES);
+
+      for (const name of ["check:mise", "check:fmt", "check:types", "fallow:dead-code", "test"]) {
+        const result = await workspace.run(task(name));
+        const output = `${result.stdout}${result.stderr}`.trim();
+        expect(result.exitCode, `${name}\n${output}`).toBe(0);
+        expect(output, name).toBe("");
+      }
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "a failing test prints its failure without banners, passing tests or summaries",
+    async () => {
+      await using workspace = await createWorkspace({
+        ...PROJECT,
+        "tests/integration/failing.test.ts": `import { expect, test } from "bun:test";\n\ntest("fails", () => {\n  expect(1).toBe(2);\n});\n`,
+      });
+
+      const result = await workspace.run(task("test"));
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout).toContain("(fail) fails");
+      expect(result.stdout).toContain("Received: 1");
+
+      for (const noise of [
+        "bun test v",
+        "(pass)",
+        " pass",
+        "expect() calls",
+        "Ran ",
+        workspace.root,
+      ]) {
+        expect(result.stdout, noise).not.toContain(noise);
+      }
     },
     TIMEOUT,
   );

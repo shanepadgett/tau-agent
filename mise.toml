@@ -4,17 +4,21 @@ bun = "1.4.3"
 node = "24.21.0"
 
 [env]
-# One line per Fallow finding, without progress output.
+# One line per Fallow finding, without progress output or log warnings.
 FALLOW_FORMAT = "compact"
 FALLOW_QUIET = "1"
+RUST_LOG = "error"
 
 [settings]
 # Type checking and type-aware lint each use several GiB on large trees; run
 # tasks one at a time.
 jobs = 1
+# Checks print only failures: no echo of each task's command.
+task.quiet = true
 
 # Every JS tool runs from node_modules under Bun. --no-install fails instead of
-# downloading a missing tool.
+# downloading a missing tool. Commands whose output has passing noise run through
+# tools/report-failures.ts, which prints nothing on success and only failures otherwise.
 
 [tasks.check]
 description = "Run every read-only check"
@@ -27,12 +31,13 @@ depends = [
   "fallow:dead-code",
   "fallow:dupes",
   "test",
+  "test:rules",
   "test:checks",
 ]
 
 [tasks."check:mise"]
 description = "Validate mise tasks"
-run = "mise tasks validate --errors-only"
+run = "bun tools/report-failures.ts plain -- mise tasks validate --errors-only"
 
 [tasks."check:types"]
 description = "Type and Effect diagnostics with the patched TypeScript compiler"
@@ -44,7 +49,7 @@ run = "bunx --bun --no-install oxlint --type-aware --deny-warnings --disable-nes
 
 [tasks."check:fmt"]
 description = "Check formatting with Oxfmt"
-run = "bunx --bun --no-install oxfmt --check"
+run = "bunx --bun --no-install oxfmt --list-different"
 
 [tasks."fix:lint"]
 description = "Apply safe Oxlint fixes to the supplied files"
@@ -56,20 +61,24 @@ run = "bunx --bun --no-install oxfmt --write"
 
 [tasks."fallow:dead-code"]
 description = "Unused files, exports and dependencies, cycles and import boundaries"
-run = "bunx --bun --no-install fallow dead-code --fail-on-issues"
+run = "bun tools/report-failures.ts fallow -- bunx --bun --no-install fallow dead-code --fail-on-issues"
 
 [tasks."fallow:dupes"]
 description = "Duplicated code"
-run = "bunx --bun --no-install fallow dupes --fail-on-issues"
+run = "bun tools/report-failures.ts fallow -- bunx --bun --no-install fallow dupes --fail-on-issues"
 
 [tasks.test]
-description = "Application integration tests"
-# ./tests must exist; the flag lets the task pass until the application has tests.
-run = "bun test ./tests --pass-with-no-tests"
+description = "Application tests, run after agent runs"
+# A test slower than one second fails here and belongs in a before-commit task.
+run = "bun tools/report-failures.ts bun-test -- bun test ./src ./tests --only-failures --parallel --timeout 1000"
+
+[tasks."test:rules"]
+description = "Lint rule unit tests under Node"
+run = "bun tools/report-failures.ts node-test -- node --test --test-reporter=dot \"tools/lint/**/*.test.ts\""
 
 [tasks."test:checks"]
-description = "Check infrastructure: integration tests under Bun, then lint rule unit tests under Node"
-run = ["bun test ./tools/checks --pass-with-no-tests", "node --test \"tools/lint/**/*.test.ts\""]
+description = "Check infrastructure integration tests, run before commits"
+run = "bun tools/report-failures.ts bun-test -- bun test ./tools/checks --only-failures --pass-with-no-tests"
 
 [tasks.docs]
 description = "Copy version-matched dependency docs into docs/reference/copies/ and rebuild the index"

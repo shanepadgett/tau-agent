@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import type { ESTree, Rule } from "@oxlint/plugins";
 
 const STOP_WORDS = new Set([
@@ -120,6 +121,60 @@ export const noRestatingJsdoc: Rule = {
       PropertyDefinition: check,
       TSPropertySignature: check,
       TSMethodSignature: check,
+    };
+  },
+};
+
+/** Two plain sentences fit; a third sentence or a list of contents does not. */
+const MAX_FILE_DOC_CHARACTERS = 200;
+
+const FOLLOWED_BY_BLANK_LINE = /^[ \t]*\r?\n[ \t]*(\r?\n|$)/;
+
+export const requireFileDoc: Rule = {
+  meta: { type: "suggestion" },
+  create(context) {
+    const { sourceCode } = context;
+    const start = sourceCode.getLocFromIndex(0);
+
+    const report = (message: string) => {
+      context.report({ loc: { start, end: start }, message });
+    };
+
+    return {
+      Program() {
+        const { text } = sourceCode;
+        const [first] = sourceCode.getAllComments();
+
+        const isFileDoc =
+          first?.type === "Block" &&
+          first.value.startsWith("*") &&
+          text.slice(0, first.start).trim() === "" &&
+          FOLLOWED_BY_BLANK_LINE.test(text.slice(first.end));
+
+        const lines = isFileDoc ? jsdocLines(first.value).filter((line) => line !== "") : [];
+
+        if (lines.length === 0) {
+          report(
+            "Start the file with a `/** ... */` comment of one or two plain sentences saying what the file is for, then a blank line.",
+          );
+
+          return;
+        }
+
+        const summary = lines.join(" ");
+        const fileName = basename(context.filename).split(".")[0] ?? "";
+        const hasTags = lines.some((line) => line.startsWith("@"));
+
+        if (summary.length > MAX_FILE_DOC_CHARACTERS || hasTags) {
+          report(
+            `Keep the file doc to one or two plain sentences (at most ${MAX_FILE_DOC_CHARACTERS} characters, no tags) about what the file is for.`,
+          );
+        } else if (restatesName(summary, fileName)) {
+          report(
+            "The file doc repeats the file name. Say what the file is for and when to use it.",
+          );
+        }
+      },
     };
   },
 };
