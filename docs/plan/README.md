@@ -9,9 +9,10 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 | [features.md](features.md) | What Tau does for the user and the model. |
 | [architecture.md](architecture.md) | How it is built: runtime, layers, data model, build order. |
 | [tooling.md](tooling.md) | Checks, lint rules, and library choices. |
+| [phase-zero.md](phase-zero.md) | Check infrastructure scope, pins, proposed gates, code plan and acceptance cases. |
 | [spikes.md](spikes.md) | Questions tested before building, with results. |
 | [deferred.md](deferred.md) | Decisions to make later, and what brings each up. |
 
 ## Open
 
-None.
+- Run the isolated check-infrastructure acceptance spike before writing root check configuration?
