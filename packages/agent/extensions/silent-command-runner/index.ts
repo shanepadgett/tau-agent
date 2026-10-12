@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, readdir, rm, stat } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
 	defineTool,
@@ -14,7 +14,8 @@ import { Type } from "typebox";
 import { BoundedTextResultBuilder, type BoundedTextOverflowDetails } from "../../shared/bounded-text-result.ts";
 import { createTemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { registerPromptSource } from "../../shared/prompt-contributions.ts";
-import { matchGlob, posixPath } from "../../shared/glob.ts";
+import { createFileScope, type FileScope } from "../../shared/glob.ts";
+import { isModifyingTool, walkFiles } from "../../shared/project-files.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { resolveProjectRoot } from "../../shared/settings/paths.ts";
 import silentCommandRunnerSettings from "./settings.ts";
@@ -25,30 +26,6 @@ const checkParams = Type.Object({}, { additionalProperties: false });
 const DEFAULT_MAX_OUTPUT_BYTES = 51200;
 const DEFAULT_TIMEOUT_MS = 120000;
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const WRITE_TOOLS = new Set([
-	"patch",
-	"write",
-	"edit",
-	"bash",
-	"powershell",
-	"eval",
-	"codemode",
-	"image_gen",
-	"screenshot_window",
-]);
-const READ_TOOLS = new Set(["read", "grep", "find", "ls", "tool_search"]);
-const WALK_SKIP_DIRS = new Set([
-	".git",
-	"node_modules",
-	"dist",
-	"build",
-	"coverage",
-	".cache",
-	".next",
-	".turbo",
-	".parcel-cache",
-	"out",
-]);
 const DEFAULT_EXCLUDE_GLOBS = [
 	".git/**",
 	"node_modules/**",
@@ -70,6 +47,7 @@ interface CommandConfig {
 	details: string | undefined;
 	includeGlobs: string[];
 	excludeGlobs: string[];
+	scope: FileScope;
 	timeoutMs: number;
 }
 
@@ -114,8 +92,8 @@ interface CheckDetails extends FailureDetails {
 
 export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	let settings: Settings = normalizeSettings(silentCommandRunnerSettings.defaults);
-	let turnStart = Date.now();
-	let turnPaths = new Set<string>();
+	let runBaseline: Snapshot = new Map();
+	const changedPaths = new Set<string>();
 	let abortController: AbortController | undefined;
 	let sessionActive = false;
 	let runActive = false;
@@ -176,10 +154,10 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		sessionActive = true;
 		runActive = false;
 		writeRevision = 0;
-		checkedRevision = undefined;
+		checkedRevision = 0;
 		pendingFailedNames.clear();
-		turnStart = Date.now();
-		turnPaths = new Set();
+		runBaseline = new Map();
+		changedPaths.clear();
 		snapshots.clear();
 		fixedHashes.clear();
 	});
@@ -207,12 +185,11 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		await fixerQueue;
 		snapshots.clear();
 		fixedHashes.clear();
-		turnStart = Date.now();
 		writeRevision = 0;
-		checkedRevision = undefined;
+		checkedRevision = 0;
 		pendingFailedNames.clear();
-		turnPaths =
-			settings.afterRun.length > 0 ? new Set(await walkFiles(await resolveProjectRoot(ctx.cwd))) : new Set();
+		changedPaths.clear();
+		runBaseline = await snapshotFiles(await resolveProjectRoot(ctx.cwd), settings.afterRun, ctx.signal);
 	});
 
 	pi.on("agent_settled", () => {
@@ -227,21 +204,17 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			return;
 		}
 		const tool = pi.getAllTools().find((entry) => entry.name === event.toolName);
-		if (
-			!WRITE_TOOLS.has(event.toolName) &&
-			(READ_TOOLS.has(event.toolName) || tool?.annotations?.readOnlyHint === true)
-		)
-			return;
+		if (!isModifyingTool(event.toolName, tool?.annotations?.readOnlyHint)) return;
 		writeRevision += 1;
 		// Descendant writes share the outer fixer snapshot, but invalidate verification individually.
 		if ([...snapshots.keys()].some((id) => event.toolCallId.startsWith(`${id}/`))) return;
-		if (settings.afterWrite.length === 0) return;
+		if (settings.afterWrite.length === 0 && settings.afterRun.length === 0) return;
 		await fixerQueue;
 		if (!sessionActive) return;
 		const projectRoot = await resolveProjectRoot(ctx.cwd);
 		snapshots.set(event.toolCallId, {
 			projectRoot,
-			files: await snapshotFiles(projectRoot, settings.afterWrite),
+			files: await snapshotFiles(projectRoot, [...settings.afterWrite, ...settings.afterRun], ctx.signal),
 		});
 	});
 
@@ -261,7 +234,11 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 
 	// The last boundary before the run settles: failures continue the run instead of starting a new one.
 	pi.on("agent_before_settle", async (event, ctx) => {
-		if (event.outcome !== "completed" || checkedRevision === writeRevision || settings.afterRun.length === 0)
+		if (
+			event.outcome !== "completed" ||
+			(checkedRevision === writeRevision && pendingFailedNames.size === 0) ||
+			settings.afterRun.length === 0
+		)
 			return undefined;
 		try {
 			const result = await runChecksWithWidget(ctx, ctx.signal);
@@ -293,7 +270,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		runActive = false;
 		abortController?.abort();
 		abortController = undefined;
-		turnPaths = new Set();
+		runBaseline = new Map();
+		changedPaths.clear();
 		for (const controller of fixerControllers) controller.abort();
 		snapshots.clear();
 		fixedHashes.clear();
@@ -303,11 +281,21 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	async function flushFixes(snapshot: WriteSnapshot, ctx: ExtensionContext): Promise<void> {
 		const task = fixerQueue.then(async () => {
 			if (!sessionActive || ctx.signal?.aborted) return;
-			const current = await snapshotFiles(snapshot.projectRoot, settings.afterWrite);
+			const commands = [...settings.afterWrite, ...settings.afterRun];
+			const current = await snapshotFiles(snapshot.projectRoot, commands, ctx.signal);
+			recordChanges(snapshot.files, current, changedPaths);
 			const changed = [...current]
-				.filter(([path, hash]) => hash !== snapshot.files.get(path) && hash !== fixedHashes.get(path))
+				.filter(
+					([path, hash]) =>
+						hash !== snapshot.files.get(path) &&
+						hash !== fixedHashes.get(path) &&
+						settings.afterWrite.some((command) => command.scope.matches(path)),
+				)
 				.map(([path]) => path);
-			if (changed.length === 0) return;
+			if (changed.length === 0) {
+				snapshot.files = current;
+				return;
+			}
 			const controller = new AbortController();
 			fixerControllers.add(controller);
 			const cancel = () => controller.abort();
@@ -316,7 +304,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			try {
 				for (const command of settings.afterWrite) {
 					if (!sessionActive || controller.signal.aborted) return;
-					const files = changed.filter((path) => matchesCommand(path, command));
+					const files = changed.filter((path) => command.scope.matches(path));
 					if (files.length === 0) continue;
 					try {
 						await runCommand(
@@ -330,7 +318,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 						// Final checks own failure reporting; a failed fixer must not stop the next one.
 					}
 				}
-				const after = await snapshotFiles(snapshot.projectRoot, settings.afterWrite);
+				const after = await snapshotFiles(snapshot.projectRoot, commands, controller.signal);
+				recordChanges(current, after, changedPaths);
 				for (const path of changed) {
 					const hash = after.get(path);
 					if (hash === undefined) fixedHashes.delete(path);
@@ -393,15 +382,15 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		const output = new BoundedTextResultBuilder(temporaryOutput, "tail");
 		try {
 			controller.signal.throwIfAborted();
-			reportProgress("Preparing checks…");
 			await fixerQueue;
 			controller.signal.throwIfAborted();
 			const revision = writeRevision;
 			const projectRoot = await resolveProjectRoot(cwd);
-			const paths = await walkFiles(projectRoot);
-			const changed = await scanChangedCommands(projectRoot, settings.afterRun, paths, turnPaths, turnStart);
+			const current = await snapshotFiles(projectRoot, settings.afterRun, controller.signal);
+			recordChanges(runBaseline, current, changedPaths);
 			const selected = settings.afterRun.filter(
-				(command) => changed.includes(command) || pendingFailedNames.has(command.name),
+				(command) =>
+					[...changedPaths].some((path) => command.scope.matches(path)) || pendingFailedNames.has(command.name),
 			);
 			const failed: FailedCommandDetails[] = [];
 			const passed: string[] = [];
@@ -442,8 +431,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			}
 			checkedRevision = revision;
 			if (failed.length > 0) {
-				turnStart = Date.now();
-				turnPaths = new Set(paths);
+				runBaseline = current;
+				changedPaths.clear();
 			}
 			return {
 				content: [{ type: "text", text: result.content }],
@@ -460,6 +449,12 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	}
 }
 
+function recordChanges(before: Snapshot, after: Snapshot, changed: Set<string>): void {
+	for (const path of new Set([...before.keys(), ...after.keys()])) {
+		if (before.get(path) !== after.get(path)) changed.add(path);
+	}
+}
+
 function normalizeSettings(value: typeof silentCommandRunnerSettings.defaults): Settings {
 	return {
 		maxOutputBytes: positiveInteger(value.maxOutputBytes, DEFAULT_MAX_OUTPUT_BYTES),
@@ -473,6 +468,8 @@ function normalizeCommands(commands: typeof silentCommandRunnerSettings.defaults
 		const name = command.name.trim();
 		const commandText = command.command.trim();
 		if (!name || !commandText) return [];
+		const includeGlobs = nonEmptyStrings(command.includeGlobs, ["**/*"]);
+		const excludeGlobs = [...DEFAULT_EXCLUDE_GLOBS, ...nonEmptyStrings(command.excludeGlobs, [])];
 		return [
 			{
 				name,
@@ -480,23 +477,32 @@ function normalizeCommands(commands: typeof silentCommandRunnerSettings.defaults
 				cwd: command.cwd?.trim() || ".",
 				env: command.env ?? {},
 				details: command.details?.trim() || undefined,
-				includeGlobs: nonEmptyStrings(command.includeGlobs, ["**/*"]),
-				excludeGlobs: [...DEFAULT_EXCLUDE_GLOBS, ...nonEmptyStrings(command.excludeGlobs, [])],
+				includeGlobs,
+				excludeGlobs,
+				scope: createFileScope(includeGlobs, excludeGlobs),
 				timeoutMs: positiveInteger(command.timeoutMs, DEFAULT_TIMEOUT_MS),
 			},
 		];
 	});
 }
 
-async function snapshotFiles(projectRoot: string, commands: readonly CommandConfig[]): Promise<Snapshot> {
+async function snapshotFiles(
+	projectRoot: string,
+	commands: readonly CommandConfig[],
+	signal: AbortSignal | undefined,
+): Promise<Snapshot> {
 	const files: Snapshot = new Map();
-	for (const path of await walkFiles(projectRoot)) {
-		if (!commands.some((command) => matchesCommand(path, command))) continue;
+	for (const path of await walkFiles(
+		projectRoot,
+		commands.map((command) => command.scope),
+		signal,
+	)) {
+		signal?.throwIfAborted();
 		try {
 			files.set(
 				path,
 				createHash("sha256")
-					.update(await readFile(resolve(projectRoot, path)))
+					.update(await readFile(resolve(projectRoot, path), { signal }))
 					.digest("hex"),
 			);
 		} catch (error: unknown) {
@@ -515,61 +521,6 @@ function formatCheckInstructions(commands: readonly CommandConfig[]): string {
 		"You may call it last in the same codemode script as your final edits: await all writes, then text(await tools.checks({})). Pending automatic fixes finish before checks.",
 		`Checks: ${commands.length ? commands.map((command) => `${command.name} [${command.command}]${command.details ? `: ${command.details}` : ""}`).join("; ") : "none configured"}`,
 	].join("\n");
-}
-
-async function scanChangedCommands(
-	projectRoot: string,
-	commands: readonly CommandConfig[],
-	paths: readonly string[],
-	turnPaths: ReadonlySet<string>,
-	turnStart: number,
-): Promise<CommandConfig[]> {
-	const currentSet = new Set(paths);
-	const deletedPaths = [...turnPaths].filter((path) => !currentSet.has(path));
-	const changed: CommandConfig[] = [];
-	for (const command of commands) {
-		const matched = paths.filter((path) => matchesCommand(path, command));
-		const hasDeleted = deletedPaths.some((path) => matchesCommand(path, command));
-		if (hasDeleted || (await hasChangedFile(projectRoot, matched, turnStart))) changed.push(command);
-	}
-	return changed;
-}
-
-async function hasChangedFile(projectRoot: string, paths: readonly string[], turnStart: number): Promise<boolean> {
-	for (const path of paths) {
-		try {
-			if ((await stat(resolve(projectRoot, path))).mtimeMs >= turnStart) return true;
-		} catch {
-			// unreadable file — treat as changed to avoid skipping checks
-			return true;
-		}
-	}
-	return false;
-}
-
-async function walkFiles(root: string): Promise<string[]> {
-	const files: string[] = [];
-	await walkDir(root, "", files);
-	return files;
-}
-
-async function walkDir(root: string, relativeDir: string, files: string[]): Promise<void> {
-	const dir = relativeDir ? resolve(root, relativeDir) : root;
-	for (const entry of await readdir(dir, { withFileTypes: true })) {
-		const relativePath = posixPath(relativeDir ? `${relativeDir}/${entry.name}` : entry.name);
-		if (entry.isDirectory()) {
-			if (!WALK_SKIP_DIRS.has(entry.name)) await walkDir(root, relativePath, files);
-			continue;
-		}
-		if (entry.isFile()) files.push(relativePath);
-	}
-}
-
-function matchesCommand(path: string, command: CommandConfig): boolean {
-	return (
-		command.includeGlobs.some((glob) => matchGlob(glob, path)) &&
-		!command.excludeGlobs.some((glob) => matchGlob(glob, path))
-	);
 }
 
 async function runCommand(

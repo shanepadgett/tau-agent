@@ -60,7 +60,7 @@ Configure these features under `extensions.decisions`. Set `enabled` to `false` 
 
 ## footer
 
-Shows the highlighted work type, models, context usage, cache-hit rate, costs, and project status. Use `/footer` to toggle it, `/footer on` or `/footer off` to set visibility, and `/footer refresh` to refresh it.
+Shows the highlighted work type, models, context usage as a bar with threshold markers and colors, cache-hit rate, costs, and project status. Use `/footer` to toggle it, `/footer on` or `/footer off` to set visibility, and `/footer refresh` to refresh it.
 
 ## handoff
 
@@ -81,6 +81,8 @@ Use `/manage-sessions` to browse saved sessions. `/sweep` starts a new session, 
 ## md-lint
 
 Automatically formats Markdown after edits, using your repository's Markdown lint configuration when present. Configure or disable it under `extensions.mdLint`.
+
+Use `extensions.mdLint.ignoreGlobs` to leave reference trees alone; patterns ending in `/**` skip the entire directory. Custom lists replace the defaults. Read-only tools do not trigger scans.
 
 ## patch
 
@@ -113,6 +115,8 @@ Lets the agent run Python or Node.js code for calculations, data processing, and
 ## silent-command-runner
 
 Runs configured fixes after file changes and checks before the agent reports finished work. Configure commands under `extensions.silentCommandRunner.afterWrite` and `afterRun`. Use `{files}` in an `afterWrite` command for the changed paths. Disable the extension through Pi's extension controls.
+
+Scanning follows the configured globs; exclusions ending in `/**` skip entire directories. Automatic checks show progress only when applicable files changed or a failed check still needs repair.
 
 ## soul
 

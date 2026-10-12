@@ -1,27 +1,16 @@
-import { readdir, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { main } from "markdownlint-cli2";
-import { matchGlob, posixPath } from "../../shared/glob.ts";
+import { createFileScope, type FileScope } from "../../shared/glob.ts";
+import { isModifyingTool, walkFiles } from "../../shared/project-files.ts";
 import { registerPromptSource } from "../../shared/prompt-contributions.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
 import { resolveProjectRoot } from "../../shared/settings/paths.ts";
 import mdLintSettings from "./settings.ts";
 
 const CONFIG_PATH = join(dirname(fileURLToPath(import.meta.url)), "markdownlint-cli2.jsonc");
-const WALK_SKIP_DIRS = new Set([
-	".git",
-	"node_modules",
-	"dist",
-	"build",
-	"coverage",
-	"out",
-	".cache",
-	".next",
-	".turbo",
-	".parcel-cache",
-]);
 
 interface FileStats {
 	mtimeMs: number;
@@ -32,7 +21,7 @@ type Snapshot = Map<string, FileStats>;
 
 interface Settings {
 	enabled: boolean;
-	ignoreGlobs: string[];
+	scope: FileScope;
 }
 
 type Notify = (message: string, type?: "info" | "warning" | "error") => void;
@@ -40,7 +29,7 @@ type Notify = (message: string, type?: "info" | "warning" | "error") => void;
 function normalizeSettings(value: typeof mdLintSettings.defaults): Settings {
 	return {
 		enabled: value.enabled ?? true,
-		ignoreGlobs: (value.ignoreGlobs ?? []).map((glob) => glob.trim()).filter(Boolean),
+		scope: createFileScope(["**/*.md"], (value.ignoreGlobs ?? []).map((glob) => glob.trim()).filter(Boolean)),
 	};
 }
 
@@ -49,11 +38,13 @@ export default function mdLintExtension(pi: ExtensionAPI): void {
 	let snapshot: Snapshot | undefined;
 	let queue: Promise<void> = Promise.resolve();
 	let sessionActive = false;
+	const writeCalls = new Set<string>();
 
 	pi.on("session_start", async (_event, ctx) => {
 		settings = normalizeSettings(await loadTauExtensionSettings(ctx, mdLintSettings));
 		sessionActive = true;
 		snapshot = undefined;
+		writeCalls.clear();
 	});
 
 	registerPromptSource(pi, {
@@ -76,25 +67,36 @@ export default function mdLintExtension(pi: ExtensionAPI): void {
 		await queue;
 		if (!sessionActive) return;
 		const projectRoot = await resolveProjectRoot(ctx.cwd);
-		snapshot = await walkMarkdownStats(projectRoot, settings.ignoreGlobs);
+		writeCalls.clear();
+		snapshot = await walkMarkdownStats(projectRoot, settings.scope, ctx.signal);
+	});
+
+	pi.on("tool_call", (event) => {
+		if (!settings.enabled || !sessionActive) return;
+		const tool = pi.getAllTools().find((entry) => entry.name === event.toolName);
+		if (!isModifyingTool(event.toolName, tool?.annotations?.readOnlyHint)) return;
+		if ([...writeCalls].some((id) => event.toolCallId.startsWith(`${id}/`))) return;
+		writeCalls.add(event.toolCallId);
 	});
 
 	// Format changed Markdown in the background; the handler returns without waiting.
-	pi.on("tool_result", async (_event, ctx) => {
+	pi.on("tool_result", async (event, ctx) => {
+		if (!writeCalls.delete(event.toolCallId)) return;
 		if (!settings.enabled || !sessionActive) return;
 		const cwd = ctx.cwd;
 		const notify = ctx.ui.notify;
-		queue = queue.then(() => fixChangedMarkdown(cwd, notify)).catch(() => {});
+		queue = queue.then(() => fixChangedMarkdown(cwd, notify, ctx.signal)).catch(() => {});
 	});
 
 	pi.on("session_shutdown", () => {
 		sessionActive = false;
+		writeCalls.clear();
 	});
 
-	async function fixChangedMarkdown(cwd: string, notify: Notify): Promise<void> {
-		if (!settings.enabled || !sessionActive) return;
+	async function fixChangedMarkdown(cwd: string, notify: Notify, signal: AbortSignal | undefined): Promise<void> {
+		if (!settings.enabled || !sessionActive || signal?.aborted) return;
 		const projectRoot = await resolveProjectRoot(cwd);
-		const current = await walkMarkdownStats(projectRoot, settings.ignoreGlobs);
+		const current = await walkMarkdownStats(projectRoot, settings.scope, signal);
 		if (snapshot === undefined) {
 			snapshot = current;
 			return;
@@ -134,34 +136,18 @@ export default function mdLintExtension(pi: ExtensionAPI): void {
 	}
 }
 
-async function walkMarkdownStats(root: string, ignoreGlobs: readonly string[]): Promise<Snapshot> {
+async function walkMarkdownStats(root: string, scope: FileScope, signal: AbortSignal | undefined): Promise<Snapshot> {
 	const stats: Snapshot = new Map();
-	await walkDir(root, "", stats, ignoreGlobs);
-	return stats;
-}
-
-async function walkDir(
-	root: string,
-	relativeDir: string,
-	stats: Snapshot,
-	ignoreGlobs: readonly string[],
-): Promise<void> {
-	const dir = relativeDir ? join(root, relativeDir) : root;
-	for (const entry of await readdir(dir, { withFileTypes: true })) {
-		const relativePath = posixPath(relativeDir ? `${relativeDir}/${entry.name}` : entry.name);
-		if (entry.isDirectory()) {
-			if (!WALK_SKIP_DIRS.has(entry.name)) await walkDir(root, relativePath, stats, ignoreGlobs);
-			continue;
-		}
-		if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
-		if (ignoreGlobs.some((glob) => matchGlob(glob, relativePath))) continue;
+	for (const path of await walkFiles(root, [scope], signal)) {
+		signal?.throwIfAborted();
 		try {
-			const info = await stat(join(root, relativePath));
-			stats.set(relativePath, { mtimeMs: info.mtimeMs, size: info.size });
+			const info = await stat(join(root, path));
+			stats.set(path, { mtimeMs: info.mtimeMs, size: info.size });
 		} catch {
 			// unreadable file — treat as absent
 		}
 	}
+	return stats;
 }
 
 function errorMessage(error: unknown): string {
