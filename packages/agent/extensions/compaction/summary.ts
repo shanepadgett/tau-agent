@@ -12,6 +12,17 @@ import { errorText } from "../../shared/text.ts";
 
 const SUMMARY_PROMPT = readFileSync(new URL("./prompts/summary.md", import.meta.url), "utf8");
 
+export async function resolveCompactionCandidates(ctx: ExtensionContext) {
+	const session = ctx.model;
+	if (!session) throw new Error("No model available for compaction");
+	const candidates = (
+		await resolveEffortCandidates(ctx, "quick", { includeParentModel: false }).catch(() => [])
+	).filter(({ model }) => model.provider === session.provider && model.id !== session.id);
+	// The current model remains the last resort; summaries never cross providers.
+	candidates.push({ model: session, reasoning: ctx.thinkingLevel === "off" ? undefined : ctx.thinkingLevel });
+	return candidates;
+}
+
 export async function summarize(
 	messages: Parameters<typeof convertToLlm>[0],
 	agentHandoff: { id: string; toolCallId: string; text: string } | null,
@@ -69,11 +80,7 @@ export async function summarize(
 	// Include serialization overhead, not the native preparation's split-history estimate.
 	const inputTokens = estimateTokens(request) + Math.ceil(SUMMARY_PROMPT.length / 4) + 1024;
 	const { reserveTokens } = SettingsManager.create(ctx.cwd).getCompactionSettings(session);
-	const candidates = (
-		await resolveEffortCandidates(ctx, "quick", { includeParentModel: false }).catch(() => [])
-	).filter(({ model }) => model.provider === session.provider && model.id !== session.id);
-	// The current model remains the last resort; summaries never cross providers.
-	candidates.push({ model: session, reasoning: ctx.thinkingLevel === "off" ? undefined : ctx.thinkingLevel });
+	const candidates = await resolveCompactionCandidates(ctx);
 	for (const { model, reasoning } of candidates) {
 		try {
 			signal.throwIfAborted();
