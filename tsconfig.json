@@ -1,0 +1,62 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "types": ["bun"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "includeSuggestionsInTsc": false,
+        "diagnosticSeverity": {
+          "floatingEffect": "error",
+          "missingEffectContext": "error",
+          "missingEffectError": "error",
+          "missingLayerContext": "error",
+          "outdatedApi": "error",
+          "tryCatchInEffectGen": "error",
+          "unnecessaryEffectGen": "error",
+          "multipleEffectProvide": "error",
+          "layerMergeAllWithDependencies": "error",
+          "schemaStructWithTag": "error",
+          "catchUnfailableEffect": "error",
+          "unknownInEffectCatch": "error",
+          "missingStarInYieldEffectGen": "error",
+          "returnEffectInGen": "error",
+          "preferSchemaOverJson": "error",
+          "processEnv": "off",
+          "processEnvInEffect": "off",
+          "globalConsole": "off",
+          "globalConsoleInEffect": "off",
+          "globalFetch": "off",
+          "globalFetchInEffect": "off",
+          "globalTimers": "off",
+          "globalTimersInEffect": "off",
+          "runEffectInsideEffect": "off"
+        },
+        "overrides": [
+          {
+            "include": ["src/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "asyncFunction": "error",
+                "newPromise": "error"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "include": ["src", "tools", "tests"]
+}

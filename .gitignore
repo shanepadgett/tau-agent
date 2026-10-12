@@ -1,5 +1,7 @@
 node_modules/
 dist/
+.fallow/
+docs/reference/.stage-*/
 *.log
 .env
 .env.*

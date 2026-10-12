@@ -65,7 +65,8 @@ Checks, lint rules, and library choices are in [tooling.md](tooling.md).
 
 ## Testing
 
-- Integration tests only; no unit tests. They live in `tests/`, one file per flow (such as `tests/compaction.test.ts`), and run with `bun test`.
+- Product code has integration tests only; no unit tests. They live in `tests/`, one file per flow (such as `tests/compaction.test.ts`), and run with `bun test`.
+- Check tooling in `tools/` may have unit tests, colocated beside the file they test (`tools/lint/no-module-let.test.ts`). Check-infrastructure integration tests live in `tools/checks/`. `tests/` holds only the application's tests, so `mise run test` runs for `src/` and `tests/` changes and `mise run test:checks` runs for `tools/` and check configuration changes. Lint rules use oxlint's `RuleTester`, which does not run under Bun, so they run under Node 24 (`node --test`) as a temporary arrangement; `AGENTS.md` says when to check whether Bun now works. Integration tests keep covering what the real tools do with our configuration: scoping, fixes, formatter, fallow and hooks.
 - Most drive the core client interface with a real session database in a temp directory and a real sandbox. A few drive the compiled binary: print mode directly, the TUI inside a PTY.
 - Models come from a fake provider: a local HTTP server in the test suite that encodes neutral scripted events into each wire protocol, reached through the provider's base URL. Every flow runs on all three protocols.
 - A separate live suite calls real providers. It needs keys and costs money, so it runs by hand.

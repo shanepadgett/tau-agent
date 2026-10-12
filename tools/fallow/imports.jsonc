@@ -1,0 +1,17 @@
+{
+  "$schema": "../../node_modules/fallow/rule-pack-schema.json",
+  "version": 1,
+  "name": "tau-imports",
+  "description": "Module imports owned by one layer.",
+  "rules": [
+    {
+      "id": "sqlite-in-session",
+      "kind": "banned-import",
+      "specifiers": ["bun:sqlite"],
+      "files": ["**"],
+      "exclude": ["src/session/**"],
+      "message": "Open SQLite only in session. Use the session service from other layers.",
+      "severity": "error",
+    },
+  ],
+}

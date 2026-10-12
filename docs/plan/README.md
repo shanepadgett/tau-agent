@@ -15,4 +15,4 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 
 ## Open
 
-- Run the isolated check-infrastructure acceptance spike before writing root check configuration?
+No implementation decisions are open. Phase-zero implementation is complete; full Linux acceptance and the remaining verification cases are listed in [phase-zero.md](phase-zero.md#verification).

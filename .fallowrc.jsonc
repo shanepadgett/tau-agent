@@ -1,0 +1,71 @@
+{
+  "$schema": "./node_modules/fallow/schema.json",
+  // Fallow owns dead code, import boundaries and duplicates only.
+  // Health, complexity and CRAP checks are excluded as too noisy.
+  "ignorePatterns": ["spikes/**", "docs/reference/copies/**"],
+  "rulePacks": ["tools/fallow/imports.jsonc"],
+  "entry": ["tools/reference-docs.ts", "tools/reference-check.ts"],
+  // Temporary: nothing imports effect until src/ai exists, but the integration
+  // tests need it installed to check Effect diagnostics. Remove with the AI layer.
+  "ignoreDependencies": ["effect"],
+  "rules": {
+    "unused-dev-dependencies": "error",
+    "unused-optional-dependencies": "error",
+    "type-only-dependencies": "error",
+    "test-only-dependencies": "error",
+    "dev-dependencies-in-production": "error",
+    "re-export-cycle": "error",
+    "stale-suppressions": "error",
+    "policy-violation": "error",
+  },
+  "duplicates": { "mode": "mild", "minTokens": 50, "minLines": 5, "minOccurrences": 2 },
+  "boundaries": {
+    // Layer import rules from docs/plan/architecture.md. Same-layer imports are
+    // always allowed. Type-only imports follow the same allowlists.
+    "zones": [
+      { "name": "cli", "patterns": ["src/cli/**"] },
+      { "name": "tui", "patterns": ["src/tui/**"] },
+      { "name": "extensions", "patterns": ["src/extensions/**"] },
+      { "name": "host", "patterns": ["src/host/**"] },
+      { "name": "sdk", "patterns": ["src/sdk/**"] },
+      { "name": "core", "patterns": ["src/core/**"] },
+      { "name": "session", "patterns": ["src/session/**"] },
+      { "name": "sandbox", "patterns": ["src/sandbox/**"] },
+      { "name": "proc", "patterns": ["src/proc/**"] },
+      { "name": "workspace", "patterns": ["src/workspace/**"] },
+      { "name": "ai", "patterns": ["src/ai/**"] },
+      { "name": "tools", "patterns": ["tools/**"] },
+      { "name": "tests", "patterns": ["tests/**"] },
+    ],
+    "rules": [
+      {
+        "from": "cli",
+        "allow": [
+          "tui",
+          "extensions",
+          "host",
+          "sdk",
+          "core",
+          "session",
+          "sandbox",
+          "proc",
+          "workspace",
+          "ai",
+        ],
+      },
+      { "from": "tui", "allow": ["core", "sdk"] },
+      { "from": "extensions", "allow": ["sdk"] },
+      { "from": "host", "allow": ["sdk", "core", "session", "ai"] },
+      { "from": "sdk", "allow": ["core", "ai"] },
+      { "from": "core", "allow": ["session", "sandbox", "proc", "workspace", "ai"] },
+      { "from": "session", "allow": ["ai"] },
+      { "from": "sandbox", "allow": [] },
+      { "from": "proc", "allow": [] },
+      { "from": "workspace", "allow": [] },
+      { "from": "ai", "allow": [] },
+      { "from": "tools", "allow": [] },
+      { "from": "tests", "allow": [] },
+    ],
+    "coverage": { "requireAllFiles": true },
+  },
+}

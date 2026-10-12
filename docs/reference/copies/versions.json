@@ -1,0 +1,67 @@
+{
+  "effect": {
+    "version": "4.0.3",
+    "fingerprint": "d8439c8c4ab0b684",
+    "commits": []
+  },
+  "@effect/tsgo": {
+    "version": "0.51.1",
+    "fingerprint": "baa0912c23cfde47",
+    "commits": [
+      "47cb1ed7704aff44cacaa0f4d2ef24de990cba0e"
+    ]
+  },
+  "typescript": {
+    "version": "7.0.2",
+    "fingerprint": "0f56cd86030d2f92",
+    "commits": []
+  },
+  "@types/bun": {
+    "version": "1.4.3",
+    "fingerprint": "8249251df751a650",
+    "commits": []
+  },
+  "oxlint": {
+    "version": "1.87.0",
+    "fingerprint": "3d791fe261decdcc",
+    "commits": [
+      "58980252fa4875a9cecb0626a37b1b4931558436"
+    ]
+  },
+  "@oxlint/plugins": {
+    "version": "1.87.0",
+    "fingerprint": "4b5899882a8188b0",
+    "commits": []
+  },
+  "oxlint-tsgolint": {
+    "version": "7.0.2004",
+    "fingerprint": "8676b959b411d307",
+    "commits": []
+  },
+  "oxfmt": {
+    "version": "0.72.0",
+    "fingerprint": "81077607987d4be0",
+    "commits": [
+      "58980252fa4875a9cecb0626a37b1b4931558436"
+    ]
+  },
+  "fallow": {
+    "version": "3.33.1",
+    "fingerprint": "8830799ded9cdb5f",
+    "commits": []
+  },
+  "bun": {
+    "version": "1.4.3",
+    "fingerprint": "4dd526caf1ba5d13",
+    "commits": [
+      "c6da4a4d3010e5553438c60f6bd76d981976867c"
+    ]
+  },
+  "node": {
+    "version": "24.21.0",
+    "fingerprint": "c057cf49f94c27c4",
+    "commits": [
+      "955266bfdd854cd280dffd47548673914484e4c0"
+    ]
+  }
+}

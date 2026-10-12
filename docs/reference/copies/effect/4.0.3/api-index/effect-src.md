@@ -1,0 +1,385 @@
+# effect/src
+
+- `Arbitrary`: Derives, samples, and checks generated values from Effect Schema.
+- `Array`: Works with JavaScript arrays, readonly arrays, and non-empty arrays.
+- `BigDecimal`: Decimal numbers and arithmetic for cases where JavaScript `number` rounding is not precise enough.
+- `BigInt`: Works with JavaScript `bigint` values.
+- `Boolean`: Works with TypeScript `boolean` values.
+- `Brand`: The `Brand` module adds compile-time names to ordinary TypeScript values so structurally identical values cannot be mixed accidentally.
+- `ByteSize`: Represents exact, non-negative, integral byte counts.
+- `Cache`: Caches values loaded by an Effect lookup function.
+- `Cause`: Records the full reason an `Effect` failed.
+- `Channel`: Provides low-level building blocks for streaming data through Effect.
+- `ChannelSchema`: Schema adapters for `Channel` boundaries.
+- `Chunk`: Stores many values in an immutable ordered collection.
+- `Clock`: Service and helpers for reading time and sleeping inside Effect programs.
+- `Combiner`: Defines reusable rules for merging two values of the same type.
+- `Config`: Descriptions of configuration values that can be read from a `ConfigProvider`.
+- `ConfigProvider`: Data sources used by `Config` to load raw configuration values.
+- `Console`: Wraps console operations in Effect.
+- `Context`: Stores Effect services in typed maps.
+- `Cron`: Utilities for recurring calendar schedules written as cron expressions or explicit field constraints.
+- `Crypto`: Defines a platform-independent service for cryptographic operations.
+- `Data`: Defines helpers for small immutable data models.
+- `DateTime`: Works with absolute instants, UTC date-times, zoned date-times, and time zones.
+- `Deferred`: One-time coordination cells for Effect programs.
+- `Differ`: Interfaces for describing changes to a value as patches.
+- `Duration`: Represents immutable spans of time.
+- `Effect`: Describes workflows that run only when executed by the Effect runtime.
+- `Effectable`: Low-level helpers for making custom values behave like Effects.
+- `Equal`: Compares values with Effect's structural equality rules.
+- `Equivalence`: Defines reusable equality functions for values of the same type.
+- `ErrorReporter`: Reports Effect failures to external code.
+- `ExecutionPlan`: Describes ordered fallback steps for running effects or streams.
+- `Exit`: Represents the result of an Effect computation as a plain value.
+- `Fiber`: Operations for handles returned by forking effects.
+- `FiberHandle`: Manages at most one fiber inside a scope.
+- `FiberMap`: Manages fibers by key inside a scope.
+- `FiberSet`: Manages many fibers together inside one scope.
+- `FileSystem`: Defines the portable file system service for Effect programs.
+- `Filter`: Defines composable checks that can also transform values.
+- `Formatter`: Formats JavaScript values into readable strings.
+- `Function`: Provides small helpers for defining and reusing TypeScript functions.
+- `Graph`: Models relationships between indexed nodes and edges.
+- `HKT`: Provides type-level helpers for generic code over container-like types.
+- `Hash`: Computes Effect hash values and defines the interface for objects that want to provide their own hash implementation.
+- `HashMap`: Stores key/value entries in an immutable hash map.
+- `HashRing`: Assigns string inputs to nodes with weighted consistent hashing.
+- `HashSet`: Stores unique values in an immutable hash set.
+- `Inspectable`: Controls how values appear in logs and debugging output.
+- `Iterable`: Works with JavaScript values that implement `[Symbol.iterator]`.
+- `JsonPatch`: The `JsonPatch` module computes and applies deterministic patch documents for JSON values.
+- `JsonPointer`: Helpers for escaping JSON Pointer path segments and converting JSON Pointer URI fragments.
+- `JsonSchema`: Helpers for normalizing and converting JSON Schema and OpenAPI schema documents.
+- `Latch`: Reusable synchronization primitives for coordinating fibers.
+- `Layer`: Builds and wires services for Effect applications.
+- `LayerMap`: Caches scoped services selected by key and built from layers.
+- `LayerRef`: Creates refreshable references to a single layer-built service context.
+- `LogLevel`: Log-level types and helpers used by Effect logging.
+- `Logger`: Defines loggers and log-event data for Effect programs.
+- `ManagedRuntime`: Runs many effects against services built once from a `Layer`.
+- `Match`: Builds pattern matchers for TypeScript values.
+- `Metric`: Records and reads measurements from Effect programs.
+- `MutableHashMap`: Stores key/value entries in a mutable hash map.
+- `MutableHashSet`: Stores unique values in a mutable hash set.
+- `MutableList`: Mutable lists for collecting ordered values and draining them from the front.
+- `MutableRef`: Stores synchronous mutable state in a small reference object.
+- `Newtype`: Creates compile-time-only wrappers around existing value types.
+- `NonEmptyIterable`: The `NonEmptyIterable` module provides a type-level representation of any JavaScript `Iterable` that is known to contain at least one element.
+- `Number`: Works with TypeScript `number` values.
+- `Optic`: Reads and updates focused parts of values without mutating the original value.
+- `Option`: Models a value that may be present or absent.
+- `Order`: Defines comparison functions for ordered values.
+- `Ordering`: The standard result of comparing two values.
+- `PartitionedSemaphore`: The `PartitionedSemaphore` module provides a semaphore for limiting concurrency across a shared permit pool while keeping waiters grouped by partition key.
+- `Path`: Provides path operations through the Effect environment.
+- `Pipeable`: The `Pipeable` module defines the shared interface and implementation helpers for values that support Effect-style method chaining with `.pipe(...)`.
+- `PlatformError`: Normalized errors for platform APIs.
+- `Pool`: Shares scoped resources across fibers.
+- `Predicate`: Defines runtime checks for values.
+- `PrimaryKey`: The `PrimaryKey` module defines a small protocol for values that can expose a stable, string-based identifier.
+- `PubSub`: Broadcasts values from publishers to many subscribers.
+- `Pull`: Models one low-level pull step for stream-like consumers.
+- `Queue`: Passes values asynchronously between fibers.
+- `Random`: Provides pseudo-random generation through an Effect service.
+- `RcMap`: Shares scoped resources by key and releases them when no one is using them.
+- `RcRef`: Reference-counted handles for sharing one scoped resource across many scoped users.
+- `Record`: Works with plain JavaScript records as immutable key/value dictionaries.
+- `Redactable`: Context-aware redaction for sensitive values.
+- `Redacted`: Wraps sensitive values so normal output does not reveal them.
+- `Reducer`: Reusable strategies for reducing many values into one value.
+- `Ref`: Stores fiber-safe mutable state inside Effect programs.
+- `References`: The `References` module exposes the built-in `Context.Reference` keys that the Effect runtime consults for execution settings and diagnostic metadata.
+- `RegExp`: Tools for working with JavaScript regular expressions from the Effect module namespace.
+- `Request`: Typed request values for data loading with `Effect.request`.
+- `RequestResolver`: Resolves data requests made with `Effect.request`.
+- `Resource`: Stores refreshable scoped values.
+- `Result`: Models a value that has already succeeded or failed.
+- `Runtime`: Helpers for turning an `Effect` program into a host application's main entry point.
+- `Schedule`: Describes policies for retrying, repeating, and pacing Effect programs.
+- `Scheduler`: Controls how runnable Effect fiber tasks are dispatched.
+- `Schema`: Describes data shapes and how unknown input becomes trusted values.
+- `SchemaAST`: Represents Effect schemas as runtime trees.
+- `SchemaGetter`: Builds one-way conversions used by schemas.
+- `SchemaIssue`: Describes problems found while decoding, encoding, or checking data with schemas.
+- `SchemaParser`: Runs schemas against real values.
+- `SchemaRepresentation`: Open, compiler-extensible representation of Effect schemas.
+- `SchemaTransformation`: Builds two-way conversions used by schemas.
+- `Scope`: Controls how long resources stay open.
+- `ScopedCache`: Caches values that need scoped resource management.
+- `ScopedRef`: Stores a current value together with the scope that owns it.
+- `Semaphore`: Limits how many effects can use a shared resource at the same time.
+- `Sink`: Consumes values from a `Stream` and produces one final result.
+- `StandardSchema`: Type definitions from the Standard Schema specification.
+- `Stdio`: Service contract for command-line arguments and standard input, output, and error output.
+- `Stream`: Describes effectful sources that emit values over time.
+- `String`: Works with TypeScript `string` values.
+- `Struct`: Works with plain TypeScript objects, also called structs.
+- `SubscriptionRef`: Stores mutable state and publishes changes as a stream.
+- `Symbol`: The `Symbol` module contains the runtime predicate for JavaScript primitive `symbol` values.
+- `SynchronizedRef`: Stores mutable state whose updates run one at a time.
+- `Take`: The `Take` module provides the stored representation of one pull result from a stream-like producer.
+- `Terminal`: Service definition for interactive terminal capabilities.
+- `Tracer`: Defines the low-level tracing model used by Effect.
+- `Trie`: Stores string-keyed values in an immutable prefix tree.
+- `Tuple`: Works with fixed-length arrays, also called tuples.
+- `TxChunk`: Stores a `Chunk` inside transactional state.
+- `TxDeferred`: Transactional deferred values for coordinating Effect transactions.
+- `TxHashMap`: Transactional hash maps for storing and updating key-value pairs inside Effect transactions.
+- `TxHashSet`: Transactional hash sets for storing unique values inside Effect transactions.
+- `TxPriorityQueue`: Transactional priority queues whose state is stored in a `TxRef`.
+- `TxPubSub`: Broadcasts values to subscribers inside Effect transactions.
+- `TxQueue`: Transactional queues whose state changes participate in Effect transactions.
+- `TxReentrantLock`: Coordinates shared access inside transactions with read and write locks.
+- `TxRef`: Transactional references for coordinating mutable state with Effect transactions.
+- `TxSemaphore`: Coordinates access to limited resources inside transactions.
+- `TxSubscriptionRef`: Stores transactional state and publishes committed changes.
+- `Types`: Provides compile-time utility types for TypeScript.
+- `UndefinedOr`: Works with values that may be `undefined`.
+- `Unify`: Defines Effect's type-level unification protocol.
+- `Utils`: Internal and advanced utilities used by Effect's generator-based syntax and higher-kinded type support.
+- `Version`: The `effect` package version used in telemetry headers, resources, and scopes.
+- `ai/AiError`: Defines shared errors for AI operations.
+- `ai/AnthropicStructuredOutput`: Adapts Effect Schema codecs to the JSON Schema subset accepted by Anthropic structured output.
+- `ai/Chat`: Stateful conversation sessions on top of a language model.
+- `ai/Decision`: Defines decisions that a `DecisionModel` answers over a single input.
+- `ai/DecisionModel`: Defines the provider-neutral service for structured decisions.
+- `ai/EmbeddingModel`: Defines the provider-neutral service for text embeddings.
+- `ai/IdGenerator`: Provides identifier generation for AI features.
+- `ai/LanguageModel`: Defines the shared service for language model providers.
+- `ai/McpProtocol`: Defines the MCP protocol implementations that an `McpServer` can support.
+- `ai/McpSchema`: Defines schemas for Model Context Protocol messages.
+- `ai/McpServer`: Builds Model Context Protocol (MCP) servers with Effect.
+- `ai/Model`: Wraps an AI model layer with provider and model metadata.
+- `ai/OpenAiStructuredOutput`: Adapts Effect schemas for OpenAI structured output.
+- `ai/Prompt`: Defines prompts sent to AI language models.
+- `ai/Response`: Defines a shared data model for AI model output.
+- `ai/ResponseIdTracker`: Track provider response IDs for incremental language model calls.
+- `ai/Telemetry`: Adds OpenTelemetry GenAI attributes to Effect AI spans.
+- `ai/Tokenizer`: Service for model-specific token counting and prompt truncation.
+- `ai/Tool`: Definitions and helpers for tools that AI models can request during a workflow.
+- `ai/Toolkit`: Groups AI tools together with their handlers.
+- `ai/index`
+- `cli/Argument`: Defines typed positional arguments for Effect CLI applications.
+- `cli/CliConfig`: Configuration for Effect CLI command execution.
+- `cli/CliError`: Defines structured errors for the unstable CLI parser and runner.
+- `cli/CliOutput`: Formats CLI help and errors as text.
+- `cli/Command`: Main building block for defining and running Effect-based command-line applications.
+- `cli/Completions`: The `Completions` module turns a plain description of an Effect CLI command tree into shell completion scripts for Bash, Zsh, Fish, and PowerShell.
+- `cli/Flag`: Defines named options for command-line applications.
+- `cli/GlobalFlag`: Global flags for Effect CLI command trees.
+- `cli/HelpDoc`: Structured help documentation model for the unstable CLI package.
+- `cli/Param`: Defines the shared parameter model for CLI arguments and flags.
+- `cli/Primitive`: Parses raw command-line strings into typed values.
+- `cli/Prompt`: Builds interactive terminal prompts for CLI applications.
+- `cli/index`
+- `cluster/ClusterCron`: Runs recurring cron jobs through cluster sharding.
+- `cluster/ClusterError`: Defines the structured errors used by the unstable cluster runtime.
+- `cluster/ClusterMetrics`: Standard metric definitions used by the unstable cluster runtime.
+- `cluster/ClusterSchema`: The `ClusterSchema` module collects the annotations that add cluster behavior to RPC protocols and entity definitions.
+- `cluster/ClusterWorkflowEngine`: The cluster workflow engine runs durable workflows on top of cluster sharding and message storage.
+- `cluster/DeliverAt`: The `DeliverAt` module defines the protocol used by cluster message payloads that carry their own scheduled delivery time.
+- `cluster/Entity`: Defines addressable entity types for Effect Cluster.
+- `cluster/EntityAddress`: The `EntityAddress` module defines the value used to locate an entity within a cluster.
+- `cluster/EntityId`: The `EntityId` module defines the branded string used to identify one entity instance within an entity type.
+- `cluster/EntityProxy`: Derives RPC and HTTP API surfaces from clustered entities.
+- `cluster/EntityProxyServer`: Serves the proxy APIs generated from clustered entities.
+- `cluster/EntityResource`: Keeps resources available across cluster entity restarts.
+- `cluster/EntityType`: The `EntityType` module defines the branded string used to identify a kind of entity in an Effect cluster.
+- `cluster/Envelope`: Defines the transport envelopes exchanged by cluster entities.
+- `cluster/HttpRunner`: Connects cluster runner RPCs to HTTP and WebSocket transports.
+- `cluster/K8sHttpClient`: HTTP client support for talking to the Kubernetes API from code running inside a cluster.
+- `cluster/K8sTypes`: Kubernetes resource types used by the cluster helpers.
+- `cluster/MachineId`: Branded integer identifiers for cluster runners.
+- `cluster/Message`: Defines the message shapes moved through Effect Cluster.
+- `cluster/MessageStorage`: Stores Effect Cluster messages and replies behind a pluggable backend.
+- `cluster/Reply`: Defines reply values produced by clustered RPC execution.
+- `cluster/Runner`: Cluster runner metadata for processes that can host entity shards.
+- `cluster/RunnerAddress`: Network addresses for locating cluster runners.
+- `cluster/RunnerHealth`: Checks whether cluster runners should be treated as alive.
+- `cluster/RunnerServer`: Provides server-side layers for the cluster runner protocol.
+- `cluster/RunnerStorage`: Stores runner registration and shard-lock state for cluster sharding.
+- `cluster/Runners`: Handles communication between Effect Cluster runners.
+- `cluster/ShardId`: The `ShardId` module models the address of a shard inside an Effect Cluster shard group.
+- `cluster/Sharding`: Runs shard ownership and message routing for Effect Cluster.
+- `cluster/ShardingConfig`: Configures how an Effect Cluster runner participates in sharding.
+- `cluster/ShardingRegistrationEvent`: The `ShardingRegistrationEvent` module models the live notifications emitted by `Sharding` when the local runner registers an entity handler or singleton.
+- `cluster/SingleRunner`: Single-process cluster layer for durable entities and workflows.
+- `cluster/Singleton`: Register effects that should have one active owner in an Effect cluster.
+- `cluster/SingletonAddress`: The `SingletonAddress` module models the runtime address assigned to a cluster singleton registration.
+- `cluster/Snowflake`: Creates compact, sortable identifiers for cluster messages and runtime events.
+- `cluster/SocketRunner`: Runs cluster runner RPCs over a socket transport.
+- `cluster/SqlMessageStorage`: Persists cluster mailbox messages and replies in SQL.
+- `cluster/SqlRunnerStorage`: Stores cluster runner registration and shard ownership in SQL.
+- `cluster/TestRunner`: The `TestRunner` module assembles the smallest cluster runtime useful in tests: `Sharding` backed by in-memory message storage, in-memory runner storage, no-op 
+- `cluster/index`
+- `devtools/DevTools`: High-level layers for connecting an Effect runtime to the unstable devtools tracer.
+- `devtools/DevToolsClient`: Low-level devtools client and tracer wiring over the current `Socket`.
+- `devtools/DevToolsSchema`: Defines the experimental wire schema used by the Effect devtools protocol.
+- `devtools/DevToolsServer`: Runs the server side of the unstable Effect devtools socket protocol.
+- `devtools/index`
+- `encoding/Base64`: Base64 encoding and decoding helpers.
+- `encoding/Base64Url`: URL-safe Base64 encoding and decoding helpers.
+- `encoding/EncodingError`: Shared error type for encoding and decoding operations.
+- `encoding/Hex`: Hexadecimal encoding, decoding, and random value helpers.
+- `encoding/Ini`: Parses INI configuration files.
+- `encoding/Ndjson`: Encodes and decodes newline-delimited JSON streams in Effect channels.
+- `encoding/SchemaBinary`: A compact binary codec derived from the encoded side of a Schema.
+- `encoding/Sse`: Parses and renders Server-Sent Events text streams.
+- `encoding/Toml`: Parses TOML configuration files.
+- `encoding/Yaml`: Parses YAML configuration files.
+- `encoding/index`
+- `eventlog/Event`: Typed event definitions for the unstable event-log system.
+- `eventlog/EventGroup`: Defines groups of typed events for the unstable event-log system.
+- `eventlog/EventJournal`: Stores event-log entries and replication state.
+- `eventlog/EventLog`: Runtime for writing typed events to an event journal.
+- `eventlog/EventLogEncryption`: Cryptographic service for encrypted event-log replication.
+- `eventlog/EventLogMessage`: Defines protocol messages for event-log remote clients and servers.
+- `eventlog/EventLogRemote`: Connects a local event log to a remote replica.
+- `eventlog/EventLogServer`: Builds server-side handlers for the event-log remote protocol.
+- `eventlog/EventLogServerEncrypted`: Serves encrypted event-log replication.
+- `eventlog/EventLogServerUnencrypted`: Plaintext server implementation for the event-log remote protocol.
+- `eventlog/EventLogSessionAuth`: Signs and verifies event-log session authentication payloads.
+- `eventlog/SqlEventJournal`: SQL-backed persistence for the unstable event-log journal.
+- `eventlog/SqlEventLogServerEncrypted`: Stores encrypted event-log server state in SQL.
+- `eventlog/SqlEventLogServerUnencrypted`: SQL-backed storage for unencrypted event-log servers.
+- `eventlog/index`
+- `http-api/HttpApi`: Describes an Effect HTTP API as groups of endpoints.
+- `http-api/HttpApiBuilder`: Builds server routes from declarative `HttpApi` contracts.
+- `http-api/HttpApiClient`: Builds HTTP clients from `HttpApi` declarations.
+- `http-api/HttpApiEndpoint`: Defines endpoint declarations used inside an HTTP API group.
+- `http-api/HttpApiError`: Built-in error schemas for common HTTP API failure responses.
+- `http-api/HttpApiGroup`: Defines named groups of HTTP API endpoints.
+- `http-api/HttpApiMiddleware`: Declares middleware for schema-driven HTTP APIs.
+- `http-api/HttpApiScalar`: Scalar documentation UI for declarative `HttpApi` contracts.
+- `http-api/HttpApiSchema`: Attaches HTTP API metadata to Effect Schema values.
+- `http-api/HttpApiSecurity`: Defines security scheme declarations for declarative HTTP APIs.
+- `http-api/HttpApiSwagger`: Swagger documentation UI for declarative `HttpApi` contracts.
+- `http-api/HttpApiTest`: Tests `HttpApi` implementations through an in-memory generated client.
+- `http-api/OpenApi`: Generates OpenAPI 3.1 documents from declarative `HttpApi` contracts.
+- `http-api/index`
+- `http/Cookies`: Models HTTP cookies and cookie collections for requests and responses.
+- `http/Etag`: HTTP entity tag values and metadata-based generator layers.
+- `http/FetchHttpClient`: Fetch-based implementation of the Effect HTTP client service.
+- `http/FindMyWay`: A radix-tree HTTP router used by the unstable HTTP routing modules.
+- `http/Headers`: Models HTTP headers for the unstable HTTP client and server modules.
+- `http/HttpBody`: Describes HTTP request and response bodies before they reach a platform adapter.
+- `http/HttpClient`: Provides the service used to run outgoing HTTP requests.
+- `http/HttpClientError`: Typed failure model for Effect HTTP client operations.
+- `http/HttpClientRequest`: Describes immutable outgoing HTTP client requests.
+- `http/HttpClientResponse`: Represents responses returned by the Effect HTTP client.
+- `http/HttpEffect`: Runs Effect HTTP server handlers at platform boundaries.
+- `http/HttpIncomingMessage`: Common model for incoming HTTP messages.
+- `http/HttpMethod`: Defines supported HTTP method names for the unstable HTTP modules.
+- `http/HttpMiddleware`: Wraps HTTP server apps with request and response behavior.
+- `http/HttpPlatform`: Platform-specific support for serving files as HTTP server responses.
+- `http/HttpRouter`: Builds server-side routers for Effect HTTP applications.
+- `http/HttpServer`: Service for serving Effect HTTP responses on a concrete HTTP server.
+- `http/HttpServerError`: Describes failures raised while handling HTTP server requests.
+- `http/HttpServerRequest`: Provides server-side access to the current incoming HTTP request.
+- `http/HttpServerRespondable`: Converts supported values into HTTP server responses.
+- `http/HttpServerResponse`: Describes immutable responses returned by Effect HTTP handlers.
+- `http/HttpStaticServer`: Serves static files for Effect HTTP applications.
+- `http/HttpStatus`: Named HTTP status codes for the unstable HTTP modules.
+- `http/HttpTraceContext`: HTTP propagation helpers for Effect tracing context.
+- `http/Mime`: Standard MIME type lookup.
+- `http/Multipart`: Parses and persists HTTP `multipart/form-data` request bodies.
+- `http/MultipartParser`: Low-level parser for HTTP `multipart/form-data` bodies.
+- `http/MultipartParser/HeadersParser`: Low-level parser for multipart header blocks.
+- `http/MultipartParser/Search`: Low-level byte search used by the multipart parser.
+- `http/Template`: Builds HTTP response text from template literals.
+- `http/Url`: Parses and edits platform `URL` values.
+- `http/UrlParams`: Models URL query parameters as ordered string pairs.
+- `http/index`
+- `index`
+- `net/AddressResolver`: Resolves host and port endpoints to socket addresses.
+- `net/Dns`: Host name resolution, DNS queries, and DNS record values.
+- `net/Host`: Host names and unresolved host and port endpoints.
+- `net/IpInterface`: IPv4 and IPv6 interface addresses that preserve host bits alongside a prefix length.
+- `net/IpNetwork`: Pure, canonical IPv4 and IPv6 network prefixes using CIDR notation.
+- `net/NetAddress`: Pure, platform-neutral values for MAC, IP, internet socket, and Unix path addresses.
+- `net/index`
+- `observability/Otlp`: Configures OpenTelemetry Protocol (OTLP) HTTP export for Effect telemetry.
+- `observability/OtlpExporter`: Shared batch exporter for OTLP/HTTP observability modules.
+- `observability/OtlpLogger`: Exports Effect log entries over OTLP/HTTP.
+- `observability/OtlpMetrics`: Exports Effect metrics over OTLP/HTTP.
+- `observability/OtlpResource`: Builds OTLP resource metadata shared by exported telemetry.
+- `observability/OtlpSerialization`: Serializes OTLP payloads into HTTP request bodies.
+- `observability/OtlpTracer`: Exports Effect tracing spans over OTLP/HTTP.
+- `observability/PrometheusMetrics`: Formats Effect metrics for Prometheus.
+- `observability/index`
+- `persistence/KeyValueStore`: Provides effectful key/value storage for persistence backends.
+- `persistence/Persistable`: Describes request values whose results can be persisted.
+- `persistence/PersistedCache`: Combines in-memory caching with durable storage for `Persistable` requests.
+- `persistence/PersistedQueue`: Stores schema-encoded queue work in persistent storage.
+- `persistence/Persistence`: Stores encoded results for `Persistable` requests.
+- `persistence/RateLimiter`: Coordinates rate limits through shared persistent storage.
+- `persistence/Redis`: Redis support shared by persistence modules.
+- `persistence/index`
+- `process/ChildProcess`: Describes child processes before they are started.
+- `process/ChildProcessSpawner`: Service boundary for starting and controlling child processes.
+- `process/index`
+- `reactivity/AsyncResult`: Represents observable state for asynchronous values.
+- `reactivity/Atom`: Reactive state primitives for values managed by an `AtomRegistry`.
+- `reactivity/AtomHttpApi`: Connects typed `HttpApi` clients to atoms.
+- `reactivity/AtomRef`: Mutable reactive references for local, in-memory state.
+- `reactivity/AtomRegistry`: Stores and runs atoms for one reactive runtime.
+- `reactivity/AtomRpc`: Connects typed RPC clients to atoms.
+- `reactivity/Hydration`: Saves and restores serializable atom state.
+- `reactivity/Reactivity`: Process-local invalidation for connecting writes to dependent reads.
+- `reactivity/index`
+- `rpc/Rpc`: Defines schema-backed contracts for individual RPC procedures.
+- `rpc/RpcClient`: Runs typed RPC calls from the client side.
+- `rpc/RpcClientError`: Client-side protocol failures reported by unstable RPC transports.
+- `rpc/RpcGroup`: Collects typed RPC definitions and server handlers.
+- `rpc/RpcMessage`: Message envelopes shared by unstable RPC clients, servers, serializers, and transports.
+- `rpc/RpcMiddleware`: Middleware services for the unstable RPC runtime.
+- `rpc/RpcSchema`: RPC schema markers and interruption annotations.
+- `rpc/RpcSerialization`: Serializes RPC protocol messages for transports.
+- `rpc/RpcServer`: Runs server-side handlers for RPC groups.
+- `rpc/RpcTest`: In-memory test harness for RPC groups.
+- `rpc/RpcWorker`: Initial messages for worker-backed RPC protocols.
+- `rpc/Utils`: Buffers RPC protocol messages until their receive loop starts.
+- `rpc/index`
+- `schema/Model`: Defines schema-backed domain models with separate database and JSON shapes.
+- `schema/SchemaAOTCompiler`: Generates static JavaScript modules that install Schema decoders in the shared registry.
+- `schema/SchemaAOTCompiler/Build`: Builds self-installing modules from ahead-of-time compiled Schema decoders.
+- `schema/SchemaCompiler`: Provides the shared registry used by Schema decoder implementations.
+- `schema/SchemaCompiler/runtime`: Runtime helpers used by generated schema modules.
+- `schema/SchemaJITCompiler`: Installs runtime-generated schema decoders without changing SchemaParser's public interface.
+- `schema/SchemaJITCompiler/enable`: Enables lazy JIT compilation globally through a side-effect import.
+- `schema/VariantSchema`: Builds related schemas for named variants from shared field definitions.
+- `schema/index`
+- `socket/DatagramSocket`: Pull-based UDP sockets with scoped native handles.
+- `socket/Socket`: Models bidirectional socket connections in Effect.
+- `socket/SocketServer`: Service contract for servers that accept socket connections.
+- `socket/index`
+- `sql/Migrator`: Runs SQL migrations with `SqlClient`.
+- `sql/SqlClient`: Main SQL client service for tagged-template queries.
+- `sql/SqlConnection`: Low-level SQL connection contract used by driver integrations.
+- `sql/SqlError`: Defines structured failures for SQL clients and driver integrations.
+- `sql/SqlModel`: Builds SQL repositories and request resolvers from Effect schema models.
+- `sql/SqlResolver`: Schema-aware `RequestResolver` helpers for SQL-backed data loading.
+- `sql/SqlSchema`: Wraps SQL execution callbacks with request encoding and result decoding.
+- `sql/SqlStream`: Low-level helpers for adapting push-based SQL row sources into Effect streams.
+- `sql/Statement`: Low-level SQL statement and fragment primitives.
+- `sql/index`
+- `testing/TestClock`: Controllable `Clock` service for tests.
+- `testing/TestConsole`: Provides a test implementation of the Effect `Console` service.
+- `testing/TestCrypto`: Provides a deterministic implementation of the Effect `Crypto` service for tests.
+- `testing/TestSchema`: Provides helpers for testing Schema behavior.
+- `testing/index`
+- `workers/Transferable`: Marks encoded worker message fields that should move through `postMessage` as transfer-list entries.
+- `workers/Worker`: Client-side worker primitives shared by browser, Node, and Bun adapters.
+- `workers/WorkerError`: Typed error model for worker APIs.
+- `workers/WorkerRunner`: Worker-side primitives for worker-like runtimes.
+- `workers/index`
+- `workflow/Activity`: Defines named effects whose results can be stored by a workflow engine.
+- `workflow/DurableClock`: Durable timers for workflow sleeps.
+- `workflow/DurableDeferred`: Defines named wait points for durable workflow executions.
+- `workflow/DurableQueue`: Durable workflow queues delegate work to persisted background workers and resume the waiting workflow with the worker result.
+- `workflow/Workflow`: Defines typed durable workflows.
+- `workflow/WorkflowEngine`: Defines workflow engine services and an in-memory implementation.
+- `workflow/WorkflowProxy`: RPC and HTTP API definitions for workflows.
+- `workflow/WorkflowProxyServer`: Server-side layers for workflow proxy APIs.
+- `workflow/index`

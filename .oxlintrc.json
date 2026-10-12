@@ -1,0 +1,110 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // Type-aware rules come from oxlint-tsgolint. Effect diagnostics belong to the
+  // patched compiler (tsconfig.json), so the Effect Oxlint preset is not used.
+  "plugins": ["typescript", "unicorn", "oxc"],
+  "jsPlugins": ["./tools/lint/tau-plugin.ts"],
+  "options": { "typeAware": true },
+  "categories": { "correctness": "error" },
+  "ignorePatterns": ["spikes/**"],
+  "rules": {
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "tau/require-readable-spacing": "error"
+  },
+  "overrides": [
+    {
+      "files": ["src/**"],
+      "rules": {
+        "tau/no-effect-run": "error",
+        "tau/no-env": "error",
+        "tau/no-console": "error",
+        "tau/no-fetch": "error",
+        "tau/no-spawn": "error",
+        "tau/no-generic-filenames": "error",
+        "tau/no-reflect": "error",
+        // Readability. Our rules cover what the native rules cannot see; native rules
+        // are only turned on here.
+        "tau/no-chained-assertions": "error",
+        "tau/require-assertion-justification": "error",
+        "tau/no-unknown-parameters": "error",
+        "tau/no-unknown-returns": "error",
+        "tau/no-unknown-type-aliases": "error",
+        "tau/no-object-parameters": "error",
+        "tau/no-boolean-parameters": "error",
+        "tau/no-unsafe-dictionary-types": "error",
+        "tau/no-runtime-typeof": "error",
+        "tau/no-conditional-empty-spread": "error",
+        "tau/no-array-filter-map": "error",
+        "tau/no-in-operator": "error",
+        "tau/no-widen-then-assert": "error",
+        "tau/no-optional-parameters": "error",
+        "tau/no-vague-identifiers": "error",
+        "tau/no-narration-comments": "error",
+        "tau/no-commented-code": "error",
+        "tau/no-internal-references": "error",
+        "tau/no-restating-jsdoc": "error",
+        "tau/error-needs-cause": "error",
+        "tau/prefer-effect-fn": "error",
+        // Effect rules the compiler does not cover. The tag rules run only in modules that import Effect.
+        "tau/no-service-option": "error",
+        "tau/no-silent-error-swallow": "error",
+        "tau/no-yieldless-gen": "error",
+        "tau/no-tag-access": "error",
+        "tau/no-manual-tagged-construction": "error",
+        "typescript/no-explicit-any": "error",
+        "typescript/no-non-null-assertion": "error",
+        "typescript/ban-ts-comment": "error",
+        "typescript/consistent-type-assertions": [
+          "error",
+          { "assertionStyle": "as", "objectLiteralTypeAssertions": "never" }
+        ],
+        "typescript/no-unnecessary-type-assertion": "error",
+        "typescript/no-unnecessary-condition": "error",
+        "typescript/no-unnecessary-boolean-literal-compare": "error",
+        "typescript/no-redundant-type-constituents": "error",
+        "typescript/no-confusing-void-expression": "error",
+        "typescript/switch-exhaustiveness-check": "error",
+        "typescript/no-unsafe-assignment": "error",
+        "typescript/no-unsafe-argument": "error",
+        "typescript/no-unsafe-call": "error",
+        "typescript/no-unsafe-member-access": "error",
+        "typescript/no-unsafe-return": "error",
+        "unicorn/no-array-reduce": ["error", { "allowSimpleOperations": true }],
+        "unicorn/no-array-for-each": "error",
+        "unicorn/no-useless-undefined": "error",
+        "unicorn/no-useless-spread": "error",
+        "unicorn/no-useless-fallback-in-spread": "error",
+        "oxc/no-accumulating-spread": "error",
+        "no-nested-ternary": "error",
+        "no-negated-condition": "error",
+        "no-lonely-if": "error",
+        "no-else-return": "error",
+        "no-param-reassign": "error",
+        "no-useless-return": "error",
+        "no-unneeded-ternary": "error",
+        "max-depth": ["error", 3],
+        "max-params": ["error", 4],
+        "max-lines-per-function": [
+          "error",
+          { "max": 60, "skipBlankLines": true, "skipComments": true }
+        ],
+        "id-length": ["error", { "min": 2, "exceptions": ["_"], "exceptionPatterns": ["^[A-Z]$"] }],
+        "no-magic-numbers": [
+          "error",
+          { "ignore": [-1, 0, 1, 2], "ignoreArrayIndexes": true, "ignoreDefaultValues": true }
+        ]
+      }
+    },
+    { "files": ["src/cli/**"], "rules": { "tau/no-effect-run": "off", "tau/no-console": "off" } },
+    { "files": ["src/sdk/**"], "rules": { "tau/no-effect-run": "off" } },
+    { "files": ["src/host/**"], "rules": { "tau/no-env": "off" } },
+    { "files": ["src/ai/**"], "rules": { "tau/no-fetch": "off" } },
+    { "files": ["src/proc/**"], "rules": { "tau/no-spawn": "off" } },
+    { "files": ["src/core/**", "src/session/**"], "rules": { "tau/no-module-let": "error" } },
+    {
+      "files": ["tests/**", "tools/**/*.test.ts"],
+      "rules": { "tau/no-module-mock": "error", "tau/no-sleep": "error" }
+    }
+  ]
+}

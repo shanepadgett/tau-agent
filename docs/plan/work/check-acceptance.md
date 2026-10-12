@@ -1,18 +1,10 @@
 # Phase-zero acceptance
 
-Status: proposed isolated spike, then a retained integration flow. Question: does the exact production split enforce its policies and fail correctly on a fresh Bun-only installation on macOS and Linux arm64?
+Status: implemented as a 34-case integration flow. Full-suite macOS verification and focused Linux evidence belong in [phase-zero.md](../phase-zero.md#verification); remaining cross-platform and dynamic-entry cases keep final acceptance open. No further spikes.
 
-## First probe
+## Fixture isolation
 
-```text
-spikes/check-infrastructure/        [New, after approval] Independent pins/config, fixtures, runner and NOTES.md.
-  fixtures/                        Raw source/config cases, not application code.
-  run.ts                           Real CLI invocations and diagnostic/exit assertions.
-  linux.sh                         Same cases in a disposable Linux arm64 environment.
-  .work/                           Ignored installs, outputs and reports.
-```
-
-`[Existing]` Reference `spikes/toolchain/run.ts`'s isolated-project/process pattern; do not import it into production or reuse its Node-dependent timing wrapper. Materialize fixture projects where explicit lint paths are actually discovered: spike 6 found Oxlint skipped ignored `.work` sources. Assert discovery before asserting rule coverage; do not bypass ignore handling to claim a pass.
+`[Existing]` Reference `spikes/toolchain/run.ts`'s isolated-project/process pattern; do not import it into production or reuse its Node-dependent timing wrapper. Integration fixtures are real temporary projects outside application `src/`. Materialize them where explicit lint paths are discovered: spike 6 found Oxlint skipped ignored `.work` sources. Assert discovery before asserting rule coverage; do not bypass ignore handling to claim a pass.
 
 ## Retained flow
 
@@ -23,7 +15,7 @@ type Case = { name: string; files: Readonly<Record<string, string>>;
 type RunCase = (test: Case, workspace: string) => Promise<void>;
 ```
 
-Fixture creation/cleanup and command execution belong beside `tests/integration/checks.test.ts`. Use real tools and real temporary projects; no mocked modules, sleeps or model requests. Production configs and rules are the inputs to retained cases, not rewritten test-only approximations.
+Fixture creation/cleanup and command execution belong beside `tools/checks/checks.test.ts`. Use real tools and real temporary projects; no mocked modules, sleeps or model requests. Production configs and rules are the inputs to retained cases, not rewritten test-only approximations.
 
 ```text
 create isolated workspace
@@ -65,6 +57,6 @@ Include a reachable Oxlint plugin and a dependency used only by a Mise task, the
 - Fallow dead-code, boundary and duplicate failures are proved by exit-code tests; report-only success must not replace a blocking check.
 - Formatter supports the selected file extensions; malformed input is distinct from ordinary formatting differences.
 - Measure separate type and lint commands on a bounded realistic fixture shape; record peak memory before promising a CI budget. Spike 6's exact production split was not timed.
-- Record results and untested cases in NOTES.md and a numbered result in docs/plan/spikes.md; then port the retained flow and implement root configuration.
+- Record scaffold verification and untested cases in docs/plan/phase-zero.md.
 
 Remaining limits to record: editor integration, x64/musl, arbitrary dynamic API aliases, framework callback reachability, and real application-scale performance. A check failure stops implementation for a proposed repair and approval; it does not justify a suppression or weaker setting.

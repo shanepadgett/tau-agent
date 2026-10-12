@@ -6,6 +6,7 @@
 - Lead each section with the decision or the shape. Reasons come after, in short sentences.
 - Lasting plans live in `docs/plan/`. The table in `docs/plan/README.md` says which file holds what.
 - Record each agreed decision in the plan file in the same reply. A correction rewrites the affected part; do not append history.
+- Search `docs/reference/copies/index.md` and the dependency's docs and types before proposing any helper, type, or dependency. Name the library module and function that provides each capability. Propose new code only after the reference shows nothing that fits, and name no API that you did not find there.
 - Plan in rounds. Each round asks a small batch of related decisions.
 - Unanswered questions go in Open in `docs/plan/README.md` and are re-asked each reply until answered. Remove or reword them when another answer settles or changes them.
 

@@ -1,0 +1,240 @@
+{
+  "$schema": "https://raw.githubusercontent.com/shanepadgett/tau-agent/refs/heads/main/packages/agent/schemas/tau.schema.json",
+  "extensions": {
+    "decisions": {
+      "routing": {
+        "enabled": false
+      }
+    },
+    "compaction": {
+      "selfCompact": {
+        "enabled": false
+      }
+    },
+    "mdLint": {
+      "ignoreGlobs": [
+        ".git/**",
+        "node_modules/**",
+        "dist/**",
+        "build/**",
+        "coverage/**",
+        "out/**",
+        ".cache/**",
+        ".next/**",
+        ".turbo/**",
+        ".parcel-cache/**",
+        ".pi/sessions/**",
+        ".pi/cache/**",
+        ".pi/tmp/**",
+        ".pi/temp/**",
+        ".pi/logs/**",
+        "spikes/file-finder/corpus/**",
+        "docs/reference/copies/**"
+      ]
+    },
+    "silentCommandRunner": {
+      "afterWrite": [
+        {
+          "name": "Lint fixes",
+          "command": "mise run fix:lint -- {files}",
+          "details": "Apply safe lint fixes to changed source, tools and tests.",
+          "includeGlobs": [
+            "src/**/*.ts",
+            "src/**/*.tsx",
+            "src/**/*.js",
+            "src/**/*.jsx",
+            "src/**/*.mjs",
+            "src/**/*.cjs",
+            "tools/**/*.ts",
+            "tools/**/*.tsx",
+            "tools/**/*.js",
+            "tools/**/*.jsx",
+            "tools/**/*.mjs",
+            "tools/**/*.cjs",
+            "tests/**/*.ts",
+            "tests/**/*.tsx",
+            "tests/**/*.js",
+            "tests/**/*.jsx",
+            "tests/**/*.mjs",
+            "tests/**/*.cjs"
+          ]
+        },
+        {
+          "name": "Formatting fixes",
+          "command": "mise run fix:fmt -- {files}",
+          "details": "Format changed code and supported configuration after lint fixes.",
+          "includeGlobs": [
+            "src/**/*.ts",
+            "src/**/*.tsx",
+            "src/**/*.js",
+            "src/**/*.jsx",
+            "src/**/*.mjs",
+            "src/**/*.cjs",
+            "tools/**/*.ts",
+            "tools/**/*.tsx",
+            "tools/**/*.js",
+            "tools/**/*.jsx",
+            "tools/**/*.mjs",
+            "tools/**/*.cjs",
+            "tests/**/*.ts",
+            "tests/**/*.tsx",
+            "tests/**/*.js",
+            "tests/**/*.jsx",
+            "tests/**/*.mjs",
+            "tests/**/*.cjs",
+            "tools/**/*.json",
+            "tools/**/*.jsonc",
+            "package.json",
+            "tsconfig.json",
+            ".oxlintrc.json",
+            ".oxfmtrc.json",
+            ".fallowrc.jsonc",
+            ".pi/tau/settings.json",
+            "docs/reference/sources.json"
+          ]
+        }
+      ],
+      "afterRun": [
+        {
+          "name": "Mise task configuration",
+          "command": "mise run check:mise",
+          "details": "Validate task names, dependencies and commands.",
+          "includeGlobs": ["mise.toml"]
+        },
+        {
+          "name": "Formatting",
+          "command": "mise run check:fmt",
+          "details": "Check code and supported configuration formatting.",
+          "includeGlobs": [
+            "src/**",
+            "tools/**",
+            "tests/**",
+            "package.json",
+            "tsconfig.json",
+            ".oxlintrc.json",
+            ".oxfmtrc.json",
+            ".fallowrc.jsonc",
+            ".pi/tau/settings.json",
+            "docs/reference/sources.json",
+            ".gitignore"
+          ],
+          "excludeGlobs": ["**/*.md"]
+        },
+        {
+          "name": "Lint",
+          "command": "mise run check:lint",
+          "details": "Check type-aware and layer-scoped lint policies.",
+          "includeGlobs": [
+            "src/**",
+            "tools/**",
+            "tests/**",
+            ".oxlintrc.json",
+            "tsconfig.json",
+            "package.json",
+            "bun.lock",
+            "mise.toml"
+          ],
+          "excludeGlobs": ["**/*.md"]
+        },
+        {
+          "name": "Type checking",
+          "command": "mise run check:types",
+          "details": "Run the patched TypeScript compiler and Effect diagnostics.",
+          "includeGlobs": [
+            "src/**",
+            "tools/**",
+            "tests/**",
+            "tsconfig.json",
+            "package.json",
+            "bun.lock",
+            "mise.toml"
+          ],
+          "excludeGlobs": ["**/*.md"]
+        },
+        {
+          "name": "Reference documentation",
+          "command": "mise run check:reference",
+          "details": "Check that every dependency has reference docs matching its pinned version.",
+          "includeGlobs": [
+            "docs/reference/sources.json",
+            "tools/reference/**",
+            "tools/reference-docs.ts",
+            "tools/reference-check.ts",
+            "package.json",
+            "bun.lock",
+            "mise.toml"
+          ]
+        },
+        {
+          "name": "Application tests",
+          "command": "mise run test",
+          "details": "Run the application's integration tests.",
+          "includeGlobs": [
+            "src/**",
+            "tests/**",
+            "package.json",
+            "bun.lock",
+            "mise.toml",
+            "tsconfig.json"
+          ],
+          "excludeGlobs": ["**/*.md"],
+          "timeoutMs": 300000
+        },
+        {
+          "name": "Check infrastructure tests",
+          "command": "mise run test:checks",
+          "details": "Verify actual check commands, documentation copying, development-hook configuration and lint rules.",
+          "includeGlobs": [
+            "tools/**",
+            "package.json",
+            "bun.lock",
+            "mise.toml",
+            "tsconfig.json",
+            ".oxlintrc.json",
+            ".oxfmtrc.json",
+            ".fallowrc.jsonc",
+            ".gitignore",
+            ".pi/tau/settings.json",
+            "docs/reference/sources.json"
+          ],
+          "excludeGlobs": ["**/*.md"],
+          "timeoutMs": 300000
+        },
+        {
+          "name": "Dead code and import boundaries",
+          "command": "mise run fallow:dead-code",
+          "details": "Check unused files, exports and dependencies, unresolved imports, cycles and layer boundaries.",
+          "includeGlobs": [
+            "src/**",
+            "tools/**",
+            "tests/**",
+            "package.json",
+            "bun.lock",
+            "mise.toml",
+            "tsconfig.json",
+            ".oxlintrc.json",
+            ".fallowrc.jsonc",
+            ".gitignore"
+          ],
+          "excludeGlobs": ["**/*.md"]
+        },
+        {
+          "name": "Duplicate code",
+          "command": "mise run fallow:dupes",
+          "details": "Fail on qualifying duplicate groups.",
+          "includeGlobs": [
+            "src/**",
+            "tools/**",
+            "tests/**",
+            ".fallowrc.jsonc",
+            ".gitignore",
+            "package.json",
+            "bun.lock",
+            "mise.toml"
+          ],
+          "excludeGlobs": ["**/*.md"]
+        }
+      ]
+    }
+  }
+}

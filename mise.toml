@@ -1,2 +1,80 @@
 [tools]
 bun = "1.4.3"
+# Only for tools/ unit tests: oxlint's RuleTester does not run under Bun (AGENTS.md).
+node = "24.21.0"
+
+[env]
+# One line per Fallow finding, without progress output.
+FALLOW_FORMAT = "compact"
+FALLOW_QUIET = "1"
+
+[settings]
+# Type checking and type-aware lint each use several GiB on large trees; run
+# tasks one at a time.
+jobs = 1
+
+# Every JS tool runs from node_modules under Bun. --no-install fails instead of
+# downloading a missing tool.
+
+[tasks.check]
+description = "Run every read-only check"
+depends = [
+  "check:mise",
+  "check:fmt",
+  "check:lint",
+  "check:types",
+  "check:reference",
+  "fallow:dead-code",
+  "fallow:dupes",
+  "test",
+  "test:checks",
+]
+
+[tasks."check:mise"]
+description = "Validate mise tasks"
+run = "mise tasks validate --errors-only"
+
+[tasks."check:types"]
+description = "Type and Effect diagnostics with the patched TypeScript compiler"
+run = "bunx --bun --no-install tsc --noEmit"
+
+[tasks."check:lint"]
+description = "Oxlint, type-aware rules and the Tau plugin"
+run = "bunx --bun --no-install oxlint --type-aware --deny-warnings --disable-nested-config --format=agent src tools tests"
+
+[tasks."check:fmt"]
+description = "Check formatting with Oxfmt"
+run = "bunx --bun --no-install oxfmt --check"
+
+[tasks."fix:lint"]
+description = "Apply safe Oxlint fixes to the supplied files"
+run = "bunx --bun --no-install oxlint --type-aware --disable-nested-config --format=agent --fix"
+
+[tasks."fix:fmt"]
+description = "Format the supplied files with Oxfmt"
+run = "bunx --bun --no-install oxfmt --write"
+
+[tasks."fallow:dead-code"]
+description = "Unused files, exports and dependencies, cycles and import boundaries"
+run = "bunx --bun --no-install fallow dead-code --fail-on-issues"
+
+[tasks."fallow:dupes"]
+description = "Duplicated code"
+run = "bunx --bun --no-install fallow dupes --fail-on-issues"
+
+[tasks.test]
+description = "Application integration tests"
+# ./tests must exist; the flag lets the task pass until the application has tests.
+run = "bun test ./tests --pass-with-no-tests"
+
+[tasks."test:checks"]
+description = "Check infrastructure: integration tests under Bun, then lint rule unit tests under Node"
+run = ["bun test ./tools/checks --pass-with-no-tests", "node --test \"tools/lint/**/*.test.ts\""]
+
+[tasks.docs]
+description = "Copy version-matched dependency docs into docs/reference/copies/ and rebuild the index"
+run = "bun tools/reference-docs.ts"
+
+[tasks."check:reference"]
+description = "Every dependency has reference docs matching its pinned version"
+run = "bun tools/reference-check.ts"
