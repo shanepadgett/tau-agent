@@ -78,4 +78,3 @@ RepoReuse (arXiv 2609.35357) reported duplicated logic in 50.8% of agent task ch
 ## Standards to write
 
 - Adding a layer: folder, `index.ts`, fallow boundaries and entry, the import rule in architecture.md. Written in the scaffolding plan.
-- `docs/standards/code.md`: readable code, based on research, including the agreed helper-reuse approach. Written after that research.

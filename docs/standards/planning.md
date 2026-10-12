@@ -2,13 +2,32 @@
 
 ## All plans
 
-- A plan fits in one to two pages. If it runs longer, split the work or cut detail; nobody reads page three.
+- A plan fits in one to two pages and is mostly visual: diagrams, tables and trees, with prose only for a decision, a tradeoff or a question. If it runs longer, split the work or cut detail; nobody reads page three.
 - Lead each section with the decision or the shape. Reasons come after, in short sentences.
 - Lasting plans live in `docs/plan/`. The table in `docs/plan/README.md` says which file holds what.
 - Record each agreed decision in the plan file in the same reply. A correction rewrites the affected part; do not append history.
 - Search `docs/reference/copies/index.md` and the dependency's docs and types before proposing any helper, type, or dependency. Name the library module and function that provides each capability. Propose new code only after the reference shows nothing that fits, and name no API that you did not find there.
 - Plan in rounds. Each round asks a small batch of related decisions.
 - Unanswered questions go in Open in `docs/plan/README.md` and are re-asked each reply until answered. Remove or reword them when another answer settles or changes them.
+
+## Reader
+
+Assume the reader is new to this codebase and may not read the code you write. Never assume they know an area.
+
+- On first use, say in a few words what a system, file, term or earlier decision is and where it lives. Do not refer to something the reader has not been shown.
+- Define any name coined during the session before using it, or use the plain description instead.
+- State what the change means in plain words before how it works: what the user sees, or what the code can do afterwards that it could not before.
+
+## Engineering health
+
+A plan is accountable for the long-term health of the repository, not only for the feature.
+
+- Start with what exists. Read the code the feature touches and show how it works today, in a diagram or table, before proposing anything.
+- Ask what shape would make this feature slot in cleanly. If the current structure resists it, plan the structural change as a prep step, listed apart from the feature with the reason. Do not defer debt the feature creates or exposes.
+- Defer only unrelated improvements, and record each in `docs/plan/deferred.md` instead of leaving it in the plan.
+- Reuse before adding. For each new piece, name the existing code or library it reuses, or say where you looked and why nothing fit.
+- Name what the change deletes or replaces. A plan that only adds code is incomplete.
+- Weigh at least two shapes for any new paradigm or abstraction, and say what each costs to maintain.
 
 ## Architecture plans
 

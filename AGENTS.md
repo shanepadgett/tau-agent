@@ -7,6 +7,7 @@ Read a standard only when you are about to change something it covers. Reading o
 | Standard | Read when |
 | --- | --- |
 | [standards.md](docs/standards/standards.md) | Changing `AGENTS.md` or any file in `docs/standards/`. |
+| [code.md](docs/standards/code.md) | Writing or changing code in `src/`, `tools/` or `tests/`. |
 | [planning.md](docs/standards/planning.md) | Planning work, in chat or in `docs/plan/`. |
 | [spikes.md](docs/standards/spikes.md) | Creating or changing a spike in `spikes/`. |
 
