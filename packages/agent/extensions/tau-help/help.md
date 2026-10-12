@@ -46,6 +46,8 @@ Use `/cost-report` to view spending for a chosen period and either the current p
 
 Tau automatically replaces long conversation history with a checkpoint so work can continue. Use `/compact` to do this manually. Configure `extensions.compaction.selfCompact` to disable proactive compaction or change its thresholds.
 
+Each newly reached context stage is delivered once per checkpoint. Notice is informational and lets active work continue. Warning asks the agent to finish its current bounded work unit, then compact before starting another substantial unit.
+
 At the hard cutoff, the agent must compact before using other tools. Failures are reported; a failed self-compaction keeps that restriction until a retry succeeds.
 
 ## decisions

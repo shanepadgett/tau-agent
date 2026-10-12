@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 import {
 	SettingsManager,
+	type BoundaryContextPreview,
+	type CustomMessageEntryDraft,
 	type ExtensionAPI,
 	type ExtensionContext,
 	type SessionBoundaryDraft,
@@ -37,6 +39,11 @@ type State =
 			note: string;
 	  };
 type Level = TauAgentEvents["tau:compaction.level"];
+type GuidanceStage = keyof typeof PROMPTS;
+type GuidanceDetails =
+	| { kind: "threshold"; level: GuidanceStage }
+	| { kind: "settlement-reminder"; level: "warning" | "forced" };
+const SEVERITY: Record<GuidanceStage, number> = { notice: 1, warning: 2, forced: 3 };
 
 // Use the canonical projection so omitted or edited history cannot reappear in a summary.
 function hasMaterial(ctx: ExtensionContext): boolean {
@@ -173,6 +180,33 @@ export function registerSelfCompaction(pi: ExtensionAPI): void {
 			String(values[key] ?? "unknown"),
 		);
 	}
+	function nextGuidance(
+		current: Level,
+		messages: Readonly<BoundaryContextPreview["contextMessages"]>,
+	): CustomMessageEntryDraft | null {
+		const stage = current.level;
+		if (!current.thresholds || stage === "normal" || stage === "compacting") return null;
+		const delivered = messages.some((message) => {
+			if (message.role !== "custom" || message.customType !== GUIDANCE) return false;
+			const details = message.details;
+			if (!details || typeof details !== "object" || !("kind" in details) || details.kind !== "threshold")
+				return false;
+			if (!("level" in details)) return false;
+			const previous = details.level;
+			return (
+				(previous === "notice" || previous === "warning" || previous === "forced") &&
+				SEVERITY[previous] >= SEVERITY[stage]
+			);
+		});
+		if (delivered) return null;
+		return {
+			type: "custom_message",
+			customType: GUIDANCE,
+			content: guidance(current),
+			display: false,
+			details: { kind: "threshold", level: stage } satisfies GuidanceDetails,
+		};
+	}
 	async function route(note: string, ctx: ExtensionContext) {
 		const timeout = AbortSignal.timeout(3000);
 		const signal = AbortSignal.any([timeout, lifetime.signal, ...(ctx.signal ? [ctx.signal] : [])]);
@@ -188,7 +222,7 @@ export function registerSelfCompaction(pi: ExtensionAPI): void {
 		refresh: "append",
 		async read() {
 			return settings.selfCompact.enabled
-				? "Manage context through self_compact. When context guidance appears at the end of the conversation, compact at a natural stopping point. Call alone with a short current handoff: the user's request and authorization limits, unfinished work, immediate blockers, unanswered questions, and exact NEXT ACTION last. Aim for 500–1,500 characters; maximum 24,000. The handoff is preserved verbatim once inside the checkpoint; durable context is summarized separately."
+				? "Manage context through self_compact. Context notice is informational: continue active work without compacting solely because of the notice. At warning, finish the current bounded work unit, then compact before starting another substantial unit; if only the final answer remains, send it. At the hard cutoff, call self_compact immediately. Follow the latest context stage or settlement reminder. Call alone with a short current handoff: the user's request and authorization limits, unfinished work, immediate blockers, unanswered questions, and exact NEXT ACTION last. Aim for 500–1,500 characters; maximum 24,000. The handoff is preserved verbatim once inside the checkpoint; durable context is summarized separately."
 				: "";
 		},
 	});
@@ -244,23 +278,23 @@ export function registerSelfCompaction(pi: ExtensionAPI): void {
 				reason: "Context hard cutoff reached. Only self_compact is allowed until compaction succeeds.",
 			};
 	});
-	pi.on("context", (event, ctx) => {
+	pi.on("context", (_event, ctx) => {
 		// Boundary drafts are proposals until Pi journals them. Confirm the checkpoint
 		// (or fallback note) before unlocking tools and clearing its progress widget.
 		if (state.phase !== "watching") restore(ctx);
 		if (state.phase === "watching") clearProgress();
-		const messages = event.messages.filter((message) => message.role !== "custom" || message.customType !== GUIDANCE);
-		const text = guidance(publish(ctx));
-		if (text && hasMaterial(ctx))
-			messages.push({ role: "custom", customType: GUIDANCE, content: text, display: false, timestamp: Date.now() });
-		// Mutable guidance is appended after stable history, never inserted into the cached prefix.
-		return { messages };
+		// Changing even the tail here makes Pi collapse historical system messages.
+		// Threshold guidance is journaled at append boundaries instead.
+		publish(ctx);
 	});
 	pi.on("message_end", (_event, ctx) => {
 		publish(ctx);
 	});
-	pi.on("turn_end", (_event, ctx) => {
-		publish(ctx);
+	pi.on("turn_end", (event, ctx) => {
+		const current = publish(ctx);
+		if (event.outcome !== "completed" || ctx.signal?.aborted || lifetime.signal.aborted || !hasMaterial(ctx)) return;
+		const draft = nextGuidance(current, event.context.contextMessages);
+		if (draft) return { entries: [draft] };
 	});
 	pi.on("agent_before_settle", async (event, ctx) => {
 		if (event.outcome !== "completed" || ctx.signal?.aborted || lifetime.signal.aborted) return;
@@ -380,6 +414,7 @@ export function registerSelfCompaction(pi: ExtensionAPI): void {
 						customType: GUIDANCE,
 						content: `${guidance(current)}\nCompact now before continuing.`,
 						display: false,
+						details: { kind: "settlement-reminder", level: current.level } satisfies GuidanceDetails,
 					},
 				],
 				continue: true,
@@ -464,7 +499,14 @@ export function registerSelfCompaction(pi: ExtensionAPI): void {
 	});
 	pi.on("before_agent_start", async (_event, ctx) => {
 		await refresh(ctx);
-		publish(ctx);
+		restore(ctx);
+		const current = publish(ctx);
+		if (ctx.signal?.aborted || lifetime.signal.aborted || !hasMaterial(ctx)) return;
+		const draft = nextGuidance(current, ctx.sessionManager.buildSessionProjection().messages);
+		if (draft) {
+			const { type: _type, ...message } = draft;
+			return { message };
+		}
 	});
 	pi.on("model_select", (_event, ctx) => {
 		publish(ctx);
