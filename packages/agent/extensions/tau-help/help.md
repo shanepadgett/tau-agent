@@ -144,6 +144,10 @@ Set `extensions.toolApproval.autoApprove` to let approved requests run without a
 
 Loads specialist tools when the agent needs them instead of including every tool in every request. Loading tools can cause a prompt-cache miss on some models.
 
+## vocabulary
+
+Gives the agent consistent product terms from `.pi/tau/vocabulary.json`. Ask it to look up or manage vocabulary; it loads the deferred tool when needed. Before saving a change, discuss and agree on the product concept and definition. Terms are not collected automatically and should not describe implementation details. Saved changes enter the prompt at the next agent run.
+
 ## web
 
 Lets the agent search the web and fetch pages. Search uses an available Codex, Anthropic, or Grok login, with Exa as a fallback. Page fetching supports text and images, but not PDFs or other binary downloads.

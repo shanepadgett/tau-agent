@@ -9,6 +9,7 @@ Tau's built-in groups are:
 - `web` for public web research, reached through code mode
 - `image` for raster image generation and editing, deferred
 - `appshot` for macOS window discovery, capture, and activation, deferred
+- `vocabulary` for repository product terms agreed with the user, deferred
 
 Project and global package extensions can add groups with `registerToolGroup()` from `@shanepadgett/tau-agent`. The group id and description become the tool namespace shown to the agent.
 
