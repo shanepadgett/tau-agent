@@ -37,6 +37,7 @@ For which systems exist, how they meet, and which abstractions and patterns fit.
 - Show boundaries and dependencies as a Mermaid diagram: one idea per diagram, 5–9 boxes, short labels, left to right. Split a diagram rather than grow it.
 - Name the pattern chosen (state machine, events, middleware, wrapped services) and the alternative it beat, with one line of tradeoff.
 - When work would add another flag or special case to a growing set of states, propose a structure instead.
+- Research architectural concepts, not only libraries: name the paradigms that could fit, how other systems apply them, and what each costs to evolve. Cite the systems studied.
 - Stop at interfaces. No implementation code.
 
 ## Code-level plans

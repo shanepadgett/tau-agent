@@ -1,0 +1,52 @@
+{
+  "path": "/chat/completions",
+  "request": {
+    "model": "anthropic/claude-haiku-5.5",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Review this change: renamed `update` to `refresh` in src/ai/credential.ts and src/host/credential-store.ts. Give the risk, the files, and a one-line summary."
+      }
+    ],
+    "max_tokens": 4096,
+    "response_format": {
+      "type": "json_schema",
+      "json_schema": {
+        "name": "review",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "risk": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ]
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "summary": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "risk",
+            "files",
+            "summary"
+          ],
+          "additionalProperties": false
+        },
+        "description": "Response with a JSON object",
+        "strict": true
+      }
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": "\n         \n{\"id\":\"gen-1791845234-5WrFcQolGHJ13zomNaPP\",\"object\":\"chat.completion\",\"created\":1791845234,\"model\":\"anthropic/claude-haiku-5.5\",\"provider\":\"Azure\",\"system_fingerprint\":null,\"service_tier\":\"default\",\"choices\":[{\"index\":0,\"logprobs\":null,\"finish_reason\":\"stop\",\"native_finish_reason\":\"end_turn\",\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"risk\\\":\\\"medium\\\",\\\"files\\\":[\\\"src/ai/credential.ts\\\",\\\"src/host/credential-store.ts\\\"],\\\"summary\\\":\\\"Renames update to refresh in the credential and credential-store modules; medium risk because any callers or interface implementations not updated in the same change would break at compile or runtime.\\\"}\",\"refusal\":null,\"reasoning\":null,\"reasoning_details\":[{\"type\":\"reasoning.text\",\"signature\":\"CAQSuAcKEAgSGAI4AUIIdGhpbmtpbmcSDJO/NO4ex8UAfBCKpBoMayjLBeQHoysMGTtpIjAAzLl7HTCxZqAcEiinUnP0T4VSjYWJnsJ8oBXiqAZuofASdtJcK4l8tPDEVfA7jj0q1QaMJ/7p/R8Dktn83LorBpZ9daesw6jn+RAG0UFihGNV+CEMDNGzmquau1tBtYmrmYOCQX/2/kY8AEp5HW4VX0kmA1LBUl1buTY83DbaEu/5mrcXZXvBDJjduMF5kAKDXfvsrkkJZFRxAsL+BjC7qy3z/HPIU5/NR2XmyOMAkcvMCRQDVkg4qXiVIXi+75ZBelHzOAQBZ2UBLHOHhkyi/cQwo8/GWQ3ntDgQFj7rHgg9AuUijmKt7ezZlbEP0098wfpWChwEASEGL4XenHMG1/NyAV+W+x1IJ5NJZhKjPFMQbQ7GAfiw+FkQKm/Ez3bhm1lZH89FmvFuSVUqyqaAYMooRcZCqgBrYazJh0lRNv/YuNWJIVYxeIyuAkEc/orH0trAAuFaEIITwThwEtc0FatTB8JtCWsEKxqCIy9vv58lZJbtvLsVQ5xO9KiRbG7cWSIoCAgme4CSC3ui/PbxjTWUUGxmJQoyzEsUll75mkPEKuOsogEpqEPZHxZ+NOyeOXfgT4Nwrgm8BargqcX9Rv+BHB/VeccbyBQ1Xen+rDMV28NUCluwDG+yLq2AuSRJ3zBnKv+6hy+l6ltwjiECEwPrWUwhgF4NwNanjvdYUdRfhjhIGRlWcq5BRPt1cNasACSApzS+lf70K3SuvIOaaleP7GwpiIJWqlK8d0ljFG0nI4lfIQ35vXSq0NmGLIRkMsKKqk6u3SAX7S+IUvEEuDhAA3dc0DSCTzhh0iuKd4O8kX9jT1C5ki7ILopQFCklSgeLaMKx5jqvF7QaD1ZLD9EYuCJNEhpMKQQ/14wvYJ/BQw4f3Ox+v3grXxcW7xSMZCyKU24AmNxCrokre6sAyMaavYwYEQ2INoD4hatBzDraUDcZsw/9/7WnJvSdXPGc2/++r5ekM2pu41483JLrQElC00rjKumuCbkEJuiDwmj8Lb1xERBo7qNFtkRJhQcg2LAkCeMyvyKR32LsFML+WQxH/7eaRIB3YAEOFBnfUmiElBGT0OpppNV4ltz65FcBTPUtC8LaBmPdwi8Req6blL6y0T+WBNjLL1Ii06jm6f/KXVxIRwCU+TtzZv4phkBWwAiPFuC5wfL0kEy7g/7VBuWbtAAOwFgu/YuHfH92CT2JpJDbGhGPGAE=.eyJlbmRwb2ludF9zbHVnIjoiYW50aHJvcGljL2NsYXVkZS1oYWlrdS01LjUtMjAyNjEwMDd8YXp1cmUvZ2xvYmFsIn0\",\"format\":\"anthropic-claude-v1\",\"index\":0}]}}],\"usage\":{\"prompt_tokens\":342,\"completion_tokens\":212,\"total_tokens\":554,\"cost\":0.0001402,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.0001402,\"upstream_inference_prompt_cost\":0.0000342,\"upstream_inference_completions_cost\":0.000106},\"completion_tokens_details\":{\"reasoning_tokens\":117,\"image_tokens\":0,\"audio_tokens\":0}}}"
+}

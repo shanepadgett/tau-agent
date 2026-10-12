@@ -1,0 +1,41 @@
+{
+  "path": "/systemone",
+  "request": {
+    "model": "openai/gpt-6-luna-decisions",
+    "state": {
+      "prompt": "Rename the credential store's update method to refresh and fix every caller.",
+      "repository": "Tau, a coding agent written in TypeScript with Effect."
+    },
+    "questions": {
+      "route": {
+        "type": "choice",
+        "instructions": "What kind of work does the prompt ask for?",
+        "criteria": {
+          "code": "Change or write code in the repository.",
+          "question": "Answer a question without changing files.",
+          "chat": "Small talk with no task."
+        }
+      },
+      "offTopic": {
+        "type": "noul",
+        "instructions": "Is the prompt unrelated to software work in this repository?",
+        "criteria": {
+          "false": "It is about this repository.",
+          "true": "It is unrelated."
+        }
+      },
+      "effort": {
+        "type": "score",
+        "instructions": "How much work will the prompt take?",
+        "criteria": [
+          "trivial",
+          "small",
+          "large"
+        ]
+      }
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": "{\"model\":\"openai/gpt-6-luna-decisions-20261006\",\"answers\":{\"route\":{\"type\":\"choice\",\"choice\":\"code\",\"probabilities\":{\"code\":1,\"question\":0,\"chat\":0},\"confidence\":1},\"offTopic\":{\"type\":\"noul\",\"noul\":0},\"effort\":{\"type\":\"score\",\"score\":0.69,\"legend\":{\"0\":\"trivial\",\"1\":\"small\",\"2\":\"large\"},\"probabilities\":{\"0\":0.32,\"1\":0.67,\"2\":0.01},\"confidence\":0.5}},\"usage\":{\"input_tokens\":446,\"output_tokens\":0,\"cost\":0.0000446},\"id\":\"gen-dec-1791845218-xvf9dgC60vk1eX8rHIvA\",\"provider\":\"OpenAI\"}"
+}

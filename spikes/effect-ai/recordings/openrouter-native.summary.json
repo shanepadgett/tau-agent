@@ -1,0 +1,55 @@
+{
+  "types": [
+    "response-metadata",
+    "reasoning-start",
+    "reasoning-delta",
+    "reasoning-end",
+    "text-start",
+    "text-delta",
+    "reasoning-start",
+    "reasoning-delta",
+    "text-delta",
+    "reasoning-delta",
+    "text-delta",
+    "reasoning-delta",
+    "text-delta",
+    "reasoning-delta",
+    "text-delta",
+    "reasoning-delta",
+    "text-delta",
+    "tool-params-start",
+    "tool-params-delta",
+    "tool-params-end",
+    "tool-call",
+    "text-delta",
+    "reasoning-end",
+    "text-end",
+    "finish"
+  ],
+  "text": "Reasoning first: a JavaScript number is an IEEE 754 double with a 53-bit significand, so integers are exact only up to 2^53. 2^61 - 17 is odd and about 2.3e18, so it needs about 61 bits and cannot be stored exactly. The product 3·2^61 - 51 is about 6.9e18, which lies between 2^62 and 2^63. At that magnitude the spacing between doubles is 2^10 = 1024, and 51 is not a multiple of 1024, so the product is not exact either. I'll check this by computing it both ways.",
+  "reasoning": "I need to check whether 2^61 - 17 fits within a double's 53-bit significand. Since 17 is odd and 2^61 is even, their difference is odd, meaning it requires all 61 bits to represent exactly—well beyond",
+  "toolCalls": [
+    {
+      "name": "run",
+      "params": {
+        "script": "const numResult = (2 ** 61 - 17) * 3;\nconst exactBig = (2n ** 61n - 17n) * 3n;\nconsole.log(\"Number result:\", numResult);\nconsole.log(\"Number result (exact integer string):\", BigInt(numResult).toString());\nconsole.log(\"BigInt exact result:\", exactBig.toString());\nconsole.log(\"Equal?\", BigInt(numResult) === exactBig);\nconsole.log(\"Difference:\", (exactBig - BigInt(numResult)).toString());\nconsole.log(\"Number.isSafeInteger(numResult):\", Number.isSafeInteger(numResult));"
+      }
+    }
+  ],
+  "finish": {
+    "reason": "tool-calls",
+    "usage": {
+      "inputTokens": {
+        "uncached": 456,
+        "total": 456,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "outputTokens": {
+        "total": 814,
+        "text": 434,
+        "reasoning": 380
+      }
+    }
+  }
+}

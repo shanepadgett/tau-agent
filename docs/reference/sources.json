@@ -21,6 +21,34 @@
       "api": [{ "kind": "source", "path": "@effect/platform-bun/src" }]
     },
     {
+      "package": "@effect/ai-anthropic",
+      "versionSource": "lock",
+      "summary": "Anthropic Messages API for `effect/ai`: client, language model, config, provider tools. Its ai-docs duplicate Effect's, so only the README is copied.",
+      "docs": [{ "origin": { "kind": "installed" }, "files": ["README.md"] }],
+      "api": [{ "kind": "source", "path": "@effect/ai-anthropic/src" }]
+    },
+    {
+      "package": "@effect/ai-openai",
+      "versionSource": "lock",
+      "summary": "OpenAI Responses API for `effect/ai` (OpenAI API key and the Codex subscription): client, language model, config, schema. Its ai-docs duplicate Effect's, so only the README is copied.",
+      "docs": [{ "origin": { "kind": "installed" }, "files": ["README.md"] }],
+      "api": [{ "kind": "source", "path": "@effect/ai-openai/src" }]
+    },
+    {
+      "package": "@effect/ai-openai-compat",
+      "versionSource": "lock",
+      "summary": "Chat Completions API for `effect/ai`, for OpenAI-compatible services and gateways: client, language model, config. Its ai-docs duplicate Effect's, so only the README is copied.",
+      "docs": [{ "origin": { "kind": "installed" }, "files": ["README.md"] }],
+      "api": [{ "kind": "source", "path": "@effect/ai-openai-compat/src" }]
+    },
+    {
+      "package": "@effect/ai-openrouter",
+      "versionSource": "lock",
+      "summary": "OpenRouter for `effect/ai`: client, language model (keeps reasoning details on replay), config. Its decision model's endpoint returns 404. Its ai-docs duplicate Effect's, so only the README is copied.",
+      "docs": [{ "origin": { "kind": "installed" }, "files": ["README.md"] }],
+      "api": [{ "kind": "source", "path": "@effect/ai-openrouter/src" }]
+    },
+    {
       "package": "@effect/tsgo",
       "versionSource": "lock",
       "summary": "Effect diagnostics for the TypeScript 7 compiler: rule names, severities and tsconfig options.",

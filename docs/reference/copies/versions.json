@@ -9,6 +9,26 @@
     "fingerprint": "25ca929c276e76fc",
     "commits": []
   },
+  "@effect/ai-anthropic": {
+    "version": "4.0.3",
+    "fingerprint": "a5fba57acfac9198",
+    "commits": []
+  },
+  "@effect/ai-openai": {
+    "version": "4.0.3",
+    "fingerprint": "472d1ae41006a69d",
+    "commits": []
+  },
+  "@effect/ai-openai-compat": {
+    "version": "4.0.3",
+    "fingerprint": "e12013355cdc756e",
+    "commits": []
+  },
+  "@effect/ai-openrouter": {
+    "version": "4.0.3",
+    "fingerprint": "d7c639ebfda2e783",
+    "commits": []
+  },
   "@effect/tsgo": {
     "version": "0.51.1",
     "fingerprint": "baa0912c23cfde47",

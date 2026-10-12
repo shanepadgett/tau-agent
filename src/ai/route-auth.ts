@@ -1,0 +1,158 @@
+/** Signs each request with the route's credential, read fresh every time so a token another process refreshed is used. */
+
+import { Config, DateTime, Duration, Effect, Option, Predicate, Redacted, Schema } from "effect";
+import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
+import { ApiKey, type Credential, CredentialStore, ProviderId } from "./credential.ts";
+import type { Route } from "./routes.ts";
+
+/** A token this close to expiry counts as expired, so it cannot lapse while a request is in flight. */
+const EXPIRY_MARGIN = Duration.minutes(1);
+
+const CLAUDE_SUBSCRIPTION_BETAS = ["claude-code-20250219", "oauth-2025-04-20"];
+
+const UNAVAILABLE_REASONS = {
+  missing:
+    "has no stored credential and no API key in its environment variable. Log in, or add an API key.",
+  expired: "login has expired. Log in again.",
+  wrongKind:
+    "credential is the wrong kind for this route: an API key where a subscription login is needed, or the reverse. Log in again with the other method.",
+  unreadableToken: "access token has no ChatGPT account ID. Log in again.",
+};
+
+type UnavailableReason = keyof typeof UNAVAILABLE_REASONS;
+
+export class CredentialUnavailable extends Schema.TaggedError<CredentialUnavailable>()(
+  "CredentialUnavailable",
+  {
+    provider: ProviderId,
+    reason: Schema.Literals(["missing", "expired", "wrongKind", "unreadableToken"]),
+    message: Schema.String,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
+
+const unavailableFields = (route: Route, reason: UnavailableReason) => ({
+  provider: route.provider,
+  reason,
+  message: `${route.provider} ${UNAVAILABLE_REASONS[reason]}`,
+});
+
+/** The ChatGPT account ID that Codex requires as a header is a claim in the access token. */
+const ChatgptAccessToken = Schema.StringFromBase64Url.pipe(
+  Schema.decodeTo(
+    Schema.fromJsonString(
+      Schema.Struct({
+        "https://api.openai.com/auth": Schema.Struct({ chatgpt_account_id: Schema.String }),
+      }),
+    ),
+  ),
+);
+
+type Sign = (request: HttpClientRequest.HttpClientRequest) => HttpClientRequest.HttpClientRequest;
+
+/**
+ * Reads the route's credential and returns what signs a request with it. Fails when the credential
+ * is missing, expired or the wrong kind, so callers can check a route before sending anything.
+ */
+export const credentialSigner = Effect.fn("credentialSigner")(function* (route: Route) {
+  const credential = yield* currentCredential(route);
+
+  if (route.auth.kind === "apiKey") {
+    if (!Predicate.isTagged(credential, "ApiKey")) return yield* unavailable(route, "wrongKind");
+    return apiKeySigner(route, credential.key);
+  }
+
+  if (!Predicate.isTagged(credential, "OAuthTokens")) return yield* unavailable(route, "wrongKind");
+
+  const expiresSoon = DateTime.isLessThan(
+    credential.expiresAt,
+    DateTime.addDuration(yield* DateTime.now, EXPIRY_MARGIN),
+  );
+
+  if (expiresSoon) return yield* unavailable(route, "expired");
+
+  const signWithToken = HttpClientRequest.bearerToken(credential.access);
+
+  if (route.auth.kind === "claudeSubscription")
+    return (request) => withClaudeBetas(signWithToken(request));
+
+  const accountId = yield* chatgptAccountId(route, Redacted.value(credential.access));
+
+  return (request: HttpClientRequest.HttpClientRequest) =>
+    HttpClientRequest.setHeaders(signWithToken(request), {
+      "chatgpt-account-id": accountId,
+      originator: "tau",
+      "OpenAI-Beta": "responses=experimental",
+    });
+});
+
+/**
+ * Signs every request the client sends. A credential failure becomes a transport error, because
+ * Effect's AI clients accept only HTTP errors from a client transform.
+ */
+export const signRequests = Effect.fn("signRequests")(function* (route: Route) {
+  const context = yield* Effect.context<CredentialStore>();
+
+  return (client: HttpClient.HttpClient) =>
+    HttpClient.mapRequestEffect(client, (request) =>
+      credentialSigner(route).pipe(
+        Effect.map((sign) => sign(request)),
+        Effect.provideContext(context),
+        Effect.mapError(
+          (cause) =>
+            new HttpClientError.HttpClientError({
+              reason: new HttpClientError.TransportError({
+                request,
+                cause,
+                description: cause.message,
+              }),
+            }),
+        ),
+      ),
+    );
+});
+
+/** The stored credential, or an API key from the route's environment variable when none is stored. */
+const currentCredential = Effect.fn("currentCredential")(function* (route: Route) {
+  const store = yield* CredentialStore;
+  const stored: Option.Option<Credential> = yield* store.read(route.provider);
+  if (Option.isSome(stored)) return stored.value;
+  if (route.auth.kind !== "apiKey") return yield* unavailable(route, "missing");
+
+  // An unset variable is `none`; reading the environment itself cannot fail.
+  const key = yield* Config.option(Config.Redacted(route.auth.environmentVariable)).pipe(
+    Effect.orDie,
+  );
+
+  if (Option.isNone(key)) return yield* unavailable(route, "missing");
+  return ApiKey.make({ key: key.value });
+});
+
+const apiKeySigner = (route: Route, key: Redacted.Redacted): Sign =>
+  route.client === "anthropic"
+    ? HttpClientRequest.setHeader("x-api-key", Redacted.value(key))
+    : HttpClientRequest.bearerToken(key);
+
+const withClaudeBetas = (request: HttpClientRequest.HttpClientRequest) => {
+  const requested = request.headers["anthropic-beta"];
+
+  const betas =
+    requested === undefined ? CLAUDE_SUBSCRIPTION_BETAS : [requested, ...CLAUDE_SUBSCRIPTION_BETAS];
+
+  return HttpClientRequest.setHeader(request, "anthropic-beta", betas.join(","));
+};
+
+const chatgptAccountId = (route: Route, accessToken: string) => {
+  const [, payload = ""] = accessToken.split(".");
+
+  return Schema.decodeUnknownEffect(ChatgptAccessToken)(payload).pipe(
+    Effect.map((claims) => claims["https://api.openai.com/auth"].chatgpt_account_id),
+    Effect.mapError(
+      (cause) =>
+        new CredentialUnavailable({ ...unavailableFields(route, "unreadableToken"), cause }),
+    ),
+  );
+};
+
+const unavailable = (route: Route, reason: UnavailableReason) =>
+  Effect.fail(new CredentialUnavailable(unavailableFields(route, reason)));

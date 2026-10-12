@@ -7,6 +7,10 @@
     "prepare": "bunx --bun --no-install effect-tsgo patch --typescript"
   },
   "dependencies": {
+    "@effect/ai-anthropic": "4.0.3",
+    "@effect/ai-openai": "4.0.3",
+    "@effect/ai-openai-compat": "4.0.3",
+    "@effect/ai-openrouter": "4.0.3",
     "effect": "4.0.3"
   },
   "devDependencies": {

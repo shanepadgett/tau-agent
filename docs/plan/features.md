@@ -13,7 +13,7 @@
   | OpenCode Go | OpenAI Chat Completions | API key |
 
 - **Structured output:** a single completion call (no agent loop) can take a JSON schema and return a parsed, validated object. Each protocol uses its native feature: Anthropic structured outputs, Responses `text.format` with `json_schema`, Chat Completions `response_format` with `json_schema`. Where a model lacks it, fall back to a forced tool call. Invalid output is retried once, then fails. Pi only applies JSON schemas to tool parameters, not to responses.
-- **Decision models:** classification is a core capability next to chat, with structured questions and answers. Jev (via OpenRouter) and Luna (via OpenAI or OpenRouter) must work. It may be built on structured output.
+- **Decision models:** classification is a core capability next to chat, with structured questions and answers. Jev (via OpenRouter) and Luna (via OpenAI or OpenRouter) must work. Decisions use each provider's decision API, not structured output.
 - **Claude Code compatibility:** Anthropic subscription OAuth sends what Pi sends to look like Claude Code (system prompt identity, tool-name casing).
 - **Codex priority:** Luna always uses the fast priority tier.
 

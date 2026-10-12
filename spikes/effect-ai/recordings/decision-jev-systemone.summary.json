@@ -1,0 +1,30 @@
+{
+  "answers": {
+    "route": {
+      "label": "code",
+      "probabilities": {
+        "code": 1,
+        "question": 0,
+        "chat": 0
+      },
+      "confidence": 1
+    },
+    "offTopic": {
+      "probability": 0.03
+    },
+    "effort": {
+      "rating": 0.97,
+      "label": "small",
+      "probabilities": {
+        "trivial": 0.07,
+        "small": 0.89,
+        "large": 0.04
+      },
+      "confidence": 0.83
+    }
+  },
+  "usage": {
+    "inputTokens": 465,
+    "outputTokens": 71
+  }
+}

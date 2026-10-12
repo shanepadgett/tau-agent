@@ -1,0 +1,41 @@
+{
+  "path": "/systemone",
+  "request": {
+    "model": "~typesafe/jev-latest",
+    "state": {
+      "prompt": "Rename the credential store's update method to refresh and fix every caller.",
+      "repository": "Tau, a coding agent written in TypeScript with Effect."
+    },
+    "questions": {
+      "route": {
+        "type": "choice",
+        "instructions": "What kind of work does the prompt ask for?",
+        "criteria": {
+          "code": "Change or write code in the repository.",
+          "question": "Answer a question without changing files.",
+          "chat": "Small talk with no task."
+        }
+      },
+      "offTopic": {
+        "type": "noul",
+        "instructions": "Is the prompt unrelated to software work in this repository?",
+        "criteria": {
+          "false": "It is about this repository.",
+          "true": "It is unrelated."
+        }
+      },
+      "effort": {
+        "type": "score",
+        "instructions": "How much work will the prompt take?",
+        "criteria": [
+          "trivial",
+          "small",
+          "large"
+        ]
+      }
+    }
+  },
+  "status": 200,
+  "contentType": "application/json",
+  "body": "{\"model\":\"typesafe/jev-1.13-20260917\",\"answers\":{\"route\":{\"type\":\"choice\",\"choice\":\"code\",\"probabilities\":{\"code\":1,\"question\":0,\"chat\":0},\"confidence\":1},\"offTopic\":{\"type\":\"noul\",\"noul\":0.03},\"effort\":{\"type\":\"score\",\"score\":0.97,\"legend\":{\"0\":\"trivial\",\"1\":\"small\",\"2\":\"large\"},\"probabilities\":{\"0\":0.07,\"1\":0.89,\"2\":0.04},\"confidence\":0.83}},\"usage\":{\"input_tokens\":465,\"output_tokens\":71,\"cost\":0.00001953},\"id\":\"gen-dec-1791845217-vGrD56VQblUbTSyB5bOk\",\"provider\":\"TypeSafe\"}"
+}

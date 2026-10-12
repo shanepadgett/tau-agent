@@ -18,6 +18,34 @@ Bun layers for Effect's platform services: FileSystem, Path, runtime entry. Its 
 - Docs: `docs/reference/copies/@effect/platform-bun/4.0.3/` (1 file: README.md)
 - API (source): `node_modules/@effect/platform-bun/src/`, modules: `docs/reference/copies/@effect/platform-bun/4.0.3/api-index/@effect-platform-bun-src.md`
 
+## @effect/ai-anthropic 4.0.3
+
+Anthropic Messages API for `effect/ai`: client, language model, config, provider tools. Its ai-docs duplicate Effect's, so only the README is copied.
+
+- Docs: `docs/reference/copies/@effect/ai-anthropic/4.0.3/` (1 file: README.md)
+- API (source): `node_modules/@effect/ai-anthropic/src/`, modules: `docs/reference/copies/@effect/ai-anthropic/4.0.3/api-index/@effect-ai-anthropic-src.md`
+
+## @effect/ai-openai 4.0.3
+
+OpenAI Responses API for `effect/ai` (OpenAI API key and the Codex subscription): client, language model, config, schema. Its ai-docs duplicate Effect's, so only the README is copied.
+
+- Docs: `docs/reference/copies/@effect/ai-openai/4.0.3/` (1 file: README.md)
+- API (source): `node_modules/@effect/ai-openai/src/`, modules: `docs/reference/copies/@effect/ai-openai/4.0.3/api-index/@effect-ai-openai-src.md`
+
+## @effect/ai-openai-compat 4.0.3
+
+Chat Completions API for `effect/ai`, for OpenAI-compatible services and gateways: client, language model, config. Its ai-docs duplicate Effect's, so only the README is copied.
+
+- Docs: `docs/reference/copies/@effect/ai-openai-compat/4.0.3/` (1 file: README.md)
+- API (source): `node_modules/@effect/ai-openai-compat/src/`, modules: `docs/reference/copies/@effect/ai-openai-compat/4.0.3/api-index/@effect-ai-openai-compat-src.md`
+
+## @effect/ai-openrouter 4.0.3
+
+OpenRouter for `effect/ai`: client, language model (keeps reasoning details on replay), config. Its decision model's endpoint returns 404. Its ai-docs duplicate Effect's, so only the README is copied.
+
+- Docs: `docs/reference/copies/@effect/ai-openrouter/4.0.3/` (1 file: README.md)
+- API (source): `node_modules/@effect/ai-openrouter/src/`, modules: `docs/reference/copies/@effect/ai-openrouter/4.0.3/api-index/@effect-ai-openrouter-src.md`
+
 ## @effect/tsgo 0.51.1
 
 Effect diagnostics for the TypeScript 7 compiler: rule names, severities and tsconfig options.

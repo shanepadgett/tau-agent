@@ -5,6 +5,10 @@
     "": {
       "name": "@shanepadgett/tau",
       "dependencies": {
+        "@effect/ai-anthropic": "4.0.3",
+        "@effect/ai-openai": "4.0.3",
+        "@effect/ai-openai-compat": "4.0.3",
+        "@effect/ai-openrouter": "4.0.3",
         "effect": "4.0.3",
       },
       "devDependencies": {
@@ -21,6 +25,14 @@
     },
   },
   "packages": {
+    "@effect/ai-anthropic": ["@effect/ai-anthropic@4.0.3", "", { "peerDependencies": { "effect": "^4.0.3" } }, "sha512-c0rKev8Bg9iwBTiuANlq+2DV3XUnLeNbb8ZPzU5KPpzvuNOBpc2yZpFqjlxZa3V7azE4iKT+YeSGJ62fQNk6Fw=="],
+
+    "@effect/ai-openai": ["@effect/ai-openai@4.0.3", "", { "peerDependencies": { "effect": "^4.0.3" } }, "sha512-jdD/5uryLdlnf2XEUe1yAPSKzsYGpgBX65azWAaLtcMPk4FlP5xq3JnLfVOtOLAgiRMJ9RaMmd/7GVUeW5q3hA=="],
+
+    "@effect/ai-openai-compat": ["@effect/ai-openai-compat@4.0.3", "", { "peerDependencies": { "effect": "^4.0.3" } }, "sha512-n5dETHRuVrkqX10krAudEyuNj/n00ORU18tNa8GgjlGqldbrxt2b8ZTk+uWOMoSLYamhq5t0FK97u+Qv2y1l7Q=="],
+
+    "@effect/ai-openrouter": ["@effect/ai-openrouter@4.0.3", "", { "peerDependencies": { "effect": "^4.0.3" } }, "sha512-P7yP8iAAVrVSnpIxjOWlfKwA2b9PX+Vy7pbGYJz0tDQiW0MZXJKLIvDMyOKcG9kGt0wDpH6ACNVQL43oAQgKRQ=="],
+
     "@effect/platform-bun": ["@effect/platform-bun@4.0.3", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.3" }, "peerDependencies": { "effect": "^4.0.3" } }, "sha512-Pl2TXjRTRRvGxtGfYWW8L+B1qkZo8mEx7Itvo2lUd15OQPZGDE111S6JDm9EgGfDK3BUz3sbyNeQD687GQm2iQ=="],
 
     "@effect/platform-node-shared": ["@effect/platform-node-shared@4.0.3", "", { "dependencies": { "@types/ws": "^8.18.2", "ws": "^8.22.0" }, "peerDependencies": { "effect": "^4.0.3" } }, "sha512-5srkJfmWklWSgwZwlkMeTXobfNtxuwuTCvY9JWdPXRv/PBXAe5kKSptzRxT778oFFsaE9IMI8X61pvkifT9Eug=="],

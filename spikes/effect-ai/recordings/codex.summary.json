@@ -1,0 +1,49 @@
+{
+  "ok": true,
+  "types": [
+    "response-metadata",
+    "reasoning-start",
+    "reasoning-delta",
+    "reasoning-end",
+    "reasoning-start",
+    "reasoning-delta",
+    "reasoning-end",
+    "tool-params-start",
+    "tool-params-delta",
+    "tool-params-end",
+    "tool-call",
+    "finish"
+  ],
+  "text": "",
+  "reasoning": "**Computing exact BigInt results****Computing BigInt results**",
+  "reasoningMetadata": [
+    "{\"openai\":{\"itemId\":\"rs_089fad11a238f984016acd5c651c4081a084850923b533e362\",\"enc",
+    "{\"openai\":{\"itemId\":\"rs_089fad11a238f984016acd5c651c4081a084850923b533e362\",\"enc",
+    "{\"openai\":{\"itemId\":\"rs_089fad11a238f984016acd5c651c4081a084850923b533e362\",\"enc",
+    "{\"openai\":{\"itemId\":\"rs_089fad11a238f984016acd5c651c4081a084850923b533e362\",\"enc"
+  ],
+  "toolCalls": [
+    {
+      "name": "run",
+      "params": {
+        "script": "const exact = ( (2n ** 61n) - 17n ) * 3n;\nconst asNumber = (Number(2n ** 61n) - 17) * 3;\nconsole.log(JSON.stringify({ exact: exact.toString(), asNumber: asNumber.toString(), numberIsExact: BigInt(asNumber) === exact }));"
+      }
+    }
+  ],
+  "finish": {
+    "reason": "tool-calls",
+    "usage": {
+      "inputTokens": {
+        "uncached": 143,
+        "total": 143,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "outputTokens": {
+        "total": 467,
+        "text": 96,
+        "reasoning": 371
+      }
+    }
+  }
+}

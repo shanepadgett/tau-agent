@@ -1,0 +1,35 @@
+{
+  "status": 200,
+  "contentType": "application/json",
+  "body": "{\"model\":\"gpt-6-luna\",\"answers\":[{\"type\":\"choice\",\"name\":\"route\",\"choice\":\"code\",\"probabilities\":[{\"value\":\"code\",\"probability\":1.0},{\"value\":\"question\",\"probability\":0.0},{\"value\":\"chat\",\"probability\":0.0}],\"confidence\":1.0},{\"type\":\"predicate\",\"name\":\"offTopic\",\"probability\":0.0},{\"type\":\"score\",\"name\":\"effort\",\"score\":0.69,\"probabilities\":[{\"value\":0,\"label\":\"trivial\",\"probability\":0.32},{\"value\":1,\"label\":\"small\",\"probability\":0.67},{\"value\":2,\"label\":\"large\",\"probability\":0.01}],\"confidence\":0.5}],\"usage\":{\"input_tokens\":448,\"input_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":448}}",
+  "expected": {
+    "answers": {
+      "route": {
+        "label": "code",
+        "probabilities": {
+          "code": 1,
+          "question": 0,
+          "chat": 0
+        },
+        "confidence": 1
+      },
+      "offTopic": {
+        "probability": 0
+      },
+      "effort": {
+        "rating": 0.69,
+        "label": "small",
+        "probabilities": {
+          "trivial": 0.32,
+          "small": 0.67,
+          "large": 0.01
+        },
+        "confidence": 0.5
+      }
+    },
+    "usage": {
+      "inputTokens": 448,
+      "outputTokens": 0
+    }
+  }
+}

@@ -4,6 +4,9 @@
   // Health, complexity and CRAP checks are excluded as too noisy.
   "ignorePatterns": ["spikes/**", "docs/reference/copies/**"],
   "rulePacks": ["tools/fallow/imports.jsonc"],
+  // Temporary: OpenCode Go will use it once the model catalog says which protocol each model speaks.
+  // Remove the entry with the first src/ai file that imports it.
+  "ignoreDependencies": ["@effect/ai-openai-compat"],
   "entry": ["tools/reference-docs.ts", "tools/reference-check.ts", "tools/report-failures.ts"],
   "rules": {
     "unused-dev-dependencies": "error",

@@ -1,0 +1,14 @@
+{
+  "name": "effect-ai-spike",
+  "private": true,
+  "dependencies": {
+    "@effect/ai-anthropic": "4.0.3",
+    "@effect/ai-openai": "4.0.3",
+    "@effect/ai-openai-compat": "4.0.3",
+    "@effect/ai-openrouter": "4.0.3",
+    "effect": "4.0.3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2"
+  }
+}
