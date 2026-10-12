@@ -36,7 +36,7 @@ Automatically requests Fast mode for `gpt-6-luna` on `openai-codex`. Fast mode c
 
 ## commit
 
-Use `/commit` to group changes, review messages, and commit. `extensions.commit.push` controls pushing: `"ask"` by default, `true` to push automatically, or `false` to skip. Pushing a branch without an upstream sets tracking on `origin`.
+Use `/commit` to group changes, review messages, and commit. `extensions.commit.push` controls pushing: `"ask"` by default, `true` to push automatically, or `false` to skip. Pushing a branch without an upstream sets tracking on `origin`. Registered pre-commit checks run once first; failures stop the commit and go to the agent.
 
 ## cost-report
 
@@ -114,7 +114,7 @@ Lets the agent run Python or Node.js code for calculations, data processing, and
 
 ## silent-command-runner
 
-Runs configured fixes after file changes and checks before the agent reports finished work. Configure commands under `extensions.silentCommandRunner.afterWrite` and `afterRun`. Use `{files}` in an `afterWrite` command for the changed paths. Disable the extension through Pi's extension controls.
+Runs configured fixes after file changes and checks before the agent reports finished work. Configure commands under `extensions.silentCommandRunner.afterWrite`, `afterRun`, and `beforeCommit` (run once per `/commit`). Use `{files}` in an `afterWrite` command for the changed paths. Disable the extension through Pi's extension controls.
 
 Scanning follows the configured globs; exclusions ending in `/**` skip entire directories. Automatic checks show progress only when applicable files changed or a failed check still needs repair.
 

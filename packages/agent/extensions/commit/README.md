@@ -12,6 +12,8 @@ Generate a semantic commit plan from current repository changes, review it, then
 
 `/commit` takes over the editor for the full run. It gathers change evidence, asks a model for a small set of meaningful conventional commits covering every dirty file, lets you review and edit the commit messages, commits the approved groups, then optionally pushes.
 
+Before generating the plan, `/commit` runs pre-commit checks once if any extension registered them, for example Silent Command Runner's `beforeCommit` commands. If a check fails, `/commit` stops without committing and sends the failures to the agent to fix. Without registered checks, this step is skipped.
+
 Grouping is fixed: files cannot be moved between commits in the review UI. If the grouping is wrong, regenerate the plan with a note describing what to change. Message editing and per-message regeneration stay available.
 
 `extensions.commit.push` controls what happens after the commits land:

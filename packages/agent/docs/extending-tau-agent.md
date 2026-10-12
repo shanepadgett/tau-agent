@@ -143,6 +143,29 @@ Fields:
 
 Tau's attention extension listens for this event. Other packages can listen too for custom notifications.
 
+## `tau:commit.before`
+
+Register a check that runs once when the user runs `/commit`, before Tau generates a commit plan. If any check fails, `/commit` stops without committing and sends the failure text to the agent to fix.
+
+```ts
+pi.events.on("tau:commit.before", (event) => {
+  event.waitFor("my-extension", runMyCheck(event.cwd, event.signal));
+});
+
+async function runMyCheck(cwd: string, signal: AbortSignal) {
+  const result = await pi.exec("npm", ["test"], { cwd, signal });
+  return { passed: result.code === 0, text: result.stdout + result.stderr };
+}
+```
+
+Fields:
+
+- `cwd`: session working directory.
+- `signal`: aborts when the user cancels `/commit`.
+- `waitFor(source, check)`: registers a check. Call it before the handler's first `await`. `source` names the check in notifications and in the agent message. `check` resolves to `{ passed, text }`; `text` is sent to the agent when `passed` is false. A rejected promise counts as a failure.
+
+When no handler calls `waitFor`, `/commit` skips this step. Checks must not change files; `/commit` stops if the working tree changes while they run.
+
 ## `tau:tool-row-state.set`
 
 Set visual state on a Tau tool row (for example pruned).

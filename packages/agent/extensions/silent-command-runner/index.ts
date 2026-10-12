@@ -12,6 +12,7 @@ import {
 import { Box, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { BoundedTextResultBuilder, type BoundedTextOverflowDetails } from "../../shared/bounded-text-result.ts";
+import { onTauEvent } from "../../shared/events.ts";
 import { createTemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { registerPromptSource } from "../../shared/prompt-contributions.ts";
 import { createFileScope, type FileScope } from "../../shared/glob.ts";
@@ -55,6 +56,7 @@ interface Settings {
 	maxOutputBytes: number;
 	afterWrite: CommandConfig[];
 	afterRun: CommandConfig[];
+	beforeCommit: CommandConfig[];
 }
 
 type Snapshot = Map<string, string>;
@@ -194,6 +196,12 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 
 	pi.on("agent_settled", () => {
 		runActive = false;
+	});
+
+	// Uses settings loaded at session start or the last prompt: waitFor must be called before any await.
+	onTauEvent(pi, "silent-command-runner.before-commit", "tau:commit.before", (event) => {
+		if (!sessionActive || settings.beforeCommit.length === 0) return;
+		event.waitFor("silent-command-runner", runBeforeCommit(event.cwd, settings.beforeCommit, event.signal));
 	});
 
 	pi.on("tool_call", async (event, ctx) => {
@@ -336,6 +344,32 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		await task;
 	}
 
+	async function runBeforeCommit(
+		cwd: string,
+		commands: readonly CommandConfig[],
+		signal: AbortSignal,
+	): Promise<{ passed: boolean; text: string }> {
+		const output = new BoundedTextResultBuilder(temporaryOutput, "tail");
+		try {
+			const projectRoot = await resolveProjectRoot(cwd);
+			const failed: string[] = [];
+			for (const command of commands) {
+				signal.throwIfAborted();
+				const result = await runCommand(pi, projectRoot, command, signal, []);
+				if (result.code === 0 && !result.killed) continue;
+				failed.push(command.name);
+				await output.append(`${formatAgentFailure(result)}\n\n`);
+			}
+			signal.throwIfAborted();
+			if (failed.length > 0) await output.append(`The following checks failed: ${failed.join(", ")}`);
+			const result = await output.finish();
+			return { passed: failed.length === 0, text: result.content };
+		} catch (error) {
+			await output.abort();
+			throw error;
+		}
+	}
+
 	async function refreshSettings(ctx: ExtensionContext): Promise<void> {
 		const next = normalizeSettings(await loadTauExtensionSettings(ctx, silentCommandRunnerSettings));
 		if (JSON.stringify(next.afterRun) !== JSON.stringify(settings.afterRun)) checkedRevision = undefined;
@@ -460,6 +494,7 @@ function normalizeSettings(value: typeof silentCommandRunnerSettings.defaults): 
 		maxOutputBytes: positiveInteger(value.maxOutputBytes, DEFAULT_MAX_OUTPUT_BYTES),
 		afterWrite: normalizeCommands(value.afterWrite),
 		afterRun: normalizeCommands(value.afterRun),
+		beforeCommit: normalizeCommands(value.beforeCommit),
 	};
 }
 

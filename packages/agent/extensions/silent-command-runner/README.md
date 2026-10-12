@@ -49,7 +49,23 @@ In a run with file edits, any later write-capable tool call invalidates verifica
 
 Automatic checks require changed file contents, additions, or deletions covered by a configured check, or a previously failed check awaiting repair. Read-only shell commands and web-only codemode calls do not show check progress or run commands when they leave matching files unchanged.
 
-Both arrays support `name`, `command`, `cwd` (relative to the project root), `env`, `details`, `includeGlobs`, `excludeGlobs`, and `timeoutMs`. Commands default to a 120-second timeout and match all project files except generated/cache directories. `maxOutputBytes` controls each stream retained in expanded failure details; shared output limits bound the text sent to the agent. Remove an array entry to stop a command; use Pi's extension controls to disable the extension. The `checks` tool is registered and exposed only when `afterRun` contains runnable checks; if checks are removed during a loaded session, the tool is hidden. Run `/reload` after changing extension code or settings.
+Both arrays support `name`, `command`, `cwd` (relative to the project root), `env`, `details`, `includeGlobs`, `excludeGlobs`, and `timeoutMs`. `beforeCommit` supports the same fields except the globs. Commands default to a 120-second timeout and match all project files except generated/cache directories. `maxOutputBytes` controls each stream retained in expanded failure details; shared output limits bound the text sent to the agent. Remove an array entry to stop a command; use Pi's extension controls to disable the extension. The `checks` tool is registered and exposed only when `afterRun` contains runnable checks; if checks are removed during a loaded session, the tool is hidden. Run `/reload` after changing extension code or settings.
+
+## Pre-commit checks
+
+`beforeCommit` commands run once each time you run `/commit`, before Tau generates a commit plan. Every command runs, in array order, regardless of which files changed. Use this list for checks such as the full test suite that would otherwise run once per commit in a Git `pre-commit` hook, because `/commit` can create several commits. If any command fails, `/commit` stops without committing and sends the failures to the agent to fix. Remove matching Git hooks yourself if you no longer want them; `/commit` still runs them.
+
+```json
+{
+  "extensions": {
+    "silentCommandRunner": {
+      "beforeCommit": [{ "name": "Unit tests", "command": "npm test" }]
+    }
+  }
+}
+```
+
+Commands must not change files. If the working tree changes while they run, `/commit` stops.
 
 ## Reduce check-output tokens
 

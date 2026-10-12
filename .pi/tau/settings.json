@@ -75,15 +75,6 @@
 					]
 				},
 				{
-					"name": "Unit tests",
-					"command": "mise run test:unit",
-					"details": "Vitest unit tests with the agent reporter.",
-					"includeGlobs": [
-						"packages/**/*.ts",
-						"vitest.config.ts"
-					]
-				},
-				{
 					"name": "Dead code",
 					"command": "mise run fallow:dead-code",
 					"details": "Fallow unused files/exports/deps, unresolved imports, and cycles. Compact output via FALLOW_FORMAT.",
@@ -106,6 +97,13 @@
 						".pi/extensions/**/*.ts",
 						".fallowrc.jsonc"
 					]
+				}
+			],
+			"beforeCommit": [
+				{
+					"name": "Unit tests",
+					"command": "mise run test:unit",
+					"details": "Vitest unit tests with the agent reporter."
 				}
 			]
 		}

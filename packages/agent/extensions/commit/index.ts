@@ -1,21 +1,32 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { createGitRunner, loadRepoStatus } from "../../shared/git.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
+import { createTemporaryOutputStore, type TemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { errorText } from "../../shared/text.ts";
 import { type CommitPlanState, generatePlan } from "./commit-plan.ts";
 import { assertCommittableState, computeWorktreeSignature, loadChangeSet } from "./git-change-set.ts";
+import { runPreCommitChecks } from "./pre-commit-checks.ts";
 import { executeCommitPlan, PartialCommitError, pushCurrentBranch, runCommitFlow } from "./review-ui.ts";
 import commitSettings from "./settings.ts";
 
 const COMMIT_MARKER_TYPE = "tau.commit";
 
 export default function commitExtension(pi: ExtensionAPI): void {
+	const temporaryOutput = createTemporaryOutputStore();
+	pi.on("session_start", async () => {
+		await temporaryOutput.shutdown();
+		await temporaryOutput.start();
+	});
+	pi.on("session_shutdown", async () => {
+		await temporaryOutput.shutdown();
+	});
+
 	pi.registerCommand("commit", {
 		description: "Generate semantic commit groups and commit selected repository changes",
 		handler: async (_args, ctx) => {
 			await ctx.waitForIdle();
 			try {
-				await runCommit(pi, ctx);
+				await runCommit(pi, ctx, temporaryOutput);
 			} catch (error) {
 				ctx.ui.notify(`Commit failed: ${errorText(error)}`, "error");
 			}
@@ -23,7 +34,11 @@ export default function commitExtension(pi: ExtensionAPI): void {
 	});
 }
 
-async function runCommit(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
+async function runCommit(
+	pi: ExtensionAPI,
+	ctx: ExtensionCommandContext,
+	temporaryOutput: TemporaryOutputStore,
+): Promise<void> {
 	const git = createGitRunner(pi, ctx);
 	const repo = await loadRepoStatus(git);
 	if (!repo) {
@@ -41,15 +56,26 @@ async function runCommit(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promis
 	const settings = await loadTauExtensionSettings(ctx, commitSettings);
 
 	if (ctx.hasUI) {
-		await runCommitFlow(pi, ctx, git, repo.root, COMMIT_MARKER_TYPE, { push: settings.push });
+		await runCommitFlow(pi, ctx, git, repo.root, COMMIT_MARKER_TYPE, temporaryOutput, { push: settings.push });
 		return;
 	}
 
 	const evidence = await loadChangeSet(git, repo.root, ctx.sessionManager.getBranch(), COMMIT_MARKER_TYPE);
 	assertCommittableState(evidence.files);
+	const worktreeSignature = await computeWorktreeSignature(git, repo.root, evidence.files);
+	const checksPassed = await runPreCommitChecks(
+		pi,
+		ctx,
+		temporaryOutput,
+		ctx.signal ?? new AbortController().signal,
+		git,
+		repo.root,
+		{ files: evidence.files, signature: worktreeSignature },
+	);
+	if (!checksPassed) return;
 	const state: CommitPlanState = {
 		files: evidence.files,
-		worktreeSignature: await computeWorktreeSignature(git, repo.root, evidence.files),
+		worktreeSignature,
 		groups: await generatePlan(ctx, evidence),
 	};
 	try {

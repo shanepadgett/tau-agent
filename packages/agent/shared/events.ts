@@ -40,6 +40,12 @@ export type TauAgentEvents = {
 	"tau:eval.source-store": {
 		accept(store: ScriptSourceStore): void;
 	};
+	"tau:commit.before": {
+		cwd: string;
+		signal: AbortSignal;
+		/** Call before the handler's first await. */
+		waitFor(source: string, check: Promise<{ passed: boolean; text: string }>): void;
+	};
 	"tau:footer-item": {
 		id: string;
 		text?: string;

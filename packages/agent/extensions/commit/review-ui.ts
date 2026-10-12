@@ -15,6 +15,7 @@ import {
 } from "@earendil-works/pi-tui";
 import { emitAgentBlocked } from "../../shared/agent-blocked.ts";
 import type { GitRunner } from "../../shared/git.ts";
+import type { TemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { errorText } from "../../shared/text.ts";
 import { bindingHint, editorTheme, rawHint, type ToolKeyHint } from "@shanepadgett/tau-tui";
 import { SelectableList, type SelectableListResult } from "@shanepadgett/tau-tui";
@@ -35,6 +36,7 @@ import {
 	loadChangeSet,
 	stageFilesOnly,
 } from "./git-change-set.ts";
+import { runPreCommitChecks } from "./pre-commit-checks.ts";
 import type { CommitPushPolicy } from "./settings.ts";
 
 const MAX_GROUPS = 10;
@@ -87,11 +89,12 @@ export async function runCommitFlow(
 	git: GitRunner,
 	root: string,
 	markerType: string,
+	temporaryOutput: TemporaryOutputStore,
 	options: { push: CommitPushPolicy },
 ): Promise<void> {
 	await ctx.ui.custom<void>(
 		(tui, theme, _keybindings, done) =>
-			new CommitFlowPanel(pi, ctx, tui, theme, git, root, markerType, options.push, done),
+			new CommitFlowPanel(pi, ctx, tui, theme, git, root, markerType, temporaryOutput, options.push, done),
 	);
 }
 
@@ -167,6 +170,7 @@ class CommitFlowPanel implements Component, Focusable {
 	private readonly git: GitRunner;
 	private readonly root: string;
 	private readonly markerType: string;
+	private readonly temporaryOutput: TemporaryOutputStore;
 	private readonly pushPolicy: CommitPushPolicy;
 	private readonly done: () => void;
 	private readonly panelConfig: ToolPanelConfig;
@@ -189,6 +193,7 @@ class CommitFlowPanel implements Component, Focusable {
 		git: GitRunner,
 		root: string,
 		markerType: string,
+		temporaryOutput: TemporaryOutputStore,
 		pushPolicy: CommitPushPolicy,
 		done: () => void,
 	) {
@@ -199,6 +204,7 @@ class CommitFlowPanel implements Component, Focusable {
 		this.git = git;
 		this.root = root;
 		this.markerType = markerType;
+		this.temporaryOutput = temporaryOutput;
 		this.pushPolicy = pushPolicy;
 		this.done = done;
 		this.groupList = this.createGroupList([]);
@@ -275,6 +281,22 @@ class CommitFlowPanel implements Component, Focusable {
 			if (this.isCancelled()) return this.cancelFlow();
 			assertCommittableState(evidence.files);
 			this.evidence = evidence;
+			const worktreeSignature = await computeWorktreeSignature(this.git, this.root, evidence.files);
+			if (this.isCancelled()) return this.cancelFlow();
+
+			this.startWorking("Running pre-commit checks", true);
+			if (!(this.working instanceof CancellableLoader)) throw new Error("Pre-commit checks must be cancellable.");
+			const checksPassed = await runPreCommitChecks(
+				this.pi,
+				this.ctx,
+				this.temporaryOutput,
+				this.working.signal,
+				this.git,
+				this.root,
+				{ files: evidence.files, signature: worktreeSignature },
+			);
+			if (this.isCancelled()) return this.cancelFlow();
+			if (!checksPassed) return this.close();
 
 			this.startWorking("Generating plan", true);
 			const groups = await generatePlan(this.generationCtx(), evidence, [], "", {
@@ -282,12 +304,7 @@ class CommitFlowPanel implements Component, Focusable {
 			});
 			if (this.isCancelled()) return this.cancelFlow();
 
-			this.plan = {
-				files: evidence.files,
-				worktreeSignature: await computeWorktreeSignature(this.git, this.root, evidence.files),
-				groups,
-			};
-			if (this.isCancelled()) return this.cancelFlow();
+			this.plan = { files: evidence.files, worktreeSignature, groups };
 			this.stopWorking();
 			emitAgentBlocked(this.pi, { body: "Waiting for commit plan review", source: "commit.review" });
 			this.showGroups(groups[0]?.id);
