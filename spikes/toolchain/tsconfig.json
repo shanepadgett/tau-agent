@@ -1,0 +1,28 @@
+{
+	"compilerOptions": {
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"target": "ESNext",
+		"lib": ["ESNext"],
+		"types": ["bun"],
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"exactOptionalPropertyTypes": true,
+		"allowImportingTsExtensions": true,
+		"skipLibCheck": true,
+		"noEmit": true,
+		"plugins": [
+			{
+				"name": "@effect/language-service",
+				"diagnosticSeverity": { "floatingEffect": "error", "processEnv": "error" },
+				"overrides": [
+					{
+						"include": ["src/host/**/*.ts"],
+						"options": { "diagnosticSeverity": { "processEnv": "off" } }
+					}
+				]
+			}
+		]
+	},
+	"include": ["src"]
+}

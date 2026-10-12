@@ -1,0 +1,18 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"extends": ["./node_modules/@effect/tsgo/oxlint-presets/correctness.json"],
+	"options": { "typeAware": true },
+	"plugins": ["typescript", "effecttsgo"],
+	"jsPlugins": ["./tools/tau-plugin.js"],
+	"categories": { "correctness": "error" },
+	"rules": {
+		"typescript/no-floating-promises": "error",
+		"effecttsgo/floating-effect": "error",
+		"effecttsgo/process-env": "error",
+		"tau/no-process-env": "error"
+	},
+	"overrides": [
+		{ "files": ["src/core/**"], "rules": { "tau/no-module-let": "error" } },
+		{ "files": ["src/host/**"], "rules": { "tau/no-process-env": "off", "effecttsgo/process-env": "off" } }
+	]
+}

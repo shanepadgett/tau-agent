@@ -1,0 +1,15 @@
+{
+	"name": "toolchain-spike",
+	"private": true,
+	"type": "module",
+	"dependencies": {
+		"effect": "4.0.3"
+	},
+	"devDependencies": {
+		"@effect/tsgo": "0.51.1",
+		"@types/bun": "1.4.2",
+		"oxlint": "1.87.0",
+		"oxlint-tsgolint": "7.0.2003",
+		"typescript": "7.0.2"
+	}
+}
