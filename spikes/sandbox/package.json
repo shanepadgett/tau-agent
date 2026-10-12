@@ -1,0 +1,7 @@
+{
+	"name": "sandbox-spike",
+	"private": true,
+	"dependencies": {
+		"quickjs-wasi": "3.6.2"
+	}
+}

@@ -1,0 +1,12 @@
+# Spikes
+
+A spike answers a question whose answer could change the plan. Code and full notes go in `spikes/<name>/`, with a `NOTES.md`.
+
+1. **Extension loading** (`spikes/extension-loading/`): in a compiled `tau` binary, can a user's `.ts` extension import the SDK and get the embedded copy? Can changed extensions be re-imported on `/reload`?
+   **Result: yes.** A runtime `Bun.plugin` serves the SDK as a virtual module and wins over an extension's own `node_modules` copy. Reload works by deleting `require.cache` entries under extension dirs (query-string busting misses helper files).
+2. **Sandbox** (`spikes/sandbox/`): does QuickJS load from a compiled binary with its WASM embedded? Can scripts await async host functions and be cancelled mid-run?
+   **Result: yes.** WASM embeds with `import … with { type: "file" }`. Async host calls run concurrently and abort cleanly. CPU-bound scripts block the main thread, so the real sandbox runs in a `Worker` and is interrupted through a shared flag.
+3. **Process sessions** (`spikes/pty/`): from a compiled binary, can `Bun.Terminal` run an interactive program (a shell, `python`), accept input, resize, keep a background server alive across tool calls, and kill the whole process tree with no orphans? A "no" means shipping a PTY helper binary, as OpenCode does.
+   **Result: yes on macOS and Linux arm64.** Shell/Python input, resize, server persistence and cleanup pass without a helper. Use `detached: true` to isolate children from Tau's process group. Job-control shells create additional groups, so cleanup must cover owned descendants, not just the root group. Linux passed in an OrbStack Debian 13 container; the tested cleanup covers ordinary shell jobs.
+4. **OpenTUI** (`spikes/opentui/`): does an OpenTUI + Solid app with a chat pane and sidebar run from a compiled binary (OpenTUI loads a native Zig library through `bun:ffi`)? Can an extension's `.tsx` file, loaded at runtime, add a sidebar slot? Solid needs a JSX compile step, so the extension loader would run that transform. A "no" on the second question means extension UI uses OpenTUI's plain object API instead of JSX.
+   **Result: yes on macOS and Linux arm64.** Streaming markdown, input, sidebar and reactive runtime `.tsx` extension work without `node_modules`, headlessly and in a PTY. OpenTUI's runtime plugin exposes embedded Solid/OpenTUI modules and transforms JSX. Binary size: 82 MiB on macOS, 106 MiB on Linux. Linux passed in an OrbStack Debian 13 container.
