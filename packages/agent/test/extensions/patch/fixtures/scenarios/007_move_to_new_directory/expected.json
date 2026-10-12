@@ -1,7 +1,0 @@
-{
-	"status": "completed",
-	"changes": [
-		"move:old/name.txt->renamed/dir/name.txt"
-	],
-	"failureCount": 0
-}

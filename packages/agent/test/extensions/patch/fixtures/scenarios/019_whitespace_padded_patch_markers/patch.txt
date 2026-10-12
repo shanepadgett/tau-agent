@@ -1,4 +1,0 @@
-  *** Begin Patch  
-  *** Add File: padded.txt  
-+ok
-  *** End Patch  
