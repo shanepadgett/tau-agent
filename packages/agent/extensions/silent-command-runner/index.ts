@@ -127,9 +127,10 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	const fixedHashes: Snapshot = new Map();
 	const fixerControllers = new Set<AbortController>();
 	let fixerQueue: Promise<void> = Promise.resolve();
+	let checkToolRegistered = false;
 
 	let checkTool = defineTool<typeof checkParams, CheckDetails | { progress: string } | undefined>({
-		name: "run_checks",
+		name: "checks",
 		label: "Repository Checks",
 		description: formatCheckInstructions(settings.afterRun),
 		parameters: checkParams,
@@ -163,8 +164,6 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			return text;
 		},
 	});
-	pi.registerTool(checkTool);
-
 	pi.registerMessageRenderer<FailureDetails>(MESSAGE_TYPE, (message, { expanded }, theme) =>
 		renderFailure(asFailureDetails(message.details), expanded, theme),
 	);
@@ -222,7 +221,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 
 	pi.on("tool_call", async (event, ctx) => {
 		if (!sessionActive) return;
-		if (event.toolName === "run_checks") {
+		if (event.toolName === "checks") {
 			const ancestor = [...snapshots].find(([id]) => event.toolCallId.startsWith(`${id}/`));
 			if (ancestor) await flushFixes(ancestor[1], ctx);
 			return;
@@ -354,9 +353,13 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		settings = next;
 		const description = formatCheckInstructions(settings.afterRun);
 		const exposure = settings.afterRun.length ? "direct" : "hidden";
-		if (checkTool.description !== description || checkTool.exposure !== exposure) {
+		if (
+			(settings.afterRun.length > 0 || checkToolRegistered) &&
+			(!checkToolRegistered || checkTool.description !== description || checkTool.exposure !== exposure)
+		) {
 			checkTool = { ...checkTool, description, exposure };
 			pi.registerTool(checkTool);
+			checkToolRegistered = true;
 		}
 	}
 
@@ -427,7 +430,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			}
 			if (failed.length > 0) {
 				await output.append(
-					`${passed.length ? "\n" : ""}The following checks failed: ${failed.map((failure) => failure.name).join(", ")}\nComplete all repairs, then call run_checks before summarizing the requested work.`,
+					`${passed.length ? "\n" : ""}The following checks failed: ${failed.map((failure) => failure.name).join(", ")}\nComplete all repairs, then call checks before summarizing the requested work.`,
 				);
 			}
 			controller.signal.throwIfAborted();
@@ -435,7 +438,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			if (controller.signal.aborted || writeRevision !== revision) {
 				if (result.overflow.temporaryPath) await rm(result.overflow.temporaryPath, { force: true });
 				controller.signal.throwIfAborted();
-				throw new Error("Files may have changed during checks; call run_checks again.");
+				throw new Error("Files may have changed during checks; call checks again.");
 			}
 			checkedRevision = revision;
 			if (failed.length > 0) {
@@ -505,11 +508,11 @@ async function snapshotFiles(projectRoot: string, commands: readonly CommandConf
 
 function formatCheckInstructions(commands: readonly CommandConfig[]): string {
 	return [
-		"Required repository verification for runs with file edits: Call run_checks only when you have edited repository files during the current run, including additions, modifications, moves, or deletions. Skip it for discussion, read-only investigation, and in-memory eval or codemode work that does not edit repository files. Calling a write-capable tool alone does not require checks. For runs with file edits, you MUST call run_checks after all implementation, investigation, builds, and focused testing are complete, immediately before your final summary. Do not send the final summary first or rely on automatic settlement checks to satisfy this requirement. Never use run_checks for intermediate validation.",
-		"Never manually run any repository check listed below or its equivalent, during development or final verification. This includes their task-runner commands, direct binaries, wrappers, and alternate flags through bash, eval, or codemode. Configured formatting, lint, type checking, full test suites, dependency/schema validation, dead-code checks, and duplicate-code checks belong exclusively to run_checks.",
+		"Required repository verification for runs with file edits: Call checks only when you have edited repository files during the current run, including additions, modifications, moves, or deletions. Skip it for discussion, read-only investigation, and in-memory eval or codemode work that does not edit repository files. Calling a write-capable tool alone does not require checks. For runs with file edits, you MUST call checks after all implementation, investigation, builds, and focused testing are complete, immediately before your final summary. Do not send the final summary first or rely on automatic settlement checks to satisfy this requirement. Never use checks for intermediate validation.",
+		"Never manually run any repository check listed below or its equivalent, during development or final verification. This includes their task-runner commands, direct binaries, wrappers, and alternate flags through bash, eval, or codemode. Configured formatting, lint, type checking, full test suites, dependency/schema validation, dead-code checks, and duplicate-code checks belong exclusively to checks.",
 		"During development, builds and focused tests are allowed only when needed for the work in progress; batch them at meaningful boundaries. The focused-test exception allows a relevant subset of a registered suite, never the full suite. Do not use a build or another command name to bypass the restriction on configured checks.",
-		"If checks fail, complete all repairs, then call run_checks again before your final summary. In a run with file edits, any later write-capable call invalidates the result, even if it changes nothing; finish that work and call run_checks again. Summarize file-editing work only after verification is current.",
-		"You may call it last in the same codemode script as your final edits: await all writes, then text(await tools.run_checks({})). Pending automatic fixes finish before checks.",
+		"If checks fail, complete all repairs, then call checks again before your final summary. In a run with file edits, any later write-capable call invalidates the result, even if it changes nothing; finish that work and call checks again. Summarize file-editing work only after verification is current.",
+		"You may call it last in the same codemode script as your final edits: await all writes, then text(await tools.checks({})). Pending automatic fixes finish before checks.",
 		`Checks: ${commands.length ? commands.map((command) => `${command.name} [${command.command}]${command.details ? `: ${command.details}` : ""}`).join("; ") : "none configured"}`,
 	].join("\n");
 }

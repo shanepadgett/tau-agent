@@ -19,4 +19,4 @@ Rules:
 - Keep TypeScript, Biome, Node, and `typebox` aligned when safe.
 - Do not change package manager, relax checks, or delete local behavior without asking.
 - If dependency versions changed, run `npm install --ignore-scripts`.
-- Finish all work, then call `run_checks` before the final summary; do not run registered checks or their equivalents manually.
+- Finish all work, then call `checks` before the final summary; do not run registered checks or their equivalents manually.

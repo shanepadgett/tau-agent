@@ -68,7 +68,7 @@ export default defineTauExtensionSettings({
 				Type.Array(commandSchema, {
 					default: [],
 					description:
-						"Read-only final checks run by run_checks, with automatic settlement fallback when verification is missing or stale.",
+						"Read-only final checks run by the checks tool, with automatic settlement fallback when verification is missing or stale.",
 				}),
 			),
 		},

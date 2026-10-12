@@ -27,7 +27,7 @@ Updates deps. Never blind bumps. Every change discussed with user. Analyze first
 5. Present findings. No manifest/lockfile/code edits yet.
 6. Decide with user per package or explicit user-chosen batches. Nothing without approval.
 7. Apply only approved bumps and approved follow-on code. Leave unapproved pins.
-8. Refresh lockfiles. Finish all work, then call `run_checks` before the final summary. Do not run registered checks or their equivalents manually.
+8. Refresh lockfiles. Finish all work, then call `checks` before the final summary. Do not run registered checks or their equivalents manually.
 
 ## Pi compatibility
 
