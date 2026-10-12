@@ -8,7 +8,7 @@ interface AutoreadLine {
 	state: "reading" | "read" | "pruned";
 }
 
-const samplePath = "packages/agent/src/ast/engine.ts";
+const samplePath = "packages/agent/shared/text.ts";
 
 export function createAutoreadPreviewWidget(_tui: TUI, _cwd: string, theme: Theme): Container {
 	const container = new Container();
@@ -20,11 +20,11 @@ export function createAutoreadPreviewWidget(_tui: TUI, _cwd: string, theme: Them
 		"Agent Payload",
 		[
 			samplePath,
-			"18-22: export type FileSource = {",
-			"24-28: export type AstSearchBinding = {",
-			"30-37: export type AstSearchHit = {",
-			"39-60: export type ExploreEngine = {",
-			"212-470: export function createExploreEngine(options: ExploreEngineOptions): ExploreEngine",
+			'import { keyHint, type Theme } from "@earendil-works/pi-coding-agent";',
+			"",
+			"// Small text helpers shared across extensions.",
+			"",
+			'export { formatAge, preview } from "@shanepadgett/tau-tui";',
 		].join("\n"),
 	);
 	for (const state of ["reading", "read", "pruned"] as const) {

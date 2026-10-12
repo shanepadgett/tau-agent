@@ -8,10 +8,13 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { generateToolValidated, resolveCandidates } from "../../shared/model-fallback/index.ts";
 import { errorText } from "../../shared/text.ts";
+import { createToolRowStateStore } from "../../shared/tool-row-state.ts";
+import { registerFileInjectionRenderer } from "../../src/file-injection/index.ts";
 import { prepareFileInjection } from "@shanepadgett/tau-agent";
 import { buildHandoffRequest, type HandoffDraft, handoffDraftFromToolInput, HANDOFF_TOOL } from "./model.ts";
 
 export default function handoffExtension(pi: ExtensionAPI): void {
+	registerFileInjectionRenderer(pi, createToolRowStateStore(pi, "handoff.tool-row-state"));
 	pi.registerCommand("handoff", {
 		description: "Start a fresh chat with a generated prompt and autoread files",
 		handler: async (args, ctx) => {
@@ -92,11 +95,11 @@ export default function handoffExtension(pi: ExtensionAPI): void {
 				return;
 			}
 
-			const fileMessages = await prepareFileInjection(pi, {
+			const fileMessages = await prepareFileInjection({
 				cwd: ctx.cwd,
 				source: "handoff",
 				batchId: randomUUID(),
-				files: draft.files.map((path) => ({ path, mode: "full" as const })),
+				paths: draft.files,
 			});
 			const result = await ctx.newSession({
 				parentSession: currentSessionFile,

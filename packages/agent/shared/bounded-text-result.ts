@@ -46,7 +46,6 @@ export class BoundedTextResultBuilder {
 	private readonly strategy: BoundedTextStrategy;
 	private snapshot = "";
 	private blocks: VisibleBlock[] = [];
-	private requiredBlocks: VisibleBlock[] = [];
 	private totalBytes = 0;
 	private newlineCount = 0;
 	private hasContent = false;
@@ -103,28 +102,6 @@ export class BoundedTextResultBuilder {
 		await this.persist(chunk);
 	}
 
-	async appendRequiredBlock(label: string, text: string): Promise<void> {
-		if (this.strategy !== "completeBlocks") throw new Error("Required blocks need complete-block retention");
-		this.requireOpen();
-		const block = { id: undefined, label, text };
-		this.requiredBlocks.push(block);
-		const prefix = this.hasContent ? "\n\n" : "";
-		const chunk = `${prefix}${text}`;
-		this.count(chunk);
-		if (!this.overflowed) {
-			const candidate = `${this.snapshot}${chunk}`;
-			if (!truncateHead(candidate).truncated) {
-				this.snapshot = candidate;
-				return;
-			}
-			this.overflowed = true;
-			this.modelClosed = true;
-			await this.persist(candidate);
-			return;
-		}
-		await this.persist(chunk);
-	}
-
 	async finish(): Promise<BoundedTextResult> {
 		this.requireOpen();
 		this.finished = true;
@@ -172,17 +149,22 @@ export class BoundedTextResultBuilder {
 
 	private finishBlocks(totalLines: number, temporaryPath: string | undefined): BoundedTextResult {
 		const blocks = [...this.blocks];
-		const required = this.requiredBlocks.map((block) => block.text).join("\n\n");
-		let retained = [...blocks.map((block) => block.text), required].filter(Boolean).join("\n\n");
+		let retained = blocks
+			.map((block) => block.text)
+			.filter(Boolean)
+			.join("\n\n");
 		let shownBytes = Buffer.byteLength(retained);
 		let shownLines = textLineCount(retained);
 		let notice = this.notice(shownLines, shownBytes, totalLines, temporaryPath);
 		const oversized = this.oversizedBlockLabel
-			? `[File block omitted because it exceeds the model-output budget: ${this.oversizedBlockLabel}. Run a non-recursive outline for that file.]`
+			? `[File block omitted because it exceeds the model-output budget: ${this.oversizedBlockLabel}.]`
 			: "";
 		while (blocks.length > 0 && truncateHead([retained, oversized, notice].filter(Boolean).join("\n\n")).truncated) {
 			blocks.pop();
-			retained = [...blocks.map((block) => block.text), required].filter(Boolean).join("\n\n");
+			retained = blocks
+				.map((block) => block.text)
+				.filter(Boolean)
+				.join("\n\n");
 			shownBytes = Buffer.byteLength(retained);
 			shownLines = textLineCount(retained);
 			notice = this.notice(shownLines, shownBytes, totalLines, temporaryPath);

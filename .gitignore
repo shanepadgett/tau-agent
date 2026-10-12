@@ -101,7 +101,6 @@ Thumbs.db
 .pi/temp/
 .pi/logs/
 .pi/tau/ready/
-.pi/tau/reviews/
 *.pi-pack
 *.tgz
 

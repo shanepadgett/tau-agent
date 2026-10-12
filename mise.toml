@@ -3,7 +3,6 @@ node = "24.18.0"
 "npm:oxfmt" = "0.62.0"
 "npm:oxlint" = "1.77.0"
 "npm:fallow" = "2.100.0"
-"npm:tree-sitter-cli" = "0.26.11"
 
 [env]
 NODE_USE_SYSTEM_CA = "1"
@@ -138,6 +137,3 @@ run = "fallow --format json --quiet"
 description = "Full fallow analysis as human-readable terminal output"
 run = "FALLOW_FORMAT=human FALLOW_QUIET=0 fallow --format human"
 
-[tasks."grammars:build"]
-description = "Rebuild vendored tree-sitter grammar wasm artifacts"
-run = "node --experimental-strip-types packages/agent/scripts/build-grammars.ts"

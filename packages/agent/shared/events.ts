@@ -2,7 +2,6 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { ToolRowVisualState } from "./tool-row-state.js";
 import type { DecisionClient, DecisionRoute, DecisionUsage } from "./decisions.ts";
 import type { ScriptSourceStore } from "./script-source.ts";
-import type { FileInjectionRequest, PreparedFileInjection } from "../src/file-injection/index.ts";
 
 export type TauAgentEvents = {
 	/** @internal Runtime-scoped classifier client. */
@@ -36,26 +35,6 @@ export type TauAgentEvents = {
 		title?: string;
 		body?: string;
 		source?: string;
-	};
-	"tau:file-mutation.applied": {
-		source: "patch";
-		toolCallId: string;
-		cwd: string;
-		status: "completed" | "partial" | "failed";
-		changes: Array<{
-			path: string;
-			kind: "add" | "replace" | "update" | "delete";
-			move?: { from: string; to: string };
-			linesAdded: number;
-			linesRemoved: number;
-			resultingFingerprint: string | null;
-			snapshotRanges?: Array<{ startLine: number; endLine: number }>;
-		}>;
-	};
-	/** @internal Runtime-scoped request for Explore-owned file preparation. */
-	"tau:file-injection.prepare": {
-		request: FileInjectionRequest;
-		accept(preparation: Promise<PreparedFileInjection[]>): void;
 	};
 	/** @internal Eval's live source store, used to review the code it will execute. */
 	"tau:eval.source-store": {

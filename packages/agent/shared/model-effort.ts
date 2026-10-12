@@ -1,4 +1,4 @@
-import type { Api, Model, ThinkingLevel } from "@earendil-works/pi-ai";
+import type { ThinkingLevel } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { resolveCandidates } from "./model-fallback/index.ts";
 import type { ModelCandidate } from "./model-fallback/types.ts";
@@ -13,15 +13,6 @@ interface ModelPreference {
 interface ProviderPreference {
 	provider: string;
 	models: readonly ModelPreference[];
-}
-
-export interface EffortProviderCandidates {
-	provider: string;
-	label: string;
-	candidates: ReadonlyArray<{
-		model: Model<Api>;
-		reasoning: ThinkingLevel;
-	}>;
 }
 
 export interface EffortCandidateOptions {
@@ -71,28 +62,6 @@ const MODEL_PREFERENCES: Record<ModelEffort, readonly ProviderPreference[]> = {
 		},
 	],
 };
-
-export function resolveEffortProviders(
-	ctx: Pick<ExtensionContext, "modelRegistry">,
-	effort: ModelEffort,
-): EffortProviderCandidates[] {
-	const available = new Map(ctx.modelRegistry.getAvailable().map((model) => [`${model.provider}/${model.id}`, model]));
-	return MODEL_PREFERENCES[effort].flatMap((preference) => {
-		const candidates = preference.models.flatMap(({ model, reasoning }) => {
-			const availableModel = available.get(`${preference.provider}/${model}`);
-			return availableModel ? [{ model: availableModel, reasoning }] : [];
-		});
-		return candidates.length
-			? [
-					{
-						provider: preference.provider,
-						label: ctx.modelRegistry.getProviderDisplayName(preference.provider),
-						candidates,
-					},
-				]
-			: [];
-	});
-}
 
 export function resolveEffortCandidates(
 	ctx: Pick<ExtensionContext, "modelRegistry" | "model" | "cwd" | "isProjectTrusted">,

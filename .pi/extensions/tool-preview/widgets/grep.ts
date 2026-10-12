@@ -8,14 +8,13 @@ export function createGrepPreviewWidget(tui: TUI, cwd: string, theme: Theme): Co
 			name: "grep",
 			sampleTitle: "Literal Query",
 			args: {
-				queries: [{ patterns: ["Explore", "outline"], paths: ["packages/agent/extensions/explore/README.md"] }],
+				queries: [{ patterns: ["Web", "codemode"], paths: ["packages/agent/extensions/web/README.md"] }],
 			},
-			argText: "patterns=Explore,outline paths=packages/agent/extensions/explore/README.md",
+			argText: "patterns=Web,codemode paths=packages/agent/extensions/web/README.md",
 			result: [
-				"packages/agent/extensions/explore/README.md (23 lines)",
-				"1: # Explore",
-				"3: Explore gives Tau 12 structural source tools: outlines, declaration slices, discovery, structural search, graph and relationship queries, impact, and context packs.",
-				"11: When `explore.read.enabled` is on (default), a full Pi `read` or autoread of a registered source file above the threshold returns an outline.",
+				"packages/agent/extensions/web/README.md (20 lines)",
+				"1: # Web",
+				"8: Both register with `codemode` exposure, so scripts call `tools.webfetch` and `tools.websearch` and only the script's output reaches the model.",
 			].join("\n"),
 		},
 		{
@@ -23,16 +22,17 @@ export function createGrepPreviewWidget(tui: TUI, cwd: string, theme: Theme): Co
 			sampleTitle: "Context Lines",
 			args: {
 				queries: [
-					{ patterns: ["createExploreEngine"], paths: ["packages/agent/extensions/explore/index.ts"], context: 2 },
+					{ patterns: ["createToolRowStateStore"], paths: ["packages/agent/extensions/web/index.ts"], context: 2 },
 				],
 			},
-			argText: "patterns=createExploreEngine paths=packages/agent/extensions/explore/index.ts context=2",
+			argText: "patterns=createToolRowStateStore paths=packages/agent/extensions/web/index.ts context=2",
 			result: [
-				"packages/agent/extensions/explore/index.ts (103 lines)",
-				"38- \tengine?.shutdown();",
-				"39- \tgraph?.clear();",
-				"40: \tengine = createExploreEngine({ cwd: absoluteCwd });",
-				"41- \tgraph = createFileGraph(engine);",
+				"packages/agent/extensions/web/index.ts (27 lines)",
+				"8-",
+				"9- export default function webExtension(pi: ExtensionAPI): void {",
+				'10: \tconst rowState = createToolRowStateStore(pi, "web.tool-row-state");',
+				"11- \tconst temporaryOutput = createTemporaryOutputStore();",
+				"12- \tregisterToolGroup(pi, {",
 			].join("\n"),
 		},
 		{
@@ -40,37 +40,35 @@ export function createGrepPreviewWidget(tui: TUI, cwd: string, theme: Theme): Co
 			sampleTitle: "Multiple Queries",
 			args: {
 				queries: [
-					{ patterns: ["# Explore"], paths: ["packages/agent/extensions/explore/README.md"] },
-					{ patterns: ["createDiscoverTool"], paths: ["packages/agent/extensions/explore/tools/discover.ts"] },
+					{ patterns: ["# Web"], paths: ["packages/agent/extensions/web/README.md"] },
+					{ patterns: ["createWebSearchTool"], paths: ["packages/agent/extensions/web/websearch.ts"] },
 				],
 			},
 			argText: "2 queries",
 			result: [
 				"query 1",
-				"packages/agent/extensions/explore/README.md (23 lines)",
-				"1: # Explore",
+				"packages/agent/extensions/web/README.md (20 lines)",
+				"1: # Web",
 				"query 2",
-				"packages/agent/extensions/explore/tools/discover.ts (207 lines)",
-				"127: export function createDiscoverTool(",
+				"packages/agent/extensions/web/websearch.ts (98 lines)",
+				"35: export function createWebSearchTool(rowState: ToolRowStateStore, temporaryOutput: TemporaryOutputStore) {",
 			].join("\n"),
 		},
 		{
 			name: "grep",
 			sampleTitle: "No Matches",
-			args: { queries: [{ patterns: ["doesNotExist"], paths: ["packages/agent/extensions/explore/README.md"] }] },
-			argText: "patterns=doesNotExist paths=packages/agent/extensions/explore/README.md",
+			args: { queries: [{ patterns: ["doesNotExist"], paths: ["packages/agent/extensions/web/README.md"] }] },
+			argText: "patterns=doesNotExist paths=packages/agent/extensions/web/README.md",
 			result: "No matches",
 		},
 		{
 			name: "grep",
 			sampleTitle: "Invalid Regex Error",
 			args: {
-				queries: [{ patterns: ["[Explore"], paths: ["packages/agent/extensions/explore/README.md"], regex: true }],
+				queries: [{ patterns: ["[Web"], paths: ["packages/agent/extensions/web/README.md"], regex: true }],
 			},
-			argText: "patterns=[Explore paths=packages/agent/extensions/explore/README.md regex",
-			result: ["rg: regex parse error:", "    (?:[Explore)", "       ^", "error: unclosed character class"].join(
-				"\n",
-			),
+			argText: "patterns=[Web paths=packages/agent/extensions/web/README.md regex",
+			result: ["rg: regex parse error:", "    (?:[Web)", "       ^", "error: unclosed character class"].join("\n"),
 			isError: true,
 		},
 	]);

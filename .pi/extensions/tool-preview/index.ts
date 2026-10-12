@@ -1,23 +1,14 @@
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, TUI } from "@earendil-works/pi-tui";
 import { matchesKey } from "@earendil-works/pi-tui";
-import { createAstSearchPreviewWidget } from "./widgets/ast-search.ts";
 import { createAutoreadPreviewWidget } from "./widgets/autoread.ts";
-import { createDiscoverPreviewWidget } from "./widgets/discover.ts";
 import { createFindPreviewWidget } from "./widgets/find.ts";
 import { createGrepPreviewWidget } from "./widgets/grep.ts";
 import { framePreviewWidget } from "./widgets/layout.ts";
 import { createLsPreviewWidget } from "./widgets/ls.ts";
-import { createOutlinePreviewWidget } from "./widgets/outline.ts";
 import { createPatchPreviewWidget } from "./widgets/patch.ts";
 import { createPublishPreviewWidget } from "./widgets/publish.ts";
 import { createReadPreviewWidget } from "./widgets/read.ts";
-import {
-	createCalleesPreviewWidget,
-	createCallersPreviewWidget,
-	createImplementationsPreviewWidget,
-	createReferencesPreviewWidget,
-} from "./widgets/relationships.ts";
 import { createTabsListPreviewWidget } from "./widgets/tabs-list.ts";
 import { createToolPanelPreviewWidget } from "./widgets/tool-panel.ts";
 
@@ -29,20 +20,13 @@ interface PreviewStory {
 }
 
 const STORIES: readonly PreviewStory[] = [
-	{ label: "ast_search — row states", createWidget: createAstSearchPreviewWidget },
 	{ label: "autoread — line states", createWidget: createAutoreadPreviewWidget },
-	{ label: "callees — row states", createWidget: createCalleesPreviewWidget },
-	{ label: "callers — row states", createWidget: createCallersPreviewWidget },
-	{ label: "discover — row states", createWidget: createDiscoverPreviewWidget },
 	{ label: "find — row states", createWidget: createFindPreviewWidget },
 	{ label: "grep — row states", createWidget: createGrepPreviewWidget },
-	{ label: "implementations — row states", createWidget: createImplementationsPreviewWidget },
 	{ label: "ls — row states", createWidget: createLsPreviewWidget },
-	{ label: "outline — row states", createWidget: createOutlinePreviewWidget },
 	{ label: "patch — row states", createWidget: createPatchPreviewWidget },
 	{ label: "publish — activity panel", createWidget: createPublishPreviewWidget },
 	{ label: "read — row states", createWidget: createReadPreviewWidget },
-	{ label: "references — row states", createWidget: createReferencesPreviewWidget },
 	{ label: "tabs-list — Tabs and SelectableList", createWidget: createTabsListPreviewWidget },
 	{ label: "tool-panel — shell states", createWidget: createToolPanelPreviewWidget },
 ];

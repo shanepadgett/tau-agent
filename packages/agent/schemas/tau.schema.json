@@ -531,41 +531,6 @@
 					},
 					"additionalProperties": false
 				},
-				"explore": {
-					"type": "object",
-					"properties": {
-						"context": {
-							"type": "object",
-							"properties": {
-								"defaultBudgetTokens": {
-									"type": "integer",
-									"default": 8000,
-									"minimum": 1,
-									"description": "Default token budget for context when the caller omits budget."
-								}
-							},
-							"additionalProperties": false
-						},
-						"read": {
-							"type": "object",
-							"properties": {
-								"enabled": {
-									"type": "boolean",
-									"default": true,
-									"description": "Master switch for Explore structural read overlay and large-source autoread outline path. When false, Pi read and autoread keep ordinary full bodies."
-								},
-								"structureThresholdLines": {
-									"type": "integer",
-									"default": 200,
-									"minimum": 1,
-									"description": "Registered source at or under this line count may be full-read. Above it, full read model-visible result is outline only."
-								}
-							},
-							"additionalProperties": false
-						}
-					},
-					"additionalProperties": false
-				},
 				"footer": {
 					"type": "object",
 					"properties": {

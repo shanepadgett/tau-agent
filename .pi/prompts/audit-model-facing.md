@@ -37,7 +37,7 @@ Any text that can reach the model via Pi/Tau surfaces this extension uses:
 - `context` event message rewrites/injections
 - `before_provider_request` payload rewrites (final wire text, even if `getSystemPrompt()` differs)
 - `message_end` message replacements
-- Tau `injectFiles` / `prepareFileInjection` bodies
+- Tau `prepareFileInjection` bodies
 
 ### Tool run / intercept
 
@@ -133,7 +133,7 @@ field2: description
 ...
 ```
 
-### Injected messages (`sendMessage` / injectFiles / …)
+### Injected messages (`sendMessage` / …)
 ```text
 customType=... when=...
 <body or shape>

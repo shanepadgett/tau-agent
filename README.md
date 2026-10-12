@@ -1,7 +1,7 @@
 <!-- markdownlint-disable-next-line MD033 -->
 <h1 align="center">τau Agent</h1>
 
-A [Pi](https://github.com/earendil-works/pi) package for coding with less wasted context. Tau adds a working prompt, focused source exploration, and automatic checks that send failures—not successful command logs—to the agent.
+A [Pi](https://github.com/earendil-works/pi) package for coding with less wasted context. Tau adds a working prompt and automatic checks that send failures—not successful command logs—to the agent.
 
 ## Install
 
@@ -33,7 +33,6 @@ pi install git:github.com/shanepadgett/tau-agent
 
 - **[Soul](packages/agent/extensions/soul/README.md)** supplies the agent's working instructions: direct communication, explicit planning, scoped changes, and focused tool use. Stable instructions stay in place across turns; updates append where the model supports it, preserving the cached prompt prefix.
 - **[Silent Command Runner](packages/agent/extensions/silent-command-runner/README.md)** silently fixes matching files after modifying tools finish. Its `checks` tool runs final checks before the agent summarizes file-editing work, returning failures for repair. Discussion and read-only work skip the tool. Automatic settlement checks cover missing or stale verification.
-- **[Explore](packages/agent/extensions/explore/README.md)** reads source structure: declaration outlines, selected bodies, imports, and callers. Large supported files return an outline by default rather than their entire contents. Pi keeps `ls`, `find`, `grep`, and `read`; Explore adds focused ways to inspect code.
 - **[Tool Loader](packages/agent/extensions/tool-loader/README.md)** keeps specialist tool definitions out of ordinary coding requests. Image and macOS tools load when needed; web tools run through code mode so the agent can filter results before they enter context. Cache preservation when loading tools depends on the model.
 - **[Eval](packages/agent/extensions/eval/README.md)** runs custom Python and Node.js code using installed runtimes. Failed scripts can be retried with targeted edits rather than sending the whole script again.
 
@@ -67,7 +66,6 @@ For settings shared across projects, use `/tau init --global`. See the [Silent C
 
 | Command | Purpose |
 | --- | --- |
-| `/review` | Run a separate simplify, architecture, or correctness review without adding the report to the coding conversation. |
 | `/aside <question>` | Ask a one-off question without adding the question or answer to the conversation. |
 | `/handoff <goal>` | Prepare a fresh linked session with an opening prompt you can review. |
 | `/commit` | Group, review, and commit selected Git changes. |

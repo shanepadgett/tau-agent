@@ -112,7 +112,6 @@ tau → app dist/cli.js
 
 registry.ts
   export const tauExtensions: InlineExtension[] = [
-    { name: "explore", factory: explore, builtin: true },
     …
   ]
 ```
@@ -130,7 +129,7 @@ Development loads built-ins from source through Pi's jiti loader, so `/reload` k
 
 ### Build
 
-The app build bundles Pi's packages, the SDK, and built-ins, and copies Pi's runtime assets (themes, interactive assets, export templates) and docs. WASM and native dependencies (`@ast-grep/wasm`, `web-tree-sitter`, `@vscode/tree-sitter-wasm`, photon, quickjs) stay external runtime dependencies. The same build emits the SDK's bundled type declarations, which include Pi's types, into the app (`types/`) and into the published SDK package.
+The app build bundles Pi's packages, the SDK, and built-ins, and copies Pi's runtime assets (themes, interactive assets, export templates) and docs. Native dependencies (photon, quickjs) stay external runtime dependencies. The same build emits the SDK's bundled type declarations, which include Pi's types, into the app (`types/`) and into the published SDK package.
 
 ## Extension authoring
 
@@ -196,11 +195,11 @@ This is product behavior in a built-in extension, not a repo-local dev extension
 Tau has one settings concept. Pi's core settings and Tau's sections share one file per scope.
 
 - **Files:** `~/.tau/agent/settings.json` and `<project>/.tau/settings.json`. No separate Tau settings file and no `extensions` wrapper; in Pi's settings `extensions` is the resource list.
-- **Layout:** sections are top-level keys next to Pi's: Tau's (`explore`, `footer`, `modelFallback`, `reference`, `silentCommandRunner`, `toolApproval`, `worktree`) and those of third-party packages using `defineSettings`.
+- **Layout:** sections are top-level keys next to Pi's: Tau's (`footer`, `modelFallback`, `reference`, `silentCommandRunner`, `toolApproval`, `worktree`) and those of third-party packages using `defineSettings`.
 - **Collision guard:** the schema generator fails when a Tau section key matches a key in Pi's `Settings` type. Packages that collide with core or another package are reported at load.
 - **Reads:** per-section validation and repair, with the same project-trust gating as Pi.
 - **Writes:** replace only the section's own key under the same lock Pi's settings storage uses (`proper-lockfile`, `lockSync(path, { realpath: false })`). With the fork, this can be a section API on Pi's `SettingsManager` instead of a second writer. Decide when implementing; it adds to the change set.
-- **Whole-extension switches:** remove `footer.enabled` and `toolApproval.enabled`. Use `"extensions": ["-builtin:<name>"]`. Silent Command Runner already has no extension or per-command `enabled`; its commands are grouped into `afterWrite` and `afterRun`. Finer switches stay, such as `explore.read.enabled`.
+- **Whole-extension switches:** remove `footer.enabled` and `toolApproval.enabled`. Use `"extensions": ["-builtin:<name>"]`. Silent Command Runner already has no extension or per-command `enabled`; its commands are grouped into `afterWrite` and `afterRun`.
 - **Schema:** a published schema covers Pi's `Settings` type plus Tau's sections. Because packages add sections, Tau also writes `~/.tau/agent/settings.schema.json` covering installed packages, and `settings.json` points `$schema` there.
 - **Commands:** `/tau init` is removed. `/tau doctor` validates the whole file.
 - **State dirs:** no `tau/` subfolders. Global state in `~/.tau/agent/<name>`, project state in `.tau/<name>`. Names must not collide with Pi's: `sessions`, `npm`, `git`, `extensions`, `skills`, `prompts`, `themes`, `types`, `settings.json`, `auth.json`, `models.json`, `trust.json`, `keybindings.json`, `mcp.json`.
@@ -252,8 +251,7 @@ A failed copy leaves no partial files and no record, so the next launch offers a
 - **Bundling breakers:**
   - `shared/settings/specs.ts` discovers settings modules by file glob and dynamic import. Replace with a static registry, which also feeds schema generation.
   - `tau-help` reads `help.md` and `docs/` relative to `import.meta.url`.
-  - `src/ast/grammars/manifest.ts` resolves WASM through `import.meta.url` and `createRequire`.
-  - `extensions/appshot/native-helper.ts` and `extensions/review/session.ts` use paths relative to `import.meta.url`.
+  - `extensions/appshot/native-helper.ts` uses paths relative to `import.meta.url`.
 - **Module state:** jiti loads each file extension with `moduleCache: false`; bundled built-ins share one module graph. Audit module-level state. Found so far: `writeQueues` in `shared/settings/json.ts`, where sharing is beneficial.
 - **Imports:** built-ins move from `@earendil-works/*` and `@shanepadgett/tau-tui` imports to the SDK.
 - **`/tau doctor`:** remove the Pi version check.

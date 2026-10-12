@@ -56,10 +56,6 @@ Design work defaults to Sonnet under `simple-design` for bounded component desig
 
 Configure these features under `extensions.decisions`. Set `enabled` to `false` to disable them, or choose `auto`, `jev`, or `luna` for `classifier`. Missing credentials or failed decisions do not stop work.
 
-## explore
-
-Lets the agent inspect code structure, find declarations and references, and follow calls and dependencies. It can request a specific function or range instead of reading a whole file. Large file reads may show an outline first.
-
 ## footer
 
 Shows the highlighted work type, models, context usage, cache-hit rate, costs, and project status. Use `/footer` to toggle it, `/footer on` or `/footer off` to set visibility, and `/footer refresh` to refresh it.
@@ -95,10 +91,6 @@ Use `/qna` to answer the agent's last questions in a form. It supports choices a
 ## ready
 
 Use `/ready` to scan how well a repository supports agent work, including setup, checks, standards, and context. Choose a Markdown or HTML report, saved under `.pi/tau/ready/`. The scan does not score the repository.
-
-## review
-
-Use `/review` to review current Git changes, or `/review <direction>` to review a specified part of the repository. Choose a review type and logged-in provider. Results are saved under `.pi/tau/reviews/` without adding the review to the main conversation.
 
 ## reference
 
