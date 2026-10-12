@@ -11,6 +11,13 @@ Effect 4: typed effects, services and layers, Schema, Stream, errors. Read the e
 - Docs: `docs/reference/copies/effect/4.0.3/` (75 files: README.md, ai-docs/, AGENTS.md)
 - API (source): `node_modules/effect/src/`, modules: `docs/reference/copies/effect/4.0.3/api-index/effect-src.md`
 
+## @effect/platform-bun 4.0.3
+
+Bun layers for Effect's platform services: FileSystem, Path, runtime entry. Its ai-docs duplicate Effect's, so only the README is copied.
+
+- Docs: `docs/reference/copies/@effect/platform-bun/4.0.3/` (1 file: README.md)
+- API (source): `node_modules/@effect/platform-bun/src/`, modules: `docs/reference/copies/@effect/platform-bun/4.0.3/api-index/@effect-platform-bun-src.md`
+
 ## @effect/tsgo 0.51.1
 
 Effect diagnostics for the TypeScript 7 compiler: rule names, severities and tsconfig options.

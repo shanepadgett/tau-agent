@@ -2,7 +2,7 @@
 
 Status: seven spikes complete on macOS; OpenTUI, PTYs and file finding also verified on Linux arm64. Layers, package layout, Effect, the AI layer, the turn loop, SQLite access, tooling, FFF and helper reuse are settled. Use unpatched FFF first; reconsider the tested native workaround if a ranking bug is opened.
 
-Tau becomes its own coding agent, built from the ground up on this branch. It does not embed or depend on Pi. Pi's code (MIT) may be read and ported where that is faster, keeping its license notice. The `main` branch stays a Pi package and keeps shipping until this branch replaces it.
+Tau becomes its own coding agent, built from the ground up on this branch. It does not embed or depend on Pi. OpenCode and Pi are read-only references for learning which problems they solved and how; Tau writes its own code on its own architecture and copies none of theirs. The `main` branch stays a Pi package and keeps shipping until this branch replaces it.
 
 | File | Holds |
 | --- | --- |
@@ -15,4 +15,6 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 
 ## Open
 
-No implementation decisions are open. Phase-zero implementation is complete; full Linux acceptance and the remaining verification cases are listed in [phase-zero.md](phase-zero.md#verification).
+Phase zero is complete; its unverified cases are in [deferred.md](deferred.md). Build step 1 is planned in [work/credential-store.md](work/credential-store.md).
+
+No decisions are open.

@@ -4,6 +4,11 @@
     "fingerprint": "d8439c8c4ab0b684",
     "commits": []
   },
+  "@effect/platform-bun": {
+    "version": "4.0.3",
+    "fingerprint": "25ca929c276e76fc",
+    "commits": []
+  },
   "@effect/tsgo": {
     "version": "0.51.1",
     "fingerprint": "baa0912c23cfde47",

@@ -5,12 +5,12 @@
   "description": "Module imports owned by one layer.",
   "rules": [
     {
-      "id": "sqlite-in-session",
+      "id": "sqlite-in-database",
       "kind": "banned-import",
       "specifiers": ["bun:sqlite"],
       "files": ["**"],
-      "exclude": ["src/session/**"],
-      "message": "Open SQLite only in session. Use the session service from other layers.",
+      "exclude": ["src/database/**"],
+      "message": "Open SQLite only in the database layer. Use openDatabase from other layers.",
       "severity": "error",
     },
   ],

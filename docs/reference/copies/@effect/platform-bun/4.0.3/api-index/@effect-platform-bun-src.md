@@ -1,0 +1,28 @@
+# @effect/platform-bun/src
+
+- `BunAddressResolver`: Bun implementation of Effect's `AddressResolver` service.
+- `BunChildProcessSpawner`: Bun implementation of `ChildProcessSpawner`.
+- `BunClusterHttp`: Bun HTTP and WebSocket layers for Effect Cluster runners.
+- `BunClusterSocket`: Bun socket layers for Effect Cluster runners.
+- `BunCrypto`: The `BunCrypto` module provides Bun's `Crypto` service layer for Effect programs.
+- `BunDatagramSocket`: Bun UDP adapter for `effect/socket/DatagramSocket`, built on the native `Bun.udpSocket`.
+- `BunDns`: Bun implementation of Effect's `Dns` service.
+- `BunFileSystem`: Bun layer for Effect's `FileSystem` service.
+- `BunHttpClient`
+- `BunHttpPlatform`: Bun implementation of the Effect HTTP platform service.
+- `BunHttpServer`: Bun implementation of the Effect `HttpServer`.
+- `BunHttpServerRequest`: Accessor for the Bun request behind an Effect HTTP server request.
+- `BunMultipart`: Bun-specific helpers for parsing HTTP `multipart/form-data` request bodies.
+- `BunPath`: Bun-backed layers for Effect's {@link Path} service.
+- `BunRedis`: Bun Redis integration backed by Bun's built-in `RedisClient`.
+- `BunRuntime`: Bun process runner for Effect programs.
+- `BunServices`: Aggregate Bun platform services layer.
+- `BunSink`
+- `BunSocket`: Bun platform socket entry point for Effect sockets.
+- `BunSocketServer`
+- `BunStdio`: Process stdio for Bun applications.
+- `BunStream`: Bun stream interoperability for Effect streams.
+- `BunTerminal`: Bun-backed implementation of Effect's `Terminal` service.
+- `BunWorker`: Parent-side worker support for Bun applications.
+- `BunWorkerRunner`: Worker-entrypoint support for Bun worker runners.
+- `index`
