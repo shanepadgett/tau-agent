@@ -55,6 +55,28 @@ export const instructionsUpdate = Effect.fn("instructionsUpdate")(function* <E, 
   return isFirst ? Option.some(firstEntry(sources, current)) : noteEntry(sources, saved, current);
 });
 
+/** The paths in the saved keys that start with `prefix`, such as `agents:` for agents files. */
+export const savedPaths = (entries: readonly Entry[], prefix: string) =>
+  Object.keys(savedValues(entries)).flatMap((key) =>
+    key.startsWith(prefix) ? [key.slice(prefix.length)] : [],
+  );
+
+/** A source whose value is the instructions in the file at `path`, shown inside a tag that names the path. */
+export const fileSource = <E, R>(
+  key: string,
+  path: string,
+  read: Effect.Effect<Option.Option<string>, E, R>,
+): InstructionSource<E, R> => ({
+  key,
+  read,
+  first: (value) => tagged(path, value),
+  changed: (value) => `${path} changed. It now says:\n${tagged(path, value)}`,
+  removed: `The instructions from ${path} no longer apply.`,
+});
+
+const tagged = (path: string, value: string) =>
+  `<instructions path="${path}">\n${value}\n</instructions>`;
+
 const firstEntry = <E, R>(
   sources: readonly InstructionSource<E, R>[],
   current: Values,

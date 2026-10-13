@@ -8,6 +8,7 @@ import { Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
 import { type Database, openDatabase, type Transaction } from "../database/Database.ts";
 import { TauHome } from "../database/TauHome.ts";
 import { type Entry, EntryBody, SessionId } from "./Entry.ts";
+import { makeSkillUses, SKILL_USE_TABLE, SkillUses } from "./SkillUses.ts";
 
 const MIGRATIONS = [
   "CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT NOT NULL, origin TEXT NOT NULL, " +
@@ -15,6 +16,7 @@ const MIGRATIONS = [
   "CREATE TABLE entry (session_id TEXT NOT NULL REFERENCES session (id), " +
     "number INTEGER NOT NULL, at INTEGER NOT NULL, body TEXT NOT NULL, " +
     "PRIMARY KEY (session_id, number)) STRICT",
+  SKILL_USE_TABLE,
 ];
 
 const Origin = Schema.Union([
@@ -99,19 +101,28 @@ export class Sessions extends Context.Service<
     ) => Effect.Effect<readonly Entry[], SessionStoreError>;
   }
 >()("tau/session/Sessions") {
-  /** Stores sessions in `sessions.db` in Tau's home folder. */
-  static readonly layer = Layer.effect(
-    Sessions,
-    TauHome.use((home) => makeSessions(join(home.directory, "sessions.db"))),
+  /**
+   * Stores sessions in `sessions.db` in Tau's home folder. Gives the skill uses too, because they
+   * are in the same file, which only one connection migrates.
+   */
+  static readonly layer = Layer.effectContext(
+    TauHome.use((home) => openSessionStore(join(home.directory, "sessions.db"))),
   );
 }
 
 type NewSession = (directory: string, origin: Origin) => Effect.Effect<Session>;
 
-const makeSessions = Effect.fn("makeSessions")(function* (path: string) {
+const openSessionStore = Effect.fn("openSessionStore")(function* (path: string) {
+  const database = yield* openDatabase(path, MIGRATIONS).pipe(
+    Effect.mapError((cause) => new SessionStoreError({ path, cause })),
+  );
+
+  const sessions = makeSessions(path, database, yield* Crypto.Crypto);
+  return Context.make(Sessions, sessions).pipe(Context.add(SkillUses, makeSkillUses(database)));
+});
+
+const makeSessions = (path: string, database: Database, crypto: Crypto.Crypto) => {
   const fail = (cause: unknown) => new SessionStoreError({ path, cause });
-  const database = yield* openDatabase(path, MIGRATIONS).pipe(Effect.mapError(fail));
-  const crypto = yield* Crypto.Crypto;
 
   // UUIDv7 starts with the time, so IDs sort by creation.
   const newSession: NewSession = (directory, origin) =>
@@ -175,7 +186,7 @@ const makeSessions = Effect.fn("makeSessions")(function* (path: string) {
     );
 
   return Sessions.of({ create, get, fork, list, append, entries });
-});
+};
 
 const forkWithin = (database: Database, newSession: NewSession, from: SessionId, through: number) =>
   Effect.fn("Sessions.fork")(function* (transaction: Transaction) {

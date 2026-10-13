@@ -4,14 +4,15 @@
  */
 
 import { resolve } from "node:path";
-import { CodeMode, Tool, toolError } from "@opencode/codemode";
+import { CodeMode, type Namespace, Tool, toolError } from "@opencode/codemode";
 import { Duration, Effect, FileSystem, Predicate, Schema } from "effect";
 
 /** Logs and the final value are cut to this many bytes, keeping the start. */
 const MAX_OUTPUT_BYTES = 50_000;
 const JSON_INDENT = 2;
 
-export type Functions<R> = Readonly<Record<string, Tool.Tool<R>>>;
+/** What a script can call: functions, and groups of functions such as `tools.skills.<name>`. */
+export type Functions<R> = Namespace.Namespace<R>["tools"];
 
 /** The text the model gets back from one script, and whether the script failed. */
 export type ScriptResult = { readonly text: string; readonly isFailure: boolean };

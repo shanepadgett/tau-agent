@@ -1,6 +1,6 @@
 # Change Tau's settings
 
-`~/.tau/settings.json` sets the model, run limits and extra model providers. Without the file, Tau uses its defaults.
+`~/.tau/settings.json` sets the model, run limits, extra model providers and whether Tau reads `AGENTS.md` files. Without the file, Tau uses its defaults.
 
 1. Create or open `~/.tau/settings.json`. Comments are allowed.
 2. Add the settings you need:
@@ -13,6 +13,8 @@
      "maxTurns": 50,
      // Default time limits in seconds. The model can set its own for one call.
      "timeouts": { "run": 600, "shell": 120 },
+     // false: Tau reads no AGENTS.md file, yours or the project's.
+     "agentsFiles": true,
      "routes": {
        // A server of your own that speaks the Chat Completions API.
        "local": {
@@ -32,6 +34,7 @@
 - `timeouts.run` limits one `run` call (default 600 seconds). `timeouts.shell` limits one shell command (default 120 seconds). The run limit always wins.
 - An entry under `routes` with the name of a built-in route changes only its models. Any other name adds a route, which needs `protocol` (`anthropic`, `openaiResponses` or `openaiChat`) and `apiUrl`.
 - A route you add sends no key unless `apiKeyEnv` names the environment variable that holds it.
+- `"agentsFiles": false` turns off every `AGENTS.md` file. Instruction files and skills still load. See [Write instruction files](write-instruction-files.md).
 
 ## Limits
 

@@ -1,86 +1,78 @@
 /**
- * The built-in instruction sources: the agent instruction files, today's date, the environment and
- * the files in the session directory.
+ * The built-in instruction sources: agents files, instruction files, the skill list, today's
+ * date, the environment and the files in the session directory.
  */
 
 import { arch, platform } from "node:os";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
-import { Clock, Duration, Effect, FileSystem, Option } from "effect";
+import { Clock, Effect, FileSystem, Option } from "effect";
 import { runCommand } from "../../../proc/Command.ts";
 import type { Entry } from "../../../session/Entry.ts";
-import { type InstructionSource, savedValues } from "./instructions.ts";
+import type { UserInstructions } from "../../UserInstructions.ts";
+import { type FoundSkills, skillListSource } from "../skills/skills.ts";
+import { GIT_TIMEOUT, projectFolders } from "./folders.ts";
+import { alwaysSources, findInstructionFiles, readWhenSource } from "./instruction-files.ts";
+import { fileSource, type InstructionSource, savedPaths } from "./instructions.ts";
 
-const GIT_TIMEOUT_SECONDS = 10;
-const GIT_TIMEOUT = Duration.seconds(GIT_TIMEOUT_SECONDS);
 const MAX_FILE_LINES = 200;
 const AGENTS_FILE = "AGENTS.md";
 const AGENTS_KEY = "agents:";
 
-/** The session directory, and the user's own instruction files, most shared first. */
-export type Where = { readonly directory: string; readonly userInstructions: readonly string[] };
+/** The session directory, what the user set up, and the skills found for the run. */
+export type Where = {
+  readonly directory: string;
+  readonly user: UserInstructions["Service"];
+  readonly skills: FoundSkills;
+};
 
 /**
  * Every source for the next model call, most shared first, so the cached start of a request also
- * repeats across sessions. The instruction file of a subfolder comes in once a script touched a
- * file below it.
+ * repeats across sessions. The agents file of a subfolder comes in once a script touched a file
+ * below it.
  */
 export const instructionSources = Effect.fn("instructionSources")(function* (
   where: Where,
   entries: readonly Entry[],
 ) {
-  const root = yield* repositoryRoot(where.directory);
+  const { root, folders } = yield* projectFolders(where.directory);
 
-  const levels = Option.isSome(root)
-    ? levelsBelow(root.value, yield* realPath(where.directory))
-    : 0;
-
-  const agentsFiles = [
-    ...where.userInstructions,
-    ...foldersFromRoot(where.directory, levels).map((folder) => join(folder, AGENTS_FILE)),
-    ...savedAgentsFiles(entries),
-    ...agentsFilesAbove(where.directory, touchedFiles(entries)),
-  ];
+  const files = yield* findInstructionFiles([
+    ...where.user.instructionFolders,
+    ...folders.map((folder) => join(folder, ".tau", "instructions")),
+  ]);
 
   return [
-    ...[...new Set(agentsFiles)].map(agentsSource),
+    ...agentsSources(where, folders, entries),
+    ...alwaysSources(files, entries),
+    readWhenSource(files),
+    skillListSource(where.skills, entries),
     dateSource,
     environmentSource(where.directory, root),
     filesSource(where.directory, root),
   ];
 });
 
-const repositoryRoot = (directory: string) =>
-  runCommand("git rev-parse --show-toplevel", directory, GIT_TIMEOUT).pipe(
-    Effect.map(({ exitCode, output }) =>
-      exitCode === 0 ? Option.some(output.trim()) : Option.none<string>(),
-    ),
-    Effect.orElseSucceed(() => Option.none<string>()),
-  );
+/** With agents files turned off, only the saved ones have a source, and each reads as removed. */
+const agentsSources = (where: Where, folders: readonly string[], entries: readonly Entry[]) => {
+  const saved = savedPaths(entries, AGENTS_KEY);
 
-/** Git gives the root as a real path, so the session directory is compared as one too. */
-const realPath = (directory: string) =>
-  FileSystem.FileSystem.pipe(
-    Effect.flatMap((fileSystem) => fileSystem.realPath(directory)),
-    Effect.orElseSucceed(() => directory),
-  );
+  if (!where.user.agentsFiles) {
+    return saved.map((path) =>
+      fileSource(`${AGENTS_KEY}${path}`, path, Effect.succeed(Option.none<string>())),
+    );
+  }
 
-const levelsBelow = (root: string, directory: string) => {
-  const path = relative(root, directory);
-  if (path === "" || path.startsWith("..") || isAbsolute(path)) return 0;
-  return path.split(sep).length;
+  const paths = [
+    ...where.user.files,
+    ...folders.map((folder) => join(folder, AGENTS_FILE)),
+    ...saved,
+    ...agentsFilesAbove(where.directory, touchedFiles(entries)),
+  ];
+
+  return [...new Set(paths)].map((path) =>
+    fileSource(`${AGENTS_KEY}${path}`, path, readIfExists(path)),
+  );
 };
-
-/** `directory` and the `levels` folders above it, from the top down. */
-const foldersFromRoot = (directory: string, levels: number) => {
-  const folders = [directory];
-  for (let level = 0; level < levels; level++) folders.unshift(dirname(folders[0] ?? directory));
-  return folders;
-};
-
-const savedAgentsFiles = (entries: readonly Entry[]) =>
-  Object.keys(savedValues(entries)).flatMap((key) =>
-    key.startsWith(AGENTS_KEY) ? [key.slice(AGENTS_KEY.length)] : [],
-  );
 
 /** The files the scripts touched since the last reply. */
 const touchedFiles = (entries: readonly Entry[]) => {
@@ -91,7 +83,7 @@ const touchedFiles = (entries: readonly Entry[]) => {
     .flatMap(({ body }) => (body.type === "tool-result" ? (body.files ?? []) : []));
 };
 
-/** The instruction files in the folders between `directory` and each file, from the top down. */
+/** The agents files in the folders between `directory` and each file, from the top down. */
 const agentsFilesAbove = (directory: string, files: readonly string[]) =>
   files.flatMap((file) => {
     const path = relative(directory, dirname(file));
@@ -101,16 +93,10 @@ const agentsFilesAbove = (directory: string, files: readonly string[]) =>
     return folders.map((_, index) => join(directory, ...folders.slice(0, index + 1), AGENTS_FILE));
   });
 
-const agentsSource = (path: string) => ({
-  key: `${AGENTS_KEY}${path}`,
-  read: Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    if (!(yield* fileSystem.exists(path))) return Option.none<string>();
-    return Option.some(yield* fileSystem.readFileString(path));
-  }),
-  first: (value: string) => `Instructions from ${path}:\n\n${value}`,
-  changed: (value: string) => `${path} changed. It now says:\n\n${value}`,
-  removed: `${path} was removed.`,
+const readIfExists = Effect.fn("readIfExists")(function* (path: string) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  if (!(yield* fileSystem.exists(path))) return Option.none<string>();
+  return Option.some(yield* fileSystem.readFileString(path));
 });
 
 const dateFormat = new Intl.DateTimeFormat("en-GB", { dateStyle: "full" });

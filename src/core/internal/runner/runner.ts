@@ -3,6 +3,7 @@
  * one writer. A cancel stops the running prompt and gives back the waiting ones.
  */
 
+import { join } from "node:path";
 import {
   Cause,
   Effect,
@@ -19,12 +20,16 @@ import { ConversationId } from "../../../ai/ConversationId.ts";
 import type { Models } from "../../../ai/Models.ts";
 import type { SessionId } from "../../../session/Entry.ts";
 import type { Session, Sessions } from "../../../session/Sessions.ts";
+import type { SkillUses } from "../../../session/SkillUses.ts";
 import type { AgentEvent, Command } from "../../Client.ts";
+import type { UserInstructions } from "../../UserInstructions.ts";
 import type { Outcome, RunContext } from "../loop/run-context.ts";
+import { projectFolders } from "../instructions/folders.ts";
 import { instructionsUpdate } from "../instructions/instructions.ts";
 import { instructionSources } from "../instructions/sources.ts";
 import { runSteps } from "../loop/step.ts";
 import { scriptFunctions } from "../run-tool/run-tool.ts";
+import { findSkills, type Skill, SKILLS_GROUP, skillFunctions } from "../skills/skills.ts";
 import { failureText } from "./failure-text.ts";
 
 /** What scripts reach the computer through. */
@@ -35,8 +40,8 @@ export type RunServices = {
   readonly models: Models["Service"];
   readonly fileSystem: FileSystem.FileSystem;
   readonly spawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
-  /** The user's own instruction files, most shared first. */
-  readonly userInstructions: readonly string[];
+  readonly userInstructions: UserInstructions["Service"];
+  readonly skillUses: SkillUses["Service"];
 };
 
 /** A session opened for runs. */
@@ -102,18 +107,23 @@ const runPrompt = (
     const { sessions, models } = services;
     const { model, timeouts, maxTurns } = prompt.options;
     yield* sessions.append(session.id, [{ type: "user", text: prompt.text }]);
+    const skills = yield* runSkills(services, session.directory);
+    const used = (skill: Skill) => services.skillUses.record(skill.name, session.directory);
+    const user = services.userInstructions;
 
     const context: RunContext<Platform> = {
       session: session.id,
       model,
       languageModel: yield* models.languageModel(model, ConversationId.make(session.id)),
       sessions,
-      functions: (touched) => scriptFunctions(session.directory, timeouts, touched),
+      functions: (touched) => ({
+        ...scriptFunctions(session.directory, timeouts, touched),
+        [SKILLS_GROUP]: skillFunctions(skills.skills, touched, used),
+      }),
       updateInstructions: (entries) =>
-        instructionSources(
-          { directory: session.directory, userInstructions: services.userInstructions },
-          entries,
-        ).pipe(Effect.flatMap((sources) => instructionsUpdate(sources, entries))),
+        instructionSources({ directory: session.directory, user, skills }, entries).pipe(
+          Effect.flatMap((sources) => instructionsUpdate(sources, entries)),
+        ),
       timeouts,
       maxTurns,
       emit: (event) => PubSub.publish(events, event).pipe(Effect.asVoid),
@@ -124,6 +134,21 @@ const runPrompt = (
     Effect.provideService(FileSystem.FileSystem, services.fileSystem),
     Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, services.spawner),
   );
+
+/** The skills are found once per run; a skill added during a run is seen by the next one. */
+const runSkills = Effect.fn("runSkills")(function* (services: RunServices, directory: string) {
+  const { folders } = yield* projectFolders(directory);
+
+  const skills = yield* findSkills({
+    user: services.userInstructions.skillFolders,
+    project: folders.flatMap((folder) => [
+      join(folder, ".agents", "skills"),
+      join(folder, ".tau", "skills"),
+    ]),
+  });
+
+  return { skills, ranking: yield* services.skillUses.ranking(directory) };
+});
 
 const runEnded = (exit: Exit.Exit<Finished, unknown>): AgentEvent => {
   if (Exit.isSuccess(exit)) return { type: "run-ended", reason: exit.value };

@@ -1,6 +1,6 @@
 # Build step 4: the agent loop
 
-Status: round 1 (architecture) agreed, 2026-10-13. Slices 4a and 4b are built and confirmed live; their decisions are in [architecture.md](../architecture.md#core-ideas). Next: instruction files and skills, then slice 4c.
+Status: round 1 (architecture) agreed, 2026-10-13. Slices 4a and 4b are built and confirmed live; their decisions are in [architecture.md](../architecture.md#core-ideas). Instruction files and skills are built ([archive](../archive/instruction-files-and-skills.md)). Next: slice 4c.
 
 After step 4, `tau -p "fix the failing test"` works from a terminal: Tau sends the prompt to a model, runs the model's `run` scripts in the working directory, saves every entry to the session, and prints the answer. The TUI (step 6) later drives the same core.
 

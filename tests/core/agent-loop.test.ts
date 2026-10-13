@@ -1,48 +1,23 @@
 import { describe, expect, test } from "bun:test";
-import { BunServices } from "@effect/platform-bun";
-import {
-  Context,
-  Duration,
-  Effect,
-  FileSystem,
-  Layer,
-  Option,
-  PubSub,
-  type Scope,
-  Stream,
-} from "effect";
-import { AiError, LanguageModel, type Prompt, type Response } from "effect/ai";
+import { Effect, FileSystem, Option, PubSub, Stream } from "effect";
+import { AiError, type Prompt, type Response } from "effect/ai";
 import { TestClock } from "effect/testing";
-import { Models } from "../../src/ai/Models.ts";
-import { RouteId } from "../../src/ai/Routes.ts";
-import { Agent, type OpenSession } from "../../src/core/Agent.ts";
-import type { AgentEvent, RunOptions } from "../../src/core/Client.ts";
-import { TauHome } from "../../src/database/TauHome.ts";
-import { userInstructionsLayer } from "../../src/host/UserInstructions.ts";
-import { Sessions } from "../../src/session/Sessions.ts";
-
-type Reply = Stream.Stream<Response.StreamPartEncoded, AiError.AiError>;
-
-const options: RunOptions = {
-  model: { route: RouteId.make("scripted"), model: "scripted" },
-  maxTurns: undefined,
-  timeouts: { run: Duration.seconds(5), shell: Duration.seconds(5) },
-};
-
-const textReply = (text: string): Reply =>
-  Stream.make<Response.StreamPartEncoded[]>(
-    { type: "text-start", id: "text" },
-    { type: "text-delta", id: "text", delta: text },
-    { type: "text-end", id: "text" },
-  );
-
-const runReply = (id: string, code: string): Reply =>
-  Stream.make<Response.StreamPartEncoded[]>({
-    type: "tool-call",
-    id,
-    name: "run",
-    params: { code },
-  });
+import type { OpenSession } from "../../src/core/Agent.ts";
+import type { AgentEvent } from "../../src/core/Client.ts";
+import {
+  isRunEnd,
+  options,
+  prompt,
+  type Reply,
+  runEnd,
+  runReply,
+  systemText,
+  takeUntil,
+  textReply,
+  toolResults,
+  userTexts,
+  withHarness,
+} from "../support/agent-harness.ts";
 
 /** The end of a reply, with the token counts a provider reports. */
 const finish = (cacheRead: number, cacheWrite: number): Reply =>
@@ -87,92 +62,6 @@ const unfinishedReply = (text: string): Reply =>
     Stream.never,
   );
 
-/** A model that answers with the next scripted reply and keeps each prompt it gets. */
-const scriptedModels = (replies: readonly Reply[], prompts: Prompt.Prompt[]) =>
-  Layer.effect(
-    Models,
-    Effect.gen(function* () {
-      const model = yield* LanguageModel.make({
-        generateText: () => Effect.die("Tau streams every model call."),
-        streamText: (request) => {
-          const reply = replies[prompts.length] ?? textReply("No more script.");
-          prompts.push(request.prompt);
-          return reply;
-        },
-      });
-
-      return Models.of({
-        languageModel: () => Effect.succeed(model),
-        decisionModel: () => Effect.die("Turn tests use no decision model."),
-      });
-    }),
-  );
-
-type Harness = {
-  /** The user's home folder; Tau's home is `.tau` in it. */
-  readonly home: string;
-  readonly directory: string;
-  readonly prompts: Prompt.Prompt[];
-  readonly startAgent: (
-    replies: readonly Reply[],
-  ) => Effect.Effect<Agent["Service"], never, Scope.Scope>;
-  readonly sessions: Sessions["Service"];
-};
-
-/** Real SQLite, codemode and shell in a temp directory. Each `startAgent` builds a new agent on the same files. */
-const withHarness = <A, E>(
-  program: (harness: Harness) => Effect.Effect<A, E, Scope.Scope | FileSystem.FileSystem>,
-) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fileSystem = yield* FileSystem.FileSystem;
-      const home = yield* fileSystem.makeTempDirectoryScoped();
-      const directory = `${home}/work`;
-      yield* fileSystem.makeDirectory(directory);
-
-      const sessionsAt = Sessions.layer.pipe(Layer.provide(TauHome.at(`${home}/.tau`)));
-      const sessions = Context.get(yield* Layer.build(sessionsAt), Sessions);
-      const prompts: Prompt.Prompt[] = [];
-
-      const startAgent = (replies: readonly Reply[]) =>
-        Layer.build(
-          Agent.layer.pipe(
-            Layer.provide(scriptedModels(replies, prompts)),
-            Layer.provide(Layer.succeed(Sessions, sessions)),
-            Layer.provide(BunServices.layer),
-            Layer.provide(userInstructionsLayer.pipe(Layer.provide(TauHome.at(`${home}/.tau`)))),
-          ),
-        ).pipe(Effect.map((context) => Context.get(context, Agent)));
-
-      return yield* program({ home, directory, prompts, startAgent, sessions });
-    }).pipe(Effect.scoped, Effect.provide(BunServices.layer)),
-  );
-
-/** Takes events until one matches, and gives every event taken. */
-const takeUntil = Effect.fn("takeUntil")(function* (
-  events: PubSub.Subscription<AgentEvent>,
-  isLast: (event: AgentEvent) => boolean,
-) {
-  const taken: AgentEvent[] = [];
-
-  for (;;) {
-    const event = yield* PubSub.take(events);
-    taken.push(event);
-    if (isLast(event)) return taken;
-  }
-});
-
-const isRunEnd = (event: AgentEvent) => event.type === "run-ended";
-
-/** Sends a prompt and gives the run's events, through its end. */
-const prompt = Effect.fn("prompt")(function* (opened: OpenSession, text: string) {
-  const events = yield* opened.subscribe;
-  yield* opened.send({ type: "prompt", text, options });
-  return yield* takeUntil(events, isRunEnd);
-});
-
-const runEnd = (events: readonly AgentEvent[]) => events.find(isRunEnd);
-
 /** Sends a prompt and moves the test clock past each retry wait, through the run's end. */
 const promptWithRetries = Effect.fn("promptWithRetries")(function* (
   opened: OpenSession,
@@ -193,16 +82,6 @@ const promptWithRetries = Effect.fn("promptWithRetries")(function* (
 const retries = (events: readonly AgentEvent[]) =>
   events.flatMap((event) => (event.type === "retrying" ? [event] : []));
 
-/** The text of every tool result in a prompt, in order. */
-const toolResults = (sent: Prompt.Prompt | undefined) =>
-  (sent?.content ?? []).flatMap((message) =>
-    message.role === "tool"
-      ? message.content.flatMap((part) =>
-          part.type === "tool-result" ? [String(part.result)] : [],
-        )
-      : [],
-  );
-
 /** The roles of the messages that carry a Claude cache mark. */
 const cacheMarked = (sent: Prompt.Prompt | undefined) =>
   (sent?.content ?? []).flatMap((message) =>
@@ -212,17 +91,6 @@ const cacheMarked = (sent: Prompt.Prompt | undefined) =>
 /** The messages as a provider gets them, without the cache marks, which move on each request. */
 const withoutMarks = (sent: Prompt.Prompt | undefined) =>
   JSON.stringify((sent?.content ?? []).map(({ role, content }) => ({ role, content })));
-
-const systemText = (sent: Prompt.Prompt | undefined) =>
-  (sent?.content ?? []).flatMap((message) => (message.role === "system" ? [message.content] : []));
-
-/** The text of every user message: prompts and instruction notes. */
-const userTexts = (sent: Prompt.Prompt | undefined) =>
-  (sent?.content ?? []).flatMap((message) =>
-    message.role === "user"
-      ? message.content.flatMap((part) => (part.type === "text" ? [part.text] : []))
-      : [],
-  );
 
 const texts = (sent: Prompt.Prompt | undefined) =>
   (sent?.content ?? []).flatMap((message) =>
@@ -314,7 +182,7 @@ describe("agent loop", () => {
         const notes = userTexts(second).slice(1).join("\n");
 
         expect(notes).toContain(
-          `${harness.directory}/AGENTS.md changed. It now says:\n\nUse tabs.`,
+          `${harness.directory}/AGENTS.md changed. It now says:\n<instructions path="${harness.directory}/AGENTS.md">\nUse tabs.\n</instructions>`,
         );
 
         expect(notes).toContain("Files added:\nnew.txt");
@@ -339,7 +207,7 @@ describe("agent loop", () => {
         const opened = yield* agent.open(Option.none(), harness.directory);
         yield* prompt(opened, "Read it.");
         const [first, , third] = harness.prompts;
-        const note = `Instructions from ${harness.directory}/sub/AGENTS.md:\n\nSub rules.`;
+        const note = `<instructions path="${harness.directory}/sub/AGENTS.md">\nSub rules.\n</instructions>`;
 
         expect(systemText(first)[0]).not.toContain("Sub rules.");
         expect(userTexts(third).filter((text) => text === note)).toHaveLength(1);

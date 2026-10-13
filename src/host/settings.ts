@@ -36,6 +36,8 @@ const SettingsFile = Schema.Struct({
   timeouts: Schema.optional(
     Schema.Struct({ run: Schema.optional(Seconds), shell: Schema.optional(Seconds) }),
   ),
+  /** `false` turns off every agents file, the user's and the project's. */
+  agentsFiles: Schema.optional(Schema.Boolean),
 });
 
 /** What a run uses from the settings file. Each value is absent when the file does not set it. */
@@ -53,14 +55,19 @@ class SettingsInvalid extends Schema.TaggedError<SettingsInvalid>()("SettingsInv
 }) {}
 
 /** The settings that change how a run behaves. The route table is a separate service of the AI layer. */
-export class Settings extends Context.Service<Settings, { readonly run: RunSettings }>()(
-  "tau/host/Settings",
-) {
+export class Settings extends Context.Service<
+  Settings,
+  {
+    readonly run: RunSettings;
+    /** Whether Tau reads agents files. */
+    readonly agentsFiles: boolean;
+  }
+>()("tau/host/Settings") {
   /** Reads `settings.json` in Tau's home folder once, and gives the run settings and the route table. */
   static readonly layer = Layer.effectContext(
     TauHome.use(({ directory }) => readSettingsFile(join(directory, "settings.json"))).pipe(
-      Effect.map(({ routes, routeSettings, run }) =>
-        Context.make(Settings, { run }).pipe(
+      Effect.map(({ routes, routeSettings, run, agentsFiles }) =>
+        Context.make(Settings, { run, agentsFiles }).pipe(
           Context.add(RouteTable, { routes, settings: routeSettings }),
         ),
       ),
@@ -72,6 +79,7 @@ type SettingsFileContent = {
   readonly routes: ReadonlyArray<Route>;
   readonly routeSettings: ReadonlyMap<RouteId, RouteSettings>;
   readonly run: RunSettings;
+  readonly agentsFiles: boolean;
 };
 
 const noRunSettings: RunSettings = {
@@ -89,6 +97,7 @@ const readSettingsFile = Effect.fn("readSettingsFile")(function* (path: string) 
     routes: builtInRoutes,
     routeSettings: new Map(),
     run: noRunSettings,
+    agentsFiles: true,
   };
 
   if (!(yield* fileSystem.exists(path))) return noSettings;
@@ -123,7 +132,14 @@ const readSettingsFile = Effect.fn("readSettingsFile")(function* (path: string) 
     shellTimeoutSeconds: file.timeouts?.shell,
   };
 
-  return { routes: [...builtInRoutes, ...added.flat()], routeSettings, run };
+  const content: SettingsFileContent = {
+    routes: [...builtInRoutes, ...added.flat()],
+    routeSettings,
+    run,
+    agentsFiles: file.agentsFiles ?? true,
+  };
+
+  return content;
 });
 
 /**
