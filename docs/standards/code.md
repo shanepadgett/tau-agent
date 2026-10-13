@@ -43,6 +43,7 @@ Read the Effect reference before writing Effect code. These rules cover how we u
 - A service owns one capability behind a small interface. Make a service for something with dependencies or state, or that a test replaces. A pure function is not a service.
 - Service methods require nothing. Their dependencies come from the layer that builds the service.
 - Only `cli` provides layers in `src/`. Other layers declare what they need and leave the wiring to it.
+- Put a service's layer on its class as `static readonly layer`. Paths and settings come from services such as `TauHome`, never from function arguments. A layer that implements a service declared in another layer exports one `<service>Layer`.
 - Write sequences in `Effect.gen` or `Effect.fn`. Use `pipe` for short one-way transforms and to attach behavior such as retry, timeout or a span. Do not nest `pipe` chains.
 - Expected failures are named domain errors in the error channel (`SessionNotFound`) that carry what the caller needs to act. Bugs are defects. Handle an error where something can be done about it; otherwise let it pass.
 - Parse unknown data with `Schema`. Do not hand-write type guards; use `Predicate`.

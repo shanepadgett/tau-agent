@@ -6,7 +6,7 @@ import { join } from "node:path";
 const MODELS_DEV_URL = "https://models.dev/api.json";
 const CLAUDE_CODE_URL = "https://registry.npmjs.org/@anthropic-ai/claude-code/latest";
 
-// The `catalogProvider` of each built-in route in src/ai/routes.ts. Tools cannot import src/.
+// The `catalogProvider` of each built-in route in src/ai/Routes.ts. Tools cannot import src/.
 const CATALOG_PROVIDERS = ["anthropic", "openai", "openrouter", "opencode-go"];
 
 const OUTPUT = join(import.meta.dir, "../src/ai/catalog-snapshot.json");

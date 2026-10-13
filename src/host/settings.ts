@@ -1,11 +1,17 @@
 /** Reads the user's settings from `~/.tau/settings.json`. The file can contain comments. */
 
 import { join } from "node:path";
-import { Effect, FileSystem, Schema } from "effect";
-import type { RouteSettings } from "../ai/catalog.ts";
-import { ProviderId } from "../ai/credential.ts";
-import { DecisionSettings, ModelSettings, Protocol } from "../ai/model-profile.ts";
-import { builtInRoutes, type Route, RouteId } from "../ai/routes.ts";
+import { Context, Effect, FileSystem, Layer, Schema } from "effect";
+import { ProviderId } from "../ai/Credential.ts";
+import { DecisionSettings, ModelSettings, Protocol } from "../ai/ModelProfile.ts";
+import {
+  builtInRoutes,
+  type Route,
+  RouteId,
+  type RouteSettings,
+  RouteTable,
+} from "../ai/Routes.ts";
+import { TauHome } from "../database/TauHome.ts";
 
 const RouteEntry = Schema.Struct({
   protocol: Schema.optional(Protocol),
@@ -46,8 +52,23 @@ class SettingsInvalid extends Schema.TaggedError<SettingsInvalid>()("SettingsInv
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-type Settings = {
-  /** The built-in routes, then the routes the user added. */
+/** The settings that change how a run behaves. The route table is a separate service of the AI layer. */
+export class Settings extends Context.Service<Settings, { readonly run: RunSettings }>()(
+  "tau/host/Settings",
+) {
+  /** Reads `settings.json` in Tau's home folder once, and gives the run settings and the route table. */
+  static readonly layer = Layer.effectContext(
+    TauHome.use(({ directory }) => readSettingsFile(join(directory, "settings.json"))).pipe(
+      Effect.map(({ routes, routeSettings, run }) =>
+        Context.make(Settings, { run }).pipe(
+          Context.add(RouteTable, { routes, settings: routeSettings }),
+        ),
+      ),
+    ),
+  );
+}
+
+type SettingsFileContent = {
   readonly routes: ReadonlyArray<Route>;
   readonly routeSettings: ReadonlyMap<RouteId, RouteSettings>;
   readonly run: RunSettings;
@@ -60,12 +81,11 @@ const noRunSettings: RunSettings = {
   shellTimeoutSeconds: undefined,
 };
 
-/** Reads `settings.json` in `tauDirectory`. If there is no file, Tau uses the built-in routes only. */
-export const readSettings = Effect.fn("readSettings")(function* (tauDirectory: string) {
+/** If there is no file, Tau uses the built-in routes only. */
+const readSettingsFile = Effect.fn("readSettingsFile")(function* (path: string) {
   const fileSystem = yield* FileSystem.FileSystem;
-  const path = join(tauDirectory, "settings.json");
 
-  const noSettings: Settings = {
+  const noSettings: SettingsFileContent = {
     routes: builtInRoutes,
     routeSettings: new Map(),
     run: noRunSettings,

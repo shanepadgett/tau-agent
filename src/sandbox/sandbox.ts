@@ -87,6 +87,15 @@ export const fileFunctions = (directory: string) => {
   };
 };
 
+/** `replace` changes only text that appears once, so it never edits the wrong place. */
+class TextNotUnique extends Schema.TaggedError<TextNotUnique>()("TextNotUnique", {
+  count: Schema.Int,
+}) {
+  override get message() {
+    return `the text to replace appears ${this.count} times, not once`;
+  }
+}
+
 const readFile = Effect.fn("readFile")(function* (path: string) {
   const fileSystem = yield* FileSystem.FileSystem;
   return yield* fileSystem.readFileString(path);
@@ -106,9 +115,7 @@ const replaceOnce = Effect.fn("replaceOnce")(function* (
   const text = yield* fileSystem.readFileString(path);
   const count = text.split(edit.old).length - 1;
 
-  if (count !== 1) {
-    return yield* Effect.fail({ message: `the text to replace appears ${count} times, not once` });
-  }
+  if (count !== 1) return yield* new TextNotUnique({ count });
 
   yield* fileSystem.writeFileString(
     path,

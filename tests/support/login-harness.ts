@@ -1,11 +1,12 @@
 import { BunCrypto, BunFileSystem } from "@effect/platform-bun";
 import { ConfigProvider, Context, Effect, FileSystem, Layer, type Scope } from "effect";
 import { FetchHttpClient, HttpClientRequest } from "effect/http";
-import { CredentialStore } from "../../src/ai/credential.ts";
-import { LoginPrompt } from "../../src/ai/login.ts";
-import { credentialSigner } from "../../src/ai/route-auth.ts";
-import { builtInRoutes, type Route, RouteId } from "../../src/ai/routes.ts";
-import { credentialStoreLayer } from "../../src/host/credential-store.ts";
+import { CredentialStore } from "../../src/ai/Credential.ts";
+import { HostId, type LoginMethod, LoginPrompt } from "../../src/ai/Login.ts";
+import { credentialSigner } from "../../src/ai/internal/signing/route-auth.ts";
+import { builtInRoutes, type Route, RouteId } from "../../src/ai/Routes.ts";
+import { TauHome } from "../../src/database/TauHome.ts";
+import { credentialStoreLayer } from "../../src/host/CredentialStore.ts";
 
 export const sha256 = (text: string) =>
   new Bun.CryptoHasher("sha256").update(text).digest("base64url");
@@ -17,6 +18,8 @@ export const routeNamed = (id: string) => {
 };
 
 export type Browser = {
+  /** How the user chooses to log in, when Tau asks. */
+  readonly method: LoginMethod;
   /** Whether the browser reaches Tau's callback after logging in. */
   readonly reachesCallback: boolean;
   /** What the user pastes, given where the browser ended up; undefined never answers. */
@@ -47,11 +50,20 @@ const fakeUser = (browser: Browser) => {
           const answer = browser.paste(redirect);
           return answer === undefined ? Effect.never : Effect.succeed(answer);
         }),
+      askSecret: () => Effect.die("No test types an API key."),
+      chooseMethod: () => Effect.succeed(browser.method),
     }),
   );
 };
 
-export const neverPastes: Browser = { reachesCallback: true, paste: () => undefined };
+export const neverPastes: Browser = {
+  method: "browser",
+  reachesCallback: true,
+  paste: () => undefined,
+};
+
+/** The host ID that tests send to the fake Sign in with ChatGPT server. */
+export const TEST_HOST_ID = "urn:uuid:00000000-0000-4000-8000-000000000000";
 
 const environment = { OPENROUTER_API_KEY: "environment-key" };
 
@@ -64,7 +76,8 @@ export const withCredentials = <A, E, R>(
     const tauDirectory = `${yield* fileSystem.makeTempDirectoryScoped()}/.tau`;
 
     const layer = Layer.mergeAll(
-      credentialStoreLayer(tauDirectory),
+      credentialStoreLayer.pipe(Layer.provide(TauHome.at(tauDirectory))),
+      Layer.succeed(HostId, { read: Effect.succeed(TEST_HOST_ID) }),
       FetchHttpClient.layer,
       BunCrypto.layer,
       fakeUser(browser),

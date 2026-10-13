@@ -3,9 +3,9 @@
  * requests, and where Tau gets data about the models.
  */
 
-import { Schema } from "effect";
-import { ProviderId } from "./credential.ts";
-import type { DecisionProfile, Protocol } from "./model-profile.ts";
+import { Context, Schema } from "effect";
+import { ProviderId } from "./Credential.ts";
+import type { DecisionProfile, DecisionSettings, ModelSettings, Protocol } from "./ModelProfile.ts";
 
 export const RouteId = Schema.String.pipe(Schema.brand("RouteId"));
 export type RouteId = typeof RouteId.Type;
@@ -153,6 +153,22 @@ const chatgptApp: ChatgptApp = {
 // Luna input limit on the Responses API.
 const LUNA_INPUT_TOKENS = 922_000;
 const JEV_CONTEXT_TOKENS = 64_000;
+
+/** The changes and additions that the user's settings make to the models of one route. */
+export type RouteSettings = {
+  readonly models: Readonly<Record<string, ModelSettings>>;
+  readonly decisionModels: Readonly<Record<string, DecisionSettings>>;
+};
+
+/** The routes Tau knows, with the model settings of each. The host reads them from the settings file. */
+export class RouteTable extends Context.Service<
+  RouteTable,
+  {
+    /** The built-in routes, then the routes the user added. */
+    readonly routes: ReadonlyArray<Route>;
+    readonly settings: ReadonlyMap<RouteId, RouteSettings>;
+  }
+>()("tau/ai/RouteTable") {}
 
 export const builtInRoutes: ReadonlyArray<Route> = [
   {

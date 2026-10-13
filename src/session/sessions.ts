@@ -5,8 +5,9 @@
 
 import { join } from "node:path";
 import { Context, Crypto, DateTime, Effect, Layer, Schema } from "effect";
-import { type Database, openDatabase, type Transaction } from "../database/database.ts";
-import { type Entry, EntryBody, SessionId } from "./entry.ts";
+import { type Database, openDatabase, type Transaction } from "../database/Database.ts";
+import { TauHome } from "../database/TauHome.ts";
+import { type Entry, EntryBody, SessionId } from "./Entry.ts";
 
 const MIGRATIONS = [
   "CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT NOT NULL, origin TEXT NOT NULL, " +
@@ -97,11 +98,13 @@ export class Sessions extends Context.Service<
       after: number,
     ) => Effect.Effect<readonly Entry[], SessionStoreError>;
   }
->()("tau/session/Sessions") {}
-
-/** Stores sessions in `sessions.db` inside `tauDirectory`, normally `~/.tau`. */
-export const sessionsLayer = (tauDirectory: string) =>
-  Layer.effect(Sessions, makeSessions(join(tauDirectory, "sessions.db")));
+>()("tau/session/Sessions") {
+  /** Stores sessions in `sessions.db` in Tau's home folder. */
+  static readonly layer = Layer.effect(
+    Sessions,
+    TauHome.use((home) => makeSessions(join(home.directory, "sessions.db"))),
+  );
+}
 
 type NewSession = (directory: string, origin: Origin) => Effect.Effect<Session>;
 

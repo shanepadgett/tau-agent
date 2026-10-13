@@ -4,7 +4,7 @@
  */
 
 import { type DateTime, Schema } from "effect";
-import { RouteId } from "../ai/routes.ts";
+import { RouteId } from "../ai/Routes.ts";
 
 export const SessionId = Schema.String.pipe(Schema.brand("SessionId"));
 export type SessionId = typeof SessionId.Type;

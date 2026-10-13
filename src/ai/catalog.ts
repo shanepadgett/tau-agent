@@ -3,19 +3,21 @@
 import { Array, Context, DateTime, Duration, Effect, Layer, Option, Ref, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import bundledSnapshot from "./catalog-snapshot.json" with { type: "json" };
-import { CredentialStore } from "./credential.ts";
-import { fetchLiveModels, LiveModel } from "./live-models.ts";
+import { CredentialStore } from "./Credential.ts";
+import { fetchLiveModels, LiveModel } from "./internal/catalog/live-models.ts";
 import {
   applyDecisionSettings,
   applyModelSettings,
   type DecisionProfile,
-  type DecisionSettings,
   type ModelProfile,
-  type ModelSettings,
-} from "./model-profile.ts";
-import { keepProviders, ModelsDevCatalog, modelsDevProfile } from "./models-dev.ts";
-import { credentialSigner, signRequests } from "./route-auth.ts";
-import { type LiveList, type Route, RouteId } from "./routes.ts";
+} from "./ModelProfile.ts";
+import {
+  keepProviders,
+  ModelsDevCatalog,
+  modelsDevProfile,
+} from "./internal/catalog/models-dev.ts";
+import { credentialSigner, signRequests } from "./internal/signing/route-auth.ts";
+import { type LiveList, type Route, RouteId, type RouteSettings, RouteTable } from "./Routes.ts";
 
 const REFRESH_INTERVAL = Duration.days(1);
 
@@ -45,22 +47,18 @@ export const parseModelRef = (text: string): Option.Option<ModelRef> => {
   return Option.some({ route: RouteId.make(text.slice(0, slash)), model: text.slice(slash + 1) });
 };
 
-/** The changes and additions that the user's settings make to the models of one route. */
-export type RouteSettings = {
-  readonly models: Readonly<Record<string, ModelSettings>>;
-  readonly decisionModels: Readonly<Record<string, DecisionSettings>>;
-};
-
 /**
  * The addresses that the daily refresh reads for models.dev data and the latest Claude Code
  * release. Tests use a fake server.
  */
-export type CatalogSources = { readonly modelsDevUrl: string; readonly claudeCodeUrl: string };
+type CatalogSources = { readonly modelsDevUrl: string; readonly claudeCodeUrl: string };
 
-export const publicCatalogSources: CatalogSources = {
-  modelsDevUrl: "https://models.dev/api.json",
-  claudeCodeUrl: "https://registry.npmjs.org/@anthropic-ai/claude-code/latest",
-};
+export const CatalogSources = Context.Reference<CatalogSources>("tau/ai/CatalogSources", {
+  defaultValue: () => ({
+    modelsDevUrl: "https://models.dev/api.json",
+    claudeCodeUrl: "https://registry.npmjs.org/@anthropic-ai/claude-code/latest",
+  }),
+});
 
 export class UnknownRoute extends Schema.TaggedError<UnknownRoute>()("UnknownRoute", {
   route: RouteId,
@@ -117,16 +115,22 @@ export class Catalog extends Context.Service<
      */
     readonly refreshIfStale: Effect.Effect<void>;
   }
->()("tau/ai/Catalog") {}
+>()("tau/ai/Catalog") {
+  /** The catalog of the routes in the route table. */
+  static readonly layer = Layer.effect(
+    Catalog,
+    Effect.gen(function* () {
+      const { routes, settings } = yield* RouteTable;
+      return yield* makeCatalog({ routes, settings, sources: yield* CatalogSources });
+    }),
+  );
+}
 
-export type CatalogOptions = {
+type CatalogOptions = {
   readonly routes: ReadonlyArray<Route>;
   readonly settings: ReadonlyMap<RouteId, RouteSettings>;
   readonly sources: CatalogSources;
 };
-
-export const catalogLayer = (options: CatalogOptions) =>
-  Layer.effect(Catalog, makeCatalog(options));
 
 // `mise run catalog` makes the snapshot. If it does not decode, that tool has a bug.
 const bundled = Schema.decodeUnknownSync(CatalogData)(bundledSnapshot);

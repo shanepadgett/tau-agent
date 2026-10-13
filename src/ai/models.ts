@@ -23,21 +23,21 @@ import {
   type NoDecisionApi,
   type UnknownModel,
   type UnknownRoute,
-} from "./catalog.ts";
-import { CredentialStore, type CredentialStoreError } from "./credential.ts";
-import type { ModelProfile } from "./model-profile.ts";
-import { withMessagesDefaults } from "./messages-defaults.ts";
-import { openAiDecisionModel } from "./openai-decisions.ts";
-import { collectResponseStream } from "./responses-stream.ts";
-import { withStructuredOutput } from "./structured-output.ts";
+} from "./Catalog.ts";
+import { CredentialStore, type CredentialStoreError } from "./Credential.ts";
+import type { ModelProfile } from "./ModelProfile.ts";
+import { withMessagesDefaults } from "./internal/protocols/messages-defaults.ts";
+import { openAiDecisionModel } from "./internal/protocols/openai-decisions.ts";
+import { collectResponseStream } from "./internal/protocols/responses-stream.ts";
+import { withStructuredOutput } from "./internal/protocols/structured-output.ts";
+import type { ConversationId } from "./ConversationId.ts";
 import {
-  type ConversationId,
   type CredentialUnavailable,
   credentialSigner,
   type RequestSigning,
   signRequests,
-} from "./route-auth.ts";
-import type { Route } from "./routes.ts";
+} from "./internal/signing/route-auth.ts";
+import type { Route } from "./Routes.ts";
 
 type ModelsError = UnknownRoute | UnknownModel | CredentialUnavailable | CredentialStoreError;
 
@@ -56,7 +56,12 @@ export class Models extends Context.Service<
       ref: ModelRef,
     ) => Effect.Effect<DecisionModel.DecisionModel, ModelsError | NoDecisionApi>;
   }
->()("tau/ai/Models") {}
+>()("tau/ai/Models") {
+  static readonly layer = Layer.effect(
+    Models,
+    Effect.suspend(() => makeModels()),
+  );
+}
 
 type ClientTransform = (client: HttpClient.HttpClient) => HttpClient.HttpClient;
 
@@ -95,8 +100,6 @@ const makeModels = Effect.fn("makeModels")(function* () {
     decisionModel: (ref) => decisionModel(ref).pipe(Effect.provideContext(context)),
   });
 });
-
-export const modelsLayer = Layer.effect(Models, makeModels());
 
 const chatModel = (route: Route, profile: ModelProfile, sign: ClientTransform) => {
   const model = profile.id;

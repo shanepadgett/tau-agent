@@ -13,9 +13,10 @@ import {
   Stream,
 } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { ApiKey, CredentialStore, ProviderId } from "../../src/ai/credential.ts";
-import { builtInRoutes } from "../../src/ai/routes.ts";
-import { credentialStoreLayer } from "../../src/host/credential-store.ts";
+import { ApiKey, CredentialStore, ProviderId } from "../../src/ai/Credential.ts";
+import { builtInRoutes } from "../../src/ai/Routes.ts";
+import { TauHome } from "../../src/database/TauHome.ts";
+import { credentialStoreLayer } from "../../src/host/CredentialStore.ts";
 
 // Builds the binary, so it takes seconds and runs before commit, not after each agent run.
 const BUILD_AND_RUN_MILLIS = 60_000;
@@ -84,7 +85,10 @@ const runTau = Effect.fn("runTau")(function* (
 });
 
 const readSaved = Effect.fn("readSaved")(function* (home: string) {
-  const services = yield* Layer.build(credentialStoreLayer(join(home, ".tau")));
+  const services = yield* Layer.build(
+    credentialStoreLayer.pipe(Layer.provide(TauHome.at(join(home, ".tau")))),
+  );
+
   return yield* Context.get(services, CredentialStore).read(openai);
 });
 
