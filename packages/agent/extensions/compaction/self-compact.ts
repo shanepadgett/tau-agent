@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { setTimeout as delay } from "node:timers/promises";
 import {
 	SettingsManager,
 	type BoundaryContextPreview,
@@ -331,68 +330,58 @@ export function registerSelfCompaction(
 			const signal = AbortSignal.any([scope, ...(ctx.signal ? [ctx.signal] : [])]);
 			showProgress(ctx);
 			signal.addEventListener("abort", clearProgress, { once: true });
-			for (let attempt = 0; attempt < 3; attempt++) {
-				state.phase = "compacting";
+			state.phase = "compacting";
+			save();
+			publish(ctx);
+			try {
+				const result = await summarize(
+					event.context.contextMessages,
+					{ id: handoff.id, toolCallId: handoff.toolCallId, text: handoff.note },
+					ctx,
+					signal,
+					pi,
+				);
+				progress?.loader?.setMessage("Preparing handoff…");
+				await route(handoff.note, ctx);
+				signal.throwIfAborted();
+				const entries: SessionBoundaryDraft[] = [
+					{
+						type: "compaction",
+						summary: result.summary,
+						firstKeptEntryId: null,
+						details: result.details,
+						usage: result.usage,
+					},
+					{
+						type: "custom_message",
+						customType: CONTINUE,
+						content: RESUME,
+						display: false,
+						details: { id: handoff.id },
+					},
+					{
+						type: "custom",
+						customType: STATE,
+						data: { phase: "watching", cycle: handoff.cycle + 1, nudged: false, forced: false },
+					},
+				];
+				signal.removeEventListener("abort", clearProgress);
+				lastLevel = "";
+				return { entries, continue: true };
+			} catch {
+				// A tree/session switch already restored another branch's state.
+				if (scope.aborted) return;
+				state = { ...handoff, phase: "failed" };
 				save();
-				publish(ctx);
-				try {
-					progress?.loader?.setMessage("Compacting context…");
-					const result = await summarize(
-						event.context.contextMessages,
-						{ id: handoff.id, toolCallId: handoff.toolCallId, text: handoff.note },
-						ctx,
-						signal,
-					);
-					progress?.loader?.setMessage("Preparing handoff…");
-					await route(handoff.note, ctx);
-					signal.throwIfAborted();
-					const entries: SessionBoundaryDraft[] = [
-						{
-							type: "compaction",
-							summary: result.summary,
-							firstKeptEntryId: null,
-							details: result.details,
-							usage: result.usage,
-						},
-						{
-							type: "custom_message",
-							customType: CONTINUE,
-							content: RESUME,
-							display: false,
-							details: { id: handoff.id },
-						},
-						{
-							type: "custom",
-							customType: STATE,
-							data: { phase: "watching", cycle: handoff.cycle + 1, nudged: false, forced: false },
-						},
-					];
-					signal.removeEventListener("abort", clearProgress);
-					lastLevel = "";
-					return { entries, continue: true };
-				} catch {
-					// A tree/session switch already restored another branch's state.
-					if (scope.aborted) return;
-					state = { ...handoff, phase: "failed" };
-					save();
-					if (signal.aborted) {
-						clearProgress();
-						return;
-					}
-					if (attempt < 2) {
-						try {
-							await delay(2000 * (attempt + 1), undefined, { signal });
-						} catch {
-							clearProgress();
-							return;
-						}
-					}
+				if (signal.aborted) {
+					clearProgress();
+					return;
 				}
 			}
 			signal.removeEventListener("abort", clearProgress);
 			clearProgress();
 			ctx.ui.notify(
-				"Self-compaction failed after three attempts. Your note is saved and tools stay locked; the next run or /compact can retry.",
+				"Self-compaction failed. Your note is saved and tools stay locked; the next run or /compact can retry.",
 				"error",
 			);
 			return;

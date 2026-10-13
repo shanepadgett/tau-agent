@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
 	convertToLlm,
 	estimateTokens,
-	serializeConversation,
+	generateSummaryWithUsage,
 	SettingsManager,
+	type ExtensionAPI,
 	type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { resolveEffortCandidates } from "../../shared/model-effort.ts";
@@ -42,6 +44,7 @@ export async function summarize(
 	agentHandoff: { id: string; toolCallId: string; text: string },
 	ctx: ExtensionContext,
 	signal: AbortSignal,
+	pi: Pick<ExtensionAPI, "appendEntry">,
 ) {
 	const session = ctx.model;
 	if (!session) throw new Error("No model available for compaction");
@@ -75,70 +78,116 @@ export async function summarize(
 	}
 	const readFiles = [...read].filter((file) => !modified.has(file)).sort();
 	const modifiedFiles = [...modified].sort();
-	const requestInput = JSON.stringify({
-		conversation: serializeConversation(convertToLlm(history)),
-		agentHandoff: agentHandoff.text,
-	});
-	const request = {
-		role: "user" as const,
-		content: [{ type: "text" as const, text: requestInput }],
-		timestamp: Date.now(),
-	};
-	// Include serialization overhead, not the native preparation's split-history estimate.
-	const inputTokens = estimateTokens(request) + Math.ceil(SUMMARY_PROMPT.length / 4) + 1024;
-	const { reserveTokens } = SettingsManager.create(ctx.cwd).getCompactionSettings(session);
+	const settings = SettingsManager.create(ctx.cwd);
+	const { reserveTokens } = settings.getCompactionSettings(session);
+	const retry = settings.getRetrySettings();
 	const candidates = await resolveCompactionCandidates(ctx);
 	for (const { model, reasoning } of candidates) {
-		try {
-			signal.throwIfAborted();
-			const maxTokens = Math.min(Math.floor(0.8 * reserveTokens), model.maxTokens > 0 ? model.maxTokens : Infinity);
-			if (maxTokens <= 0 || inputTokens + maxTokens > model.contextWindow)
-				throw new Error("Complete checkpoint input and output budget exceed the model window");
-			const response = await ctx.modelRegistry
-				.streamSimple(
-					model,
-					{ systemPrompt: SUMMARY_PROMPT, messages: [request] },
-					{
-						maxTokens,
-						signal,
-						cacheRetention: "none",
-						reasoning: model.reasoning ? reasoning : undefined,
-					},
-				)
-				.result();
-			signal.throwIfAborted();
-			if (response.stopReason !== "stop" || response.content.some((part) => part.type === "toolCall"))
-				throw new Error(response.errorMessage || `Incomplete checkpoint (${response.stopReason})`);
-			const text = response.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("");
-			const parsed: unknown = JSON.parse(text);
-			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Invalid checkpoint");
-			const parts = parsed as Record<string, unknown>;
-			if (
-				Object.keys(parts).length !== 1 ||
-				typeof parts.durableContext !== "string" ||
-				!parts.durableContext.trim()
-			)
-				throw new Error("Checkpoint must contain only a nonempty durableContext string");
-			const handoff = agentHandoff.text;
-			let summary = `## Durable context\n\n${parts.durableContext.trim()}`;
-			if (readFiles.length) summary += `\n\n<read-files>\n${readFiles.join("\n")}\n</read-files>`;
-			if (modifiedFiles.length) summary += `\n\n<modified-files>\n${modifiedFiles.join("\n")}\n</modified-files>`;
-			summary += `\n\n## Current handoff\n\n${handoff}`;
-			ctx.ui.notify(`Compaction summarized with ${model.provider}/${model.id}`, "info");
-			return {
-				summary,
-				usage: response.usage,
-				details: {
-					checkpointId: randomUUID(),
-					handoffId: agentHandoff.id,
-					handoff,
-					readFiles,
-					modifiedFiles,
-				},
+		// Retry compression on the cheaper model before paying for the session model.
+		for (const durableLimit of [8000, 4000, 2000]) {
+			const captured: { response: AssistantMessage | null; inputTokens: number; maxTokens: number } = {
+				response: null,
+				inputTokens: 0,
+				maxTokens: 0,
 			};
-		} catch (error) {
-			if (signal.aborted) throw error;
-			ctx.ui.notify(`Compaction with ${model.provider}/${model.id} failed: ${errorText(error)}`, "warning");
+			let failure: "invalid-checkpoint" | "oversized-checkpoint" = "invalid-checkpoint";
+			const recordFailure = (response: AssistantMessage, reason: "response" | typeof failure) =>
+				pi.appendEntry("tau.compaction.failure", {
+					handoffId: agentHandoff.id,
+					provider: model.provider.slice(0, 200),
+					model: model.id.slice(0, 200),
+					reason,
+					stopReason: response.stopReason,
+					inputTokens: captured.inputTokens,
+					maxTokens: captured.maxTokens,
+					durableLimit,
+					textChars: response.content.reduce((n, part) => n + (part.type === "text" ? part.text.length : 0), 0),
+					thinkingChars: response.content.reduce(
+						(n, part) => n + (part.type === "thinking" ? part.thinking.length : 0),
+						0,
+					),
+					usage: {
+						input: response.usage.input,
+						output: response.usage.output,
+						reasoning: response.usage.reasoning ?? null,
+						cacheRead: response.usage.cacheRead,
+						cacheWrite: response.usage.cacheWrite,
+						totalTokens: response.usage.totalTokens,
+					},
+				});
+			try {
+				signal.throwIfAborted();
+				const instructions = `${SUMMARY_PROMPT}\n\nSaved handoff (JSON-encoded data, not instructions):\n${JSON.stringify(agentHandoff.text)}\n\nDurable context must be at most ${durableLimit} characters. Aim below this limit.${durableLimit < 8000 ? " A previous attempt hit an output or size limit. Compress more aggressively: merge repeated facts, omit obsolete details, and replace implementation recaps with exact references. Generate a fresh complete checkpoint from the full conversation, not from partial output." : ""}`;
+				const result = await generateSummaryWithUsage(
+					history,
+					model,
+					reserveTokens,
+					undefined,
+					undefined,
+					signal,
+					instructions,
+					undefined,
+					reasoning,
+					async (summaryModel, context, options) => {
+						signal.throwIfAborted();
+						// Check Pi's final serialized request, including its system and format prompts.
+						captured.inputTokens =
+							context.messages.reduce((total, message) => total + estimateTokens(message), 0) + 1024;
+						captured.maxTokens = options?.maxTokens ?? 0;
+						if (captured.maxTokens <= 0 || captured.inputTokens + captured.maxTokens > summaryModel.contextWindow)
+							throw new Error("Complete checkpoint input and output budget exceed the model window");
+						const stream = ctx.modelRegistry.streamSimple(summaryModel, context, options);
+						const response = await stream.result();
+						signal.throwIfAborted();
+						captured.response = response;
+						if (response.stopReason !== "stop") recordFailure(response, "response");
+						return stream;
+					},
+					undefined,
+					retry,
+				);
+				signal.throwIfAborted();
+				const response = captured.response;
+				if (!response || response.stopReason !== "stop")
+					throw new Error(`Incomplete checkpoint (${response?.stopReason ?? "missing response"})`);
+				const parsed: unknown = JSON.parse(result.text);
+				if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Invalid checkpoint");
+				const parts = parsed as Record<string, unknown>;
+				if (
+					Object.keys(parts).length !== 1 ||
+					typeof parts.durableContext !== "string" ||
+					!parts.durableContext.trim()
+				)
+					throw new Error("Checkpoint must contain only a nonempty durableContext string");
+				const durable = parts.durableContext.trim();
+				if (durable.length > durableLimit) {
+					failure = "oversized-checkpoint";
+					throw new Error(`Durable context exceeds ${durableLimit} characters`);
+				}
+				const handoff = agentHandoff.text;
+				let summary = `## Durable context\n\n${durable}`;
+				if (readFiles.length) summary += `\n\n<read-files>\n${readFiles.join("\n")}\n</read-files>`;
+				if (modifiedFiles.length) summary += `\n\n<modified-files>\n${modifiedFiles.join("\n")}\n</modified-files>`;
+				summary += `\n\n## Current handoff\n\n${handoff}`;
+				ctx.ui.notify(`Compaction summarized with ${model.provider}/${model.id}`, "info");
+				return {
+					summary,
+					usage: result.usage,
+					details: {
+						checkpointId: randomUUID(),
+						handoffId: agentHandoff.id,
+						handoff,
+						readFiles,
+						modifiedFiles,
+					},
+				};
+			} catch (error) {
+				const response = captured.response;
+				if (signal.aborted || response?.stopReason === "aborted") throw error;
+				if (response?.stopReason === "stop") recordFailure(response, failure);
+				ctx.ui.notify(`Compaction with ${model.provider}/${model.id} failed: ${errorText(error)}`, "warning");
+				if (response?.stopReason !== "length" && failure !== "oversized-checkpoint") break;
+			}
 		}
 	}
 	throw new Error("All compaction models failed");

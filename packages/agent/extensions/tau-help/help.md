@@ -52,7 +52,7 @@ Set `extensions.compaction.selfCompact.enabled` to `false` to disable self-compa
 
 Each newly reached context stage is delivered once per checkpoint. Notice is informational and lets active work continue. Warning asks the agent to finish its current bounded work unit, then compact before starting another substantial unit.
 
-At the hard cutoff, the agent must compact before using other tools. Failures are reported; a failed self-compaction keeps that restriction until a retry succeeds.
+At the hard cutoff, the agent must compact before using other tools. Self-compaction retries output-limit failures with smaller durable summaries before falling back to the session model; partial summaries are never saved. Transient failures follow Pi's configured retry policy. A failed self-compaction keeps the saved handoff and tool restriction until a retry or `/compact` recovery succeeds.
 
 ## decisions
 
