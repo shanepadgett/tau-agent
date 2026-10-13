@@ -239,7 +239,13 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 
 	// Missing or stale checks run once; failures give the agent a chance to repair or report a blocker.
 	pi.on("agent_before_settle", async (event, ctx) => {
-		if (event.outcome !== "completed" || checkedRevision === writeRevision || settings.afterRun.length === 0)
+		if (
+			event.outcome !== "completed" ||
+			event.continue ||
+			event.context.pendingMessages.length > 0 ||
+			checkedRevision === writeRevision ||
+			settings.afterRun.length === 0
+		)
 			return undefined;
 		try {
 			const result = await runChecksWithWidget(ctx, ctx.signal);
