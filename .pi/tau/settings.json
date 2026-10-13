@@ -1,6 +1,9 @@
 {
   "$schema": "https://raw.githubusercontent.com/shanepadgett/tau-agent/refs/heads/main/packages/agent/schemas/tau.schema.json",
   "extensions": {
+    "commit": {
+      "avoidBreakingChanges": true
+    },
     "decisions": {
       "routing": {
         "enabled": false
