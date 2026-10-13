@@ -14,7 +14,7 @@ import {
   OpenRouterDecisionModel,
   OpenRouterLanguageModel,
 } from "@effect/ai-openrouter";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Option } from "effect";
 import type { DecisionModel, LanguageModel } from "effect/ai";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import {
@@ -28,6 +28,7 @@ import { CredentialStore, type CredentialStoreError } from "./Credential.ts";
 import type { ModelProfile } from "./ModelProfile.ts";
 import { withMessagesDefaults } from "./internal/protocols/messages-defaults.ts";
 import { openAiDecisionModel } from "./internal/protocols/openai-decisions.ts";
+import { planOf, withPlanLimits } from "./internal/protocols/plan-limits.ts";
 import { collectResponseStream } from "./internal/protocols/responses-stream.ts";
 import { withStructuredOutput } from "./internal/protocols/structured-output.ts";
 import type { ConversationId } from "./ConversationId.ts";
@@ -85,7 +86,15 @@ const makeModels = Effect.fn("makeModels")(function* () {
   ) {
     const { route, profile } = yield* catalog.model(ref);
     const sign = yield* signedFor(route, { protocol: profile.protocol, conversationId });
-    return withStructuredOutput(yield* chatModel(route, profile, sign), profile.supports);
+
+    const chat = yield* chatModel(route, profile, sign, conversationId);
+
+    const limited = Option.match(planOf(route.auth), {
+      onNone: () => chat,
+      onSome: (plan) => withPlanLimits(chat, plan),
+    });
+
+    return withStructuredOutput(limited, profile.supports);
   });
 
   const decisionModel = Effect.fn("Models.decisionModel")(function* (ref: ModelRef) {
@@ -101,7 +110,12 @@ const makeModels = Effect.fn("makeModels")(function* () {
   });
 });
 
-const chatModel = (route: Route, profile: ModelProfile, sign: ClientTransform) => {
+const chatModel = (
+  route: Route,
+  profile: ModelProfile,
+  sign: ClientTransform,
+  conversationId: ConversationId,
+) => {
   const model = profile.id;
 
   switch (profile.protocol) {
@@ -130,10 +144,15 @@ const chatModel = (route: Route, profile: ModelProfile, sign: ClientTransform) =
         : sign;
 
       // Tau sends the full conversation in each request, so the server stores nothing. The server
-      // returns reasoning in encrypted form, and Tau sends it back in the next request.
+      // returns reasoning in encrypted form, and Tau sends it back in the next request. The cache
+      // key sends each request of a conversation to the cache that holds its earlier requests.
       return OpenAiLanguageModel.make({
         model,
-        config: { store: false, include: ["reasoning.encrypted_content"] },
+        config: {
+          store: false,
+          include: ["reasoning.encrypted_content"],
+          prompt_cache_key: conversationId,
+        },
       }).pipe(
         Effect.provideServiceEffect(
           OpenAiClient.OpenAiClient,

@@ -11,16 +11,29 @@ type AssistantPart = AssistantEntry["parts"][number];
 type ToolCall = Extract<AssistantPart, { type: "tool-call" }>;
 type ToolResult = Extract<EntryBody, { type: "tool-result" }>;
 
+/**
+ * Claude caches a request only up to the parts it marks. The mark on the system prompt keeps the
+ * shared start cached; the mark on the last message caches the whole conversation for the next
+ * request. Effect's Anthropic and OpenRouter providers read these keys; others ignore them.
+ */
+const CACHE_MARK = {
+  anthropic: { cacheControl: { type: "ephemeral" } },
+  openrouter: { cacheControl: { type: "ephemeral" } },
+} as const;
+
 /** The result a call gets when no result was saved for it. */
 const MISSING_RESULT = "The call ended before it returned a result.";
 
 /**
- * Repairs the tool history while it converts, because the protocols refuse a call without a
+ * Gives the system prompt and the conversation of `entries`, with cache marks. The system prompt is
+ * `soul` and the newest instructions for the system prompt; later instructions are notes at their
+ * place in the chat. Repairs
+ * the tool history while it converts, because the protocols refuse a call without a
  * result: each call gets its result right after the reply that made it, a call without a saved
  * result (a cancel, a crash, a branch cut) gets an error result, and a result without a call is
  * left out. Interrupted replies are left out too.
  */
-export const contextView = (entries: readonly Entry[]): Prompt.Prompt => {
+export const contextView = (soul: string, entries: readonly Entry[]): Prompt.Prompt => {
   const savedResults = new Map<string, ToolResult>();
 
   for (const { body } of entries) {
@@ -38,9 +51,39 @@ export const contextView = (entries: readonly Entry[]): Prompt.Prompt => {
     if (body.type === "assistant" && !body.interrupted) {
       messages.push(...replyMessages(body, savedResults));
     }
+
+    if (body.type === "instructions" && body.placement === "note") {
+      messages.push(Prompt.userMessage({ content: [Prompt.textPart({ text: body.text })] }));
+    }
   }
 
-  return Prompt.fromMessages(messages);
+  const instructions = entries.findLast(
+    ({ body }) => body.type === "instructions" && body.placement === "system",
+  );
+
+  const system =
+    instructions?.body.type === "instructions" ? `${soul}\n\n${instructions.body.text}` : soul;
+
+  const last = messages.pop();
+  if (last !== undefined) messages.push(withCacheMark(last));
+
+  return Prompt.fromMessages([
+    Prompt.systemMessage({ content: system, options: CACHE_MARK }),
+    ...messages,
+  ]);
+};
+
+const withCacheMark = (message: Prompt.Message): Prompt.Message => {
+  switch (message.role) {
+    case "system":
+      return Prompt.systemMessage({ content: message.content, options: CACHE_MARK });
+    case "user":
+      return Prompt.userMessage({ content: message.content, options: CACHE_MARK });
+    case "assistant":
+      return Prompt.assistantMessage({ content: message.content, options: CACHE_MARK });
+    case "tool":
+      return Prompt.toolMessage({ content: message.content, options: CACHE_MARK });
+  }
 };
 
 const replyMessages = (reply: AssistantEntry, savedResults: ReadonlyMap<string, ToolResult>) => {

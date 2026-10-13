@@ -21,8 +21,11 @@ import type { SessionId } from "../../../session/Entry.ts";
 import type { Session, Sessions } from "../../../session/Sessions.ts";
 import type { AgentEvent, Command } from "../../Client.ts";
 import type { Outcome, RunContext } from "../loop/run-context.ts";
+import { instructionsUpdate } from "../instructions/instructions.ts";
+import { instructionSources } from "../instructions/sources.ts";
 import { runSteps } from "../loop/step.ts";
 import { scriptFunctions } from "../run-tool/run-tool.ts";
+import { failureText } from "./failure-text.ts";
 
 /** What scripts reach the computer through. */
 type Platform = FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner;
@@ -32,6 +35,8 @@ export type RunServices = {
   readonly models: Models["Service"];
   readonly fileSystem: FileSystem.FileSystem;
   readonly spawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
+  /** The user's own instruction files, most shared first. */
+  readonly userInstructions: readonly string[];
 };
 
 /** A session opened for runs. */
@@ -103,7 +108,12 @@ const runPrompt = (
       model,
       languageModel: yield* models.languageModel(model, ConversationId.make(session.id)),
       sessions,
-      functions: scriptFunctions(session.directory, timeouts),
+      functions: (touched) => scriptFunctions(session.directory, timeouts, touched),
+      updateInstructions: (entries) =>
+        instructionSources(
+          { directory: session.directory, userInstructions: services.userInstructions },
+          entries,
+        ).pipe(Effect.flatMap((sources) => instructionsUpdate(sources, entries))),
       timeouts,
       maxTurns,
       emit: (event) => PubSub.publish(events, event).pipe(Effect.asVoid),
@@ -120,7 +130,5 @@ const runEnded = (exit: Exit.Exit<Finished, unknown>): AgentEvent => {
 
   if (Cause.hasInterruptsOnly(exit.cause)) return { type: "run-ended", reason: "cancelled" };
 
-  const error = Cause.squash(exit.cause);
-  const message = error instanceof Error ? error.message : String(error);
-  return { type: "run-ended", reason: "failed", error: message };
+  return { type: "run-ended", reason: "failed", error: failureText(exit.cause) };
 };

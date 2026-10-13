@@ -9,11 +9,6 @@
         "enabled": false
       }
     },
-    "compaction": {
-      "selfCompact": {
-        "enabled": false
-      }
-    },
     "mdLint": {
       "ignoreGlobs": [
         ".git/**",

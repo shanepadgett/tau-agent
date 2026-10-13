@@ -105,7 +105,8 @@ export const credentialSigner = Effect.fn("credentialSigner")(function* (
 
 /**
  * Names Tau as the client. Claude subscription requests must look like Claude Code, so they do not
- * name Tau. OpenCode Go also needs the conversation ID to route requests and cache prompts.
+ * name Tau. OpenCode Go and OpenAI also need the conversation ID to route requests and cache
+ * prompts.
  */
 const withClientHeaders = (
   request: HttpClientRequest.HttpClientRequest,
@@ -115,12 +116,17 @@ const withClientHeaders = (
   if (route.auth.kind === "claudeSubscription") return request;
   const named = HttpClientRequest.setHeader(request, "user-agent", TAU_USER_AGENT);
   const { conversationId } = signing;
-  if (route.conversationHeaders !== "opencode" || conversationId === undefined) return named;
+  if (route.conversationHeaders === undefined || conversationId === undefined) return named;
 
-  return HttpClientRequest.setHeaders(named, {
-    "x-opencode-session": conversationId,
-    "x-opencode-client": "tau",
-  });
+  switch (route.conversationHeaders) {
+    case "opencode":
+      return HttpClientRequest.setHeaders(named, {
+        "x-opencode-session": conversationId,
+        "x-opencode-client": "tau",
+      });
+    case "openai":
+      return HttpClientRequest.setHeader(named, "session-id", conversationId);
+  }
 };
 
 const credentialOnlySigner = Effect.fn("credentialOnlySigner")(function* (

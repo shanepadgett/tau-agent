@@ -11,15 +11,17 @@ import {
   type Scope,
   Stream,
 } from "effect";
-import { LanguageModel, type Prompt, type Response } from "effect/ai";
+import { AiError, LanguageModel, type Prompt, type Response } from "effect/ai";
+import { TestClock } from "effect/testing";
 import { Models } from "../../src/ai/Models.ts";
 import { RouteId } from "../../src/ai/Routes.ts";
 import { Agent, type OpenSession } from "../../src/core/Agent.ts";
 import type { AgentEvent, RunOptions } from "../../src/core/Client.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
+import { userInstructionsLayer } from "../../src/host/UserInstructions.ts";
 import { Sessions } from "../../src/session/Sessions.ts";
 
-type Reply = Stream.Stream<Response.StreamPartEncoded>;
+type Reply = Stream.Stream<Response.StreamPartEncoded, AiError.AiError>;
 
 const options: RunOptions = {
   model: { route: RouteId.make("scripted"), model: "scripted" },
@@ -41,6 +43,39 @@ const runReply = (id: string, code: string): Reply =>
     name: "run",
     params: { code },
   });
+
+/** The end of a reply, with the token counts a provider reports. */
+const finish = (cacheRead: number, cacheWrite: number): Reply =>
+  Stream.make<Response.StreamPartEncoded[]>({
+    type: "finish",
+    reason: "tool-calls",
+    usage: {
+      inputTokens: { uncached: 10, total: 10 + cacheRead + cacheWrite, cacheRead, cacheWrite },
+      outputTokens: { total: 5, text: 5, reasoning: undefined },
+    },
+  });
+
+/** A reply the provider refuses with a rate limit. */
+const rateLimited: Reply = Stream.fail(
+  AiError.make({
+    module: "Scripted",
+    method: "streamText",
+    reason: new AiError.RateLimitError({}),
+  }),
+);
+
+/** A reply that stops at the model's output limit. */
+const cutOff: Reply = Stream.concat(
+  textReply("The start of a long"),
+  Stream.make<Response.StreamPartEncoded[]>({
+    type: "finish",
+    reason: "length",
+    usage: {
+      inputTokens: { uncached: 10, total: 10, cacheRead: 0, cacheWrite: 0 },
+      outputTokens: { total: 5, text: 5, reasoning: undefined },
+    },
+  }),
+);
 
 /** A reply that sends some text and then never ends, as a model does while it is still writing. */
 const unfinishedReply = (text: string): Reply =>
@@ -74,6 +109,8 @@ const scriptedModels = (replies: readonly Reply[], prompts: Prompt.Prompt[]) =>
   );
 
 type Harness = {
+  /** The user's home folder; Tau's home is `.tau` in it. */
+  readonly home: string;
   readonly directory: string;
   readonly prompts: Prompt.Prompt[];
   readonly startAgent: (
@@ -103,10 +140,11 @@ const withHarness = <A, E>(
             Layer.provide(scriptedModels(replies, prompts)),
             Layer.provide(Layer.succeed(Sessions, sessions)),
             Layer.provide(BunServices.layer),
+            Layer.provide(userInstructionsLayer.pipe(Layer.provide(TauHome.at(`${home}/.tau`)))),
           ),
         ).pipe(Effect.map((context) => Context.get(context, Agent)));
 
-      return yield* program({ directory, prompts, startAgent, sessions });
+      return yield* program({ home, directory, prompts, startAgent, sessions });
     }).pipe(Effect.scoped, Effect.provide(BunServices.layer)),
   );
 
@@ -135,6 +173,26 @@ const prompt = Effect.fn("prompt")(function* (opened: OpenSession, text: string)
 
 const runEnd = (events: readonly AgentEvent[]) => events.find(isRunEnd);
 
+/** Sends a prompt and moves the test clock past each retry wait, through the run's end. */
+const promptWithRetries = Effect.fn("promptWithRetries")(function* (
+  opened: OpenSession,
+  text: string,
+) {
+  const events = yield* opened.subscribe;
+  yield* opened.send({ type: "prompt", text, options });
+  const taken: AgentEvent[] = [];
+
+  for (;;) {
+    const event = yield* PubSub.take(events);
+    taken.push(event);
+    if (isRunEnd(event)) return taken;
+    if (event.type === "retrying") yield* TestClock.adjust("1 minute");
+  }
+});
+
+const retries = (events: readonly AgentEvent[]) =>
+  events.flatMap((event) => (event.type === "retrying" ? [event] : []));
+
 /** The text of every tool result in a prompt, in order. */
 const toolResults = (sent: Prompt.Prompt | undefined) =>
   (sent?.content ?? []).flatMap((message) =>
@@ -142,6 +200,27 @@ const toolResults = (sent: Prompt.Prompt | undefined) =>
       ? message.content.flatMap((part) =>
           part.type === "tool-result" ? [String(part.result)] : [],
         )
+      : [],
+  );
+
+/** The roles of the messages that carry a Claude cache mark. */
+const cacheMarked = (sent: Prompt.Prompt | undefined) =>
+  (sent?.content ?? []).flatMap((message) =>
+    message.options.anthropic?.cacheControl === undefined ? [] : [message.role],
+  );
+
+/** The messages as a provider gets them, without the cache marks, which move on each request. */
+const withoutMarks = (sent: Prompt.Prompt | undefined) =>
+  JSON.stringify((sent?.content ?? []).map(({ role, content }) => ({ role, content })));
+
+const systemText = (sent: Prompt.Prompt | undefined) =>
+  (sent?.content ?? []).flatMap((message) => (message.role === "system" ? [message.content] : []));
+
+/** The text of every user message: prompts and instruction notes. */
+const userTexts = (sent: Prompt.Prompt | undefined) =>
+  (sent?.content ?? []).flatMap((message) =>
+    message.role === "user"
+      ? message.content.flatMap((part) => (part.type === "text" ? [part.text] : []))
       : [],
   );
 
@@ -174,6 +253,96 @@ describe("agent loop", () => {
         expect(yield* (yield* FileSystem.FileSystem).exists(`${harness.directory}/out.txt`)).toBe(
           true,
         );
+      }),
+    ));
+
+  test("each request repeats the one before it and carries cache marks, and replies keep their token counts", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([
+          Stream.concat(runReply("call-1", 'console.log("hi")'), finish(0, 900)),
+          textReply("Done."),
+        ]);
+
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        yield* prompt(opened, "Say hi.");
+        const [first, second] = harness.prompts;
+
+        expect(withoutMarks(second)).toStartWith(withoutMarks(first).slice(0, -1));
+        expect(cacheMarked(first)).toEqual(["system", "user"]);
+        expect(cacheMarked(second)).toEqual(["system", "tool"]);
+
+        const entries = yield* harness.sessions.entries(opened.session.id, 0);
+        const reply = entries.find(({ body }) => body.type === "assistant")?.body;
+
+        expect(reply?.type === "assistant" && reply.tokens).toEqual({
+          input: 910,
+          output: 5,
+          cacheRead: 0,
+          cacheWrite: 900,
+        });
+      }),
+    ));
+
+  test("instructions go in the system prompt once, and later changes come as notes", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        yield* fileSystem.makeDirectory(`${harness.home}/.agents`);
+        yield* fileSystem.writeFileString(`${harness.home}/.agents/AGENTS.md`, "Be brief.");
+        yield* fileSystem.writeFileString(`${harness.directory}/AGENTS.md`, "Use spaces.");
+
+        const agent = yield* harness.startAgent([
+          runReply(
+            "call-1",
+            'await tools.write({ path: "AGENTS.md", content: "Use tabs." })\nawait tools.write({ path: "new.txt", content: "x" })',
+          ),
+          textReply("Done."),
+        ]);
+
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        yield* prompt(opened, "Change the rules.");
+        const [first, second] = harness.prompts;
+
+        const [system] = systemText(first);
+        expect(system).toContain("Be brief.");
+        expect(system).toContain("Use spaces.");
+        expect(system).toContain("Today's date is");
+        expect(system).toContain("AGENTS.md");
+        expect(systemText(second)).toEqual(systemText(first));
+
+        const notes = userTexts(second).slice(1).join("\n");
+
+        expect(notes).toContain(
+          `${harness.directory}/AGENTS.md changed. It now says:\n\nUse tabs.`,
+        );
+
+        expect(notes).toContain("Files added:\nnew.txt");
+      }),
+    ));
+
+  test("a file read in a folder with its own AGENTS.md adds that file as a note, once", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        yield* fileSystem.makeDirectory(`${harness.directory}/sub`);
+        yield* fileSystem.writeFileString(`${harness.directory}/sub/AGENTS.md`, "Sub rules.");
+        yield* fileSystem.writeFileString(`${harness.directory}/sub/file.txt`, "x");
+        const read = 'await tools.read({ path: "sub/file.txt" })';
+
+        const agent = yield* harness.startAgent([
+          runReply("call-1", read),
+          runReply("call-2", read),
+          textReply("Done."),
+        ]);
+
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        yield* prompt(opened, "Read it.");
+        const [first, , third] = harness.prompts;
+        const note = `Instructions from ${harness.directory}/sub/AGENTS.md:\n\nSub rules.`;
+
+        expect(systemText(first)[0]).not.toContain("Sub rules.");
+        expect(userTexts(third).filter((text) => text === note)).toHaveLength(1);
       }),
     ));
 
@@ -327,6 +496,59 @@ describe("agent loop", () => {
 
         expect(runEnd(events)).toEqual({ type: "run-ended", reason: "turn-limit" });
         expect(harness.prompts).toHaveLength(2);
+      }),
+    ));
+
+  test("a rate limit is retried after a wait, and text from the failed call is left out", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([
+          Stream.concat(unfinishedReply("Half").pipe(Stream.take(2)), rateLimited),
+          rateLimited,
+          textReply("Answer."),
+        ]);
+
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const events = yield* promptWithRetries(opened, "Answer.");
+
+        expect(runEnd(events)).toEqual({ type: "run-ended", reason: "answered" });
+        expect(retries(events).map(({ attempt }) => attempt)).toEqual([1, 2]);
+        // The waits are 2 and 4 seconds, give or take a fifth.
+        expect(retries(events)[0]?.seconds).toBe(2);
+        expect(retries(events)[1]?.seconds).toBeWithin(3, 6);
+        expect(texts(harness.prompts[2])).toEqual([]);
+
+        const entries = yield* harness.sessions.entries(opened.session.id, 0);
+
+        const interrupted = entries.filter(
+          ({ body }) => body.type === "assistant" && body.interrupted,
+        );
+
+        expect(interrupted).toHaveLength(1);
+      }).pipe(Effect.provide(TestClock.layer())),
+    ));
+
+  test("after four retries the run fails", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent(Array.from({ length: 5 }, () => rateLimited));
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const events = yield* promptWithRetries(opened, "Answer.");
+
+        expect(retries(events)).toHaveLength(4);
+        expect(runEnd(events)).toMatchObject({ type: "run-ended", reason: "failed" });
+        expect(harness.prompts).toHaveLength(5);
+      }).pipe(Effect.provide(TestClock.layer())),
+    ));
+
+  test("a reply cut off at the output limit ends the run as output-limit", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([cutOff]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const events = yield* prompt(opened, "Write a lot.");
+
+        expect(runEnd(events)).toEqual({ type: "run-ended", reason: "output-limit" });
       }),
     ));
 

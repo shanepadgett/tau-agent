@@ -13,6 +13,7 @@ import {
   type Functions,
   runScript,
   type ScriptResult,
+  type Touched,
 } from "../../../sandbox/Sandbox.ts";
 
 export type Timeouts = { readonly run: Duration.Duration; readonly shell: Duration.Duration };
@@ -46,9 +47,9 @@ const sh = (directory: string, timeout: Duration.Duration) =>
   });
 
 /** Everything a `run` script can call, working in `directory`. */
-export const scriptFunctions = (directory: string, timeouts: Timeouts) => ({
+export const scriptFunctions = (directory: string, timeouts: Timeouts, touched: Touched) => ({
   sh: sh(directory, timeouts.shell),
-  ...fileFunctions(directory),
+  ...fileFunctions(directory, touched),
 });
 
 export const runToolkit = <R>(functions: Functions<R>, timeouts: Timeouts) =>

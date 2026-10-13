@@ -33,9 +33,15 @@ export const openCalls = (entries: readonly Entry[]) => {
   return callsOf(latest.body.parts).filter((call) => !handled.has(call.id));
 };
 
-/** The model answers next when the session ends with a prompt or a tool result. */
+/**
+ * The model answers next when the session ends with a prompt or a tool result. Started calls and
+ * instructions saved for the next model call do not count.
+ */
 export const needsReply = (entries: readonly Entry[]) => {
-  const last = entries.findLast(({ body }) => body.type !== "tool-started");
+  const last = entries.findLast(
+    ({ body }) => body.type !== "tool-started" && body.type !== "instructions",
+  );
+
   return last?.body.type === "user" || last?.body.type === "tool-result";
 };
 

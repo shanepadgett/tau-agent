@@ -10,6 +10,7 @@ import { Models } from "../../ai/Models.ts";
 import { Agent } from "../../core/Agent.ts";
 import type { AgentEvent, RunOptions } from "../../core/Client.ts";
 import { type RunSettings, Settings } from "../../host/Settings.ts";
+import { userInstructionsLayer } from "../../host/UserInstructions.ts";
 import { SessionId } from "../../session/Entry.ts";
 import { Sessions } from "../../session/Sessions.ts";
 import { showFailure } from "./failure.ts";
@@ -45,6 +46,7 @@ const agentLayer = Agent.layer.pipe(
   Layer.provideMerge(Models.layer),
   Layer.provideMerge(Catalog.layer),
   Layer.provide(Sessions.layer),
+  Layer.provide(userInstructionsLayer),
 );
 
 /** The `tau` command itself. Without a subcommand, `-p` runs a prompt. */
@@ -136,6 +138,12 @@ const printRun = Effect.fn("printRun")(function* (
   if (end.reason === "turn-limit") {
     return yield* showFailure({ message: "The run reached maxTurns in ~/.tau/settings.json." });
   }
+
+  if (end.reason === "output-limit") {
+    return yield* showFailure({
+      message: "The reply reached the model's output limit, so the answer is cut short.",
+    });
+  }
 }, Effect.scoped);
 
 type RunEnded = Extract<AgentEvent, { type: "run-ended" }>;
@@ -160,6 +168,10 @@ const printEvent = (stdio: Stdio.Stdio, event: AgentEvent) => {
       );
     case "tool-started":
       return Console.error(`\n› ${event.summary}`).pipe(Effect.as(Option.none<RunEnded>()));
+    case "retrying":
+      return Console.error(
+        `\n${event.message}\nRetry ${event.attempt} in ${event.seconds} s.`,
+      ).pipe(Effect.as(Option.none<RunEnded>()));
     case "tool-ended":
     case "prompts-returned":
       return Effect.succeed(Option.none<RunEnded>());

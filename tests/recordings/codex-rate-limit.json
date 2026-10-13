@@ -1,0 +1,5 @@
+{
+  "status": 429,
+  "contentType": "application/json",
+  "body": "{\"error\":{\"type\":\"rate_limit_exceeded\",\"message\":\"Rate limit reached\"}}"
+}

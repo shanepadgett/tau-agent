@@ -20,12 +20,14 @@ export const replyEntry = Effect.fn("replyEntry")(function* (
   );
 
   const saved = yield* Effect.forEach(content, savedPart);
+  const finish = parts.find((part) => part.type === "finish");
 
   const entry: AssistantEntry = {
     type: "assistant",
     model,
     parts: saved.flat(),
     interrupted: false,
+    tokens: finish === undefined ? undefined : tokensOf(finish.usage),
   };
 
   return entry;
@@ -49,6 +51,13 @@ export const interruptedEntry = (
     interrupted: true,
   };
 };
+
+const tokensOf = ({ inputTokens, outputTokens }: Response.Usage) => ({
+  input: inputTokens.total,
+  output: outputTokens.total,
+  cacheRead: inputTokens.cacheRead,
+  cacheWrite: inputTokens.cacheWrite,
+});
 
 const savedPart = (part: Prompt.AssistantMessagePart): Effect.Effect<readonly Part[]> => {
   switch (part.type) {

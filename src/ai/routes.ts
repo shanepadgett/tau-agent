@@ -96,8 +96,11 @@ export type Route = {
    */
   readonly liveList: LiveList | undefined;
   readonly decisions: DecisionApi | undefined;
-  /** The headers that carry the conversation ID, for a provider that needs it. */
-  readonly conversationHeaders: "opencode" | undefined;
+  /**
+   * The headers that carry the conversation ID, for a provider that needs it. OpenAI reads the
+   * prompt cache of a conversation only when its requests carry a `session-id` header.
+   */
+  readonly conversationHeaders: "opencode" | "openai" | undefined;
 };
 
 // Both clients are the providers' own CLI clients, which these subscription logins require.
@@ -194,7 +197,7 @@ export const builtInRoutes: ReadonlyArray<Route> = [
       kind: "openaiDecisions",
       models: [{ id: "gpt-6-luna", name: "Luna", contextTokens: LUNA_INPUT_TOKENS }],
     },
-    conversationHeaders: undefined,
+    conversationHeaders: "openai",
   },
   {
     id: RouteId.make("chatgpt"),
@@ -205,7 +208,7 @@ export const builtInRoutes: ReadonlyArray<Route> = [
     catalogProvider: "openai",
     liveList: "openaiModels",
     decisions: undefined,
-    conversationHeaders: undefined,
+    conversationHeaders: "openai",
   },
   {
     id: RouteId.make("codex"),
@@ -216,7 +219,7 @@ export const builtInRoutes: ReadonlyArray<Route> = [
     catalogProvider: "openai",
     liveList: "codexModels",
     decisions: undefined,
-    conversationHeaders: undefined,
+    conversationHeaders: "openai",
   },
   {
     id: RouteId.make("openrouter"),

@@ -1,0 +1,9 @@
+{
+  "status": 429,
+  "contentType": "application/json",
+  "headers": {
+    "anthropic-ratelimit-unified-status": "rejected",
+    "anthropic-ratelimit-unified-reset": "1791900000"
+  },
+  "body": "{\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"This request would exceed your account's rate limit.\"}}"
+}

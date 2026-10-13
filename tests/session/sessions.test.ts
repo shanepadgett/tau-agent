@@ -90,9 +90,10 @@ describe("sessions", () => {
         ]);
 
         const reader = yield* openSessions(tauDirectory);
-        const prompt = contextView(yield* reader.entries(session.id, 0));
+        const prompt = contextView("Soul.", yield* reader.entries(session.id, 0));
 
         expect(prompt.content.map((message) => message.role)).toEqual([
+          "system",
           "user",
           "assistant",
           "tool",
@@ -227,10 +228,11 @@ describe("sessions", () => {
         ]);
 
         const branch = yield* sessions.fork(parent.id, 2);
-        const prompt = contextView(yield* sessions.entries(branch.id, 0));
-        const [, , tool] = prompt.content;
+        const prompt = contextView("Soul.", yield* sessions.entries(branch.id, 0));
+        const [, , , tool] = prompt.content;
 
         expect(prompt.content.map((message) => message.role)).toEqual([
+          "system",
           "user",
           "assistant",
           "tool",

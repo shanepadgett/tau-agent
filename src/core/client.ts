@@ -23,5 +23,19 @@ export type AgentEvent =
    * back to the user, such as by putting them back in the editor.
    */
   | { readonly type: "prompts-returned"; readonly prompts: readonly string[] }
-  | { readonly type: "run-ended"; readonly reason: "answered" | "turn-limit" | "cancelled" }
+  /**
+   * The model call failed with an error that can pass, such as a rate limit, and Tau calls again
+   * after `seconds`. Text the client got from the failed call is not part of the answer.
+   */
+  | {
+      readonly type: "retrying";
+      readonly attempt: number;
+      readonly seconds: number;
+      readonly message: string;
+    }
+  /** `output-limit`: the reply stopped at the model's output limit, so the answer is cut short. */
+  | {
+      readonly type: "run-ended";
+      readonly reason: "answered" | "turn-limit" | "output-limit" | "cancelled";
+    }
   | { readonly type: "run-ended"; readonly reason: "failed"; readonly error: string };

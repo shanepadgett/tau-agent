@@ -57,9 +57,15 @@ const PathInput = Schema.Struct({ path: Schema.String });
 const WriteInput = Schema.Struct({ path: Schema.String, content: Schema.String });
 const ReplaceInput = Schema.Struct({ path: Schema.String, old: Schema.String, new: Schema.String });
 
+/** Gets the full path of each file a script's file functions touch. */
+export type Touched = (path: string) => Effect.Effect<void>;
+
 /** `read`, `write` and `replace`. Relative paths start at `directory`. */
-export const fileFunctions = (directory: string) => {
-  const at = (path: string) => resolve(directory, path);
+export const fileFunctions = (directory: string, touched: Touched) => {
+  const at = (path: string) => {
+    const full = resolve(directory, path);
+    return touched(full).pipe(Effect.as(full));
+  };
 
   const failed = (path: string) => (error: { readonly message: string }) =>
     toolError(`${path}: ${error.message}`);
@@ -69,20 +75,26 @@ export const fileFunctions = (directory: string) => {
       description: "Reads a text file.",
       input: PathInput,
       output: Schema.String,
-      execute: ({ path }) => readFile(at(path)).pipe(Effect.mapError(failed(path))),
+      execute: ({ path }) => at(path).pipe(Effect.flatMap(readFile), Effect.mapError(failed(path))),
     }),
     write: Tool.make({
       description: "Writes a text file, and makes its folders if they do not exist.",
       input: WriteInput,
       execute: ({ path, content }) =>
-        writeFile(at(path), content).pipe(Effect.mapError(failed(path))),
+        at(path).pipe(
+          Effect.flatMap((full) => writeFile(full, content)),
+          Effect.mapError(failed(path)),
+        ),
     }),
     replace: Tool.make({
       description:
         "Replaces the one place in a file where `old` appears with `new`. Fails if `old` appears zero times or more than once.",
       input: ReplaceInput,
       execute: (input) =>
-        replaceOnce(at(input.path), input).pipe(Effect.mapError(failed(input.path))),
+        at(input.path).pipe(
+          Effect.flatMap((full) => replaceOnce(full, input)),
+          Effect.mapError(failed(input.path)),
+        ),
     }),
   };
 };

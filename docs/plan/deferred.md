@@ -8,7 +8,7 @@ Decisions to make later. Each line is the question and what brings it up. When t
 - Whether a separate raw shell tool beats a shell function inside the sandbox. Comes up once the agent loop runs.
 - OS-level confinement for commands that `run` starts: Seatbelt (`sandbox-exec`) on macOS, Landlock or bubblewrap on Linux, as Codex CLI and Claude Code do, limiting writes to the workspace and network to an allowlist. Could be a replaceable SDK part with the OS sandbox as Tau's default. Comes up at build step 4.
 - Whether Tau runs well inside NVIDIA OpenShell (a container sandbox with a gateway and credential injection) for users who want that containment. OpenShell is not Tau's runtime: it wraps the whole agent, needs a container runtime and a gateway service, and keeps credentials outside the agent. Comes up when a user runs Tau inside it, or at build step 8.
-- Prompt cache mechanics: where each provider takes cache markers, building the compaction request from the same system prompt, functions and history with only the summary instruction appended (OpenCode PRs #25100 and #42506 estimate about 90% savings), and showing the cache hit rate in the sidebar. Comes up at build step 5.
+- Prompt cache mechanics: Claude's third and fourth cache marks and its 1-hour lifetime; OpenAI's explicit cache mode (`prompt_cache_options`, `prompt_cache_breakpoint`, 30 minutes), which Effect's OpenAI provider exposes; where each provider takes cache markers; building the compaction request from the same system prompt, functions and history with only the summary instruction appended (OpenCode PRs #25100 and #42506 estimate about 90% savings), and showing the cache hit rate in the sidebar. Comes up at build step 5.
 - Custom type-aware lint rules. Comes up when TypeScript 7.1 ships its JS API.
 - A versioned source for TypeScript 7 compiler-option docs. Comes up when an agent misconfigures `tsconfig.json` from the README alone, or when the TypeScript website documents 7.x.
 - Whether a generated module map would improve helper discovery. Comes up when reuse-first planning misses an existing helper.
@@ -19,7 +19,6 @@ Decisions to make later. Each line is the question and what brings it up. When t
 - The exact 49/50-token duplicate thresholds. Comes up when a duplicate report looks wrong near the threshold.
 - Whether development hooks rerun checks after a live session's files change. Comes up when a hook misses a change in a live session.
 - The Codex `session_id` header and priority tier. Comes up at build step 4, when the agent loop calls models with the session ID.
-- ChatGPT plan usage-limit errors, with a link to the usage settings. Comes up at build step 4, when the agent loop handles errors.
 - Refreshing OAuth tokens in the background before a request needs them. Comes up if a refresh noticeably delays a request.
 - A live token refresh on the `chatgpt` route through Tau's code (offline tests cover it). Comes up at the next live check.
 - Whether Tau reloads `~/.tau/settings.json` when it changes, or only on start. Comes up at build step 7, with extension hot reload.

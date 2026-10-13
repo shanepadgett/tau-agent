@@ -9,6 +9,7 @@ import { Models } from "../ai/Models.ts";
 import type { SessionId } from "../session/Entry.ts";
 import { type SessionNotFound, Sessions, type SessionStoreError } from "../session/Sessions.ts";
 import { makeRunner, type OpenSession, type RunServices } from "./internal/runner/runner.ts";
+import { UserInstructions } from "./UserInstructions.ts";
 
 export type { OpenSession } from "./internal/runner/runner.ts";
 
@@ -33,6 +34,7 @@ export class Agent extends Context.Service<
         models: yield* Models,
         fileSystem: yield* FileSystem.FileSystem,
         spawner: yield* ChildProcessSpawner.ChildProcessSpawner,
+        userInstructions: (yield* UserInstructions).files,
       };
 
       const runners = yield* RcMap.make({ lookup: (id: SessionId) => makeRunner(services, id) });

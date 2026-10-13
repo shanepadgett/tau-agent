@@ -8,12 +8,13 @@ import {
   Exit,
   FileSystem,
   Layer,
+  Option,
   Redacted,
   Schema,
   Stream,
   type Scope,
 } from "effect";
-import { Decision, DecisionModel, LanguageModel, Prompt, Tool, Toolkit } from "effect/ai";
+import { AiError, Decision, DecisionModel, LanguageModel, Prompt, Tool, Toolkit } from "effect/ai";
 import { Base64Url } from "effect/encoding";
 import { FetchHttpClient } from "effect/http";
 import {
@@ -27,6 +28,7 @@ import {
 import { Catalog } from "../../src/ai/Catalog.ts";
 import snapshot from "../../src/ai/catalog-snapshot.json" with { type: "json" };
 import { Models } from "../../src/ai/Models.ts";
+import { planLimitOf } from "../../src/ai/PlanLimit.ts";
 import { ConversationId } from "../../src/ai/ConversationId.ts";
 import { RouteId, RouteTable } from "../../src/ai/Routes.ts";
 import packageJson from "../../package.json" with { type: "json" };
@@ -43,6 +45,7 @@ const Recording = Schema.Struct({
   status: Schema.Number,
   contentType: Schema.String,
   body: Schema.String,
+  headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   expected: Schema.optional(Schema.Json),
 });
 
@@ -78,7 +81,7 @@ const replayServer = (...names: [string, ...string[]]) =>
 
             return new Response(recording.body, {
               status: recording.status,
-              headers: { "content-type": recording.contentType },
+              headers: { ...recording.headers, "content-type": recording.contentType },
             });
           },
         }),
@@ -400,6 +403,59 @@ describe("models", () => {
         ).not.toThrow();
       }),
     ));
+
+  test.each([
+    { chat: { route: "openai", model: "gpt-6-luna" }, recording: "openai-object" },
+    { chat: codex, recording: "codex-object" },
+    { chat: { route: "chatgpt", model: "gpt-6.1-sol" }, recording: "codex-object" },
+  ])(
+    "$chat.route requests carry the conversation ID as the prompt cache key and session ID",
+    (expected) =>
+      run(
+        Effect.gen(function* () {
+          const server = yield* replayServer(expected.recording);
+          yield* generateReview(server.url, expected.chat, "Review it.");
+
+          const CacheKeyBody = Schema.fromJsonString(
+            Schema.Struct({ prompt_cache_key: Schema.Literal(conversation) }),
+          );
+
+          expect(() =>
+            Schema.decodeUnknownSync(CacheKeyBody)(server.received[0]?.body),
+          ).not.toThrow();
+
+          expect(server.received[0]?.headers.get("session-id")).toBe(conversation);
+        }),
+      ),
+  );
+
+  test.each([
+    { name: "ChatGPT usage limit", chat: codex, recording: "codex-usage-limit", plan: "ChatGPT" },
+    {
+      name: "Claude usage limit",
+      chat: { route: "anthropic", model: "claude-sonnet-5-5" },
+      recording: "anthropic-usage-limit",
+      plan: "Claude",
+    },
+    { name: "ChatGPT rate limit", chat: codex, recording: "codex-rate-limit", plan: undefined },
+  ])("a 429 reply: $name", (expected) =>
+    run(
+      Effect.gen(function* () {
+        const server = yield* replayServer(expected.recording);
+        const error = yield* Effect.flip(generateReview(server.url, expected.chat, "Review it."));
+        const limit = AiError.isAiError(error) ? planLimitOf(error) : Option.none();
+
+        expect(server.received).toHaveLength(1);
+        expect(Option.getOrUndefined(limit)?.plan.name).toBe(expected.plan);
+
+        if (Option.isSome(limit)) {
+          expect(Option.map(limit.value.resetAt, DateTime.toEpochMillis)).toEqual(
+            Option.some(1_791_900_000_000),
+          );
+        }
+      }),
+    ),
+  );
 
   test("Claude subscription requests start the system prompt with the Claude Code identity", () =>
     run(

@@ -1,6 +1,6 @@
 /** Runs the tool calls of the latest reply, one at a time, saving each as started before it runs. */
 
-import { Effect, Option } from "effect";
+import { Effect, Option, Ref } from "effect";
 import { runCall } from "../run-tool/run-tool.ts";
 import { CONTINUE, type Operation, type RunContext } from "./run-context.ts";
 import { failedResult, openCalls, summary, type ToolCall } from "./tool-history.ts";
@@ -26,9 +26,15 @@ const runToolCall = <R>(run: RunContext<R>, call: ToolCall) => {
     yield* run.sessions.append(run.session, [{ type: "tool-started", callId: call.id }]);
     yield* run.emit({ type: "tool-started", callId: call.id, summary: summary(call) });
 
+    const touched = yield* Ref.make<ReadonlySet<string>>(new Set());
+
+    const functions = run.functions((path) =>
+      Ref.update(touched, (paths) => new Set(paths).add(path)),
+    );
+
     const scriptResult =
       call.name === "run"
-        ? yield* runCall(call.params, run.functions, run.timeouts)
+        ? yield* runCall(call.params, functions, run.timeouts)
         : { text: `There is no tool named ${call.name}. The only tool is run.`, isFailure: true };
 
     yield* run.sessions.append(run.session, [
@@ -38,6 +44,7 @@ const runToolCall = <R>(run: RunContext<R>, call: ToolCall) => {
         name: call.name,
         result: scriptResult.text,
         isFailure: scriptResult.isFailure,
+        files: [...(yield* Ref.get(touched))],
       },
     ]);
 

@@ -1,6 +1,6 @@
 # Slice 4b: instructions and errors
 
-Status: agreed 2026-10-13. Build step 4's slices are in [agent-loop.md](agent-loop.md). File paths predate the module layout in [architecture.md](../architecture.md#package-layout); when building, put each file in that layout (for example `src/core/internal/loop/` for operations, `src/core/Client.ts` for events).
+Status: archived. Built and confirmed live 2026-10-13; its lasting decisions are in [architecture.md](../architecture.md#core-ideas) (Agent loop as built), and the step 5 cache work is in [deferred.md](../deferred.md).
 
 After 4b, the model knows the date, where it runs and what the project's `AGENTS.md` files say, and it learns about changes to them without the cached part of the request changing. A rate limit or a dropped connection no longer ends a run: Tau waits and tries again. When a ChatGPT or Claude plan runs out, Tau says so, says when it resets and links to the usage page, and does not retry.
 
@@ -30,6 +30,8 @@ Two changes to the step and one to the `ai` layer. No new layer.
 | Model call | Retries, plan limits, output limit | `src/core/operations.ts` |
 | Plan usage limits | Recognized in `ai`, turned into Effect's `QuotaExhaustedError`, which is never retried | `src/ai/plan-limits.ts` |
 | Claude cache marks | The system prompt and the last message carry a cache mark | `src/session/context-view.ts` |
+| Cache key | The session ID goes as `prompt_cache_key` on the `openai` and `codex` routes | `src/ai/Models.ts` |
+| Cache token counts | Each saved reply keeps the cache read and write token counts | `src/session/Entry.ts` |
 | Failure text | Names the plan, the reset time and the usage page | `src/core/failure-text.ts`, used by `runEnded` in `agent.ts` |
 
 ## Instructions as value deltas
@@ -83,9 +85,21 @@ context view:
 
 The system prompt is then fixed for the whole session until compaction, so the provider's cache keeps working when `AGENTS.md`, the date or the files change.
 
-## Claude cache marks
+## Caching
 
-Claude caches only up to the parts a request marks; OpenAI caches without marks. The context view marks the end of the system prompt and the last message with `cacheControl: { type: "ephemeral" }`, under both the `anthropic` and `openrouter` option keys that Effect's providers read (`@effect/ai-anthropic` `getCacheControl`; `@effect/ai-openrouter`). Other providers ignore those keys. Claude allows four marks; the third and fourth (Grok Build marks the user message before the previous reply) wait for step 5, with the rest of the cache work.
+Each provider caches the longest prefix it has seen before, so every request must repeat the earlier one byte for byte up to its new part: tools, system prompt, then messages. Fixed instructions (above) keep the system prompt the same; a test checks the whole prefix. Changing the model or thinking settings between prompts starts a new cache, which is expected.
+
+| Route | How it caches | Tau sends |
+| --- | --- | --- |
+| `anthropic`, OpenRouter Claude and Gemini, OpenCode Go Messages models | Only up to marked points; 5 minutes | Two marks (below) |
+| `openai`, `chatgpt`, `codex` | Automatic over about 1,024 tokens, but only with a `session-id` header (spike 13) | The session ID as `prompt_cache_key` and as the `session-id` header, as Codex and Pi do |
+| Other OpenRouter and OpenCode Go models | Automatic | Nothing more; OpenCode Go already gets `x-opencode-session` |
+
+**Marks.** Claude caches only up to the parts a request marks. The context view marks the end of the system prompt and the last message with `cacheControl: { type: "ephemeral" }`, under both the `anthropic` and `openrouter` option keys that Effect's providers read (`@effect/ai-anthropic` `getCacheControl`; `@effect/ai-openrouter`). Other providers ignore those keys. Claude allows four marks; the third and fourth (Grok Build marks the user message before the previous reply) wait for step 5, with the rest of the cache work.
+
+**Token counts.** The assistant entry saves `cacheReadTokens` and `cacheWriteTokens` from the reply's usage (Effect's `Usage` `inputTokens` details), so a session shows whether caching works. The cache warning and the cold-cache compaction question ([features.md](../features.md#interface)) read them later.
+
+Later, in step 5: Claude's third and fourth marks, the 1-hour lifetime, and OpenAI's explicit cache mode (breakpoints, 30 minutes), which Effect's OpenAI provider exposes; its docs are not checked yet.
 
 ## Errors
 
@@ -123,6 +137,7 @@ src/session/entry.ts        + InstructionsEntry; tool results + files
 src/sandbox/sandbox.ts      file functions report the paths they touch
 src/session/context-view.ts system prompt from the newest "system" entry; notes as user messages; cache marks
 src/ai/plan-limits.ts       429 on a plan route → QuotaExhaustedError with resetAt
+src/ai/Models.ts            + prompt_cache_key from the conversation ID on openai and codex
 src/ai/routes.ts            + usage page on the claudeSubscription, codexLogin and chatgptApp logins
 src/cli/print.ts            stderr lines for "retrying" and "output-limit"
 ```
@@ -131,6 +146,8 @@ Replaced: `Prompt.setSystem(contextView(entries), BASE_PROMPT)` in `operations.t
 
 ## Tests
 
-- **Agent loop** (`tests/agent-loop.test.ts`, scripted model, real files): the first model call has `AGENTS.md` and the date in the system prompt; editing `AGENTS.md` mid-run adds one note and leaves the system prompt the same; reading a file under a folder with its own `AGENTS.md` adds that file as a note once; creating a file adds a `Files added` note; a scripted rate limit is retried and the run answers; five failures end the run as failed; a `length` finish ends as `output-limit`; the system prompt and last message of each request carry a cache mark. Retry waits use `TestClock`, so no test sleeps.
+- **Agent loop** (`tests/agent-loop.test.ts`, scripted model, real files): the first model call has `AGENTS.md` and the date in the system prompt; editing `AGENTS.md` mid-run adds one note and leaves the system prompt the same; reading a file under a folder with its own `AGENTS.md` adds that file as a note once; creating a file adds a `Files added` note; a scripted rate limit is retried and the run answers; five failures end the run as failed; a `length` finish ends as `output-limit`; the system prompt and last message of each request carry a cache mark; each request repeats the previous request's tools, system prompt and messages unchanged; a reply's cache token counts are saved. Retry waits use `TestClock`, so no test sleeps.
 - **Plan limits** (`tests/models.test.ts`, replay server): a ChatGPT 429 becomes the plan message and is sent once. The 429 recording is written from Codex's documented body until a live one is captured.
+- **Cache key** (`tests/models.test.ts`, replay server): `openai`, `chatgpt` and `codex` requests carry the conversation ID as `prompt_cache_key` and as the `session-id` header.
+- **Live check**: the second Claude request and the second ChatGPT request in a session read from the cache.
 - **Recognizer**: a table test of the pure function that reads a 429.
