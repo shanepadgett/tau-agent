@@ -5,7 +5,8 @@
 
 import { resolve } from "node:path";
 import { CodeMode, type Namespace, Tool, toolError } from "@opencode/codemode";
-import { Duration, Effect, FileSystem, Predicate, Schema } from "effect";
+import { Duration, Effect, FileSystem, Predicate, Result, Schema } from "effect";
+import type { WriteQueue } from "./WriteQueue.ts";
 
 /** Logs and the final value are cut to this many bytes, keeping the start. */
 const MAX_OUTPUT_BYTES = 50_000;
@@ -56,13 +57,18 @@ const renderValue = (value: Schema.Json) =>
 
 const PathInput = Schema.Struct({ path: Schema.String });
 const WriteInput = Schema.Struct({ path: Schema.String, content: Schema.String });
-const ReplaceInput = Schema.Struct({ path: Schema.String, old: Schema.String, new: Schema.String });
+/** A change to text: the one place where `old` appears becomes `new`. */
+export const Edit = Schema.Struct({ old: Schema.String, new: Schema.String });
+const ReplaceInput = Schema.Struct({ path: Schema.String, ...Edit.fields });
 
 /** Gets the full path of each file a script's file functions touch. */
 export type Touched = (path: string) => Effect.Effect<void>;
 
-/** `read`, `write` and `replace`. Relative paths start at `directory`. */
-export const fileFunctions = (directory: string, touched: Touched) => {
+/**
+ * `read`, `write` and `replace`. Relative paths start at `directory`. Writes to one file wait in
+ * `queue`, so a `replace` never writes over another write it did not read.
+ */
+export const fileFunctions = (directory: string, touched: Touched, queue: WriteQueue) => {
   const at = (path: string) => {
     const full = resolve(directory, path);
     return touched(full).pipe(Effect.as(full));
@@ -83,7 +89,7 @@ export const fileFunctions = (directory: string, touched: Touched) => {
       input: WriteInput,
       execute: ({ path, content }) =>
         at(path).pipe(
-          Effect.flatMap((full) => writeFile(full, content)),
+          Effect.flatMap((full) => queue.withFile(full, writeFile(full, content))),
           Effect.mapError(failed(path)),
         ),
     }),
@@ -93,14 +99,14 @@ export const fileFunctions = (directory: string, touched: Touched) => {
       input: ReplaceInput,
       execute: (input) =>
         at(input.path).pipe(
-          Effect.flatMap((full) => replaceOnce(full, input)),
+          Effect.flatMap((full) => queue.withFile(full, replaceOnce(full, input))),
           Effect.mapError(failed(input.path)),
         ),
     }),
   };
 };
 
-/** `replace` changes only text that appears once, so it never edits the wrong place. */
+/** An edit changes only text that appears once, so it never changes the wrong place. */
 class TextNotUnique extends Schema.TaggedError<TextNotUnique>()("TextNotUnique", {
   count: Schema.Int,
 }) {
@@ -120,18 +126,20 @@ const writeFile = Effect.fn("writeFile")(function* (path: string, content: strin
   yield* fileSystem.writeFileString(path, content);
 });
 
-const replaceOnce = Effect.fn("replaceOnce")(function* (
-  path: string,
-  edit: typeof ReplaceInput.Type,
-) {
+/** Applies `edit` to `text`, or fails when its `old` text does not appear exactly once. */
+export const replaceUnique = (
+  text: string,
+  edit: typeof Edit.Type,
+): Result.Result<string, TextNotUnique> => {
+  const count = text.split(edit.old).length - 1;
+  if (count !== 1) return Result.fail(new TextNotUnique({ count }));
+
+  return Result.succeed(text.replace(edit.old, () => edit.new));
+};
+
+const replaceOnce = Effect.fn("replaceOnce")(function* (path: string, edit: typeof Edit.Type) {
   const fileSystem = yield* FileSystem.FileSystem;
   const text = yield* fileSystem.readFileString(path);
-  const count = text.split(edit.old).length - 1;
-
-  if (count !== 1) return yield* new TextNotUnique({ count });
-
-  yield* fileSystem.writeFileString(
-    path,
-    text.replace(edit.old, () => edit.new),
-  );
+  const changed = yield* Effect.fromResult(replaceUnique(text, edit));
+  yield* fileSystem.writeFileString(path, changed);
 });

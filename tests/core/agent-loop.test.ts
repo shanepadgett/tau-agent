@@ -396,6 +396,27 @@ describe("agent loop", () => {
       }).pipe(Effect.provide(TestClock.layer())),
     ));
 
+  test("an empty reply is tried again instead of ending the run", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([
+          runReply("call-1", 'console.log("hi")'),
+          finish(0, 0),
+          textReply("Answer."),
+        ]);
+
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const events = yield* promptWithRetries(opened, "Answer.");
+
+        expect(retries(events).map(({ message }) => message)).toEqual([
+          expect.stringContaining("empty reply"),
+        ]);
+
+        expect(runEnd(events)).toEqual({ type: "run-ended", reason: "answered" });
+        expect(harness.prompts).toHaveLength(3);
+      }).pipe(Effect.provide(TestClock.layer())),
+    ));
+
   test("after four retries the run fails", () =>
     withHarness((harness) =>
       Effect.gen(function* () {

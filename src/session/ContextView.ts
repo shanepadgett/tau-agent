@@ -3,6 +3,7 @@
  * entries into Effect's prompt types.
  */
 
+import { Predicate } from "effect";
 import { Prompt } from "effect/ai";
 import type { Entry, EntryBody } from "./Entry.ts";
 
@@ -10,6 +11,7 @@ type AssistantEntry = Extract<EntryBody, { type: "assistant" }>;
 type AssistantPart = AssistantEntry["parts"][number];
 type ToolCall = Extract<AssistantPart, { type: "tool-call" }>;
 type ToolResult = Extract<EntryBody, { type: "tool-result" }>;
+type SavedResult = { readonly number: number; readonly body: ToolResult };
 
 /**
  * Claude caches a request only up to the parts it marks. The mark on the system prompt keeps the
@@ -31,14 +33,14 @@ const MISSING_RESULT = "The call ended before it returned a result.";
  * the tool history while it converts, because the protocols refuse a call without a
  * result: each call gets its result right after the reply that made it, a call without a saved
  * result (a cancel, a crash, a branch cut) gets an error result, and a result without a call is
- * left out. Interrupted replies are left out too.
+ * left out. Interrupted replies are left out too. A failed script's result ends with its script ID.
  */
 export const contextView = (soul: string, entries: readonly Entry[]): Prompt.Prompt => {
-  const savedResults = new Map<string, ToolResult>();
+  const savedResults = new Map<string, SavedResult>();
 
-  for (const { body } of entries) {
+  for (const { number, body } of entries) {
     if (body.type === "tool-result" && !savedResults.has(body.callId))
-      savedResults.set(body.callId, body);
+      savedResults.set(body.callId, { number, body });
   }
 
   const messages: Prompt.Message[] = [];
@@ -86,7 +88,7 @@ const withCacheMark = (message: Prompt.Message): Prompt.Message => {
   }
 };
 
-const replyMessages = (reply: AssistantEntry, savedResults: ReadonlyMap<string, ToolResult>) => {
+const replyMessages = (reply: AssistantEntry, savedResults: ReadonlyMap<string, SavedResult>) => {
   const assistant = Prompt.assistantMessage({ content: reply.parts.map(assistantPart) });
   const calls = reply.parts.filter((part): part is ToolCall => part.type === "tool-call");
   if (calls.length === 0) return [assistant];
@@ -112,11 +114,22 @@ const assistantPart = (part: AssistantPart) => {
   }
 };
 
-const toolResultPart = (call: ToolCall, saved: ToolResult | undefined) =>
+const toolResultPart = (call: ToolCall, saved: SavedResult | undefined) =>
   Prompt.toolResultPart({
     id: call.id,
     name: call.name,
-    result: saved?.result ?? MISSING_RESULT,
-    isFailure: saved?.isFailure ?? true,
+    result: saved === undefined ? MISSING_RESULT : modelResult(saved),
+    isFailure: saved?.body.isFailure ?? true,
     providerExecuted: false,
   });
+
+/**
+ * The script ID is the number of the result's entry, so the model can fix the script with edits.
+ * It is added here and not saved, because an entry gets its number only when it is saved.
+ */
+const modelResult = ({ number, body }: SavedResult) => {
+  const isFailedScript =
+    body.isFailure && body.script !== undefined && Predicate.isString(body.result);
+
+  return isFailedScript ? `${String(body.result)}\n\nScript ID: ${number}` : body.result;
+};

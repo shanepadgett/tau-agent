@@ -18,6 +18,7 @@ import {
 import { ChildProcessSpawner } from "effect/process";
 import { ConversationId } from "../../../ai/ConversationId.ts";
 import type { Models } from "../../../ai/Models.ts";
+import type { WriteQueue } from "../../../sandbox/WriteQueue.ts";
 import type { SessionId } from "../../../session/Entry.ts";
 import type { Session, Sessions } from "../../../session/Sessions.ts";
 import type { SkillUses } from "../../../session/SkillUses.ts";
@@ -42,6 +43,8 @@ export type RunServices = {
   readonly spawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
   readonly userInstructions: UserInstructions["Service"];
   readonly skillUses: SkillUses["Service"];
+  /** Shared by every session of the process, so their writes to one file wait for each other. */
+  readonly writeQueue: WriteQueue;
 };
 
 /** A session opened for runs. */
@@ -117,7 +120,7 @@ const runPrompt = (
       languageModel: yield* models.languageModel(model, ConversationId.make(session.id)),
       sessions,
       functions: (touched) => ({
-        ...scriptFunctions(session.directory, timeouts, touched),
+        ...scriptFunctions(session.directory, timeouts, touched, services.writeQueue),
         [SKILLS_GROUP]: skillFunctions(skills.skills, touched, used),
       }),
       updateInstructions: (entries) =>

@@ -1,6 +1,6 @@
 /** Reads the tool calls of a session from its entries: which calls started, which have results. */
 
-import { Predicate } from "effect";
+import { Option, Predicate } from "effect";
 import type { Entry, EntryBody } from "../../../session/Entry.ts";
 
 type AssistantPart = Extract<EntryBody, { type: "assistant" }>["parts"][number];
@@ -53,8 +53,23 @@ export const failedResult = (call: ToolCall, text: string): EntryBody => ({
   isFailure: true,
 });
 
-/** The first line of the script, so a client can show what is running. */
+/** The script a `run` result with entry number `scriptId` ran, if that result exists. */
+export const findScript = (entries: readonly Entry[], scriptId: number) => {
+  const body = entries.find((entry) => entry.number === scriptId)?.body;
+  if (body?.type !== "tool-result" || body.name !== "run") return Option.none<string>();
+
+  return Option.fromUndefinedOr(body.script);
+};
+
+/** The first line of the script, or the script it edits, so a client can show what is running. */
 export const summary = (call: ToolCall) => {
-  const code = Predicate.hasProperty(call.params, "code") ? call.params.code : undefined;
-  return Predicate.isString(code) ? (code.trim().split("\n")[0] ?? "") : call.name;
+  const { params } = call;
+
+  if (Predicate.hasProperty(params, "code") && Predicate.isString(params.code))
+    return params.code.trim().split("\n")[0] ?? "";
+
+  if (Predicate.hasProperty(params, "scriptId") && Predicate.isNumber(params.scriptId))
+    return `Edits to script ${params.scriptId}`;
+
+  return call.name;
 };

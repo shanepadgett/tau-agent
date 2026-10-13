@@ -1,6 +1,6 @@
 # Build step 4: the agent loop
 
-Status: round 1 (architecture) agreed, 2026-10-13. Slices 4a and 4b are built and confirmed live; their decisions are in [architecture.md](../architecture.md#core-ideas). Instruction files and skills are built ([archive](../archive/instruction-files-and-skills.md)). Next: slice 4c.
+Status: round 1 (architecture) agreed, 2026-10-13. Slices 4a and 4b are built and confirmed live; their decisions are in [architecture.md](../architecture.md#core-ideas). Instruction files and skills are built ([archive](../archive/instruction-files-and-skills.md)). Slice 4c is built and checked live ([archive](../archive/agent-loop-4c.md)). Next: slice 4d ([agent-loop-4d.md](agent-loop-4d.md)).
 
 After step 4, `tau -p "fix the failing test"` works from a terminal: Tau sends the prompt to a model, runs the model's `run` scripts in the working directory, saves every entry to the session, and prints the answer. The TUI (step 6) later drives the same core.
 
@@ -31,15 +31,16 @@ flowchart LR
 - **The `sandbox` layer** is new: `@opencode/codemode` plus Tau's functions, made with `Tool.make`. `core` decides which functions a script sees.
 - **The runner** is a fiber that takes commands from a queue, so a session has one writer.
 
-## Decision 1 (agreed): build step 4 in three slices
+## Decision 1 (agreed): build step 4 in slices
 
 | Slice | Delivers |
 | --- | --- |
 | **4a: a working agent** | print mode; the loop (call the model, run its tool calls, an optional turn limit, off by default); `run` with `sh`, `read`, `write` and `replace`; Soul rewritten as the base prompt; Ctrl-C cancels cleanly; continue a session by ID; three safety rules from [loop-research.md](../loop-research.md#changes-for-slice-4a-agreed): a tool call is recorded as started before it runs, the context view repairs tool history, an interrupted reply's text is kept |
 | **4b: instructions and errors** | instruction sources as value deltas (`AGENTS.md`, date, environment); retries on rate limits and network errors; plan usage-limit messages |
-| **4c: script tools** | edit a failed script by ID; queue writes to one file; the `checks` tool and change detection (the `workspace` layer) |
+| **4c: script tools** | edit a failed script by ID; queue writes to one file |
+| **4d: checks** | the `checks` tool and change detection (the `workspace` layer); a limit on repeated failing calls |
 
-Each slice ends with checks and one live run. A slice is planned in its own code round.
+Slice 4c's architecture round split the third slice in two. Each slice ends with checks and one live run. A slice is planned in its own code round.
 
 ## Decision 2 (agreed): print mode
 

@@ -6,6 +6,7 @@
 import { Context, Effect, FileSystem, Layer, Option, RcMap, type Scope } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { Models } from "../ai/Models.ts";
+import { makeWriteQueue } from "../sandbox/WriteQueue.ts";
 import type { SessionId } from "../session/Entry.ts";
 import { type SessionNotFound, Sessions, type SessionStoreError } from "../session/Sessions.ts";
 import { SkillUses } from "../session/SkillUses.ts";
@@ -37,6 +38,7 @@ export class Agent extends Context.Service<
         spawner: yield* ChildProcessSpawner.ChildProcessSpawner,
         userInstructions: yield* UserInstructions,
         skillUses: yield* SkillUses,
+        writeQueue: yield* makeWriteQueue,
       };
 
       const runners = yield* RcMap.make({ lookup: (id: SessionId) => makeRunner(services, id) });

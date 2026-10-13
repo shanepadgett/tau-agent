@@ -72,7 +72,8 @@ const ToolStartedEntry = Schema.Struct({
 
 /**
  * `files` are the paths the script's file functions touched. Tau loads the agent instruction files
- * above them. A result Tau made itself, such as for a cancelled call, has none.
+ * above them. A result Tau made itself, such as for a cancelled call, has none. `script` is the
+ * code a `run` call ran, after any edits, so a later call can edit it again.
  */
 const ToolResultEntry = Schema.Struct({
   type: Schema.Literal("tool-result"),
@@ -81,6 +82,7 @@ const ToolResultEntry = Schema.Struct({
   result: Schema.Json,
   isFailure: Schema.Boolean,
   files: Schema.optional(Schema.Array(Schema.String)),
+  script: Schema.optional(Schema.String),
 });
 
 /**

@@ -1,7 +1,8 @@
 /** Runs the tool calls of the latest reply, one at a time, saving each as started before it runs. */
 
 import { Effect, Option, Ref } from "effect";
-import { runCall } from "../run-tool/run-tool.ts";
+import type { Entry } from "../../../session/Entry.ts";
+import { runCall, type RunResult } from "../run-tool/run-tool.ts";
 import { CONTINUE, type Operation, type RunContext } from "./run-context.ts";
 import { failedResult, openCalls, summary, type ToolCall } from "./tool-history.ts";
 
@@ -13,15 +14,15 @@ export const runToolCalls =
     const calls = openCalls(entries);
     if (calls.length === 0) return Option.none();
 
-    const runAll = Effect.forEach(calls, (call) => runToolCall(run, call));
+    const runAll = Effect.forEach(calls, (call) => runToolCall(run, call, entries));
     return Option.some(runAll.pipe(Effect.as(CONTINUE)));
   };
 
 /**
  * Saves the call as started, runs it and saves its result. A cancel at any point after the start
- * gives the call a result that says so.
+ * gives the call a result that says so. `entries` hold the scripts a call can edit.
  */
-const runToolCall = <R>(run: RunContext<R>, call: ToolCall) => {
+const runToolCall = <R>(run: RunContext<R>, call: ToolCall, entries: readonly Entry[]) => {
   const execute = Effect.gen(function* () {
     yield* run.sessions.append(run.session, [{ type: "tool-started", callId: call.id }]);
     yield* run.emit({ type: "tool-started", callId: call.id, summary: summary(call) });
@@ -32,10 +33,14 @@ const runToolCall = <R>(run: RunContext<R>, call: ToolCall) => {
       Ref.update(touched, (paths) => new Set(paths).add(path)),
     );
 
-    const scriptResult =
+    const scriptResult: RunResult =
       call.name === "run"
-        ? yield* runCall(call.params, functions, run.timeouts)
-        : { text: `There is no tool named ${call.name}. The only tool is run.`, isFailure: true };
+        ? yield* runCall(call.params, entries, functions, run.timeouts)
+        : {
+            text: `There is no tool named ${call.name}. The only tool is run.`,
+            isFailure: true,
+            script: undefined,
+          };
 
     yield* run.sessions.append(run.session, [
       {
@@ -45,6 +50,7 @@ const runToolCall = <R>(run: RunContext<R>, call: ToolCall) => {
         result: scriptResult.text,
         isFailure: scriptResult.isFailure,
         files: [...(yield* Ref.get(touched))],
+        script: scriptResult.script,
       },
     ]);
 

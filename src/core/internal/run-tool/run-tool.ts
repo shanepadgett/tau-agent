@@ -4,27 +4,41 @@
  */
 
 import { searchSignature, Tool as ScriptFunction, toolError } from "@opencode/codemode";
-import { Duration, Effect, Schema } from "effect";
+import { Duration, Effect, Option, Result, Schema } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 import { runCommand } from "../../../proc/Command.ts";
 import {
   describeFunctions,
+  Edit,
   fileFunctions,
   type Functions,
+  replaceUnique,
   runScript,
   type ScriptResult,
   type Touched,
 } from "../../../sandbox/Sandbox.ts";
+import type { WriteQueue } from "../../../sandbox/WriteQueue.ts";
+import type { Entry } from "../../../session/Entry.ts";
+import { findScript } from "../loop/tool-history.ts";
 import { SKILLS_GROUP } from "../skills/skills.ts";
 
 export type Timeouts = { readonly run: Duration.Duration; readonly shell: Duration.Duration };
 
 const Seconds = Schema.Finite.check(Schema.isGreaterThan(0));
 
+/**
+ * A call sends `code`, or `scriptId` and `edits` to fix an earlier script. They are optional fields
+ * of one object, not a union, because providers require the root of a tool's schema to be an object.
+ */
 const RunParameters = Schema.Struct({
-  code: Schema.String,
+  code: Schema.optional(Schema.String),
+  scriptId: Schema.optional(Schema.Int),
+  edits: Schema.optional(Schema.NonEmptyArray(Edit)),
   timeoutSeconds: Schema.optional(Seconds),
 });
+
+/** `script` is the code that ran; a call that ran nothing has none. */
+export type RunResult = ScriptResult & { readonly script: string | undefined };
 
 const ShellInput = Schema.Struct({
   command: Schema.String,
@@ -48,18 +62,32 @@ const sh = (directory: string, timeout: Duration.Duration) =>
   });
 
 /** The functions a `run` script can call, working in `directory`. Skills are added beside them. */
-export const scriptFunctions = (directory: string, timeouts: Timeouts, touched: Touched) => ({
+export const scriptFunctions = (
+  directory: string,
+  timeouts: Timeouts,
+  touched: Touched,
+  queue: WriteQueue,
+) => ({
   sh: sh(directory, timeouts.shell),
-  ...fileFunctions(directory, touched),
+  ...fileFunctions(directory, touched, queue),
 });
+
+/**
+ * Effect checks a tool's parameters while it reads the reply, and a call that fails that check ends
+ * the run. So the tool gives Effect only the JSON schema, and `runCall` checks the parameters,
+ * where a wrong call becomes a failed result the model can fix. Strict mode is off because OpenAI's
+ * strict schemas make every optional field required, and models then fill in fields they should
+ * leave out.
+ */
+const RUN_PARAMETERS_JSON_SCHEMA = Tool.getJsonSchemaFromSchema(RunParameters);
 
 export const runToolkit = <R>(functions: Functions<R>, timeouts: Timeouts) =>
   Toolkit.make(
-    Tool.make("run", {
+    Tool.dynamic("run", {
       description: runDescription(describeFunctions(withoutSkills(functions)), timeouts),
-      parameters: RunParameters,
+      parameters: RUN_PARAMETERS_JSON_SCHEMA,
       success: Schema.String,
-    }),
+    }).annotate(Tool.Strict, false),
   );
 
 /**
@@ -80,18 +108,79 @@ const runDescription = (functions: readonly string[], timeouts: Timeouts) =>
     "",
     "Only what the program prints with console.log and the value it returns come back. A function that fails throws.",
     `The whole program stops after timeoutSeconds, default ${Duration.toSeconds(timeouts.run)}. This always wins over a shell command's own timeout.`,
+    "",
+    "When a program fails, its result ends with a Script ID. To fix it, send scriptId and edits instead of code. Each edit changes the one place in that program where `old` appears to `new`, in order. If an `old` appears zero times or more than once, nothing runs.",
   ].join("\n");
 
-/** Runs one `run` call. Parameters the model got wrong come back as a failed result. */
-export const runCall = <R>(params: Schema.Json, functions: Functions<R>, timeouts: Timeouts) =>
-  Schema.decodeUnknownEffect(RunParameters)(params).pipe(
-    Effect.matchEffect({
-      onFailure: (error): Effect.Effect<ScriptResult, never, R> =>
-        Effect.succeed({ text: `The run parameters are wrong: ${error.message}`, isFailure: true }),
-      onSuccess: (input) =>
-        runScript(input.code, functions, secondsOr(input.timeoutSeconds, timeouts.run)),
-    }),
+/**
+ * Runs one `run` call: its code, or an earlier script with edits. Parameters the model got wrong
+ * and edits that do not apply come back as a failed result.
+ */
+export const runCall = <R>(
+  params: Schema.Json,
+  entries: readonly Entry[],
+  functions: Functions<R>,
+  timeouts: Timeouts,
+): Effect.Effect<RunResult, never, R> => {
+  const parsed = Schema.decodeUnknownResult(RunParameters)(params).pipe(
+    Result.mapError((error) => `The run parameters are wrong: ${error.message}`),
+    Result.flatMap((input) =>
+      scriptToRun(input, entries).pipe(
+        Result.map((script) => ({ script, timeoutSeconds: input.timeoutSeconds })),
+      ),
+    ),
   );
+
+  if (Result.isFailure(parsed))
+    return Effect.succeed({ text: parsed.failure, isFailure: true, script: undefined });
+
+  const { script, timeoutSeconds } = parsed.success;
+
+  return runScript(script, functions, secondsOr(timeoutSeconds, timeouts.run)).pipe(
+    Effect.map((ran) => ({ ...ran, script })),
+  );
+};
+
+const scriptToRun = (
+  input: typeof RunParameters.Type,
+  entries: readonly Entry[],
+): Result.Result<string, string> => {
+  const { code, scriptId, edits } = input;
+  const sendsCodeOnly = code !== undefined && scriptId === undefined && edits === undefined;
+  if (sendsCodeOnly) return Result.succeed(code);
+
+  const sendsEditsOnly = code === undefined && scriptId !== undefined && edits !== undefined;
+  if (sendsEditsOnly) return editedScript(entries, scriptId, edits);
+
+  return Result.fail("Send code, or scriptId and edits, not both.");
+};
+
+/** All edits apply, or none do: a failed edit leaves the earlier script as it was. */
+const editedScript = (
+  entries: readonly Entry[],
+  scriptId: number,
+  edits: readonly (typeof Edit.Type)[],
+): Result.Result<string, string> => {
+  const earlier = findScript(entries, scriptId);
+
+  if (Option.isNone(earlier))
+    return Result.fail(`There is no script ${scriptId}. Send the whole program as code.`);
+
+  let script = earlier.value;
+
+  for (const [index, edit] of edits.entries()) {
+    const edited = replaceUnique(script, edit);
+
+    if (Result.isFailure(edited))
+      return Result.fail(
+        `Edit ${index + 1} of script ${scriptId}: ${edited.failure.message}. Nothing ran; fix the edits and send them again.`,
+      );
+
+    script = edited.success;
+  }
+
+  return Result.succeed(script);
+};
 
 const secondsOr = (seconds: number | undefined, fallback: Duration.Duration) =>
   seconds === undefined ? fallback : Duration.seconds(seconds);
