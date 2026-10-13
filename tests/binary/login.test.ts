@@ -23,6 +23,7 @@ const BUILD_AND_RUN_MILLIS = 60_000;
 
 const DOWN = "\u001B[B";
 const ENTER = "\r";
+const CTRL_C = "\u0003";
 
 const openai = ProviderId.make("openai");
 
@@ -116,6 +117,11 @@ describe("compiled tau", () => {
         expect(Option.map(saved, (key) => Redacted.value(key.key))).toEqual(
           Option.some("sk-binary-test"),
         );
+
+        const again = yield* runTau(binary, home, "login", [{ prompt: "Log in to", keys: CTRL_C }]);
+
+        expect(again.output).toContain("openai (API key, key saved)");
+        expect(again.output).toContain("anthropic (Claude subscription)");
 
         const logout = yield* runTau(binary, home, "logout", [
           { prompt: "Log out of", keys: ENTER },

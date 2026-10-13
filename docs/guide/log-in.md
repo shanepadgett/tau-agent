@@ -8,7 +8,7 @@
    tau login
    ```
 
-2. Choose the provider. The list shows how each one logs in: an API key, a Claude subscription, or a ChatGPT plan.
+2. Choose the provider. The list shows how each one logs in: an API key, a Claude subscription, or a ChatGPT plan. A provider you are already logged in to says so, such as `anthropic (Claude subscription, logged in)` or `openrouter (API key, key saved)`. Choosing it again replaces the saved login.
 3. Follow the prompt:
    - For an API key, paste the key.
    - For a subscription, choose a browser on this machine, or a browser anywhere (Tau shows an address or a code).

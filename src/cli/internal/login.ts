@@ -24,6 +24,15 @@ const AUTH_DESCRIPTIONS = {
     "Tau connects the way the Codex CLI does; works with a device code, without a browser",
 } satisfies Record<Route["auth"]["kind"], string>;
 
+/** Shown beside a provider that already has a saved credential. */
+const SAVED_TITLES = {
+  none: "saved",
+  apiKey: "key saved",
+  claudeSubscription: "logged in",
+  chatgptApp: "logged in",
+  codexLogin: "logged in",
+} satisfies Record<Route["auth"]["kind"], string>;
+
 const HEADLESS_TITLES = {
   copyCode: "A browser anywhere, then paste the code it shows",
   deviceCode: "A browser anywhere, entering a code Tau shows",
@@ -40,13 +49,35 @@ const routesWithCredentials = RouteTable.use(({ routes }) =>
   Effect.succeed(routes.filter((route) => route.auth.kind !== "none")),
 );
 
+/** The routes whose provider has a saved login or key. */
+const savedRoutes = Effect.fn("savedRoutes")(function* (routes: readonly Route[]) {
+  const store = yield* CredentialStore;
+
+  return yield* Effect.filter(routes, (route) =>
+    store.read(route.provider).pipe(Effect.map(Option.isSome)),
+  );
+});
+
+/** A login choice says whether its provider is already logged in, so the user sees what is missing. */
+const loginChoice = (saved: readonly Route[]) => (route: Route) => {
+  const choice = routeChoice(route);
+  const kind = route.auth.kind;
+
+  return saved.includes(route)
+    ? { ...choice, title: `${route.provider} (${AUTH_TITLES[kind]}, ${SAVED_TITLES[kind]})` }
+    : choice;
+};
+
 export const loginCommand = Command.make(
   "login",
   {},
   Effect.fn("login")(function* () {
+    const routes = yield* routesWithCredentials;
+    const saved = yield* savedRoutes(routes);
+
     const route = yield* Prompt.Select({
       message: "Log in to",
-      choices: (yield* routesWithCredentials).map(routeChoice),
+      choices: routes.map(loginChoice(saved)),
     });
 
     yield* logIn(route);
@@ -58,11 +89,7 @@ export const logoutCommand = Command.make(
   "logout",
   {},
   Effect.fn("logout")(function* () {
-    const store = yield* CredentialStore;
-
-    const loggedIn = yield* Effect.filter(yield* routesWithCredentials, (route) =>
-      store.read(route.provider).pipe(Effect.map(Option.isSome)),
-    );
+    const loggedIn = yield* savedRoutes(yield* routesWithCredentials);
 
     if (loggedIn.length === 0)
       return yield* Console.log("No provider has a saved login or API key.");
