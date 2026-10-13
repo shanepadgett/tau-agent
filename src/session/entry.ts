@@ -37,10 +37,24 @@ const ToolCallPart = Schema.Struct({
 
 const UserEntry = Schema.Struct({ type: Schema.Literal("user"), text: Schema.String });
 
+/**
+ * An interrupted reply holds the text the model sent before the user or a crash stopped it. The
+ * user sees it; later model calls leave it out.
+ */
 const AssistantEntry = Schema.Struct({
   type: Schema.Literal("assistant"),
   model: Schema.Struct({ route: RouteId, model: Schema.String }),
   parts: Schema.Array(Schema.Union([TextPart, ReasoningPart, ToolCallPart])),
+  interrupted: Schema.Boolean,
+});
+
+/**
+ * Saved before a tool call runs. A call with this entry and no result was cut short, so Tau never
+ * runs it again.
+ */
+const ToolStartedEntry = Schema.Struct({
+  type: Schema.Literal("tool-started"),
+  callId: Schema.String,
 });
 
 const ToolResultEntry = Schema.Struct({
@@ -51,7 +65,13 @@ const ToolResultEntry = Schema.Struct({
   isFailure: Schema.Boolean,
 });
 
-export const EntryBody = Schema.Union([UserEntry, AssistantEntry, ToolResultEntry]);
+export const EntryBody = Schema.Union([
+  UserEntry,
+  AssistantEntry,
+  ToolStartedEntry,
+  ToolResultEntry,
+]);
+
 export type EntryBody = typeof EntryBody.Type;
 
 /** `number` starts at 1 in each session and only grows. */

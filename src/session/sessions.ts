@@ -23,7 +23,7 @@ const Origin = Schema.Union([
 
 type Origin = typeof Origin.Type;
 
-type Session = {
+export type Session = {
   readonly id: SessionId;
   readonly directory: string;
   readonly origin: Origin;
@@ -53,12 +53,15 @@ const LastNumber = Schema.Struct({ last: Schema.Int });
 
 const SESSION_COLUMNS = "id, directory, origin, created_at, updated_at";
 
-class SessionStoreError extends Schema.TaggedError<SessionStoreError>()("SessionStoreError", {
-  path: Schema.String,
-  cause: Schema.Defect(),
-}) {}
+export class SessionStoreError extends Schema.TaggedError<SessionStoreError>()(
+  "SessionStoreError",
+  {
+    path: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {}
 
-class SessionNotFound extends Schema.TaggedError<SessionNotFound>()("SessionNotFound", {
+export class SessionNotFound extends Schema.TaggedError<SessionNotFound>()("SessionNotFound", {
   session: SessionId,
 }) {}
 
@@ -71,6 +74,8 @@ export class Sessions extends Context.Service<
   Sessions,
   {
     readonly create: (directory: string) => Effect.Effect<Session, SessionStoreError>;
+
+    readonly get: (id: SessionId) => Effect.Effect<Session, SessionNotFound | SessionStoreError>;
 
     /** Starts a new session with copies of entries 1 to `through` of `from`. */
     readonly fork: (
@@ -161,7 +166,12 @@ const makeSessions = Effect.fn("makeSessions")(function* (path: string) {
         Effect.mapError(fail),
       );
 
-  return Sessions.of({ create, fork, list, append, entries });
+  const get = (id: SessionId) =>
+    readSession(database, id).pipe(
+      Effect.catchTag("DatabaseError", (error) => Effect.fail(fail(error))),
+    );
+
+  return Sessions.of({ create, get, fork, list, append, entries });
 });
 
 const forkWithin = (database: Database, newSession: NewSession, from: SessionId, through: number) =>

@@ -6,36 +6,50 @@
 import { Prompt } from "effect/ai";
 import type { Entry, EntryBody } from "./entry.ts";
 
-type AssistantPart = Extract<EntryBody, { type: "assistant" }>["parts"][number];
+type AssistantEntry = Extract<EntryBody, { type: "assistant" }>;
+type AssistantPart = AssistantEntry["parts"][number];
+type ToolCall = Extract<AssistantPart, { type: "tool-call" }>;
 type ToolResult = Extract<EntryBody, { type: "tool-result" }>;
 
+/** The result a call gets when no result was saved for it. */
+const MISSING_RESULT = "The call ended before it returned a result.";
+
+/**
+ * Repairs the tool history while it converts, because the protocols refuse a call without a
+ * result: each call gets its result right after the reply that made it, a call without a saved
+ * result (a cancel, a crash, a branch cut) gets an error result, and a result without a call is
+ * left out. Interrupted replies are left out too.
+ */
 export const contextView = (entries: readonly Entry[]): Prompt.Prompt => {
+  const savedResults = new Map<string, ToolResult>();
+
+  for (const { body } of entries) {
+    if (body.type === "tool-result" && !savedResults.has(body.callId))
+      savedResults.set(body.callId, body);
+  }
+
   const messages: Prompt.Message[] = [];
 
   for (const { body } of entries) {
-    const previous = messages.at(-1);
+    if (body.type === "user") {
+      messages.push(Prompt.userMessage({ content: [Prompt.textPart({ text: body.text })] }));
+    }
 
-    // Consecutive tool results become one tool message, as the protocols expect.
-    if (body.type === "tool-result" && previous?.role === "tool") {
-      const content = [...previous.content, toolResultPart(body)];
-      messages[messages.length - 1] = Prompt.toolMessage({ content });
-    } else {
-      messages.push(message(body));
+    if (body.type === "assistant" && !body.interrupted) {
+      messages.push(...replyMessages(body, savedResults));
     }
   }
 
   return Prompt.fromMessages(messages);
 };
 
-const message = (body: EntryBody): Prompt.Message => {
-  switch (body.type) {
-    case "user":
-      return Prompt.userMessage({ content: [Prompt.textPart({ text: body.text })] });
-    case "assistant":
-      return Prompt.assistantMessage({ content: body.parts.map(assistantPart) });
-    case "tool-result":
-      return Prompt.toolMessage({ content: [toolResultPart(body)] });
-  }
+const replyMessages = (reply: AssistantEntry, savedResults: ReadonlyMap<string, ToolResult>) => {
+  const assistant = Prompt.assistantMessage({ content: reply.parts.map(assistantPart) });
+  const calls = reply.parts.filter((part): part is ToolCall => part.type === "tool-call");
+  if (calls.length === 0) return [assistant];
+
+  const content = calls.map((call) => toolResultPart(call, savedResults.get(call.id)));
+  return [assistant, Prompt.toolMessage({ content })];
 };
 
 const assistantPart = (part: AssistantPart) => {
@@ -55,11 +69,11 @@ const assistantPart = (part: AssistantPart) => {
   }
 };
 
-const toolResultPart = (body: ToolResult) =>
+const toolResultPart = (call: ToolCall, saved: ToolResult | undefined) =>
   Prompt.toolResultPart({
-    id: body.callId,
-    name: body.name,
-    result: body.result,
-    isFailure: body.isFailure,
+    id: call.id,
+    name: call.name,
+    result: saved?.result ?? MISSING_RESULT,
+    isFailure: saved?.isFailure ?? true,
     providerExecuted: false,
   });

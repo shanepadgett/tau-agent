@@ -15,6 +15,7 @@
     "@effect/ai-openai-compat": "4.0.3",
     "@effect/ai-openrouter": "4.0.3",
     "@effect/platform-bun": "4.0.3",
+    "@opencode/codemode": "2.0.27",
     "effect": "4.0.3"
   },
   "devDependencies": {
@@ -26,5 +27,8 @@
     "oxlint": "1.87.0",
     "oxlint-tsgolint": "7.0.2004",
     "typescript": "7.0.2"
+  },
+  "overrides": {
+    "effect": "4.0.3"
   }
 }

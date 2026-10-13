@@ -52,7 +52,7 @@
 ## Conversation
 
 - **Steering:** a message sent while the agent works is delivered at the next step boundary.
-- **Follow-ups:** a message queued while the agent works waits until the run ends, then starts the next turn.
+- **Follow-ups:** a message queued while the agent works waits until the run ends, then starts the next run.
 - **Custom messages:** the user or an extension can add a message to the chat, and choose whether it starts a turn.
 - **Branching:** conversations form a tree, as in Pi, but cleaner and easier to understand. Designed at build step 3.
 

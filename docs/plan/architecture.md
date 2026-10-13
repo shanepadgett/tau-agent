@@ -19,7 +19,7 @@
 - **ChatGPT plan routes only stream.** On both plan routes, `src/ai/responses-stream.ts` sends non-streaming requests (such as `generateObject`) as streams. It builds the reply from the `response.output_item.done` events, because the completed event's `output` can be empty, and drops `phase: "commentary"` messages. OpenRouter routes set `strictJsonSchema: true`, or some upstream providers ignore the schema.
 - **Escape hatch per protocol.** If a package cannot do what a route needs, `transformClient` or the request config covers it first; failing that, Tau implements that one protocol behind `LanguageModel.make`, and no caller changes.
 - **Sessions store Tau's own entry schema, never Effect's part types.** Entries are converted to `Prompt` parts when a request is built, so an Effect upgrade cannot break saved sessions.
-- The turn loop runs tools itself: requests set `disableToolCallResolution`.
+- The agent loop runs tools itself: requests set `disableToolCallResolution`.
 - All three protocols ship together, with no "first": Anthropic Messages, OpenAI Responses, and Chat Completions with its OpenAI-compatible wrappers. Drop media, Bedrock, and Gemini.
 - **Providers are configured routes**: protocol, endpoint, auth, and request config, each mapped onto one of the four Effect packages. An enterprise gateway (Azure OpenAI, LiteLLM, vLLM, an internal proxy) needs only config.
 - Each route has typed compatibility settings, such as a message sanitizer and the field that carries the token limit.
@@ -110,10 +110,10 @@ Checks, lint rules, and library choices are in [tooling.md](tooling.md).
 ## Core ideas
 
 - **One command and event interface.** The TUI and print mode are both clients of it, so RPC can be added later as a thin layer.
-- **Turn loop.** A re-entrant step function, after Goose's design. Each step reads the session's entries, runs an ordered list of operations, and persists the effects of the first operation that applies. Status is `continuing`, `yielded`, or `cancelled`. Nothing lives between steps except entries, so a session can be rebuilt after any step; a test rebuilds it after every step to prove this.
+- **Agent loop.** A re-entrant step function, after Goose's design. Each step reads the session's entries, runs an ordered list of operations, and persists the effects of the first operation that applies. Status is `continuing`, `yielded`, or `cancelled`. Nothing lives between steps except entries, so a session can be rebuilt after any step; a test rebuilds it after every step to prove this.
 - **Operations are the extension point for turn behavior.** Extensions add them through the SDK in named phases (`input`, `tools`, `recovery`); inference is always last and collects tools and prompt parts from every operation. Built-ins use the same API. An operation records what it did in entry metadata, never in memory. Each step records which operation applied, for inspection.
 - **Effects and events are separate.** Effects only append entries. Events are the live stream (text deltas, tool progress, usage) and are not stored.
-- **One writer per session.** A runner fiber takes commands from a bounded queue and runs steps one at a time. Steering is queued and injected at the next step boundary. Follow-up messages wait until the run ends, then start the next turn.
+- **One writer per session.** A runner fiber takes commands from a bounded queue and runs steps one at a time. Steering is queued and joins the run after the current turn. Follow-up messages wait until the run ends, then start the next run.
 - **Cancellation.** Interrupting the step finalizes the interrupted operation, answers every open tool call with an "interrupted" result, then finalizes the other operations.
 - **Middleware only around I/O.** The model call and tool execution can be wrapped (audit, redaction), with declared order.
 - **Background tasks.** Core runs work beside the chat: compaction, classifier and routing calls, process sessions. Each task reports status events, which feed the sidebar. Work that changes the conversation while it is busy is applied at the next turn boundary.
@@ -121,6 +121,12 @@ Checks, lint rules, and library choices are in [tooling.md](tooling.md).
 - **Instructions are value deltas,** after OpenCode's session design. Guidance other than the base prompt comes from keyed instruction sources. Before each model call, `core` reads them and appends one entry recording which values changed. The system prompt renders the values from the last compaction; each later change is rendered once into that entry and shown to the model as a note at that point in the chat. Details in [sdk-catalog.md](sdk-catalog.md#stable-prefix).
 - **Session data model.** Entries are never deleted. A compaction entry holds a summary and points to the first kept entry. The context the model sees is computed from entries: the latest summary, then everything from its kept entry on. No Pi session import.
 - **Sessions** (`src/session/`, build step 3). All sessions live in one shared SQLite file, `~/.tau/sessions.db`, as in Goose and OpenCode, so listing, search and branches are queries; export writes one session to its own file. Several Tau processes share the file; entry numbers are given inside a write transaction.
+- **Agent loop as built** (slice 4a, `src/core/`). `Agent` opens sessions and takes `prompt` and `cancel` commands; each session has one writer, and a prompt sent during a run waits for it. Events (`text`, `tool-started`, `tool-ended`, `run-ended`) go to subscribers and are not saved. A step tries, in order: interrupt calls that started and have no result, run open tool calls, stop at the turn limit, call the model.
+  - **Safety rules** (from [loop-research.md](loop-research.md)): a `tool-started` entry is saved before a call runs, and after a crash such a call gets an "interrupted" result instead of running again. The context view puts each result right after its call, gives a call without a result an error result, and drops a result without a call. A cancelled reply's text is saved as interrupted and left out of later model calls.
+  - **No turn limit by default.** Long runs are normal; `maxTurns` in settings sets one.
+  - **Timeouts:** a whole `run` call defaults to 10 minutes (codemode's per-run `timeoutMs`), one `sh` call to 2 minutes; the model can set either per call, `timeouts.run` and `timeouts.shell` in settings change the defaults, and the `run` timeout always wins. `proc` starts commands in their own process group and kills the group on timeout, cancel or exit.
+  - **Print mode:** `tau -p "prompt"` or a prompt on stdin; `--session <id>`, `--model route/model` (the route ends at the first slash), else `model` in settings, else Tau stops and says how to set one. The answer streams to stdout; tool lines and the session ID go to stderr. No approval prompts: `run` acts with the user's permissions.
+  - **Tests** use a scripted in-process model through the `Models` service; everything else is real. They move to the HTTP fake provider when it is built ([deferred.md](deferred.md)).
   - A session is one ordered list of entries, numbered from 1. The number is the cursor an SDK subscriber resumes from (`Sessions.entries(session, after)`).
   - **A branch is a new session**, as in OpenCode and Codex: `fork` copies the parent's entries up to the chosen one, and the new session records where it came from. The branch tree is a tree of sessions. Pi's tree inside one file was rejected: every reader walks parent links, and Pi still needed `/fork` and `/clone` beside `/tree`.
   - Entries hold Tau's own types as JSON: user text, assistant parts (text, reasoning, tool calls) and tool results. Provider data, such as a Claude thinking signature, is kept per part without being read.
@@ -129,7 +135,7 @@ Checks, lint rules, and library choices are in [tooling.md](tooling.md).
 - **SQLite.** `bun:sqlite` directly, behind our own Effect service in the `database` layer, used by `session` and `host`: `acquireRelease`, WAL, `PRAGMA user_version` migrations, Schema-decoded rows, tagged errors. Not `effect/sql`: it is unstable, issue #8920 reports lost writes on Effect 4.0.2 with Bun 1.4.0, and OpenCode wrote its own `bun:sqlite` driver.
 - **Sandbox.** `@opencode/codemode`, an interpreter for a JavaScript subset written on Effect ([spike 9](spikes.md)). Scripts reach only the functions Tau gives them, defined with `Tool.make` and Effect Schemas. It runs on the main thread: interruption and timeouts stop busy loops while the event loop keeps ticking. Pinned, with an `effect` override so one Effect copy is installed. Replaces QuickJS in a worker.
 - **Change detection.** Files change through scripts, `sh`, and background processes, so tool arguments cannot say what changed. Core uses the `workspace` layer to compare the working tree before and after each `run` call (`git status` plus hashes of changed and untracked files). The result feeds `fix` checks (`{files}`) and marks `checks` results stale.
-- **Background task recovery.** None for now. Work interrupted by a crash starts over on the next turn.
+- **Background task recovery.** None for now. Work interrupted by a crash starts over on the next run.
 - **PTYs.** Bun's built-in `Bun.Terminal`, not `node-pty`; verified in compiled binaries on macOS and Linux arm64. Spawn with `detached: true`. Cancellation must cover owned descendants across shell job-control groups, then close the terminal; the spike's snapshot cleanup is not a production supervisor. Lives in `proc`.
 
 ## Build order
@@ -141,7 +147,7 @@ Each step builds only on earlier steps.
 | 1 | `database` SQLite service; `host` credential store | nothing |
 | 2 | `ai`: routes, three protocols, structured output, OAuth flows, model catalog; `host` settings file and environment-variable credential fallback | 1: OAuth refresh tokens must be saved; routes are the first setting and the catalog names the variables |
 | 3 | `session`: entries, context view | 1: the SQLite service |
-| 4 | `core` turn loop and `run` tool, driven by print mode | 2, 3: the loop reads and writes entries |
+| 4 | `core` agent loop and `run` tool, driven by print mode | 2, 3: the loop reads and writes entries |
 | 5 | Background tasks, compaction | 4 |
 | 6 | TUI and interactive shell | 4, 5 |
 | 7 | Extension host and SDK; redesign Tau's built-ins from `main` | 4, 6 |

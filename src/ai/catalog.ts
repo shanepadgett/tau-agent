@@ -34,6 +34,17 @@ export type CatalogData = typeof CatalogData.Type;
 
 export type ModelRef = { readonly route: RouteId; readonly model: string };
 
+/**
+ * Reads `route/model`. The route ends at the first slash, so a model name may hold slashes, as in
+ * `openrouter/anthropic/claude-haiku-5.5`.
+ */
+export const parseModelRef = (text: string): Option.Option<ModelRef> => {
+  const slash = text.indexOf("/");
+  const isRef = slash > 0 && slash < text.length - 1;
+  if (!isRef) return Option.none();
+  return Option.some({ route: RouteId.make(text.slice(0, slash)), model: text.slice(slash + 1) });
+};
+
 /** The changes and additions that the user's settings make to the models of one route. */
 export type RouteSettings = {
   readonly models: Readonly<Record<string, ModelSettings>>;

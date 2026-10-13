@@ -18,11 +18,29 @@ const RouteEntry = Schema.Struct({
 
 type RouteEntry = typeof RouteEntry.Type;
 
+const Seconds = Schema.Finite.check(Schema.isGreaterThan(0));
+
 const SettingsFile = Schema.Struct({
   routes: Schema.optional(Schema.Record(Schema.String, RouteEntry)),
+  /** The model a run uses, written `route/model`. */
+  model: Schema.optional(Schema.String),
+  /** Ends a run after this many turns. There is no limit without it. */
+  maxTurns: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
+  /** Defaults for one `run` call and one shell command. The model can change them per call. */
+  timeouts: Schema.optional(
+    Schema.Struct({ run: Schema.optional(Seconds), shell: Schema.optional(Seconds) }),
+  ),
 });
 
-export class SettingsInvalid extends Schema.TaggedError<SettingsInvalid>()("SettingsInvalid", {
+/** What a run uses from the settings file. Each value is absent when the file does not set it. */
+export type RunSettings = {
+  readonly model: string | undefined;
+  readonly maxTurns: number | undefined;
+  readonly runTimeoutSeconds: number | undefined;
+  readonly shellTimeoutSeconds: number | undefined;
+};
+
+class SettingsInvalid extends Schema.TaggedError<SettingsInvalid>()("SettingsInvalid", {
   path: Schema.String,
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
@@ -32,13 +50,27 @@ type Settings = {
   /** The built-in routes, then the routes the user added. */
   readonly routes: ReadonlyArray<Route>;
   readonly routeSettings: ReadonlyMap<RouteId, RouteSettings>;
+  readonly run: RunSettings;
+};
+
+const noRunSettings: RunSettings = {
+  model: undefined,
+  maxTurns: undefined,
+  runTimeoutSeconds: undefined,
+  shellTimeoutSeconds: undefined,
 };
 
 /** Reads `settings.json` in `tauDirectory`. If there is no file, Tau uses the built-in routes only. */
 export const readSettings = Effect.fn("readSettings")(function* (tauDirectory: string) {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = join(tauDirectory, "settings.json");
-  const noSettings: Settings = { routes: builtInRoutes, routeSettings: new Map() };
+
+  const noSettings: Settings = {
+    routes: builtInRoutes,
+    routeSettings: new Map(),
+    run: noRunSettings,
+  };
+
   if (!(yield* fileSystem.exists(path))) return noSettings;
 
   const text = yield* fileSystem
@@ -64,7 +96,14 @@ export const readSettings = Effect.fn("readSettings")(function* (tauDirectory: s
     ]),
   );
 
-  return { routes: [...builtInRoutes, ...added.flat()], routeSettings };
+  const run: RunSettings = {
+    model: file.model,
+    maxTurns: file.maxTurns,
+    runTimeoutSeconds: file.timeouts?.run,
+    shellTimeoutSeconds: file.timeouts?.shell,
+  };
+
+  return { routes: [...builtInRoutes, ...added.flat()], routeSettings, run };
 });
 
 /**

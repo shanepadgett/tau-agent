@@ -88,5 +88,10 @@
     "commits": [
       "955266bfdd854cd280dffd47548673914484e4c0"
     ]
+  },
+  "@opencode/codemode": {
+    "version": "2.0.27",
+    "fingerprint": "e8048780529f0deb",
+    "commits": []
   }
 }

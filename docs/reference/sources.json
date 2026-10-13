@@ -7,110 +7,240 @@
       "summary": "Effect 4: typed effects, services and layers, Schema, Stream, errors. Read the examples before writing Effect code; the module list names every API.",
       "docs": [
         {
-          "origin": { "kind": "installed" },
+          "origin": {
+            "kind": "installed"
+          },
           "files": ["README.md", "AGENTS.md", "ai-docs/src/**/*.md", "ai-docs/src/**/*.ts"]
         }
       ],
-      "api": [{ "kind": "source", "path": "effect/src" }]
+      "api": [
+        {
+          "kind": "source",
+          "path": "effect/src"
+        }
+      ]
     },
     {
       "package": "@effect/platform-bun",
       "versionSource": "lock",
       "summary": "Bun layers for Effect's platform services: FileSystem, Path, runtime entry. Its ai-docs duplicate Effect's, so only the README is copied.",
-      "docs": [{ "origin": { "kind": "installed" }, "files": ["README.md"] }],
-      "api": [{ "kind": "source", "path": "@effect/platform-bun/src" }]
+      "docs": [
+        {
+          "origin": {
+            "kind": "installed"
+          },
+          "files": ["README.md"]
+        }
+      ],
+      "api": [
+        {
+          "kind": "source",
+          "path": "@effect/platform-bun/src"
+        }
+      ]
     },
     {
       "package": "@effect/ai-anthropic",
       "versionSource": "lock",
       "summary": "Anthropic Messages API for `effect/ai`: client, language model, config, provider tools. Its ai-docs duplicate Effect's, so only the README is copied.",
-      "docs": [{ "origin": { "kind": "installed" }, "files": ["README.md"] }],
-      "api": [{ "kind": "source", "path": "@effect/ai-anthropic/src" }]
+      "docs": [
+        {
+          "origin": {
+            "kind": "installed"
+          },
+          "files": ["README.md"]
+        }
+      ],
+      "api": [
+        {
+          "kind": "source",
+          "path": "@effect/ai-anthropic/src"
+        }
+      ]
     },
     {
       "package": "@effect/ai-openai",
       "versionSource": "lock",
       "summary": "OpenAI Responses API for `effect/ai` (OpenAI API key and the Codex subscription): client, language model, config, schema. Its ai-docs duplicate Effect's, so only the README is copied.",
-      "docs": [{ "origin": { "kind": "installed" }, "files": ["README.md"] }],
-      "api": [{ "kind": "source", "path": "@effect/ai-openai/src" }]
+      "docs": [
+        {
+          "origin": {
+            "kind": "installed"
+          },
+          "files": ["README.md"]
+        }
+      ],
+      "api": [
+        {
+          "kind": "source",
+          "path": "@effect/ai-openai/src"
+        }
+      ]
     },
     {
       "package": "@effect/ai-openai-compat",
       "versionSource": "lock",
       "summary": "Chat Completions API for `effect/ai`, for OpenAI-compatible services and gateways: client, language model, config. Its ai-docs duplicate Effect's, so only the README is copied.",
-      "docs": [{ "origin": { "kind": "installed" }, "files": ["README.md"] }],
-      "api": [{ "kind": "source", "path": "@effect/ai-openai-compat/src" }]
+      "docs": [
+        {
+          "origin": {
+            "kind": "installed"
+          },
+          "files": ["README.md"]
+        }
+      ],
+      "api": [
+        {
+          "kind": "source",
+          "path": "@effect/ai-openai-compat/src"
+        }
+      ]
     },
     {
       "package": "@effect/ai-openrouter",
       "versionSource": "lock",
       "summary": "OpenRouter for `effect/ai`: client, language model (keeps reasoning details on replay), config. Its decision model's endpoint returns 404. Its ai-docs duplicate Effect's, so only the README is copied.",
-      "docs": [{ "origin": { "kind": "installed" }, "files": ["README.md"] }],
-      "api": [{ "kind": "source", "path": "@effect/ai-openrouter/src" }]
+      "docs": [
+        {
+          "origin": {
+            "kind": "installed"
+          },
+          "files": ["README.md"]
+        }
+      ],
+      "api": [
+        {
+          "kind": "source",
+          "path": "@effect/ai-openrouter/src"
+        }
+      ]
     },
     {
       "package": "@effect/tsgo",
       "versionSource": "lock",
       "summary": "Effect diagnostics for the TypeScript 7 compiler: rule names, severities and tsconfig options.",
       "docs": [
-        { "origin": { "kind": "installed" }, "files": ["README.md"] },
+        {
+          "origin": {
+            "kind": "installed"
+          },
+          "files": ["README.md"]
+        },
         {
           "origin": {
             "kind": "git",
             "repository": "https://github.com/Effect-TS/tsgo.git",
-            "ref": { "tag": "@effect/tsgo@{version}" }
+            "ref": {
+              "tag": "@effect/tsgo@{version}"
+            }
           },
           "files": ["docs/**/*.md"]
         }
       ],
       "api": [
-        { "kind": "schema", "path": "@effect/tsgo/schema.json" },
-        { "kind": "schema", "path": "@effect/tsgo/oxlint-schema.json" }
+        {
+          "kind": "schema",
+          "path": "@effect/tsgo/schema.json"
+        },
+        {
+          "kind": "schema",
+          "path": "@effect/tsgo/oxlint-schema.json"
+        }
       ]
     },
     {
       "package": "typescript",
       "versionSource": "lock",
       "summary": "TypeScript 7 (native compiler). Only the README is copied: compiler-option docs have no versioned source.",
-      "docs": [{ "origin": { "kind": "installed" }, "files": ["README.md"] }],
+      "docs": [
+        {
+          "origin": {
+            "kind": "installed"
+          },
+          "files": ["README.md"]
+        }
+      ],
       "api": []
     },
     {
       "package": "@types/bun",
       "versionSource": "lock",
       "summary": "Type definitions for Bun's APIs. The declarations are the API reference.",
-      "docs": [{ "origin": { "kind": "installed" }, "files": ["README.md"] }],
-      "api": [{ "kind": "types", "path": "bun-types" }]
+      "docs": [
+        {
+          "origin": {
+            "kind": "installed"
+          },
+          "files": ["README.md"]
+        }
+      ],
+      "api": [
+        {
+          "kind": "types",
+          "path": "bun-types"
+        }
+      ]
     },
     {
       "package": "oxlint",
       "versionSource": "lock",
       "summary": "Linter: configuration, rules and their options, and the JS plugin guide. The website pages are unversioned.",
       "docs": [
-        { "origin": { "kind": "installed" }, "files": ["README.md"] },
+        {
+          "origin": {
+            "kind": "installed"
+          },
+          "files": ["README.md"]
+        },
         {
           "origin": {
             "kind": "git",
             "repository": "https://github.com/oxc-project/website.git",
-            "ref": { "branch": "main" }
+            "ref": {
+              "branch": "main"
+            }
           },
           "files": ["src/docs/guide/usage/linter.md", "src/docs/guide/usage/linter/**/*.md"]
         }
       ],
-      "api": [{ "kind": "schema", "path": "oxlint/configuration_schema.json" }]
+      "api": [
+        {
+          "kind": "schema",
+          "path": "oxlint/configuration_schema.json"
+        }
+      ]
     },
     {
       "package": "@oxlint/plugins",
       "versionSource": "lock",
       "summary": "Types for writing Oxlint JS plugins: rules, the AST, `context` and `sourceCode`.",
-      "docs": [{ "origin": { "kind": "installed" }, "files": ["README.md"] }],
-      "api": [{ "kind": "types", "path": "@oxlint/plugins/index.d.ts" }]
+      "docs": [
+        {
+          "origin": {
+            "kind": "installed"
+          },
+          "files": ["README.md"]
+        }
+      ],
+      "api": [
+        {
+          "kind": "types",
+          "path": "@oxlint/plugins/index.d.ts"
+        }
+      ]
     },
     {
       "package": "oxlint-tsgolint",
       "versionSource": "lock",
       "summary": "Type-aware lint rules for Oxlint.",
-      "docs": [{ "origin": { "kind": "installed" }, "files": ["README.md"] }],
+      "docs": [
+        {
+          "origin": {
+            "kind": "installed"
+          },
+          "files": ["README.md"]
+        }
+      ],
       "api": []
     },
     {
@@ -118,17 +248,29 @@
       "versionSource": "lock",
       "summary": "Formatter: options, ignore files and supported languages. The website pages are unversioned.",
       "docs": [
-        { "origin": { "kind": "installed" }, "files": ["README.md"] },
+        {
+          "origin": {
+            "kind": "installed"
+          },
+          "files": ["README.md"]
+        },
         {
           "origin": {
             "kind": "git",
             "repository": "https://github.com/oxc-project/website.git",
-            "ref": { "branch": "main" }
+            "ref": {
+              "branch": "main"
+            }
           },
           "files": ["src/docs/guide/usage/formatter.md", "src/docs/guide/usage/formatter/**/*.md"]
         }
       ],
-      "api": [{ "kind": "schema", "path": "oxfmt/configuration_schema.json" }]
+      "api": [
+        {
+          "kind": "schema",
+          "path": "oxfmt/configuration_schema.json"
+        }
+      ]
     },
     {
       "package": "fallow",
@@ -136,13 +278,21 @@
       "summary": "Dead code, duplication and import boundaries: CLI, issue types, patterns and gotchas.",
       "docs": [
         {
-          "origin": { "kind": "installed" },
+          "origin": {
+            "kind": "installed"
+          },
           "files": ["README.md", "skills/fallow/SKILL.md", "skills/fallow/references/*.md"]
         }
       ],
       "api": [
-        { "kind": "schema", "path": "fallow/schema.json" },
-        { "kind": "schema", "path": "fallow/capabilities.json" }
+        {
+          "kind": "schema",
+          "path": "fallow/schema.json"
+        },
+        {
+          "kind": "schema",
+          "path": "fallow/capabilities.json"
+        }
       ]
     },
     {
@@ -154,7 +304,9 @@
           "origin": {
             "kind": "git",
             "repository": "https://github.com/oven-sh/bun.git",
-            "ref": { "tag": "bun-v{version}" }
+            "ref": {
+              "tag": "bun-v{version}"
+            }
           },
           "files": ["docs/**/*.md", "docs/**/*.mdx"]
         }
@@ -170,12 +322,33 @@
           "origin": {
             "kind": "git",
             "repository": "https://github.com/nodejs/node.git",
-            "ref": { "tag": "v{version}" }
+            "ref": {
+              "tag": "v{version}"
+            }
           },
           "files": ["doc/api/*.md"]
         }
       ],
       "api": []
+    },
+    {
+      "package": "@opencode/codemode",
+      "versionSource": "lock",
+      "summary": "Runs model-written JavaScript in an interpreter written on Effect. Scripts reach only the tools the host gives them. Backs Tau's `run` tool.",
+      "docs": [
+        {
+          "origin": {
+            "kind": "installed"
+          },
+          "files": ["README.md"]
+        }
+      ],
+      "api": [
+        {
+          "kind": "types",
+          "path": "@opencode/codemode/dist"
+        }
+      ]
     }
   ]
 }

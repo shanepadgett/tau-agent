@@ -118,3 +118,10 @@ Node.js API docs. Prefer Bun's built-ins and Effect; use `node:` modules where B
 
 - Docs: `docs/reference/copies/node/24.21.0/` (68 files: doc/)
 - From: https://github.com/nodejs/node.git, tag v24.21.0, commit 955266bfdd85
+
+## @opencode/codemode 2.0.27
+
+Runs model-written JavaScript in an interpreter written on Effect. Scripts reach only the tools the host gives them. Backs Tau's `run` tool.
+
+- Docs: `docs/reference/copies/@opencode/codemode/2.0.27/` (1 file: README.md)
+- API (types): `node_modules/@opencode/codemode/dist/`, modules: `docs/reference/copies/@opencode/codemode/2.0.27/api-index/@opencode-codemode-dist.md`

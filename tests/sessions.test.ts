@@ -18,6 +18,7 @@ const answer = (text: string): EntryBody => ({
   type: "assistant",
   model,
   parts: [{ type: "text", text, providerData: {} }],
+  interrupted: false,
 });
 
 const toolResult = (callId: string): EntryBody => ({
@@ -80,6 +81,7 @@ describe("sessions", () => {
                 providerData: {},
               },
             ],
+            interrupted: false,
           },
           toolResult("call-1"),
           toolResult("call-2"),
@@ -194,6 +196,49 @@ describe("sessions", () => {
 
         const other = yield* sessions.list("/work/other");
         expect(other.map((session) => session.id)).toEqual([elsewhere.id]);
+      }),
+    ));
+
+  test("a branch cut between a call and its result gives the call an error result", () =>
+    runInTempHome((tauDirectory) =>
+      Effect.gen(function* () {
+        const sessions = yield* openSessions(tauDirectory);
+        const parent = yield* sessions.create(project);
+
+        yield* sessions.append(parent.id, [
+          user("List the files."),
+          {
+            type: "assistant",
+            model,
+            parts: [
+              {
+                type: "tool-call",
+                id: "call-1",
+                name: "run",
+                params: { code: "1" },
+                providerData: {},
+              },
+            ],
+            interrupted: false,
+          },
+          toolResult("call-1"),
+          answer("Two files."),
+        ]);
+
+        const branch = yield* sessions.fork(parent.id, 2);
+        const prompt = contextView(yield* sessions.entries(branch.id, 0));
+        const [, , tool] = prompt.content;
+
+        expect(prompt.content.map((message) => message.role)).toEqual([
+          "user",
+          "assistant",
+          "tool",
+        ]);
+
+        expect(tool?.role === "tool" && tool.content[0]).toMatchObject({
+          id: "call-1",
+          isFailure: true,
+        });
       }),
     ));
 });
