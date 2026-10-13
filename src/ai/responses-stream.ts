@@ -1,4 +1,4 @@
-/** Lets non-streaming requests, such as structured output, reach the Codex backend, which only answers with a stream. */
+/** Lets non-streaming requests, such as structured output, reach the ChatGPT plan routes, which only answer with a stream. */
 
 import { Array, Effect, Option, Predicate, Schema } from "effect";
 import { Sse } from "effect/encoding";
@@ -12,44 +12,48 @@ const RequestBody = Schema.fromJsonString(
   Schema.StructWithRest(Schema.Struct({ stream: Schema.optional(Schema.Boolean) }), [JsonFields]),
 );
 
-/** Codex sends `phase: "commentary"` messages before the final answer; only the final answer is the reply. */
+/** Models may send `phase: "commentary"` messages before the final answer; only the final answer is the reply. */
 const OutputItem = Schema.StructWithRest(Schema.Struct({ phase: Schema.optional(Schema.String) }), [
   JsonFields,
 ]);
 
-const CompletedResponse = Schema.StructWithRest(
-  Schema.Struct({ output: Schema.Array(OutputItem) }),
-  [JsonFields],
+const OutputItemDoneEvent = Schema.fromJsonString(
+  Schema.Struct({
+    type: Schema.Literal("response.output_item.done"),
+    output_index: Schema.Number,
+    item: OutputItem,
+  }),
 );
 
 const CompletedEvent = Schema.fromJsonString(
-  Schema.Struct({ type: Schema.Literal("response.completed"), response: CompletedResponse }),
+  Schema.Struct({ type: Schema.Literal("response.completed"), response: JsonFields }),
 );
 
+const decodeOutputItemDone = Schema.decodeUnknownOption(OutputItemDoneEvent);
 const decodeCompletedEvent = Schema.decodeUnknownOption(CompletedEvent);
-const encodeCompletedResponse = Schema.encodeSync(Schema.fromJsonString(CompletedResponse));
+const encodeCompletedResponse = Schema.encodeSync(Schema.fromJsonString(JsonFields));
 
 /**
  * Sends a non-streaming request as a stream and answers with the completed response, as the
  * non-streaming endpoint would. Streaming requests pass through unchanged.
  */
-export const collectCodexStream = (codex: HttpClient.HttpClient): HttpClient.HttpClient =>
+export const collectResponseStream = (client: HttpClient.HttpClient): HttpClient.HttpClient =>
   HttpClient.makeWith(
     (
       request: Effect.Effect<HttpClientRequest.HttpClientRequest, HttpClientError.HttpClientError>,
-    ) => Effect.flatMap(request, (sent) => sendCollected(codex, sent)),
+    ) => Effect.flatMap(request, (sent) => sendCollected(client, sent)),
     (request: HttpClientRequest.HttpClientRequest) => Effect.succeed(request),
   );
 
 const sendCollected = Effect.fn("sendCollected")(function* (
-  codex: HttpClient.HttpClient,
+  client: HttpClient.HttpClient,
   request: HttpClientRequest.HttpClientRequest,
 ) {
   const body = nonStreamingBody(request);
-  if (Option.isNone(body)) return yield* codex.execute(request);
+  if (Option.isNone(body)) return yield* client.execute(request);
 
   const streaming = HttpClientRequest.bodyJsonUnsafe(request, { ...body.value, stream: true });
-  const response = yield* codex.execute(streaming);
+  const response = yield* client.execute(streaming);
   // Effect's client reads the error from the body itself.
   if (response.status !== HTTP_OK) return response;
 
@@ -60,7 +64,7 @@ const sendCollected = Effect.fn("sendCollected")(function* (
       reason: new HttpClientError.DecodeError({
         request,
         response,
-        description: "The Codex stream ended without a response.completed event.",
+        description: "The response stream ended without a response.completed event.",
       }),
     });
   }
@@ -80,6 +84,12 @@ const nonStreamingBody = (request: HttpClientRequest.HttpClientRequest) => {
   return Option.filter(body, (fields) => fields.stream !== true);
 };
 
+/**
+ * The response from the `response.completed` event, with its output rebuilt from the
+ * `response.output_item.done` events. The Codex backend sometimes completes with an empty or null `output`
+ * after sending every item, so the item events are the record of what was said, as for any
+ * streaming client.
+ */
 const completedResponse = (stream: string) => {
   const payloads: string[] = [];
 
@@ -89,10 +99,12 @@ const completedResponse = (stream: string) => {
 
   parser.feed(stream);
 
+  const output = payloads
+    .flatMap((payload) => Option.toArray(decodeOutputItemDone(payload)))
+    .toSorted((first, second) => first.output_index - second.output_index)
+    .flatMap(({ item }) => (item.phase === "commentary" ? [] : [item]));
+
   return Array.findFirst(payloads, (payload) => decodeCompletedEvent(payload)).pipe(
-    Option.map(({ response }) => ({
-      ...response,
-      output: response.output.filter((item) => item.phase !== "commentary"),
-    })),
+    Option.map(({ response }) => ({ ...response, output })),
   );
 };

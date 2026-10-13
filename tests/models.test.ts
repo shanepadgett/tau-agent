@@ -18,6 +18,7 @@ import { Base64Url } from "effect/encoding";
 import { FetchHttpClient } from "effect/http";
 import {
   ApiKey,
+  ChatgptAppTokens,
   type Credential,
   CredentialStore,
   OAuthTokens,
@@ -88,7 +89,17 @@ const login = (access: string) =>
 const storedCredentials: ReadonlyArray<readonly [string, Credential]> = [
   ["anthropic", login("claude-token")],
   ["openai", ApiKey.make({ key: Redacted.make("openai-key") })],
-  ["openai-codex", login(codexAccessToken)],
+  ["codex", login(codexAccessToken)],
+  [
+    "chatgpt",
+    ChatgptAppTokens.make({
+      clientId: "oaiapp_test",
+      idToken: Redacted.make("id-token"),
+      access: Redacted.make("chatgpt-token"),
+      refresh: Redacted.make("refresh"),
+      expiresAt: DateTime.makeUnsafe(Date.now() + HOUR_MILLIS),
+    }),
+  ],
 ];
 
 /** OpenRouter's key comes from the environment, so every run also covers the fallback. */
@@ -180,6 +191,8 @@ const chatRoutes = [
       authorization: "Bearer claude-token",
       // Appended after any beta the package itself sends.
       "anthropic-beta": "claude-code-20250219,oauth-2025-04-20",
+      "user-agent": "claude-cli/2.1.296",
+      "x-app": "cli",
     },
   },
   {
@@ -189,7 +202,7 @@ const chatRoutes = [
     headers: { authorization: "Bearer openai-key" },
   },
   {
-    route: "openai-codex",
+    route: "codex",
     model: "gpt-6-luna",
     path: "/backend-api/codex/responses",
     headers: { authorization: `Bearer ${codexAccessToken}`, "chatgpt-account-id": "account-123" },
@@ -208,6 +221,28 @@ const expectSigned = (received: Received | undefined, expected: (typeof chatRout
   for (const [name, value] of Object.entries(expected.headers))
     expect(received?.headers.get(name)).toEndWith(value);
 };
+
+type ChatModel = { readonly route: string; readonly model: string };
+
+const generateReview = (serverUrl: string, chat: ChatModel, prompt: Prompt.RawInput) =>
+  runWithModels(serverUrl, storedCredentials, (models) =>
+    Effect.gen(function* () {
+      const model = yield* models.languageModel({
+        route: RouteId.make(chat.route),
+        model: chat.model,
+      });
+
+      const response = yield* LanguageModel.generateObject({
+        prompt,
+        schema: Review,
+        objectName: "review",
+      }).pipe(Effect.provideService(LanguageModel.LanguageModel, model));
+
+      return response.value;
+    }),
+  );
+
+const codex: ChatModel = { route: "codex", model: "gpt-6-luna" };
 
 describe("models", () => {
   test.each(chatRoutes)("$route streams a recorded turn that calls a tool", (expected) =>
@@ -248,21 +283,10 @@ describe("models", () => {
       Effect.gen(function* () {
         const server = yield* replayServer(`${expected.route}-object`);
 
-        const review = yield* runWithModels(server.url, storedCredentials, (models) =>
-          Effect.gen(function* () {
-            const model = yield* models.languageModel({
-              route: RouteId.make(expected.route),
-              model: expected.model,
-            });
-
-            const response = yield* LanguageModel.generateObject({
-              prompt: "Review the rename of `update` to `refresh`.",
-              schema: Review,
-              objectName: "review",
-            }).pipe(Effect.provideService(LanguageModel.LanguageModel, model));
-
-            return response.value;
-          }),
+        const review = yield* generateReview(
+          server.url,
+          expected,
+          "Review the rename of `update` to `refresh`.",
         );
 
         expect(review).toEqual(Schema.decodeUnknownSync(Review)(server.expected));
@@ -271,31 +295,71 @@ describe("models", () => {
     ),
   );
 
-  test("Codex structured output is sent as a stream", () =>
+  // Codex sometimes ends a stream with an empty `output` in `response.completed`; the reply is in
+  // the item events, as in the recording that blanks it.
+  test.each(["codex-object", "codex-object-empty-output"])(
+    "Codex structured output is sent as a stream and read from its items (%s)",
+    (recording) =>
+      run(
+        Effect.gen(function* () {
+          const server = yield* replayServer(recording);
+          const review = yield* generateReview(server.url, codex, "Review it.");
+
+          const StreamingBody = Schema.fromJsonString(
+            Schema.Struct({ stream: Schema.Literal(true) }),
+          );
+
+          expect(review).toEqual(Schema.decodeUnknownSync(Review)(server.expected));
+
+          expect(() =>
+            Schema.decodeUnknownSync(StreamingBody)(server.received[0]?.body),
+          ).not.toThrow();
+        }),
+      ),
+  );
+
+  // Sign in with ChatGPT refuses requests that do not stream; the Codex recording has the same events.
+  test("Sign in with ChatGPT requests are streamed and carry the app token", () =>
     run(
       Effect.gen(function* () {
-        const server = yield* replayServer("openai-codex-object");
-
-        yield* runWithModels(server.url, storedCredentials, (models) =>
-          Effect.gen(function* () {
-            const model = yield* models.languageModel({
-              route: RouteId.make("openai-codex"),
-              model: "gpt-6-luna",
-            });
-
-            yield* LanguageModel.generateObject({ prompt: "Review it.", schema: Review }).pipe(
-              Effect.provideService(LanguageModel.LanguageModel, model),
-            );
-          }),
-        );
+        const server = yield* replayServer("codex-object");
+        const chatgpt = { route: "chatgpt", model: "gpt-6.1-sol" };
+        const review = yield* generateReview(server.url, chatgpt, "Review it.");
 
         const StreamingBody = Schema.fromJsonString(
-          Schema.Struct({ stream: Schema.Literal(true) }),
+          Schema.Struct({ stream: Schema.Literal(true), store: Schema.Literal(false) }),
         );
+
+        expect(review).toEqual(Schema.decodeUnknownSync(Review)(server.expected));
+        expect(server.received[0]?.path).toBe("/v1/responses");
+        expect(server.received[0]?.headers.get("authorization")).toBe("Bearer chatgpt-token");
 
         expect(() =>
           Schema.decodeUnknownSync(StreamingBody)(server.received[0]?.body),
         ).not.toThrow();
+      }),
+    ));
+
+  test("Claude subscription requests start the system prompt with the Claude Code identity", () =>
+    run(
+      Effect.gen(function* () {
+        const server = yield* replayServer("anthropic-object");
+
+        yield* generateReview(server.url, { route: "anthropic", model: "claude-sonnet-5-5" }, [
+          { role: "system", content: "You review renames." },
+          { role: "user", content: "Review it." },
+        ]);
+
+        const SystemBody = Schema.fromJsonString(
+          Schema.Struct({ system: Schema.Array(Schema.Struct({ text: Schema.String })) }),
+        );
+
+        const { system } = Schema.decodeUnknownSync(SystemBody)(server.received[0]?.body);
+
+        expect(system.map((block) => block.text)).toEqual([
+          "You are Claude Code, Anthropic's official CLI for Claude.",
+          "You review renames.",
+        ]);
       }),
     ));
 
@@ -352,31 +416,6 @@ describe("models", () => {
           "openai has no stored credential",
         );
 
-        expect(server.received).toHaveLength(0);
-      }),
-    ));
-
-  test("an expired login fails before sending anything", () =>
-    run(
-      Effect.gen(function* () {
-        const server = yield* replayServer("anthropic-stream");
-
-        const expired = OAuthTokens.make({
-          access: Redacted.make("claude-token"),
-          refresh: Redacted.make("refresh"),
-          expiresAt: DateTime.makeUnsafe(Date.now()),
-        });
-
-        const exit = yield* runWithModels(server.url, [["anthropic", expired]], (models) =>
-          Effect.exit(
-            models.languageModel({
-              route: RouteId.make("anthropic"),
-              model: "claude-sonnet-5-5",
-            }),
-          ),
-        );
-
-        expect(Exit.isFailure(exit) && String(exit.cause)).toContain("anthropic login has expired");
         expect(server.received).toHaveLength(0);
       }),
     ));

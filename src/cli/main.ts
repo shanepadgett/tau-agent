@@ -1,0 +1,171 @@
+/** The `tau` command line: logging in to model providers and out of them. */
+
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { BunRuntime, BunServices } from "@effect/platform-bun";
+import { Console, Effect, Layer, Option, Runtime, Schema } from "effect";
+import { Command, Prompt } from "effect/cli";
+import { FetchHttpClient } from "effect/http";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import packageJson from "../../package.json" with { type: "json" };
+import { logInChatgptApp, revokeChatgptApp } from "../ai/chatgpt-app.ts";
+import { ApiKey, ChatgptAppTokens, CredentialStore, type Credential } from "../ai/credential.ts";
+import { type LoginFailed, logIn, LoginPrompt } from "../ai/login.ts";
+import { builtInRoutes, type ChatgptApp, type HeadlessLogin, type Route } from "../ai/routes.ts";
+import { credentialStoreLayer } from "../host/credential-store.ts";
+import { readOrCreateHostId } from "../host/host-id.ts";
+
+const AUTH_TITLES = {
+  apiKey: "API key",
+  claudeSubscription: "Claude subscription",
+  chatgptApp: "ChatGPT plan: Sign in with ChatGPT",
+  codexLogin: "ChatGPT plan: Codex login",
+} satisfies Record<Route["auth"]["kind"], string>;
+
+const AUTH_DESCRIPTIONS = {
+  apiKey: "Saved in ~/.tau; without one, Tau reads the provider's environment variable",
+  claudeSubscription: "Tau connects the way Claude Code does",
+  chatgptApp: "Tau connects as its own app; set a usage cap in ChatGPT settings",
+  codexLogin:
+    "Tau connects the way the Codex CLI does; works with a device code, without a browser",
+} satisfies Record<Route["auth"]["kind"], string>;
+
+const HEADLESS_TITLES = {
+  copyCode: "A browser anywhere, then paste the code it shows",
+  deviceCode: "A browser anywhere, entering a code Tau shows",
+} satisfies Record<HeadlessLogin["kind"], string>;
+
+const routeChoice = (route: Route) => ({
+  title: `${route.provider} (${AUTH_TITLES[route.auth.kind]})`,
+  description: AUTH_DESCRIPTIONS[route.auth.kind],
+  value: route,
+});
+
+const tauDirectory = join(homedir(), ".tau");
+
+const login = Command.make(
+  "login",
+  {},
+  Effect.fn("login")(function* () {
+    const route = yield* Prompt.Select({
+      message: "Log in to",
+      choices: builtInRoutes.map(routeChoice),
+    });
+
+    if (route.auth.kind === "apiKey") {
+      const key = yield* Prompt.Password({ message: `${route.provider} API key` });
+      yield* (yield* CredentialStore).save(route.provider, ApiKey.make({ key }));
+    } else if (route.auth.kind === "chatgptApp") {
+      const hostId = yield* readOrCreateHostId(tauDirectory);
+      yield* logInChatgptApp(route.provider, route.auth.app, hostId);
+    } else {
+      const method = yield* Prompt.Select({
+        message: "Log in with",
+        choices: [
+          { title: "A browser on this machine", value: "browser" },
+          { title: HEADLESS_TITLES[route.auth.oauth.headless.kind], value: "headless" },
+        ],
+      });
+
+      yield* logIn(route.provider, route.auth.oauth, method);
+    }
+
+    yield* Console.log(`Logged in to ${route.provider}.`);
+  }),
+).pipe(Command.withDescription("Log in to a model provider."));
+
+const logout = Command.make(
+  "logout",
+  {},
+  Effect.fn("logout")(function* () {
+    const store = yield* CredentialStore;
+
+    const loggedIn = yield* Effect.filter(builtInRoutes, (route) =>
+      store.read(route.provider).pipe(Effect.map(Option.isSome)),
+    );
+
+    if (loggedIn.length === 0)
+      return yield* Console.log("No provider has a saved login or API key.");
+
+    const route = yield* Prompt.Select({
+      message: "Log out of",
+      choices: loggedIn.map(routeChoice),
+    });
+
+    if (route.auth.kind === "chatgptApp") {
+      yield* revokeOrWarn(route.auth.app, yield* store.read(route.provider));
+    }
+
+    yield* store.remove(route.provider);
+    yield* Console.log(`Logged out of ${route.provider}.`);
+  }),
+).pipe(Command.withDescription("Remove a saved login or API key."));
+
+/** Ends a Sign in with ChatGPT login on OpenAI's side; when that fails, says how to end it by hand. */
+const revokeOrWarn = (app: ChatgptApp, stored: Option.Option<Credential>) => {
+  const tokens = Option.filter(stored, Schema.is(ChatgptAppTokens));
+  if (Option.isNone(tokens)) return Effect.void;
+
+  return revokeChatgptApp(app, tokens.value).pipe(
+    Effect.catchTag("HttpClientError", (error) =>
+      Console.log(
+        `OpenAI did not confirm the logout (${error.message}). To end it on OpenAI's side, disconnect Tau in ChatGPT settings at chatgpt.com/settings/usage.`,
+      ),
+    ),
+  );
+};
+
+const BROWSER_COMMAND = process.platform === "darwin" ? "open" : "xdg-open";
+
+const terminalLoginPrompt = Layer.effect(
+  LoginPrompt,
+  Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const terminal = yield* Effect.context<Prompt.Environment>();
+
+    return LoginPrompt.of({
+      openBrowser: (url) =>
+        Console.log(`Open this address to log in:\n${url}`).pipe(
+          Effect.andThen(spawner.exitCode(ChildProcess.make(BROWSER_COMMAND, [url]))),
+          // The address is printed, so a machine with no browser can still log in.
+          Effect.ignore,
+        ),
+      show: (text) => Console.log(text),
+      ask: (question) =>
+        Prompt.String({ message: question }).pipe(
+          Effect.provideContext(terminal),
+          Effect.catchTag("QuitError", () => Effect.interrupt),
+        ),
+    });
+  }),
+);
+
+/** A failure already printed in plain words, so the runtime only sets the exit code. */
+class ShownToUser extends Schema.TaggedError<ShownToUser>()("ShownToUser", {
+  cause: Schema.Defect(),
+}) {
+  override readonly [Runtime.errorReported] = false;
+}
+
+const showFailure = (failure: LoginFailed) =>
+  Console.error(failure.message).pipe(
+    Effect.andThen(Effect.fail(new ShownToUser({ cause: failure }))),
+  );
+
+const appLayer = Layer.mergeAll(
+  credentialStoreLayer(tauDirectory),
+  FetchHttpClient.layer,
+  terminalLoginPrompt,
+).pipe(Layer.provideMerge(BunServices.layer));
+
+Command.make("tau").pipe(
+  Command.withSubcommands([login, logout]),
+  Command.run({ version: packageJson.version }),
+  Effect.catchTags({
+    LoginFailed: showFailure,
+    // Ctrl+C in a prompt ends the command quietly, like Ctrl+C anywhere else.
+    QuitError: () => Effect.interrupt,
+  }),
+  Effect.provide(appLayer),
+  BunRuntime.runMain,
+);

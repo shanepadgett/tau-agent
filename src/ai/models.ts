@@ -10,7 +10,7 @@ import {
 import { Context, Effect, Layer, Schema } from "effect";
 import type { DecisionModel, LanguageModel } from "effect/ai";
 import { HttpClient, HttpClientRequest } from "effect/http";
-import { collectCodexStream } from "./codex.ts";
+import { collectResponseStream } from "./responses-stream.ts";
 import { CredentialStore, type CredentialStoreError } from "./credential.ts";
 import { openAiDecisionModel } from "./openai-decisions.ts";
 import { type CredentialUnavailable, credentialSigner, signRequests } from "./route-auth.ts";
@@ -91,10 +91,11 @@ const chatModel = (route: Route, model: string, sign: ClientTransform) => {
       );
 
     case "openai": {
-      const isCodex = route.auth.kind === "chatgptSubscription";
+      // Both ChatGPT plan routes refuse requests that do not stream.
+      const isStreamOnly = route.auth.kind === "codexLogin" || route.auth.kind === "chatgptApp";
 
-      const transformClient = isCodex
-        ? (client: HttpClient.HttpClient) => collectCodexStream(sign(client))
+      const transformClient = isStreamOnly
+        ? (client: HttpClient.HttpClient) => collectResponseStream(sign(client))
         : sign;
 
       // Tau rebuilds every request from its own session, so nothing is stored server-side and

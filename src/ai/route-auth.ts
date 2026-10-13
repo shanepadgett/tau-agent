@@ -1,22 +1,38 @@
-/** Signs each request with the route's credential, read fresh every time so a token another process refreshed is used. */
+/**
+ * Signs each request with the route's credential, read fresh every time so a token another process
+ * refreshed is used. A login about to expire is refreshed first.
+ */
 
 import { Config, DateTime, Duration, Effect, Option, Predicate, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
-import { ApiKey, type Credential, CredentialStore, ProviderId } from "./credential.ts";
+import { asClaudeCode } from "./claude-code.ts";
+import {
+  ApiKey,
+  ChatgptAppTokens,
+  type Credential,
+  CredentialStore,
+  OAuthTokens,
+  ProviderId,
+} from "./credential.ts";
 import type { Route } from "./routes.ts";
+import {
+  chatgptAppTokenEndpoint,
+  oauthTokenEndpoint,
+  requestTokens,
+  type TokenRequestFailed,
+} from "./token-endpoint.ts";
 
 /** A token this close to expiry counts as expired, so it cannot lapse while a request is in flight. */
 const EXPIRY_MARGIN = Duration.minutes(1);
 
-const CLAUDE_SUBSCRIPTION_BETAS = ["claude-code-20250219", "oauth-2025-04-20"];
-
 const UNAVAILABLE_REASONS = {
   missing:
-    "has no stored credential and no API key in its environment variable. Log in, or add an API key.",
-  expired: "login has expired. Log in again.",
+    "has no stored credential and no API key in its environment variable. Run tau login, or set the environment variable.",
+  expired: "login has expired. Run tau login.",
+  refreshFailed: "login could not be refreshed. Try again; if it keeps failing, run tau login.",
   wrongKind:
-    "credential is the wrong kind for this route: an API key where a subscription login is needed, or the reverse. Log in again with the other method.",
-  unreadableToken: "access token has no ChatGPT account ID. Log in again.",
+    "credential is the wrong kind for this route: an API key where a subscription login is needed, or the reverse. Run tau login and choose this provider again.",
+  unreadableToken: "access token has no ChatGPT account ID. Run tau login.",
 };
 
 type UnavailableReason = keyof typeof UNAVAILABLE_REASONS;
@@ -25,7 +41,13 @@ export class CredentialUnavailable extends Schema.TaggedError<CredentialUnavaila
   "CredentialUnavailable",
   {
     provider: ProviderId,
-    reason: Schema.Literals(["missing", "expired", "wrongKind", "unreadableToken"]),
+    reason: Schema.Literals([
+      "missing",
+      "expired",
+      "refreshFailed",
+      "wrongKind",
+      "unreadableToken",
+    ]),
     message: Schema.String,
     cause: Schema.optional(Schema.Defect()),
   },
@@ -52,7 +74,8 @@ type Sign = (request: HttpClientRequest.HttpClientRequest) => HttpClientRequest.
 
 /**
  * Reads the route's credential and returns what signs a request with it. Fails when the credential
- * is missing, expired or the wrong kind, so callers can check a route before sending anything.
+ * is missing, the wrong kind, or a login that cannot be refreshed, so callers can check a route
+ * before sending anything.
  */
 export const credentialSigner = Effect.fn("credentialSigner")(function* (route: Route) {
   const credential = yield* currentCredential(route);
@@ -62,21 +85,50 @@ export const credentialSigner = Effect.fn("credentialSigner")(function* (route: 
     return apiKeySigner(route, credential.key);
   }
 
+  if (route.auth.kind === "chatgptApp") {
+    const { app } = route.auth;
+
+    if (!Predicate.isTagged(credential, "ChatgptAppTokens"))
+      return yield* unavailable(route, "wrongKind");
+
+    const refresh = (stale: ChatgptAppTokens) =>
+      requestTokens(route.provider, chatgptAppTokenEndpoint(app, stale.clientId), {
+        grant_type: "refresh_token",
+        refresh_token: Redacted.value(stale.refresh),
+      }).pipe(
+        // A refreshed ID token carries no nonce; it is kept only as the next login's hint.
+        Effect.map(({ tokens, idToken }) =>
+          ChatgptAppTokens.make({
+            clientId: stale.clientId,
+            idToken: idToken === undefined ? stale.idToken : Redacted.make(idToken),
+            access: tokens.access,
+            refresh: tokens.refresh,
+            expiresAt: tokens.expiresAt,
+          }),
+        ),
+      );
+
+    const fresh = yield* freshTokens(route, credential, Schema.is(ChatgptAppTokens), refresh);
+    return HttpClientRequest.bearerToken(fresh.access);
+  }
+
   if (!Predicate.isTagged(credential, "OAuthTokens")) return yield* unavailable(route, "wrongKind");
 
-  const expiresSoon = DateTime.isLessThan(
-    credential.expiresAt,
-    DateTime.addDuration(yield* DateTime.now, EXPIRY_MARGIN),
-  );
+  const endpoint = oauthTokenEndpoint(route.auth.oauth);
 
-  if (expiresSoon) return yield* unavailable(route, "expired");
+  const refreshOAuth = (stale: OAuthTokens) =>
+    requestTokens(route.provider, endpoint, {
+      grant_type: "refresh_token",
+      refresh_token: Redacted.value(stale.refresh),
+    }).pipe(Effect.map((issued) => issued.tokens));
 
-  const signWithToken = HttpClientRequest.bearerToken(credential.access);
+  const tokens = yield* freshTokens(route, credential, Schema.is(OAuthTokens), refreshOAuth);
+  const signWithToken = HttpClientRequest.bearerToken(tokens.access);
 
   if (route.auth.kind === "claudeSubscription")
-    return (request) => withClaudeBetas(signWithToken(request));
+    return (request) => asClaudeCode(signWithToken(request));
 
-  const accountId = yield* chatgptAccountId(route, Redacted.value(credential.access));
+  const accountId = yield* chatgptAccountId(route, Redacted.value(tokens.access));
 
   return (request: HttpClientRequest.HttpClientRequest) =>
     HttpClientRequest.setHeaders(signWithToken(request), {
@@ -91,7 +143,7 @@ export const credentialSigner = Effect.fn("credentialSigner")(function* (route: 
  * Effect's AI clients accept only HTTP errors from a client transform.
  */
 export const signRequests = Effect.fn("signRequests")(function* (route: Route) {
-  const context = yield* Effect.context<CredentialStore>();
+  const context = yield* Effect.context<CredentialStore | HttpClient.HttpClient>();
 
   return (client: HttpClient.HttpClient) =>
     HttpClient.mapRequestEffect(client, (request) =>
@@ -128,19 +180,58 @@ const currentCredential = Effect.fn("currentCredential")(function* (route: Route
   return ApiKey.make({ key: key.value });
 });
 
+/**
+ * Returns `tokens`, or refreshed ones when they expire within a minute. Requests that find the same
+ * expired tokens wait for one refresh, in this process or another, and use its result.
+ */
+const freshTokens = Effect.fn("freshTokens")(function* <
+  Tokens extends OAuthTokens | ChatgptAppTokens,
+>(
+  route: Route,
+  tokens: Tokens,
+  isSameKind: (credential: Credential) => credential is Tokens,
+  refresh: (stale: Tokens) => Effect.Effect<Tokens, TokenRequestFailed, HttpClient.HttpClient>,
+) {
+  const expiresSoon = DateTime.isLessThan(
+    tokens.expiresAt,
+    DateTime.addDuration(yield* DateTime.now, EXPIRY_MARGIN),
+  );
+
+  if (!expiresSoon) return tokens;
+
+  const store = yield* CredentialStore;
+  const client = yield* HttpClient.HttpClient;
+
+  // `update` hands back `tokens` itself as the stale credential, so `refresh` can take them typed.
+  const refreshStored = () =>
+    refresh(tokens).pipe(Effect.provideService(HttpClient.HttpClient, client));
+
+  const updated = yield* store
+    .update(route.provider, tokens, refreshStored)
+    .pipe(Effect.catchTag("TokenRequestFailed", (cause) => refreshUnavailable(route, cause)));
+
+  if (Option.isNone(updated)) return yield* unavailable(route, "missing");
+  if (!isSameKind(updated.value)) return yield* unavailable(route, "wrongKind");
+  return updated.value;
+});
+
+const refreshUnavailable = (route: Route, cause: TokenRequestFailed) => {
+  const reason = cause.reason === "refused" ? "expired" : "refreshFailed";
+  const fields = unavailableFields(route, reason);
+
+  return Effect.fail(
+    new CredentialUnavailable({
+      ...fields,
+      message: `${fields.message} (${cause.message})`,
+      cause,
+    }),
+  );
+};
+
 const apiKeySigner = (route: Route, key: Redacted.Redacted): Sign =>
   route.client === "anthropic"
     ? HttpClientRequest.setHeader("x-api-key", Redacted.value(key))
     : HttpClientRequest.bearerToken(key);
-
-const withClaudeBetas = (request: HttpClientRequest.HttpClientRequest) => {
-  const requested = request.headers["anthropic-beta"];
-
-  const betas =
-    requested === undefined ? CLAUDE_SUBSCRIPTION_BETAS : [requested, ...CLAUDE_SUBSCRIPTION_BETAS];
-
-  return HttpClientRequest.setHeader(request, "anthropic-beta", betas.join(","));
-};
 
 const chatgptAccountId = (route: Route, accessToken: string) => {
   const [, payload = ""] = accessToken.split(".");

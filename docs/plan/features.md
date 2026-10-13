@@ -2,13 +2,14 @@
 
 ## Models
 
-- **Providers:** three wire protocols and two subscription logins.
+- **Providers:** three wire protocols and three subscription logins. The two ChatGPT plan logins are equal choices: Sign in with ChatGPT registers Tau as its own app, and the Codex login connects as the Codex CLI does and also works with a device code.
 
   | Provider | Protocol | Login |
   | --- | --- | --- |
   | Anthropic | Anthropic Messages | Claude subscription OAuth |
   | OpenAI | OpenAI Responses | API key |
-  | OpenAI Codex | OpenAI Responses | ChatGPT subscription OAuth |
+  | ChatGPT (`chatgpt`) | OpenAI Responses, public API | ChatGPT plan: Sign in with ChatGPT |
+  | Codex (`codex`) | OpenAI Responses, Codex backend | ChatGPT plan: Codex login |
   | OpenRouter | OpenAI Chat Completions | API key |
   | OpenCode Go | OpenAI Chat Completions | API key |
 

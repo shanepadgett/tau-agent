@@ -76,4 +76,4 @@ Rejected: Pi's folder scan alone, because nothing is type-checked until it runs.
 
 ## Spike before build step 8
 
-Spike 10 (`spikes/package-install/`): from the compiled binary, with no Bun on PATH, can `BUN_BE_BUN=1` install an npm package with its own dependency? And can the extension import that dependency together with the host's SDK and Effect?
+Spike 12 (`spikes/package-install/`): from the compiled binary, with no Bun on PATH, can `BUN_BE_BUN=1` install an npm package with its own dependency? And can the extension import that dependency together with the host's SDK and Effect?

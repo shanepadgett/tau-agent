@@ -22,4 +22,6 @@ Phase zero is complete; its unverified cases are in [deferred.md](deferred.md). 
 
 SDK rounds 1–3 are agreed. Round 4 (isolation and trust) is planned before build step 7.
 
-Next: build step 2, round 2 in [work/ai-layer.md](work/ai-layer.md): Claude and ChatGPT login flows and token refresh through `CredentialStore.update`.
+Under consideration: OpenAI's Sign in with ChatGPT as a subscription login for the public Responses API, alongside or instead of the Codex login. Findings are in [work/ai-layer.md](work/ai-layer.md#under-consideration-sign-in-with-chatgpt).
+
+Next: the compiled-binary `tau login` test, then round 3: the model catalog, the settings file, and the OpenCode Go route ([work/ai-layer.md](work/ai-layer.md#later-rounds)).
