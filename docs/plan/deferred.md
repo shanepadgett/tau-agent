@@ -2,7 +2,8 @@
 
 Decisions to make later. Each line is the question and what brings it up. When that happens, move the item to [questions.md](questions.md).
 
-- OpenTelemetry tracing for enterprises. Comes up when enterprise tracing is requested.
+- OpenTelemetry tracing for enterprises. Comes up when enterprise tracing is requested, or with the live inspector ([features.md](features.md#interface)).
+- The live inspector's design: how processes find the server, what is kept, how bodies are captured. Comes up after the TUI (step 6), or sooner if debugging a provider needs it.
 - How npm delivers the binary: a launcher plus one package per platform, or the npm package holds only SDK types and the binary installs separately. Comes up at build step 8.
 - Whether a separate raw shell tool beats a shell function inside the sandbox. Comes up once the agent loop runs.
 - OS-level confinement for commands that `run` starts: Seatbelt (`sandbox-exec`) on macOS, Landlock or bubblewrap on Linux, as Codex CLI and Claude Code do, limiting writes to the workspace and network to an allowlist. Could be a replaceable SDK part with the OS sandbox as Tau's default. Comes up at build step 4.
@@ -26,5 +27,7 @@ Decisions to make later. Each line is the question and what brings it up. When t
 - A `child` session origin for subagents. Comes up at build step 7; the origin is JSON, so it needs no migration.
 - Images and files in user entries, session titles, and deleting or exporting sessions. Comes up with the TUI (step 6), the auto-name extension and manage-sessions.
 - Compaction as one summary (Pi) or rolling observations (Mastra's observational memory); see [loop-research.md](loop-research.md). Comes up at build step 5.
-- The HTTP fake provider that speaks all three protocols ([architecture.md](architecture.md#testing)). Comes up with the first flow that depends on protocol behavior, such as prompt caching or tool-history repair. When it is built, move the agent-loop tests from the scripted in-process model to it and delete the scripted model.
+- The HTTP fake provider that speaks all three protocols ([architecture.md](architecture.md#testing)). Comes up with the first flow that depends on protocol behavior, such as prompt caching or tool-history repair. When it is built, move the agent-loop tests from the scripted in-process model to it and delete the scripted model. Also move the login tests' signed-header checks to it and remove the `tests` → `ai-internal` allowance in `.fallowrc.jsonc`.
+- Multi-repository sessions and projects ([features.md](features.md#context)). Comes up before build step 6, because the session list depends on it.
+- Cache warnings, the long-lived cache setting, `/settings`, and asking to compact when the cache is cold and the context is large ([features.md](features.md#interface)). The TUI parts come up at build step 6; asking to compact comes up at build step 5.
 - A loop guard, on by default: the same script with the same result several times in a row gets a nudge, then ends the run; identical replies end the run; a reply that repeats itself while streaming is stopped and retried once. Goose's `RepetitionInspector` and OpenCode's `doom_loop` permission are the nearest designs. Comes up when a run is seen looping.
