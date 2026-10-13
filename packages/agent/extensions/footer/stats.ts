@@ -11,10 +11,13 @@ export interface StatsState {
 }
 
 /**
- * Text for the footer's first row. `rightLong` carries "session" and "today" labels;
- * the footer uses `rightShort` when the labeled form does not fit.
+ * Text for the footer's first row. `left` is model plus classifier and `modelOnly` drops the
+ * classifier. `right` lists cost forms from most to least detailed; the footer uses the first that fits.
  */
-export function statsParts(theme: Theme, state: StatsState): { left: string; rightLong: string; rightShort: string } {
+export function statsParts(
+	theme: Theme,
+	state: StatsState,
+): { left: string; modelOnly: string; right: [string, ...string[]] } {
 	const { ctx } = state;
 	const usage = sessionCost(ctx);
 	const session = formatCost(usage.cost);
@@ -28,8 +31,13 @@ export function statsParts(theme: Theme, state: StatsState): { left: string; rig
 	const dim = (text: string | undefined) => (text ? theme.fg("dim", text) : undefined);
 	return {
 		left: join([modelText, state.classifier ? theme.fg("dim", state.classifier) : undefined]),
-		rightLong: join([dim(cacheHit), dim(`${session} session`), dim(`${daily} today`)]),
-		rightShort: join([dim(cacheHit), dim(session), dim(daily)]),
+		modelOnly: modelText,
+		right: [
+			join([dim(cacheHit), dim(`${session} session`), dim(`${daily} today`)]),
+			join([dim(cacheHit), dim(session), dim(daily)]),
+			join([dim(cacheHit), dim(session)]),
+			join([dim(session)]),
+		],
 	};
 }
 

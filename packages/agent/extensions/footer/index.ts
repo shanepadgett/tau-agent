@@ -2,7 +2,7 @@
 // (fallow hotspot). Do NOT proactive-split — wait for a change that forces a
 // natural seam, then extract that concern only.
 import { homedir } from "node:os";
-import { relative } from "node:path";
+import { basename, relative } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { INFO_SEPARATOR } from "@shanepadgett/tau-tui";
@@ -84,19 +84,39 @@ export default function footerExtension(pi: ExtensionAPI): void {
 						classifier,
 						dailyCost,
 					});
-					const costs =
-						visibleWidth(stats.left) + 2 + visibleWidth(stats.rightLong) <= width
-							? stats.rightLong
-							: stats.rightShort;
-					const location = [shortenPath(currentCtx.cwd), gitText(git)].filter(Boolean).join(INFO_SEPARATOR);
-					const trailing = [extensionStatusesText(footerData.getExtensionStatuses()), pi.getSessionName()?.trim()]
-						.filter(Boolean)
-						.join(INFO_SEPARATOR);
-
-					return [
-						renderSplit(width, stats.left, costs),
-						renderSplit(width, theme.fg("dim", location), theme.fg("dim", trailing)),
+					const dim = (text: string) => theme.fg("dim", text);
+					// Row 1: drop cost labels, then daily cost, then cache hit, then the classifier.
+					const cheapestCost = stats.right[stats.right.length - 1] ?? "";
+					const statsRow: [string, string][] = [
+						...stats.right.map((right): [string, string] => [stats.left, right]),
+						[stats.modelOnly, cheapestCost],
 					];
+
+					// Row 2: drop the session name, then shorten the path to its last segment, then drop it,
+					// then middle-truncate the branch. Git counts stay intact.
+					const path = shortenPath(currentCtx.cwd);
+					const dir = path === "~" ? path : basename(path);
+					const statuses = extensionStatusesText(footerData.getExtensionStatuses());
+					const sessionName = pi.getSessionName()?.trim() ?? "";
+					const withSession = [statuses, sessionName].filter(Boolean).join(INFO_SEPARATOR);
+					const gitFull = gitText(git);
+					const join = (...parts: string[]) => dim(parts.filter(Boolean).join(INFO_SEPARATOR));
+					const locationRow: [string, string][] = [
+						[join(path, gitFull), dim(withSession)],
+						[join(path, gitFull), dim(statuses)],
+						[join(dir, gitFull), dim(statuses)],
+						[join(gitFull || dir), dim(statuses)],
+					];
+					if (git) {
+						const counts = git.text === "clean" ? "" : ` (${git.text})`;
+						const budget = width - visibleWidth(statuses) - 1 - counts.length;
+						locationRow.push([
+							join(gitText({ ...git, branch: middleTruncate(git.branch, budget) })),
+							dim(statuses),
+						]);
+					}
+
+					return [renderFit(width, statsRow), renderFit(width, locationRow)];
 				},
 			} satisfies Component & { dispose(): void; invalidate(): void };
 		});
@@ -296,6 +316,24 @@ function extensionStatusesText(statuses: ReadonlyMap<string, string>): string {
 		.sort(([left], [right]) => left.localeCompare(right))
 		.map(([, text]) => text.trim())
 		.join(INFO_SEPARATOR);
+}
+
+/** Renders the first (left, right) pair that fits `width`; the last pair is clipped if none fit. */
+function renderFit(width: number, pairs: [string, string][]): string {
+	for (const [left, right] of pairs) {
+		const gap = left && right ? 1 : 0;
+		if (visibleWidth(left) + gap + visibleWidth(right) <= width) return renderSplit(width, left, right);
+	}
+	const last = pairs[pairs.length - 1];
+	return last ? renderSplit(width, last[0], last[1]) : "";
+}
+
+function middleTruncate(text: string, max: number): string {
+	if (text.length <= max) return text;
+	if (max <= 1) return "…".slice(0, Math.max(0, max));
+	const keep = max - 1;
+	const head = Math.ceil(keep / 2);
+	return `${text.slice(0, head)}…${text.slice(text.length - (keep - head))}`;
 }
 
 function renderSplit(width: number, left: string, right: string): string {
