@@ -1,4 +1,10 @@
-import type { ExtensionAPI, ExtensionContext, Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
+import {
+	estimateTokens,
+	type ExtensionAPI,
+	type ExtensionContext,
+	type Theme,
+	type ThemeColor,
+} from "@earendil-works/pi-coding-agent";
 import { INFO_SEPARATOR } from "@shanepadgett/tau-tui";
 import type { TauAgentEvents } from "../../shared/events.ts";
 import { normalizeUsage, type UsageSummary } from "../../shared/usage.ts";
@@ -76,18 +82,14 @@ export function contextBar(
 	const contextWindow = usage?.contextWindow ?? ctx.model?.contextWindow ?? 0;
 	const percentValue = typeof usage?.percent === "number" ? usage.percent : undefined;
 	const thresholds = level?.thresholds;
-	const currentTokens = usage?.tokens ?? level?.tokens ?? null;
+	const messages = ctx.sessionManager.buildSessionProjection().messages;
+	const currentTokens = usage?.tokens ?? messages.reduce((total, message) => total + estimateTokens(message), 0);
 	const tail = cells / 4;
-	const latest = [...ctx.sessionManager.buildSessionProjection().messages]
-		.reverse()
-		.find((message) => message.role === "assistant");
-	const cachedTokens =
-		latest?.role === "assistant" && currentTokens !== null
-			? Math.max(0, Math.min(currentTokens, latest.usage.cacheRead))
-			: 0;
+	const latest = [...messages].reverse().find((message) => message.role === "assistant");
+	const cachedTokens = latest?.role === "assistant" ? Math.max(0, Math.min(currentTokens, latest.usage.cacheRead)) : 0;
 	if (thresholds && contextWindow > thresholds.forced) {
 		// Linear track from 0 to the forced threshold, then a log-scaled tail from forced to the context window.
-		const tokens = currentTokens ?? 0;
+		const tokens = currentTokens;
 		const usedCells = Math.min(cells, Math.ceil((tokens / thresholds.forced) * cells));
 		const cachedCells = Math.min(usedCells, Math.floor((cachedTokens / thresholds.forced) * cells));
 		const noticeCell = Math.max(1, Math.min(cells - 2, Math.round((thresholds.notice / thresholds.forced) * cells)));
@@ -102,13 +104,11 @@ export function contextBar(
 			if (index === warningCell) bar += theme.fg(tokens >= thresholds.warning ? "error" : "dim", "!");
 			const cellColor: ThemeColor = index >= warningCell ? "error" : index >= noticeCell ? "warning" : "success";
 			bar +=
-				currentTokens === null
-					? theme.fg("dim", "?")
-					: index < cachedCells
-						? theme.fg(cellColor, "•")
-						: index < usedCells
-							? theme.fg(cellColor, "·")
-							: theme.fg("dim", "-");
+				index < cachedCells
+					? theme.fg(cellColor, "•")
+					: index < usedCells
+						? theme.fg(cellColor, "·")
+						: theme.fg("dim", "-");
 		}
 		bar += theme.fg(wallColor, "|");
 		for (let index = 0; index < tail; index++) {
@@ -118,16 +118,12 @@ export function contextBar(
 		return `${bar}${theme.fg("dim", "|")}`;
 	}
 	const total = cells + tail;
-	const usedCells =
-		contextWindow > 0 && currentTokens !== null
-			? Math.min(total, Math.ceil((currentTokens / contextWindow) * total))
-			: 0;
+	const usedCells = contextWindow > 0 ? Math.min(total, Math.ceil((currentTokens / contextWindow) * total)) : 0;
 	const cachedCells = contextWindow > 0 ? Math.min(usedCells, Math.floor((cachedTokens / contextWindow) * total)) : 0;
 	const color: ThemeColor =
 		level?.level === "forced" ? "error" : level?.level === "warning" ? "warning" : contextPercentColor(percentValue);
 	const bar = Array.from({ length: total }, (_value, index) => {
-		const cell =
-			currentTokens === null || contextWindow <= 0 ? "?" : index < cachedCells ? "•" : index < usedCells ? "·" : "-";
+		const cell = contextWindow <= 0 ? "?" : index < cachedCells ? "•" : index < usedCells ? "·" : "-";
 		return theme.fg(cell === "•" || cell === "·" ? color : "dim", cell);
 	}).join("");
 	return `${theme.fg("dim", "[")}${bar}${theme.fg("dim", "]")}`;
