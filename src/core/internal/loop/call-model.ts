@@ -4,7 +4,7 @@
  */
 
 import { Chunk, Effect, Option, Ref, Stream } from "effect";
-import type { Response } from "effect/ai";
+import { AiError, type Response } from "effect/ai";
 import type { Entry } from "../../../session/Entry.ts";
 import { contextView } from "../../../session/ContextView.ts";
 import { runToolkit } from "../run-tool/run-tool.ts";
@@ -16,6 +16,18 @@ import { needsReply } from "./tool-history.ts";
 
 const ANSWERED: Outcome = { type: "end", reason: "answered" };
 const OUTPUT_LIMIT: Outcome = { type: "end", reason: "output-limit" };
+
+/**
+ * Some models sometimes end a reply with no text and no tool call. Taken as the answer, it would end
+ * the run with the work not done, so it fails as invalid output, which is tried again.
+ */
+const EMPTY_REPLY = AiError.make({
+  module: "Agent",
+  method: "reply",
+  reason: new AiError.InvalidOutputError({
+    description: "The model sent an empty reply, with no text and no tool call.",
+  }),
+});
 
 export const callModel =
   <R>(run: RunContext<R>): Operation<R> =>
@@ -65,8 +77,16 @@ const streamReply = Effect.fn("streamReply")(function* <R>(
     ),
   );
 
-  return Chunk.toReadonlyArray(yield* Ref.get(received));
+  const parts = Chunk.toReadonlyArray(yield* Ref.get(received));
+  if (isEmptyReply(parts)) return yield* EMPTY_REPLY;
+
+  return parts;
 });
+
+const isEmptyReply = (parts: readonly Response.AnyPart[]) =>
+  !parts.some(
+    (part) => part.type === "tool-call" || (part.type === "text-delta" && part.delta.trim() !== ""),
+  );
 
 /** Saves what changed in the instructions since the last model call, and gives the entries with it. */
 const withInstructions = Effect.fn("withInstructions")(function* <R>(
