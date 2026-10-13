@@ -268,7 +268,7 @@ How the code differs from the plan above:
 
     Tests: a recording whose completed event has an empty `output` (`tests/recordings/codex-object-empty-output.json`), and a check that Claude subscription requests start the system prompt with the identity and carry the headers.
 
-## Under consideration: Sign in with ChatGPT
+## Sign in with ChatGPT: findings
 
 OpenAI expanded "Sign in with ChatGPT" at DevDay (2026-09-29). Its open-source path lets a tool spend a Plus or Pro plan on the public Responses API (`https://api.openai.com/v1/responses`) with an OAuth token, instead of the Codex backend (`chatgpt.com/backend-api/codex`). Pi and OpenCode both support it already. Pi labels its Codex login "legacy" now that this login replaces it.
 
@@ -311,7 +311,7 @@ Agreed (2026-10-12): build it now, before round 3, and keep the Codex login as a
 
 ## Round 2b (implemented): Sign in with ChatGPT
 
-After round 2b, `tau login` offers two ChatGPT plan logins side by side (names in [README.md](../README.md#open)). Both spend the same plan allowance:
+After round 2b, `tau login` offers two ChatGPT plan logins side by side ("ChatGPT plan: Sign in with ChatGPT" as `chatgpt`, "ChatGPT plan: Codex login" as `codex`). Both spend the same plan allowance:
 
 | | Sign in with ChatGPT | Codex login |
 | --- | --- | --- |

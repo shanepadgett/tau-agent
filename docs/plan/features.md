@@ -56,6 +56,8 @@
 - **Custom messages:** the user or an extension can add a message to the chat, and choose whether it starts a turn.
 - **Branching:** conversations form a tree, as in Pi, but cleaner and easier to understand. Designed at build step 3.
 
+- **Question tracker (to consider):** Tau tracks the questions it asks the user during planning and interviews, keeps the open ones in one place, and clears each when it is answered. Design not started.
+
 ## Prompts and skills
 
 - **One Markdown format** for prompt files and skills, following the Agent Skills standard for skills.

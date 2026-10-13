@@ -15,13 +15,14 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 | [phase-zero.md](phase-zero.md) | Check infrastructure scope, pins, proposed gates, code plan and acceptance cases. |
 | [spikes.md](spikes.md) | Questions tested before building, with results. |
 | [deferred.md](deferred.md) | Decisions to make later, and what brings each up. |
+| [questions.md](questions.md) | Open questions for the user. |
 
-## Open
+## Status
 
-Phase zero is complete; its unverified cases are in [deferred.md](deferred.md). Build step 1 (SQLite service, credential store) shipped. Build step 2 (the AI layer) is under way: round 1 is built, and the rest is planned in [work/ai-layer.md](work/ai-layer.md).
+Phase zero is complete; its unverified cases are in [deferred.md](deferred.md). Build step 1 (SQLite service, credential store) shipped. Build step 2 (the AI layer) is under way: rounds 1, 2 and 2b (Sign in with ChatGPT) are built and confirmed live, and the rest is planned in [work/ai-layer.md](work/ai-layer.md).
 
 SDK rounds 1–3 are agreed. Round 4 (isolation and trust) is planned before build step 7.
 
-Under consideration: OpenAI's Sign in with ChatGPT as a subscription login for the public Responses API, alongside or instead of the Codex login. Findings are in [work/ai-layer.md](work/ai-layer.md#under-consideration-sign-in-with-chatgpt).
+Approved, not yet done: turn off Effect's `unstableApiUsage` warning in `tsconfig.json`.
 
 Next: the compiled-binary `tau login` test, then round 3: the model catalog, the settings file, and the OpenCode Go route ([work/ai-layer.md](work/ai-layer.md#later-rounds)).
