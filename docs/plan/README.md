@@ -23,6 +23,4 @@ Phase zero is complete; its unverified cases are in [deferred.md](deferred.md). 
 
 SDK rounds 1–3 are agreed. Round 4 (isolation and trust) is planned before build step 7.
 
-Approved, not yet done: turn off Effect's `unstableApiUsage` warning in `tsconfig.json`.
-
-Next: the compiled-binary `tau login` test, then round 3: the model catalog, the settings file, and the OpenCode Go route ([work/ai-layer.md](work/ai-layer.md#later-rounds)).
+Next: round 3: the model catalog, the settings file, and the OpenCode Go route ([work/ai-layer.md](work/ai-layer.md#later-rounds)).

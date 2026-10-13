@@ -69,7 +69,11 @@ run = "bun tools/report-failures.ts fallow -- bunx --bun --no-install fallow dup
 [tasks.test]
 description = "Application tests, run after agent runs"
 # A test slower than one second fails here and belongs in a before-commit task.
-run = "bun tools/report-failures.ts bun-test -- bun test ./src ./tests --only-failures --parallel --timeout 1000"
+run = "bun tools/report-failures.ts bun-test -- bun test ./src ./tests --path-ignore-patterns 'tests/binary/**' --only-failures --parallel --timeout 1000"
+
+[tasks."test:binary"]
+description = "Compiled-binary tests, run before commit"
+run = "bun tools/report-failures.ts bun-test -- bun test ./tests/binary --only-failures"
 
 [tasks."test:rules"]
 description = "Lint rule unit tests under Node"

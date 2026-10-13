@@ -94,6 +94,13 @@
           ]
         }
       ],
+      "beforeCommit": [
+        {
+          "name": "Compiled binary tests",
+          "command": "mise run test:binary",
+          "details": "Build the tau binary and drive its commands as a user would."
+        }
+      ],
       "afterRun": [
         {
           "name": "Mise task configuration",

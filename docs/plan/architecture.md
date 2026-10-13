@@ -79,7 +79,7 @@ Checks, lint rules, and library choices are in [tooling.md](tooling.md).
   | Tier | Contains | Runs |
   | --- | --- | --- |
   | Agent run | Format, lint, types, Fallow, unit tests, in-process integration tests, lint rule tests | `silentCommandRunner.afterRun` in `.pi/tau/settings.json`, when matching files change |
-  | Before commit | Compiled-binary tests | `silentCommandRunner.beforeCommit`, once per `/commit`; no Git hook |
+  | Before commit | Compiled-binary tests in `tests/binary/` (`mise run test:binary`); the agent-run `test` task skips that folder | `silentCommandRunner.beforeCommit`, once per `/commit`; no Git hook |
   | Live | Real provider calls | By hand |
 
   In-process tests drive the core client interface in one process, so each takes milliseconds. The agent-run `test` task runs files with `bun test --parallel` and fails any test over 1 second (`--timeout 1000`); a slower test moves to the before-commit tier. The 1-second limit applies to the agent-run tier only: before-commit tests run from their own tasks without it, bounded only by each `beforeCommit` command's `timeoutMs`. Tests within a file run in order. Each test uses its own temporary directory, and the fake provider listens on port 0, so parallel files never share paths or ports. Before-commit commands must not change the working tree, so compiled binaries are built in a temporary directory.

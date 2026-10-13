@@ -410,7 +410,7 @@ The fake auth server gains a registration callback with `client_id`, an ID token
   - `tests/chatgpt-app.test.ts` has eight tests: the seven planned, plus one that the host ID is created once and kept.
   - The streaming test is in `tests/models.test.ts`.
   - The login harness moved to `tests/support/login-harness.ts`, shared with `tests/login.test.ts`.
-  - The logout path in the CLI is checked by hand.
+  - `tests/binary/login.test.ts` builds the binary, logs in with an API key through the prompts, and logs out again. It runs before commit.
 - **Live (2026-10-12).** The spike's registration and host ID were copied into `~/.tau` (`spikes/sign-in-with-chatgpt/import.ts`), so Tau reuses the "Tau" app the spike registered rather than registering a second one. A chat call on the `chatgpt` route (`gpt-6.1-sol`) through `Models` answered. The Claude and `codex` routes answered in the same run. A live refresh through Tau's code has not run yet; the spike refreshed the same registration by hand.
 
 ## Later rounds
