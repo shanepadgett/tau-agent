@@ -25,9 +25,9 @@
 ## Tools
 
 - **Two tools:** `run` and `checks`. Nothing else is model-visible.
-- **`run` (experiment):** runs JavaScript in a QuickJS sandbox. Every other capability (shell, file reads, search, web, process sessions, Python and Node scripts, extension functions) is a function inside it. Scripts chain calls and filter results, so only what they print reaches context. The script decides what runs in sequence (`await` each call) and what runs in parallel (`Promise.all`). Writes to the same file are queued so parallel calls cannot lose edits.
+- **`run` (experiment):** runs JavaScript through `@opencode/codemode`, an interpreter for the subset of JavaScript scripts need. Every other capability (shell, file reads, search, web, process sessions, Python and Node scripts, extension functions) is a function inside it. Scripts chain calls and filter results, so only what they print reaches context. The script decides what runs in sequence (`await` each call) and what runs in parallel (`Promise.all`). Writes to the same file are queued so parallel calls cannot lose edits.
 - **Script edits:** a failed `run` returns a script id. The model retries by sending edits to that script instead of the whole script, as Tau's `eval` tool does today.
-- **Deferred functions:** extension functions stay out of the `run` description until the model finds them with `searchTools` and `describeTool`, as in Pi codemode.
+- **Deferred functions:** extension functions stay out of the `run` description until the model finds them with the interpreter's built-in `search`. A found function is added as a new entry, not edited into the description, and folds into the description at the next compaction.
 - **No write or edit tools:** the model changes files however is most efficient: a script, a regex across many files, `sh`, a codemod. Small helpers (`read`, `write`, `replace(path, old, new)`) exist as sandbox functions the model may skip.
 - **Checks:** replaces Silent Command Runner, keeping its settings shape (`command`, `{files}`, globs, `cwd`, `env`, timeout, output limits) and silent behavior. Each entry has a mode:
 
@@ -45,12 +45,29 @@
 
 - **Background compaction:** borrowed from Pi durable. Above `window − reserve − background` (defaults 16k and 32k), a summary starts in the background while the chat continues. Above `window − reserve`, the next request waits for it. The summary covers everything before a cut that keeps about 20k recent tokens, never splitting a tool call from its result. It is placed when idle or at the next turn boundary, so work done meanwhile stays verbatim. A summary overtaken by a later cut is dropped. A "context too long" error compacts and retries once.
 - **Reset:** start a fresh context from a handoff note. Old entries stay in storage.
-- **Prompt classifier:** one decision-model call per submitted prompt, run after the prompt shows. It handles routing, suggests deferred function groups that look relevant, and flags requests that seem off-topic for the chat so the UI can offer a handoff.
+- **Prompt classifier:** one decision-model call per submitted prompt, run after the prompt shows. It handles routing, and flags requests that seem off-topic for the chat so the UI can offer a handoff.
+- **Function and skill suggestions:** the classifier also weighs the prompt and other signals (recent files, the work in progress, functions used lately) and picks the deferred functions and skills likely to be needed. Only their names go to the model, in a short note added with the prompt, as things it may look up. The full catalog stays hidden, and no instructions tell the model which groups to search. The note is appended with the user's message, so the cached prefix is untouched.
+
+## Conversation
+
+- **Steering:** a message sent while the agent works is delivered at the next step boundary.
+- **Follow-ups:** a message queued while the agent works waits until the run ends, then starts the next turn.
+- **Custom messages:** the user or an extension can add a message to the chat, and choose whether it starts a turn.
+- **Branching:** conversations form a tree, as in Pi, but cleaner and easier to understand. Designed at build step 3.
+
+## Prompts and skills
+
+- **One Markdown format** for prompt files and skills, following the Agent Skills standard for skills.
+- **Arguments, a blend of OpenCode and Pi:** `$ARGUMENTS` or `$@` for everything typed, `$1`, `$2` for positional arguments with shell-like quoting, `${1:-default}`, `${@:N}` and `${@:N:L}` for defaults and ranges, and an optional `argument-hint`. The highest-numbered placeholder takes the rest of the line, and a template with no placeholder gets the arguments appended (both from OpenCode).
+- **Code blocks run when the file is used:** `` !`git status --short` `` inserts a shell command's output, and a fenced `ts run` block runs TypeScript on Tau's Bun and inserts its return value. Arguments reach shell blocks as environment variables, not pasted into the command text, so typed input cannot inject commands (OpenCode pastes them). If a block fails, Tau shows the error and does not send. Each block's command and output show collapsed in the chat.
+- **Skills run their blocks** when the model chooses the skill or the user invokes it.
+- **Skills are always deferred:** none are listed in the system prompt. The model finds them by search, like deferred functions, and the classifier suggests likely ones.
+- **User-only skills:** `disable-model-invocation: true` hides a skill from the model, so only the user can invoke it, as in Pi and OpenCode.
 
 ## Interface
 
 - **TUI:** a chat pane and a sidebar, built on OpenTUI. The sidebar shows session state (context use, cost, running processes, compaction in progress) instead of Pi-style footers. Extensions add UI through named slots.
-- **Base system prompt:** Soul and the runtime context (date, directory snapshot) are Tau's own system prompt, not an extension.
+- **Base system prompt:** Soul is Tau's default, and an extension can replace it until the session's first model call ([sdk-catalog.md](sdk-catalog.md#replaceable-runtime-parts)). The runtime context (date, directory snapshot) and other guidance are instruction sources; their changes arrive as notes in the chat.
 
 ## Extensions
 
