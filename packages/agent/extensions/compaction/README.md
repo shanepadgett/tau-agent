@@ -14,6 +14,6 @@ Quick-model summary selection is independent of self-compaction and stays active
 
 Only `self_compact` uses the durable-context checkpoint with an agent-written handoff and replaces the complete raw history. Manual, threshold, and overflow compaction use Pi's normal summary format and retained boundary in both modes, without requiring or generating a self-compaction handoff. Earlier messages and any split-turn prefix go into the summary, while recent messages stay raw.
 
-Self-compaction limits durable context to 8,000 characters, separate from the verbatim handoff and file lists. If generation reaches its output limit or exceeds the durable-context limit, Tau regenerates from the full conversation with limits of 4,000, then 2,000 characters on the same model before falling back. Partial summaries are never saved. Transient provider failures follow Pi's configured retry policy.
+Self-compaction uses Pi's normal structured summary and output-token budget, then appends the saved handoff verbatim once. It does not require JSON output or enforce a character limit on the summary. Partial summaries are never saved. Transient provider failures follow Pi's configured retry policy.
 
 Failed self-compactions retain the handoff and tool lock; the next run can retry. `/compact` can also recover: it keeps recent history and delivers the saved handoff separately afterward. Failed quick-model summaries from native triggers fall back to Pi's default compaction.
