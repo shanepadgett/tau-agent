@@ -46,7 +46,9 @@ Use `/cost-report` to view spending for a chosen period and either the current p
 
 Tau automatically replaces long conversation history with a checkpoint so work can continue. Use `/compact` to do this manually. Configure `extensions.compaction.selfCompact` to change its thresholds. Settings changes require `/reload`.
 
-Set `extensions.compaction.selfCompact.enabled` to `false` to disable self-compaction, including its tool, instructions, handoff recovery, and post-compaction model routing. Manual and automatic compaction then use Pi's built-in summary format and configured recent-token retention. Quick-model summary selection stays active in both modes. The footer continues showing context usage.
+Manual, automatic, and overflow-recovery compaction use Pi's normal summary format and preserve the recent messages selected by its configured `keepRecentTokens` setting, even when self-compaction is enabled. They do not require or generate a self-compaction handoff. The `self_compact` tool instead replaces earlier raw history with a checkpoint that includes the agent's saved handoff. If `/compact` recovers a pending self-compaction, that saved handoff is delivered separately afterward.
+
+Set `extensions.compaction.selfCompact.enabled` to `false` to disable self-compaction, including its tool, instructions, handoff recovery, and post-compaction model routing. Manual and automatic compaction then use Pi's built-in summary format. Quick-model summary selection stays active in both modes. The footer continues showing context usage.
 
 Each newly reached context stage is delivered once per checkpoint. Notice is informational and lets active work continue. Warning asks the agent to finish its current bounded work unit, then compact before starting another substantial unit.
 

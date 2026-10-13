@@ -23,28 +23,7 @@ export async function resolveCompactionCandidates(ctx: ExtensionContext) {
 	return candidates;
 }
 
-export async function summarize(
-	messages: Parameters<typeof convertToLlm>[0],
-	agentHandoff: { id: string; toolCallId: string; text: string } | null,
-	ctx: ExtensionContext,
-	instructions: string | undefined,
-	signal: AbortSignal,
-) {
-	const session = ctx.model;
-	if (!session) throw new Error("No model available for compaction");
-	// Use only canonical projected content, never the raw branch's message bodies.
-	const history = messages.flatMap<(typeof messages)[number]>((message) => {
-		if (message.role === "system") return [];
-		if (message.role === "custom" && message.customType === "tau.compaction.guidance") return [];
-		if (agentHandoff && message.role === "toolResult" && message.toolCallId === agentHandoff.toolCallId) return [];
-		if (agentHandoff && message.role === "assistant") {
-			const content = message.content.filter(
-				(part) => part.type !== "toolCall" || part.id !== agentHandoff.toolCallId,
-			);
-			return content.length ? [{ ...message, content }] : [];
-		}
-		return [message];
-	});
+export function previousCompactionFiles(ctx: ExtensionContext) {
 	const read = new Set<string>();
 	const modified = new Set<string>();
 	const previous = [...ctx.sessionManager.getBranch()].reverse().find((entry) => entry.type === "compaction");
@@ -55,6 +34,31 @@ export async function summarize(
 		if (Array.isArray(details.modifiedFiles))
 			for (const file of details.modifiedFiles) if (typeof file === "string") modified.add(file);
 	}
+	return { read, modified };
+}
+
+export async function summarize(
+	messages: Parameters<typeof convertToLlm>[0],
+	agentHandoff: { id: string; toolCallId: string; text: string },
+	ctx: ExtensionContext,
+	signal: AbortSignal,
+) {
+	const session = ctx.model;
+	if (!session) throw new Error("No model available for compaction");
+	// Use only canonical projected content, never the raw branch's message bodies.
+	const history = messages.flatMap<(typeof messages)[number]>((message) => {
+		if (message.role === "system") return [];
+		if (message.role === "custom" && message.customType === "tau.compaction.guidance") return [];
+		if (message.role === "toolResult" && message.toolCallId === agentHandoff.toolCallId) return [];
+		if (message.role === "assistant") {
+			const content = message.content.filter(
+				(part) => part.type !== "toolCall" || part.id !== agentHandoff.toolCallId,
+			);
+			return content.length ? [{ ...message, content }] : [];
+		}
+		return [message];
+	});
+	const { read, modified } = previousCompactionFiles(ctx);
 	for (const message of history) {
 		const calls =
 			message.role === "assistant"
@@ -71,12 +75,15 @@ export async function summarize(
 	}
 	const readFiles = [...read].filter((file) => !modified.has(file)).sort();
 	const modifiedFiles = [...modified].sort();
-	const input = JSON.stringify({
+	const requestInput = JSON.stringify({
 		conversation: serializeConversation(convertToLlm(history)),
-		agentHandoff: agentHandoff?.text ?? null,
-		customInstructions: instructions ?? null,
+		agentHandoff: agentHandoff.text,
 	});
-	const request = { role: "user" as const, content: [{ type: "text" as const, text: input }], timestamp: Date.now() };
+	const request = {
+		role: "user" as const,
+		content: [{ type: "text" as const, text: requestInput }],
+		timestamp: Date.now(),
+	};
 	// Include serialization overhead, not the native preparation's split-history estimate.
 	const inputTokens = estimateTokens(request) + Math.ceil(SUMMARY_PROMPT.length / 4) + 1024;
 	const { reserveTokens } = SettingsManager.create(ctx.cwd).getCompactionSettings(session);
@@ -107,14 +114,12 @@ export async function summarize(
 			if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Invalid checkpoint");
 			const parts = parsed as Record<string, unknown>;
 			if (
+				Object.keys(parts).length !== 1 ||
 				typeof parts.durableContext !== "string" ||
-				!parts.durableContext.trim() ||
-				(agentHandoff
-					? parts.handoff !== null
-					: typeof parts.handoff !== "string" || !parts.handoff.trim() || parts.handoff.length > 24000)
+				!parts.durableContext.trim()
 			)
-				throw new Error("Checkpoint must contain durable context and exactly one current handoff");
-			const handoff = agentHandoff ? agentHandoff.text : String(parts.handoff);
+				throw new Error("Checkpoint must contain only a nonempty durableContext string");
+			const handoff = agentHandoff.text;
 			let summary = `## Durable context\n\n${parts.durableContext.trim()}`;
 			if (readFiles.length) summary += `\n\n<read-files>\n${readFiles.join("\n")}\n</read-files>`;
 			if (modifiedFiles.length) summary += `\n\n<modified-files>\n${modifiedFiles.join("\n")}\n</modified-files>`;
@@ -125,7 +130,7 @@ export async function summarize(
 				usage: response.usage,
 				details: {
 					checkpointId: randomUUID(),
-					handoffId: agentHandoff?.id ?? null,
+					handoffId: agentHandoff.id,
 					handoff,
 					readFiles,
 					modifiedFiles,

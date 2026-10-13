@@ -13,6 +13,7 @@ import { Loader } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { emitTauEvent, type TauAgentEvents } from "../../shared/events.ts";
 import { registerPromptSource } from "../../shared/prompt-contributions.ts";
+import { summarizeNativeCompaction } from "./native.ts";
 import settingsSpec from "./settings.ts";
 import { summarize } from "./summary.ts";
 
@@ -340,7 +341,6 @@ export function registerSelfCompaction(
 						event.context.contextMessages,
 						{ id: handoff.id, toolCallId: handoff.toolCallId, text: handoff.note },
 						ctx,
-						undefined,
 						signal,
 					);
 					progress?.loader?.setMessage("Preparing handoff…");
@@ -416,53 +416,23 @@ export function registerSelfCompaction(
 			};
 		}
 	});
-	// Native triggers share the checkpoint builder and keep Pi's own progress UI.
+	// Native triggers keep Pi's summary format, retained history, and progress UI.
 	pi.on("session_before_compact", async (event, ctx) => {
 		clearProgress();
-		const note = state.phase === "watching" ? null : state;
 		const signal = AbortSignal.any([event.signal, lifetime.signal]);
-		try {
-			const result = await summarize(
-				ctx.sessionManager.buildSessionProjection().messages,
-				note ? { id: note.id, toolCallId: note.toolCallId, text: note.note } : null,
-				ctx,
-				event.customInstructions,
-				signal,
-			);
-			signal.throwIfAborted();
-			// The non-message anchor adapts the required string boundary in Pi's
-			// native result without keeping any preceding raw conversation.
-			pi.appendEntry("tau.compaction.anchor", { checkpointId: result.details.checkpointId });
-			const firstKeptEntryId = ctx.sessionManager.getLeafId();
-			if (!firstKeptEntryId) throw new Error("Compaction retention anchor was not journaled");
-			return { compaction: { ...result, firstKeptEntryId, tokensBefore: event.preparation.tokensBefore } };
-		} catch {
-			if (signal.aborted) return { cancel: true };
-			ctx.ui.notify("Tau checkpoint failed; trying Pi compaction.", "warning");
-			// Pi remains the safety net for manual, threshold, and overflow recovery.
-			return undefined;
-		}
+		return summarizeNativeCompaction({ ...event, signal }, ctx);
 	});
 	pi.on("session_compact", async (event, ctx) => {
 		const scope = lifetime.signal;
 		const note = state.phase === "watching" ? null : state;
-		const details = event.compactionEntry.details as
-			| { checkpointId?: string; handoffId?: string; handoff?: string }
-			| undefined;
+		const details = event.compactionEntry.details as { handoffId?: string } | undefined;
 		const included = !!note && details?.handoffId === note.id;
 		state =
 			note && !included
 				? { ...note, phase: "ready" }
 				: { phase: "watching", cycle: state.cycle + 1, nudged: false, forced: false };
 		save();
-		if (!event.fromExtension)
-			ctx.ui.notify("Tau checkpoint failed; used Pi compaction, recent history retained.", "warning");
-		await route(
-			details?.checkpointId
-				? (details.handoff ?? note?.note ?? event.compactionEntry.summary)
-				: (note?.note ?? event.compactionEntry.summary),
-			ctx,
-		);
+		await route(note?.note ?? event.compactionEntry.summary, ctx);
 		if (scope.aborted) return;
 		if (note && (!included || !event.willRetry))
 			pi.sendMessage(
