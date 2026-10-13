@@ -14,15 +14,17 @@ Decisions to make later. Each line is the question and what brings it up. When t
 - Whether to carry FFF's native tie-break patch. Comes up if a ranking bug is opened after trying unpatched FFF; prefer an upstream fix over maintaining native binaries.
 - web-tree-sitter or `@ast-grep` for code-structure tools. Comes up when those tools are rebuilt.
 - Crash risk: a tool can succeed and the process die before its result is saved, so a rebuild could rerun it. Recording a tool-started entry would show the crash as an interrupted tool. Comes up at build step 4, since it bears on "no background task recovery".
-- One SQLite database file per session, or one shared file. Comes up at build step 3.
-- How branching works: what a branch point is, how the user moves between branches and sees the tree, and what Pi's design makes hard to understand. Comes up at build step 3.
 - OS keychain storage, encryption at rest, several accounts per provider, or per-project credentials. Comes up when a user or enterprise asks for one.
 - Whether Fallow follows dynamically loaded default exports. Comes up when the extension host loads modules by path.
 - The exact 49/50-token duplicate thresholds. Comes up when a duplicate report looks wrong near the threshold.
 - Whether development hooks rerun checks after a live session's files change. Comes up when a hook misses a change in a live session.
-- The Codex `session_id` header and priority tier. Comes up at build step 3, when sessions supply the conversation ID.
+- The Codex `session_id` header and priority tier. Comes up at build step 4, when the turn loop calls models with the session ID.
 - Parsing a `provider/model` string. Comes up with the first caller that takes a model name from the user.
 - ChatGPT plan usage-limit errors, with a link to the usage settings. Comes up at build step 4, when the turn loop handles errors.
 - Refreshing OAuth tokens in the background before a request needs them. Comes up if a refresh noticeably delays a request.
 - A live token refresh on the `chatgpt` route through Tau's code (offline tests cover it). Comes up at the next live check.
 - Whether Tau reloads `~/.tau/settings.json` when it changes, or only on start. Comes up at build step 7, with extension hot reload.
+- Turning a model reply into an assistant entry, with usage and the finish reason. Comes up at build step 4, when the turn loop saves replies.
+- Wiring `sessionsLayer` into `cli`. Comes up at build step 4, the first command that uses sessions; wiring it earlier would create `sessions.db` on `tau login`.
+- A `child` session origin for subagents. Comes up at build step 7; the origin is JSON, so it needs no migration.
+- Images and files in user entries, session titles, and deleting or exporting sessions. Comes up with the TUI (step 6), the auto-name extension and manage-sessions.
