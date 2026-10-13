@@ -1,33 +1,20 @@
 // lean: footer mixes git-status parse + usage/cost math + render; high churn
 // (fallow hotspot). Do NOT proactive-split — wait for a change that forces a
 // natural seam, then extract that concern only.
-import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, relative } from "node:path";
-import type { ExtensionAPI, ExtensionContext, Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
+import { relative } from "node:path";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { onTauEvent, onTauEventImmediately, type TauAgentEvents } from "../../shared/events.ts";
+import { INFO_SEPARATOR } from "@shanepadgett/tau-tui";
+import { emitTauEvent, onTauEventImmediately, type TauAgentEvents } from "../../shared/events.ts";
 import { loadTauExtensionSettings, updateTauExtensionSettings } from "../../shared/settings/load.ts";
+import { readUsageCosts } from "../../shared/usage.ts";
 import footerSettings from "./settings.ts";
-
-interface FooterItem {
-	id: string;
-	priority: number;
-	text: string;
-}
+import { contextBar, statsParts } from "./stats.ts";
 
 interface GitSummary {
 	branch: string;
 	text: string;
-}
-
-interface UsageSummary {
-	input: number;
-	output: number;
-	cacheRead: number;
-	cacheWrite: number;
-	latestCacheHitRate: number | undefined;
-	cost: number;
 }
 
 const COMMAND = "footer";
@@ -38,31 +25,31 @@ export default function footerExtension(pi: ExtensionAPI): void {
 	let activeCtx: ExtensionContext | undefined;
 	let footerInstalled = false;
 	let requestRender: (() => void) | undefined;
-	let unsubscribeFooterItems: (() => void) | undefined;
 	const gitByCwd = new Map<string, GitSummary | undefined>();
 	let gitRefresh: Promise<void> | undefined;
 	let dailyCost: number | undefined;
 	let dailyRefresh: Promise<void> | undefined;
-	const items = new Map<string, FooterItem>();
-	let route: string | null = null;
+	let classifier: string | null = null;
 	let compactionLevel: TauAgentEvents["tau:compaction.level"] | null = null;
-	onTauEventImmediately(pi, "footer.routing", "tau:decisions.route", (selection) => {
-		route = selection?.route ?? null;
+	onTauEventImmediately(pi, "footer.classifier", "tau:decisions.classifier", (label) => {
+		classifier = label;
 		render();
 	});
 	onTauEventImmediately(pi, "footer.compaction", "tau:compaction.level", (level) => {
 		compactionLevel = level;
 		render();
 	});
-	function restoreRoute(ctx: ExtensionContext) {
-		const latest = [...ctx.sessionManager.getBranch()]
-			.reverse()
-			.find((entry) => entry.type === "custom" && entry.customType === "tau.decisions.route");
-		const data = latest?.type === "custom" ? asRecord(latest.data) : undefined;
-		route = typeof data?.route === "string" ? data.route : null;
+	function publishContextBar(): void {
+		const ctx = activeCtx;
+		emitTauEvent(pi, "tau:editor-slot", {
+			slot: "top-center",
+			id: "context-bar",
+			text: ctx && enabled ? contextBar(ctx.ui.theme, ctx, compactionLevel) : undefined,
+		});
 	}
 
 	function render(): void {
+		publishContextBar();
 		requestRender?.();
 	}
 
@@ -85,38 +72,30 @@ export default function footerExtension(pi: ExtensionAPI): void {
 					if (requestRender) requestRender = undefined;
 				},
 				invalidate() {
-					render();
+					requestRender?.();
 				},
 				render(width: number): string[] {
 					if (!enabled) return [];
 					const currentCtx = activeCtx ?? ctx;
 					const git = gitByCwd.get(currentCtx.cwd);
-					const model = currentCtx.model ? `${currentCtx.model.provider}/${currentCtx.model.id}` : "no-model";
-					const thinking = pi.getThinkingLevel();
-					const decisionStatus = footerData.getExtensionStatuses().get("decisions") ?? "";
-					const decisionModel =
-						decisionStatus === "decisions off" || decisionStatus.startsWith("decisions unavailable")
-							? ""
-							: decisionStatus;
-					const separator = theme.fg("dim", " • ");
-					const workType = route ? `${theme.fg("accent", theme.bold(route))}${theme.fg("dim", " · ")}` : "";
-					const topLeft = [
-						`${workType}${theme.fg("dim", `${model} (${thinking})`)}`,
-						decisionModel ? theme.fg("dim", decisionModel) : "",
-					]
+					const stats = statsParts(theme, {
+						ctx: currentCtx,
+						thinking: pi.getThinkingLevel(),
+						classifier,
+						dailyCost,
+					});
+					const costs =
+						visibleWidth(stats.left) + 2 + visibleWidth(stats.rightLong) <= width
+							? stats.rightLong
+							: stats.rightShort;
+					const location = [shortenPath(currentCtx.cwd), gitText(git)].filter(Boolean).join(INFO_SEPARATOR);
+					const trailing = [extensionStatusesText(footerData.getExtensionStatuses()), pi.getSessionName()?.trim()]
 						.filter(Boolean)
-						.join(separator);
-					const sessionUsage = sessionCost(currentCtx);
-					const session = formatCost(sessionUsage.cost);
-					const daily = dailyCost === undefined ? "$?" : formatCost(dailyCost);
-					const topRight = statsText(theme, currentCtx, sessionUsage, session, daily, compactionLevel);
-					const middleLeft = [shortenPath(currentCtx.cwd), sessionName(currentCtx)].filter(Boolean).join(" • ");
-					const middleRight = extensionStatusesText(footerData.getExtensionStatuses());
+						.join(INFO_SEPARATOR);
 
 					return [
-						renderSplit(width, topLeft, topRight),
-						renderSplit(width, theme.fg("dim", middleLeft), theme.fg("dim", middleRight)),
-						renderSplit(width, theme.fg("dim", gitText(git)), theme.fg("dim", footerItemsText(items))),
+						renderSplit(width, stats.left, costs),
+						renderSplit(width, theme.fg("dim", location), theme.fg("dim", trailing)),
 					];
 				},
 			} satisfies Component & { dispose(): void; invalidate(): void };
@@ -145,9 +124,9 @@ export default function footerExtension(pi: ExtensionAPI): void {
 
 	async function refreshDailyCost(): Promise<void> {
 		if (dailyRefresh) return dailyRefresh;
-		dailyRefresh = scanDailyCost()
-			.then((cost) => {
-				dailyCost = cost;
+		dailyRefresh = readUsageCosts(localDayRange(Date.now()), AbortSignal.timeout(10000))
+			.then((costs) => {
+				dailyCost = costs.total;
 			})
 			.catch(() => {})
 			.finally(() => {
@@ -175,24 +154,9 @@ export default function footerExtension(pi: ExtensionAPI): void {
 		}
 		ctx.ui.setFooter(undefined);
 		footerInstalled = false;
+		publishContextBar();
 	}
 
-	unsubscribeFooterItems = onTauEvent(pi, "footer.items", "tau:footer-item", (item) => {
-		if (!item.id.trim()) return;
-		const text = item.text?.trim();
-		const existing = items.get(item.id);
-		if (!text) {
-			if (!existing) return;
-			items.delete(item.id);
-			render();
-			return;
-		}
-
-		const next = { id: item.id, priority: item.priority ?? 0, text };
-		if (existing?.priority === next.priority && existing.text === next.text) return;
-		items.set(item.id, next);
-		render();
-	});
 	pi.registerCommand(COMMAND, {
 		description: "Toggle Tau footer",
 		handler: async (args, ctx) => {
@@ -227,13 +191,11 @@ export default function footerExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
-		restoreRoute(ctx);
 		const settings = await loadTauExtensionSettings(ctx, footerSettings);
 		setEnabled(ctx, settings.enabled);
 		onStateChange(ctx);
 	});
 	pi.on("session_tree", (_event, ctx) => {
-		restoreRoute(ctx);
 		onStateChange(ctx, false);
 	});
 	pi.on("model_select", (_event, ctx) => {
@@ -247,14 +209,13 @@ export default function footerExtension(pi: ExtensionAPI): void {
 	pi.on("agent_end", (_event, ctx) => onStateChange(ctx));
 
 	pi.on("session_shutdown", (_event, ctx) => {
-		unsubscribeFooterItems?.();
-		unsubscribeFooterItems = undefined;
 		requestRender = undefined;
 		activeCtx = undefined;
-		route = null;
+		classifier = null;
 		compactionLevel = null;
 		footerInstalled = false;
 		ctx.ui.setFooter(undefined);
+		emitTauEvent(pi, "tau:editor-slot", { slot: "top-center", id: "context-bar" });
 	});
 
 	function onStateChange(ctx: ExtensionContext, includeDaily = true): void {
@@ -321,272 +282,6 @@ function isConflict(x: string | undefined, y: string | undefined): boolean {
 	return x === "U" || y === "U" || (x === "A" && y === "A") || (x === "D" && y === "D");
 }
 
-function sessionCost(ctx: Pick<ExtensionContext, "sessionManager">): UsageSummary {
-	let usage = zeroUsage();
-	for (const entry of ctx.sessionManager.getEntries()) {
-		if (entry.type === "custom" && entry.customType === "tau.decisions.usage") {
-			usage.cost += numberOrZero(asRecord(entry.data)?.cost);
-			continue;
-		}
-		if (entry.type === "message" && entry.message.role === "assistant") {
-			usage = addUsage(usage, normalizeUsage(entry.message.usage), true);
-			continue;
-		}
-		if (entry.type === "message" && entry.message.role === "toolResult" && entry.message.usage) {
-			usage = addUsage(usage, normalizeUsage(entry.message.usage), false);
-			continue;
-		}
-		if ((entry.type === "compaction" || entry.type === "branch_summary") && entry.usage) {
-			usage = addUsage(usage, normalizeUsage(entry.usage), false);
-		}
-	}
-	return usage;
-}
-
-function statsText(
-	theme: Theme,
-	ctx: ExtensionContext,
-	usage: UsageSummary,
-	session: string,
-	daily: string,
-	level: TauAgentEvents["tau:compaction.level"] | null,
-): string {
-	return [
-		contextText(theme, ctx, level),
-		usage.latestCacheHitRate === undefined ? "" : theme.fg("dim", `CH${usage.latestCacheHitRate.toFixed(1)}%`),
-		theme.fg("dim", `S|${session} D|${daily}`),
-	]
-		.filter(Boolean)
-		.join(theme.fg("dim", " • "));
-}
-
-function contextText(
-	theme: Theme,
-	ctx: ExtensionContext,
-	level: TauAgentEvents["tau:compaction.level"] | null,
-): string {
-	const usage = ctx.getContextUsage();
-	const contextWindow = usage?.contextWindow ?? ctx.model?.contextWindow ?? 0;
-	const percentValue = typeof usage?.percent === "number" ? usage.percent : undefined;
-	const thresholds = level?.thresholds;
-	const currentTokens = usage?.tokens ?? level?.tokens ?? null;
-	const latest = [...ctx.sessionManager.buildSessionProjection().messages]
-		.reverse()
-		.find((message) => message.role === "assistant");
-	const cachedTokens =
-		latest?.role === "assistant" && currentTokens !== null
-			? Math.max(0, Math.min(currentTokens, latest.usage.cacheRead))
-			: 0;
-	if (thresholds && contextWindow > thresholds.forced) {
-		// Linear track from 0 to the forced threshold, then a log-scaled tail from forced to the context window.
-		const tokens = currentTokens ?? 0;
-		const usedCells = Math.min(16, Math.ceil((tokens / thresholds.forced) * 16));
-		const cachedCells = Math.min(usedCells, Math.floor((cachedTokens / thresholds.forced) * 16));
-		const noticeCell = Math.max(1, Math.min(14, Math.round((thresholds.notice / thresholds.forced) * 16)));
-		const warningCell = Math.max(
-			noticeCell + 1,
-			Math.min(15, Math.round((thresholds.warning / thresholds.forced) * 16)),
-		);
-		const wallColor: ThemeColor = tokens >= thresholds.forced ? "error" : "dim";
-		let bar = theme.fg("dim", "|");
-		for (let index = 0; index < 16; index++) {
-			if (index === noticeCell) bar += theme.fg(tokens >= thresholds.notice ? "warning" : "dim", "?");
-			if (index === warningCell) bar += theme.fg(tokens >= thresholds.warning ? "error" : "dim", "!");
-			const cellColor: ThemeColor = index >= warningCell ? "error" : index >= noticeCell ? "warning" : "success";
-			bar +=
-				currentTokens === null
-					? theme.fg("dim", "?")
-					: index < cachedCells
-						? theme.fg(cellColor, "•")
-						: index < usedCells
-							? theme.fg(cellColor, "·")
-							: theme.fg("dim", "-");
-		}
-		bar += theme.fg(wallColor, "|");
-		for (let index = 0; index < 4; index++) {
-			const start = thresholds.forced * (contextWindow / thresholds.forced) ** (index / 4);
-			bar += tokens > start ? theme.fg("error", "▓") : theme.fg("dim", "░");
-		}
-		return `${bar}${theme.fg("dim", "|")}`;
-	}
-	const usedCells =
-		contextWindow > 0 && currentTokens !== null ? Math.min(20, Math.ceil((currentTokens / contextWindow) * 20)) : 0;
-	const cachedCells = contextWindow > 0 ? Math.min(usedCells, Math.floor((cachedTokens / contextWindow) * 20)) : 0;
-	const color: ThemeColor =
-		level?.level === "forced" ? "error" : level?.level === "warning" ? "warning" : contextPercentColor(percentValue);
-	const bar = Array.from({ length: 20 }, (_value, index) => {
-		const cell =
-			currentTokens === null || contextWindow <= 0 ? "?" : index < cachedCells ? "•" : index < usedCells ? "·" : "-";
-		return theme.fg(cell === "•" || cell === "·" ? color : "dim", cell);
-	}).join("");
-	return `${theme.fg("dim", "[")}${bar}${theme.fg("dim", "]")}`;
-}
-
-function contextPercentColor(percent: number | undefined): ThemeColor {
-	if (percent === undefined) return "dim";
-	if (percent > 80) return "error";
-	if (percent > 50) return "warning";
-	return "dim";
-}
-
-async function scanDailyCost(): Promise<number> {
-	const range = localDayRange(Date.now());
-	const seen = new Set<string>();
-	let total = 0;
-
-	for (const path of await sessionFiles()) {
-		try {
-			if ((await stat(path)).mtimeMs < range.startMs) continue;
-			const raw = await readFile(path, "utf8");
-			total += dailyCostFromJsonl(raw, range, seen);
-		} catch {
-			// One bad session file should not break the footer.
-		}
-	}
-
-	return total;
-}
-
-function usageIdentityFromEntry(
-	entry: Record<string, unknown>,
-): { usageValue: unknown; timestamp: number; identity: unknown[] } | undefined {
-	if (entry.type === "custom" && entry.customType === "tau.decisions.usage") {
-		const data = asRecord(entry.data);
-		return {
-			usageValue: { cost: { total: numberOrZero(data?.cost) } },
-			timestamp: timestampMs(undefined, entry.timestamp),
-			identity: [entry.customType, entry.id, data?.model, data?.feature],
-		};
-	}
-	if (entry.type === "message") {
-		const message = asRecord(entry.message);
-		if (!message) return undefined;
-		const timestamp = timestampMs(message.timestamp, entry.timestamp);
-		if (message.role === "assistant" && asRecord(message.usage)) {
-			return {
-				usageValue: message.usage,
-				timestamp,
-				identity: ["assistant", message.provider, message.model],
-			};
-		}
-		if (message.role === "toolResult" && asRecord(message.usage)) {
-			return {
-				usageValue: message.usage,
-				timestamp,
-				identity: ["toolResult", message.toolName, message.toolCallId],
-			};
-		}
-		return undefined;
-	}
-	if ((entry.type === "compaction" || entry.type === "branch_summary") && asRecord(entry.usage)) {
-		return {
-			usageValue: entry.usage,
-			timestamp: timestampMs(undefined, entry.timestamp),
-			identity: [entry.type, entry.id],
-		};
-	}
-	return undefined;
-}
-
-function usageDedupeKey(identity: readonly unknown[], timestamp: number, usage: UsageSummary): string {
-	return [...identity, timestamp, usage.input, usage.output, usage.cacheRead, usage.cacheWrite, usage.cost].join(":");
-}
-
-function dailyCostFromJsonl(
-	raw: string,
-	range: { startMs: number; endMs: number },
-	seen: Set<string> = new Set<string>(),
-): number {
-	let total = 0;
-	for (const line of raw.split("\n")) {
-		const entry = parseRecord(line);
-		if (!entry) continue;
-		const parsed = usageIdentityFromEntry(entry);
-		if (!parsed) continue;
-		if (parsed.timestamp < range.startMs || parsed.timestamp >= range.endMs) continue;
-		const usage = normalizeUsage(parsed.usageValue);
-		const key = usageDedupeKey(parsed.identity, parsed.timestamp, usage);
-		if (seen.has(key)) continue;
-		seen.add(key);
-		total += usage.cost;
-	}
-	return total;
-}
-
-async function sessionFiles(): Promise<string[]> {
-	const root = join(homedir(), ".pi", "agent", "sessions");
-	const files: string[] = [];
-	try {
-		for (const dir of await readdir(root, { withFileTypes: true })) {
-			if (!dir.isDirectory()) continue;
-			const child = join(root, dir.name);
-			for (const file of await readdir(child, { withFileTypes: true })) {
-				if (file.isFile() && file.name.endsWith(".jsonl")) files.push(join(child, file.name));
-			}
-		}
-	} catch {
-		return [];
-	}
-	return files;
-}
-
-function parseRecord(line: string): Record<string, unknown> | undefined {
-	const trimmed = line.trim();
-	if (!trimmed) return undefined;
-	try {
-		return asRecord(JSON.parse(trimmed));
-	} catch {
-		return undefined;
-	}
-}
-
-function normalizeUsage(value: unknown): UsageSummary {
-	const record = asRecord(value);
-	const cost = asRecord(record?.cost);
-	const input = numberOrZero(record?.input);
-	const output = numberOrZero(record?.output);
-	const cacheRead = numberOrZero(record?.cacheRead);
-	const cacheWrite = numberOrZero(record?.cacheWrite);
-	const promptTokens = input + cacheRead + cacheWrite;
-	const costTotal =
-		numberOrZero(cost?.total) ||
-		numberOrZero(cost?.input) +
-			numberOrZero(cost?.output) +
-			numberOrZero(cost?.cacheRead) +
-			numberOrZero(cost?.cacheWrite);
-	return {
-		input,
-		output,
-		cacheRead,
-		cacheWrite,
-		latestCacheHitRate: promptTokens > 0 ? (cacheRead / promptTokens) * 100 : undefined,
-		cost: costTotal,
-	};
-}
-
-function addUsage(left: UsageSummary, right: UsageSummary, updateCacheHitRate: boolean): UsageSummary {
-	return {
-		input: left.input + right.input,
-		output: left.output + right.output,
-		cacheRead: left.cacheRead + right.cacheRead,
-		cacheWrite: left.cacheWrite + right.cacheWrite,
-		latestCacheHitRate: updateCacheHitRate
-			? (right.latestCacheHitRate ?? left.latestCacheHitRate)
-			: left.latestCacheHitRate,
-		cost: left.cost + right.cost,
-	};
-}
-
-function zeroUsage(): UsageSummary {
-	return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, latestCacheHitRate: undefined, cost: 0 };
-}
-
-function timestampMs(messageTimestamp: unknown, entryTimestamp: unknown): number {
-	if (typeof messageTimestamp === "number") return messageTimestamp;
-	if (typeof entryTimestamp === "string") return Date.parse(entryTimestamp);
-	return Number.NaN;
-}
-
 function localDayRange(nowMs: number): { endMs: number; startMs: number } {
 	const start = new Date(nowMs);
 	start.setHours(0, 0, 0, 0);
@@ -595,19 +290,12 @@ function localDayRange(nowMs: number): { endMs: number; startMs: number } {
 	return { startMs: start.getTime(), endMs: end.getTime() };
 }
 
-function footerItemsText(items: ReadonlyMap<string, FooterItem>): string {
-	return [...items.values()]
-		.sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id))
-		.map((item) => item.text)
-		.join(" • ");
-}
-
 function extensionStatusesText(statuses: ReadonlyMap<string, string>): string {
 	return [...statuses]
-		.filter(([key, text]) => key !== "decisions" && text.trim())
+		.filter(([, text]) => text.trim())
 		.sort(([left], [right]) => left.localeCompare(right))
 		.map(([, text]) => text.trim())
-		.join(" • ");
+		.join(INFO_SEPARATOR);
 }
 
 function renderSplit(width: number, left: string, right: string): string {
@@ -627,27 +315,4 @@ function shortenPath(cwd: string): string {
 	if (cwd === home) return "~";
 	if (cwd.startsWith(`${home}/`)) return `~/${relative(home, cwd)}`;
 	return cwd;
-}
-
-function sessionName(ctx: ExtensionContext): string {
-	const entries = ctx.sessionManager.getEntries();
-	for (let index = entries.length - 1; index >= 0; index -= 1) {
-		const entry = entries[index];
-		if (entry?.type !== "session_info") continue;
-		const name = entry.name?.trim();
-		if (name) return name;
-	}
-	return "";
-}
-
-function formatCost(value: number): string {
-	return `$${value.toFixed(2)}`;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-	return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
-}
-
-function numberOrZero(value: unknown): number {
-	return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }

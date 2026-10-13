@@ -74,11 +74,7 @@ export async function generatePlan(
 				"Previous response:",
 				text,
 			].join("\n"),
-		{
-			statusKey: options?.onStatus ? undefined : "commit",
-			onStatus: options?.onStatus,
-			notifyOnFallback: true,
-		},
+		{ onStatus: options?.onStatus, notifyOnFallback: true },
 	);
 	return value;
 }
@@ -107,11 +103,7 @@ export async function regenerateMessage(
 		prompt,
 		requireCommitMessage,
 		undefined,
-		{
-			statusKey: options?.onStatus ? undefined : "commit",
-			onStatus: options?.onStatus,
-			notifyOnFallback: true,
-		},
+		{ onStatus: options?.onStatus, notifyOnFallback: true },
 	);
 }
 

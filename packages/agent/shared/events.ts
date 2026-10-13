@@ -8,6 +8,8 @@ export type TauAgentEvents = {
 	"tau:decisions.client": { accept(client: DecisionClient): void };
 	"tau:decisions.usage": DecisionUsage;
 	"tau:decisions.route": DecisionRoute | null;
+	/** Short name of the active decision classifier, or null when decisions are off or unavailable. */
+	"tau:decisions.classifier": string | null;
 	/** @internal Register routing work before the note starts the next request. */
 	"tau:compaction.handoff": {
 		note: string;
@@ -46,7 +48,9 @@ export type TauAgentEvents = {
 		/** Call before the handler's first await. */
 		waitFor(source: string, check: Promise<{ passed: boolean; text: string }>): void;
 	};
-	"tau:footer-item": {
+	/** Text embedded in one of the editor's five border slots. Omit `text` to remove the item. */
+	"tau:editor-slot": {
+		slot: "top-left" | "top-center" | "top-right" | "bottom-left" | "bottom-right";
 		id: string;
 		text?: string;
 		priority?: number;
@@ -67,12 +71,6 @@ export type TauAgentEvents = {
 		}>;
 	};
 };
-
-export interface TauFooterItem {
-	id: string;
-	text?: string;
-	priority?: number;
-}
 
 type EmitEventAPI = Pick<ExtensionAPI, "events">;
 
@@ -158,10 +156,6 @@ function subscribeToTauEvent<Name extends keyof TauAgentEvents>(
 	pi.on("session_start", attach);
 	pi.on("session_shutdown", detach);
 	return stop;
-}
-
-export function setTauFooterItem(pi: EmitEventAPI, item: TauFooterItem): void {
-	emitTauEvent(pi, "tau:footer-item", item);
 }
 
 export function decisionClientFrom(pi: EmitEventAPI): DecisionClient | undefined {

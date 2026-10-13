@@ -20,7 +20,7 @@ import { ApprovalEvidence, type EvidenceGapReason } from "./evidence.ts";
 import { ToolApprovalPanel, type ApprovalAnswer } from "./panel.ts";
 import toolApprovalSettings from "./settings.ts";
 
-const STATUS_KEY = "tool-approval";
+const SLOT_ID = "tool-approval";
 const AUTO_APPROVED_TYPE = "tau.tool-approval.auto-approved";
 const DECISION_TYPE = "tau.tool-approval.decision";
 const MAX_CONCURRENT_REVIEWS = 3;
@@ -278,7 +278,6 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 				}
 			}
 
-			ctx.ui.setStatus(STATUS_KEY, `checking ${toolLabel(request.toolName)}`);
 			try {
 				batchReviews ??= reviewAssistantRequests(pi, ctx, event, request, scriptStore, settings.autoApprove);
 				const reviews = await batchReviews;
@@ -404,7 +403,7 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 				decision.decision = rejected ? "blocked" : "approved";
 				return rejected;
 			} finally {
-				ctx.ui.setStatus(STATUS_KEY, undefined);
+				emitTauEvent(pi, "tau:editor-slot", { slot: "bottom-left", id: SLOT_ID });
 			}
 		} finally {
 			decision.elapsedMs = Math.round(performance.now() - started);
@@ -437,11 +436,11 @@ export default function toolApprovalExtension(pi: ExtensionAPI): void {
 		scriptSourceStoreFrom(pi)?.clearApprovals();
 	});
 
-	pi.on("session_shutdown", (_event, ctx) => {
+	pi.on("session_shutdown", () => {
 		batchReviews = undefined;
 		pendingNotes.clear();
 		scriptSourceStoreFrom(pi)?.clearApprovals();
-		ctx.ui.setStatus(STATUS_KEY, undefined);
+		emitTauEvent(pi, "tau:editor-slot", { slot: "bottom-left", id: SLOT_ID });
 	});
 }
 
@@ -563,7 +562,11 @@ async function checkToolRequest(
 			evidence: null,
 		};
 	}
-	ctx.ui.setStatus(STATUS_KEY, `reviewing ${toolLabel(request.toolName)}`);
+	emitTauEvent(pi, "tau:editor-slot", {
+		slot: "bottom-left",
+		id: SLOT_ID,
+		text: `reviewing ${toolLabel(request.toolName)}`,
+	});
 	return reviewToolRequest(ctx, request, metadata);
 }
 

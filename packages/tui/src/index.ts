@@ -3,6 +3,7 @@ export { pushSavedNote, renderInlineEditor, renderNoteEditor, wrapWithPrefix } f
 export { bindingHint, bindingsHint, rawHint, type ToolKeyHint } from "./key-hints.ts";
 export { Marker, type MarkerState } from "./marker.ts";
 export { ScrollableMarkdown } from "./scrollable-markdown.ts";
+export { SlotEditor, type EditorSlots } from "./slot-editor.ts";
 export {
 	SelectableList,
 	type SelectableListActionResult,
@@ -15,6 +16,6 @@ export {
 	type TextRecordSelectPanelConfig,
 	type TextRecordSelectResult,
 } from "./text-record-select-panel.ts";
-export { formatAge, preview } from "./text.ts";
+export { formatAge, INFO_SEPARATOR, preview } from "./text.ts";
 export { ToolPanel, type ToolPanelConfig, type ToolPanelFooter } from "./tool-panel.ts";
 export { visibleWindow } from "./viewport.ts";

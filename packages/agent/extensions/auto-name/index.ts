@@ -9,7 +9,6 @@ import { generateToolValidated } from "../../shared/model-fallback/index.ts";
 import { resolveEffortCandidates } from "../../shared/model-effort.ts";
 import { errorText, truncAt } from "../../shared/text.ts";
 
-const STATUS_KEY = "auto-name";
 const SENTINEL = "NONE";
 const MAX_NAME_LENGTH = 80;
 const MAX_NAMING_INPUT_CHARS = 120_000;
@@ -67,11 +66,10 @@ export default function autoNameExtension(pi: ExtensionAPI): void {
 		void runAutoName(pi, ctx, controller, myGen, prompt);
 	});
 
-	pi.on("session_shutdown", (_event, ctx) => {
+	pi.on("session_shutdown", () => {
 		generation++;
 		activeController?.abort();
 		activeController = undefined;
-		ctx.ui.setStatus(STATUS_KEY, undefined);
 	});
 }
 
@@ -98,7 +96,7 @@ async function runAutoName(
 					"Previous response:",
 					text,
 				].join("\n"),
-			{ statusKey: STATUS_KEY, notifyOnFallback: false, maxAttempts: 3 },
+			{ notifyOnFallback: false, maxAttempts: 3 },
 		);
 
 		if (controller.signal.aborted || myGen !== generation) return;
@@ -112,10 +110,7 @@ async function runAutoName(
 			ui.notify(`Session naming failed: ${errorText(error)}`, "error");
 		}
 	} finally {
-		if (activeController === controller) {
-			activeController = undefined;
-			ui.setStatus(STATUS_KEY, undefined);
-		}
+		if (activeController === controller) activeController = undefined;
 	}
 }
 

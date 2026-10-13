@@ -105,23 +105,26 @@ Related:
 
 - [TUI components](./tui.md)
 
-## `tau:footer-item`
+## `tau:editor-slot`
 
-Publish a bottom-right footer item in Tau's status footer.
+Embed text in one of five slots in Tau's editor border.
 
 ```ts
-pi.events.emit("tau:footer-item", {
-  id: "my-extension.status",
-  text: "syncing",
-  priority: 10,
+pi.events.emit("tau:editor-slot", {
+  slot: "top-left",
+  id: "my-extension.work-order",
+  text: "work order 4521",
 });
 ```
 
 Fields:
 
-- `id`: stable item id. Re-emitting the same id replaces the previous item.
-- `text`: optional display text. Omit or clear to remove the item (implementation may treat empty/undefined as hide).
-- `priority`: optional sort priority (higher shows first when the footer ranks items).
+- `slot`: `"top-left"`, `"top-center"`, `"top-right"`, `"bottom-left"`, or `"bottom-right"`.
+- `id`: stable item id. Re-emitting the same id in the same slot replaces the previous item.
+- `text`: display text. Omit or leave empty to remove the item.
+- `priority`: optional sort priority. Higher shows first when a slot has several items; they are joined with ` · `.
+
+Slots truncate to fit: the right slot gives way before the left slot, and the center slot shifts or disappears when space is tight. Working, compaction, and retry indicators stay in Pi's status area above the editor, not in the border.
 
 ## `tau:agent.blocked`
 

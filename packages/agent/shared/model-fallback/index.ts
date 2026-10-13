@@ -25,7 +25,6 @@ interface GenerationContext {
 
 interface ModelFallbackOptions {
 	sessionId?: string;
-	statusKey?: string;
 	notifyOnFallback?: boolean;
 	maxAttempts?: number;
 	onStatus?: (status: string) => void | Promise<void>;
@@ -121,11 +120,9 @@ async function withModelFallback<T>(
 	request: (candidate: ModelCandidate) => Promise<T>,
 ): Promise<{ value: T; candidate: ModelCandidate }> {
 	const failures: string[] = [];
-	const statusKey = options?.statusKey;
 
 	for (const [index, candidate] of candidates.entries()) {
 		const label = `${candidate.model.provider}/${candidate.model.id}`;
-		if (statusKey) ctx.ui.setStatus(statusKey, `generating (${label})`);
 		await options?.onStatus?.(`Generating with ${label}`);
 		try {
 			return { value: await request(candidate), candidate };

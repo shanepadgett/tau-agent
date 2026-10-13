@@ -1,5 +1,8 @@
 // Display text helpers for TUI components.
 
+/** Separator between inline pieces of information, such as model · classifier. Callers apply color. */
+export const INFO_SEPARATOR = " · ";
+
 export function preview(text: string, max = 80): string {
 	const oneLine = text.replace(/\s+/g, " ").trim();
 	return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine;

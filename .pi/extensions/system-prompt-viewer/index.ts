@@ -1,6 +1,6 @@
 import { type ExtensionAPI, keyText, type Theme, type ToolInfo } from "@earendil-works/pi-coding-agent";
 import { Box, Text } from "@earendil-works/pi-tui";
-import { onTauEventImmediately, setTauFooterItem } from "../../../packages/agent/shared/events.ts";
+import { emitTauEvent, onTauEventImmediately } from "../../../packages/agent/shared/events.ts";
 
 const COMMAND = "system-prompt-viewer";
 const MESSAGE_TYPE = "tau.system-prompt-viewer.snapshot";
@@ -26,7 +26,8 @@ export default function systemPromptViewer(pi: ExtensionAPI): void {
 	let enabled = false;
 
 	function publishFooter(): void {
-		setTauFooterItem(pi, {
+		emitTauEvent(pi, "tau:editor-slot", {
+			slot: "bottom-right",
 			id: FOOTER_ID,
 			priority: 30,
 			text: enabled ? "system prompt" : undefined,

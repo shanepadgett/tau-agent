@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { setTauFooterItem } from "../../../packages/agent/shared/events.ts";
+import { emitTauEvent } from "../../../packages/agent/shared/events.ts";
 
 const COMMAND = "bash";
 const FOOTER_ID = "bash-toggle";
@@ -24,7 +24,8 @@ export default function bashToggle(pi: ExtensionAPI): void {
 	}
 
 	function publishFooter(): void {
-		setTauFooterItem(pi, {
+		emitTauEvent(pi, "tau:editor-slot", {
+			slot: "bottom-right",
 			id: FOOTER_ID,
 			priority: 20,
 			text: disabled ? "bash off" : undefined,
@@ -84,6 +85,6 @@ export default function bashToggle(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_shutdown", () => {
-		setTauFooterItem(pi, { id: FOOTER_ID, text: undefined });
+		emitTauEvent(pi, "tau:editor-slot", { slot: "bottom-right", id: FOOTER_ID });
 	});
 }
