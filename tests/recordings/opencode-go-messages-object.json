@@ -1,0 +1,5 @@
+{
+  "status": 200,
+  "contentType": "application/json",
+  "body": "{\"id\":\"071ce67865b76173023328be6b4febb7\",\"type\":\"message\",\"role\":\"assistant\",\"stop_reason\":\"end_turn\",\"model\":\"minimax-m2.7\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"We have a conversation. The user says: \\\"Reply with exactly: ok\\\". They want the assistant's reply to be exactly \\\"ok\\\". There's no policy violation. The user explicitly wants a specific output: \\\"ok\\\". So we comply.\\n\\nWe should respond with exactly \\\"ok\\\". Ensure no extra characters, no trailing spaces? The instruction: \\\"Reply with exactly: ok\\\". The reply should be exactly \\\"ok\\\". So we output just \\\"ok\\\". Ensure no newline or additional characters? The best is to output just \\\"ok\\\". That should satisfy.\\n\\nThus final answer: ok.\",\"signature\":\"4a9d5f2b3b4e4214c22017e66e55dbb81fe154255a00449c645ddbf25f2559ee\"},{\"type\":\"text\",\"text\":\"ok\"}],\"usage\":{\"input_tokens\":46,\"output_tokens\":121}}"
+}

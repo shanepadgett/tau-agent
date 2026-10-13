@@ -1,4 +1,6 @@
-/** What a provider credential is, and the storage the AI layer needs to read and refresh it. */
+/**
+ * Defines the provider credentials, and the store that the AI layer uses to read and refresh them.
+ */
 
 import { Context, Schema, type Effect, type Option } from "effect";
 

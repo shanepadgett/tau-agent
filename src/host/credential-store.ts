@@ -1,4 +1,7 @@
-/** Keeps API keys and OAuth tokens in `~/.tau/credentials.db`, refreshing tokens one process at a time. */
+/**
+ * Keeps API keys and OAuth tokens in `~/.tau/credentials.db`. Only one process at a time refreshes
+ * a token.
+ */
 
 import { join } from "node:path";
 import { Effect, Layer, Option, Schema } from "effect";

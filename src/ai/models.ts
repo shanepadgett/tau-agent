@@ -1,105 +1,127 @@
-/** Hands out Effect language and decision models by route and model name, signed per request with Tau's credentials. */
+/**
+ * Gives Effect language models and decision models for a route and a model name. Tau signs each
+ * request with the credential of the route.
+ */
 
 import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic";
 import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai";
+import {
+  OpenAiClient as CompatClient,
+  OpenAiLanguageModel as CompatLanguageModel,
+} from "@effect/ai-openai-compat";
 import {
   OpenRouterClient,
   OpenRouterDecisionModel,
   OpenRouterLanguageModel,
 } from "@effect/ai-openrouter";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer } from "effect";
 import type { DecisionModel, LanguageModel } from "effect/ai";
 import { HttpClient, HttpClientRequest } from "effect/http";
-import { collectResponseStream } from "./responses-stream.ts";
+import {
+  Catalog,
+  type ModelRef,
+  type NoDecisionApi,
+  type UnknownModel,
+  type UnknownRoute,
+} from "./catalog.ts";
 import { CredentialStore, type CredentialStoreError } from "./credential.ts";
+import type { ModelProfile } from "./model-profile.ts";
+import { withMessagesDefaults } from "./messages-defaults.ts";
 import { openAiDecisionModel } from "./openai-decisions.ts";
-import { type CredentialUnavailable, credentialSigner, signRequests } from "./route-auth.ts";
-import { RouteId, type Route } from "./routes.ts";
+import { collectResponseStream } from "./responses-stream.ts";
+import {
+  type ConversationId,
+  type CredentialUnavailable,
+  credentialSigner,
+  type RequestSigning,
+  signRequests,
+} from "./route-auth.ts";
+import type { Route } from "./routes.ts";
 
-type ModelRef = { readonly route: RouteId; readonly model: string };
+type ModelsError = UnknownRoute | UnknownModel | CredentialUnavailable | CredentialStoreError;
 
-class UnknownRoute extends Schema.TaggedError<UnknownRoute>()("UnknownRoute", {
-  route: RouteId,
-  message: Schema.String,
-}) {}
-
-class NoDecisionApi extends Schema.TaggedError<NoDecisionApi>()("NoDecisionApi", {
-  route: RouteId,
-  message: Schema.String,
-}) {}
-
-type ModelsError = UnknownRoute | NoDecisionApi | CredentialUnavailable | CredentialStoreError;
-
-/** Both methods check the credential first, so a missing login fails here rather than mid-request. */
+/**
+ * Both methods check the credential first. A missing login fails here, before Tau sends a request.
+ */
 export class Models extends Context.Service<
   Models,
   {
+    /** Requests carry `conversationId`. A call outside a session passes a new ID for each call. */
     readonly languageModel: (
       ref: ModelRef,
+      conversationId: ConversationId,
     ) => Effect.Effect<LanguageModel.LanguageModel, ModelsError>;
     readonly decisionModel: (
       ref: ModelRef,
-    ) => Effect.Effect<DecisionModel.DecisionModel, ModelsError>;
+    ) => Effect.Effect<DecisionModel.DecisionModel, ModelsError | NoDecisionApi>;
   }
 >()("tau/ai/Models") {}
 
-export const modelsLayer = (routes: ReadonlyArray<Route>) =>
-  Layer.effect(Models, makeModels(routes));
-
 type ClientTransform = (client: HttpClient.HttpClient) => HttpClient.HttpClient;
 
-const makeModels = Effect.fn("makeModels")(function* (routes: ReadonlyArray<Route>) {
+const makeModels = Effect.fn("makeModels")(function* () {
+  const catalog = yield* Catalog;
   const context = yield* Effect.context<CredentialStore | HttpClient.HttpClient>();
 
-  const signedRoute = Effect.fn("signedRoute")(function* (ref: ModelRef) {
-    const route = routes.find((candidate) => candidate.id === ref.route);
-
-    if (route === undefined) {
-      return yield* new UnknownRoute({
-        route: ref.route,
-        message: `No route is named ${ref.route}. Check the provider part of the model name.`,
-      });
-    }
-
-    yield* credentialSigner(route);
-    return { route, sign: yield* signRequests(route) };
+  /** Checks the credential before Tau sends anything, then signs each request. */
+  const signedFor = Effect.fn("signedFor")(function* (
+    route: Route,
+    request: Omit<RequestSigning, "claudeCodeVersion">,
+  ) {
+    const signing = { ...request, claudeCodeVersion: yield* catalog.claudeCodeVersion };
+    yield* credentialSigner(route, signing);
+    return yield* signRequests(route, signing);
   });
 
-  const languageModel = (ref: ModelRef) =>
-    signedRoute(ref).pipe(
-      Effect.flatMap(({ route, sign }) => chatModel(route, ref.model, sign)),
-      Effect.provideContext(context),
-    );
+  const languageModel = Effect.fn("Models.languageModel")(function* (
+    ref: ModelRef,
+    conversationId: ConversationId,
+  ) {
+    const { route, profile } = yield* catalog.model(ref);
+    const sign = yield* signedFor(route, { protocol: profile.protocol, conversationId });
+    return yield* chatModel(route, profile, sign);
+  });
 
-  const decisionModel = (ref: ModelRef) =>
-    signedRoute(ref).pipe(
-      Effect.flatMap(({ route, sign }) => decisionModelFor(route, ref.model, sign)),
-      Effect.provideContext(context),
-    );
+  const decisionModel = Effect.fn("Models.decisionModel")(function* (ref: ModelRef) {
+    const { route } = yield* catalog.decisionModel(ref);
+    const sign = yield* signedFor(route, { protocol: route.protocol, conversationId: undefined });
+    return yield* decisionModelFor(route, ref.model, sign);
+  });
 
-  return Models.of({ languageModel, decisionModel });
+  return Models.of({
+    languageModel: (ref, conversationId) =>
+      languageModel(ref, conversationId).pipe(Effect.provideContext(context)),
+    decisionModel: (ref) => decisionModel(ref).pipe(Effect.provideContext(context)),
+  });
 });
 
-const chatModel = (route: Route, model: string, sign: ClientTransform) => {
-  switch (route.client) {
+export const modelsLayer = Layer.effect(Models, makeModels());
+
+const chatModel = (route: Route, profile: ModelProfile, sign: ClientTransform) => {
+  const model = profile.id;
+
+  switch (profile.protocol) {
     case "anthropic":
       return AnthropicLanguageModel.make({ model }).pipe(
         Effect.provideServiceEffect(
           AnthropicClient.AnthropicClient,
-          AnthropicClient.make({ apiUrl: route.apiUrl, transformClient: sign }),
+          AnthropicClient.make({
+            apiUrl: anthropicApiUrl(route.apiUrl),
+            transformClient: (client) => withMessagesDefaults(sign(client)),
+          }),
         ),
       );
 
-    case "openai": {
-      // Both ChatGPT plan routes refuse requests that do not stream.
+    case "openaiResponses": {
+      // The ChatGPT plan routes refuse requests that do not stream.
       const isStreamOnly = route.auth.kind === "codexLogin" || route.auth.kind === "chatgptApp";
 
       const transformClient = isStreamOnly
         ? (client: HttpClient.HttpClient) => collectResponseStream(sign(client))
         : sign;
 
-      // Tau rebuilds every request from its own session, so nothing is stored server-side and
-      // reasoning comes back encrypted for the next request to replay.
+      // Tau sends the full conversation in each request, so the server stores nothing. The server
+      // returns reasoning in encrypted form, and Tau sends it back in the next request.
       return OpenAiLanguageModel.make({
         model,
         config: { store: false, include: ["reasoning.encrypted_content"] },
@@ -111,8 +133,16 @@ const chatModel = (route: Route, model: string, sign: ClientTransform) => {
       );
     }
 
+    case "openaiChat":
+      return CompatLanguageModel.make({ model }).pipe(
+        Effect.provideServiceEffect(
+          CompatClient.OpenAiClient,
+          CompatClient.make({ apiUrl: route.apiUrl, transformClient: sign }),
+        ),
+      );
+
     case "openrouter":
-      // Without strict schemas some upstream providers ignore the schema and answer in prose.
+      // Without strict schemas, some upstream providers ignore the schema and reply in prose.
       return OpenRouterLanguageModel.make({ model, config: { strictJsonSchema: true } }).pipe(
         Effect.provideServiceEffect(
           OpenRouterClient.OpenRouterClient,
@@ -122,17 +152,21 @@ const chatModel = (route: Route, model: string, sign: ClientTransform) => {
   }
 };
 
+/**
+ * The Effect Anthropic client adds `/v1/messages` to the address. Some routes also serve OpenAI
+ * protocols and keep `/v1` at the end of their address, for example OpenCode Go. Remove it here.
+ */
+const anthropicApiUrl = (apiUrl: string) => apiUrl.replace(/\/v1$/, "");
+
 const decisionModelFor = Effect.fn("decisionModelFor")(function* (
   route: Route,
   model: string,
   sign: ClientTransform,
 ) {
-  switch (route.decisions) {
+  switch (route.decisions?.kind) {
+    // The catalog refuses a route that has no decision API, so this does not occur.
     case undefined:
-      return yield* new NoDecisionApi({
-        route: route.id,
-        message: `${route.id} has no decision API. Choose a decision model on openai or openrouter.`,
-      });
+      return yield* Effect.die(`${route.id} has no decision API`);
 
     case "systemOne": {
       const transformClient = (client: HttpClient.HttpClient) => toSystemOne(sign(client));

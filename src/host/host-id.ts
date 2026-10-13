@@ -1,4 +1,7 @@
-/** Keeps this machine's Sign in with ChatGPT host ID in `~/.tau/host-id`, apart from credentials so a copy of them never carries it. */
+/**
+ * Keeps the host ID for Sign in with ChatGPT in `~/.tau/host-id`. The file is separate from the
+ * credentials, so a copy of the credentials does not include it.
+ */
 
 import { join } from "node:path";
 import { Crypto, Effect, FileSystem } from "effect";

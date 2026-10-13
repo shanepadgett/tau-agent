@@ -1,4 +1,4 @@
-/** Opens private SQLite files and runs write transactions that hold the lock across async work. */
+/** Opens private SQLite files. Runs write transactions that keep the lock during async work. */
 
 import { Database as Connection, SQLiteError } from "bun:sqlite";
 import { dirname } from "node:path";

@@ -82,6 +82,10 @@ export const run = <A, E>(program: Effect.Effect<A, E, Scope.Scope | FileSystem.
   Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(BunFileSystem.layer)));
 
 export const signedAuthorization = (route: Route) =>
-  credentialSigner(route).pipe(
+  credentialSigner(route, {
+    protocol: route.protocol,
+    claudeCodeVersion: "2.1.296",
+    conversationId: undefined,
+  }).pipe(
     Effect.map((sign) => sign(HttpClientRequest.get("https://example.com")).headers.authorization),
   );

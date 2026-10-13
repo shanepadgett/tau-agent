@@ -23,4 +23,4 @@ Phase zero is complete; its unverified cases are in [deferred.md](deferred.md). 
 
 SDK rounds 1–3 are agreed. Round 4 (isolation and trust) is planned before build step 7.
 
-Next: round 3: the model catalog, the settings file, and the OpenCode Go route ([work/ai-layer.md](work/ai-layer.md#later-rounds)).
+Round 3 (model catalog, settings file, OpenCode Go) is built ([work/model-catalog.md](work/model-catalog.md)). Next: round 4, the structured-output fallback and the retry on invalid output.

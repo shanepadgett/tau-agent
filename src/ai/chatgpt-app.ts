@@ -1,4 +1,7 @@
-/** Signs in with ChatGPT as Tau's own registered app, checks the ID token, and revokes the login on logout. */
+/**
+ * Logs in with Sign in with ChatGPT, where Tau is registered as its own app. Checks the ID token,
+ * and revokes the login when the user logs out.
+ */
 
 import { Clock, Crypto, Effect, Option, Redacted, Result, Schema } from "effect";
 import { Base64Url } from "effect/encoding";

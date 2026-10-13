@@ -1,12 +1,12 @@
-/** Makes Claude subscription requests look like Claude Code's, which Anthropic requires of subscription tokens. */
+/**
+ * Adds the Claude Code headers and system text to Claude subscription requests. Anthropic refuses
+ * subscription tokens without them.
+ */
 
 import { Option, Predicate, Schema } from "effect";
 import { HttpClientRequest } from "effect/http";
 
 const BETAS = ["claude-code-20250219", "oauth-2025-04-20"];
-
-/** The latest Claude Code release on npm when this was written. */
-const CLAUDE_CODE_VERSION = "2.1.296";
 
 // Without both the client headers and the identity, Anthropic answers 429 with no rate-limit details.
 const IDENTITY = {
@@ -24,11 +24,12 @@ const MessagesBody = Schema.fromJsonString(
 
 const decodeMessagesBody = Schema.decodeUnknownOption(MessagesBody);
 
-export const asClaudeCode = (request: HttpClientRequest.HttpClientRequest) =>
+/** `version` is a Claude Code release. The model catalog keeps it current. */
+export const asClaudeCode = (request: HttpClientRequest.HttpClientRequest, version: string) =>
   withIdentity(
     HttpClientRequest.setHeaders(request, {
       "anthropic-beta": betasFor(request),
-      "user-agent": `claude-cli/${CLAUDE_CODE_VERSION}`,
+      "user-agent": `claude-cli/${version}`,
       "x-app": "cli",
     }),
   );

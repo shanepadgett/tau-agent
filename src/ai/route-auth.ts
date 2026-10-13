@@ -1,10 +1,8 @@
-/**
- * Signs each request with the route's credential, read fresh every time so a token another process
- * refreshed is used. A login about to expire is refreshed first.
- */
+/** Signs each request with the credential of the route. Tau reads the credential for each request, and refreshes a login that is about to expire. */
 
 import { Config, DateTime, Duration, Effect, Option, Predicate, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
+import packageJson from "../../package.json" with { type: "json" };
 import { asClaudeCode } from "./claude-code.ts";
 import {
   ApiKey,
@@ -14,6 +12,7 @@ import {
   OAuthTokens,
   ProviderId,
 } from "./credential.ts";
+import type { Protocol } from "./model-profile.ts";
 import type { Route } from "./routes.ts";
 import {
   chatgptAppTokenEndpoint,
@@ -72,17 +71,71 @@ const ChatgptAccessToken = Schema.StringFromBase64Url.pipe(
 
 type Sign = (request: HttpClientRequest.HttpClientRequest) => HttpClientRequest.HttpClientRequest;
 
+/** One conversation with a model. Some providers use it to route requests and to cache prompts. */
+export const ConversationId = Schema.String.pipe(Schema.brand("ConversationId"));
+export type ConversationId = typeof ConversationId.Type;
+
+/**
+ * Data that signing needs in addition to the credential. The models on one route can use different
+ * protocols.
+ */
+export type RequestSigning = {
+  readonly protocol: Protocol;
+  /** The Claude Code release that a Claude subscription request identifies as. */
+  readonly claudeCodeVersion: string;
+  /** Undefined for a request that is not part of a conversation, such as a model list. */
+  readonly conversationId: ConversationId | undefined;
+};
+
+const TAU_USER_AGENT = `tau/${packageJson.version}`;
+
+const unsigned: Sign = (request) => request;
+
 /**
  * Reads the route's credential and returns what signs a request with it. Fails when the credential
  * is missing, the wrong kind, or a login that cannot be refreshed, so callers can check a route
  * before sending anything.
  */
-export const credentialSigner = Effect.fn("credentialSigner")(function* (route: Route) {
+export const credentialSigner = Effect.fn("credentialSigner")(function* (
+  route: Route,
+  signing: RequestSigning,
+) {
+  const signWithCredential = yield* credentialOnlySigner(route, signing);
+
+  return (request: HttpClientRequest.HttpClientRequest) =>
+    withClientHeaders(signWithCredential(request), route, signing);
+});
+
+/**
+ * Names Tau as the client. Claude subscription requests must look like Claude Code, so they do not
+ * name Tau. OpenCode Go also needs the conversation ID to route requests and cache prompts.
+ */
+const withClientHeaders = (
+  request: HttpClientRequest.HttpClientRequest,
+  route: Route,
+  signing: RequestSigning,
+) => {
+  if (route.auth.kind === "claudeSubscription") return request;
+  const named = HttpClientRequest.setHeader(request, "user-agent", TAU_USER_AGENT);
+  const { conversationId } = signing;
+  if (route.conversationHeaders !== "opencode" || conversationId === undefined) return named;
+
+  return HttpClientRequest.setHeaders(named, {
+    "x-opencode-session": conversationId,
+    "x-opencode-client": "tau",
+  });
+};
+
+const credentialOnlySigner = Effect.fn("credentialOnlySigner")(function* (
+  route: Route,
+  signing: RequestSigning,
+) {
+  if (route.auth.kind === "none") return unsigned;
   const credential = yield* currentCredential(route);
 
   if (route.auth.kind === "apiKey") {
     if (!Predicate.isTagged(credential, "ApiKey")) return yield* unavailable(route, "wrongKind");
-    return apiKeySigner(route, credential.key);
+    return apiKeySigner(signing.protocol, credential.key);
   }
 
   if (route.auth.kind === "chatgptApp") {
@@ -126,7 +179,7 @@ export const credentialSigner = Effect.fn("credentialSigner")(function* (route: 
   const signWithToken = HttpClientRequest.bearerToken(tokens.access);
 
   if (route.auth.kind === "claudeSubscription")
-    return (request) => asClaudeCode(signWithToken(request));
+    return (request) => asClaudeCode(signWithToken(request), signing.claudeCodeVersion);
 
   const accountId = yield* chatgptAccountId(route, Redacted.value(tokens.access));
 
@@ -142,12 +195,15 @@ export const credentialSigner = Effect.fn("credentialSigner")(function* (route: 
  * Signs every request the client sends. A credential failure becomes a transport error, because
  * Effect's AI clients accept only HTTP errors from a client transform.
  */
-export const signRequests = Effect.fn("signRequests")(function* (route: Route) {
+export const signRequests = Effect.fn("signRequests")(function* (
+  route: Route,
+  signing: RequestSigning,
+) {
   const context = yield* Effect.context<CredentialStore | HttpClient.HttpClient>();
 
   return (client: HttpClient.HttpClient) =>
     HttpClient.mapRequestEffect(client, (request) =>
-      credentialSigner(route).pipe(
+      credentialSigner(route, signing).pipe(
         Effect.map((sign) => sign(request)),
         Effect.provideContext(context),
         Effect.mapError(
@@ -228,8 +284,8 @@ const refreshUnavailable = (route: Route, cause: TokenRequestFailed) => {
   );
 };
 
-const apiKeySigner = (route: Route, key: Redacted.Redacted): Sign =>
-  route.client === "anthropic"
+const apiKeySigner = (protocol: Protocol, key: Redacted.Redacted): Sign =>
+  protocol === "anthropic"
     ? HttpClientRequest.setHeader("x-api-key", Redacted.value(key))
     : HttpClientRequest.bearerToken(key);
 

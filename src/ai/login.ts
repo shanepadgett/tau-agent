@@ -1,7 +1,4 @@
-/**
- * Logs in to a subscription and saves its tokens. The browser login also accepts a pasted address, and
- * a headless login (Claude's copy-code page or ChatGPT's device code) works with no browser at all.
- */
+/** Logs in to a subscription and saves the tokens. It works with a browser on this machine, or with a code when there is no browser. */
 
 import {
   Context,

@@ -1,4 +1,7 @@
-/** Requests tokens from a subscription's OAuth token endpoint, when logging in and when a login is refreshed. */
+/**
+ * Gets tokens from the OAuth token endpoint of a subscription. Tau uses it to log in and to refresh
+ * a login.
+ */
 
 import { DateTime, Duration, Effect, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";

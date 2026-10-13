@@ -20,3 +20,4 @@ Decisions to make later. Each line is the question and what brings it up. When t
 - Whether Fallow follows dynamically loaded default exports. Comes up when the extension host loads modules by path.
 - The exact 49/50-token duplicate thresholds. Comes up when a duplicate report looks wrong near the threshold.
 - Whether development hooks rerun checks after a live session's files change. Comes up when a hook misses a change in a live session.
+- Whether Tau reloads `~/.tau/settings.json` when it changes, or only on start. Comes up at build step 7, with extension hot reload.

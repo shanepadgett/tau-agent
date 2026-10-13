@@ -1,7 +1,11 @@
-/** Routes say which Effect AI package reaches a provider, at which URL, and how its requests authenticate. */
+/**
+ * Defines the routes to model providers. A route gives the provider address, how Tau signs
+ * requests, and where Tau gets data about the models.
+ */
 
 import { Schema } from "effect";
 import { ProviderId } from "./credential.ts";
+import type { DecisionProfile, Protocol } from "./model-profile.ts";
 
 export const RouteId = Schema.String.pipe(Schema.brand("RouteId"));
 export type RouteId = typeof RouteId.Type;
@@ -60,19 +64,40 @@ export type ChatgptApp = {
 
 /** A subscription login changes more than the token: each one adds headers its provider checks. */
 export type RouteAuth =
+  /** A local server that does not need a key. */
+  | { readonly kind: "none" }
   | { readonly kind: "apiKey"; readonly environmentVariable: string }
   | { readonly kind: "claudeSubscription"; readonly oauth: OAuthClient }
   | { readonly kind: "codexLogin"; readonly oauth: OAuthClient }
   | { readonly kind: "chatgptApp"; readonly app: ChatgptApp };
 
+/** The model list of the Codex backend, or the standard `/v1/models` list. */
+export type LiveList = "codexModels" | "openaiModels";
+
+/** The decision API of a route, and the decision models that Tau knows on it. */
+type DecisionApi = {
+  readonly kind: "systemOne" | "openaiDecisions";
+  readonly models: ReadonlyArray<DecisionProfile>;
+};
+
 export type Route = {
   readonly id: RouteId;
   /** The credential the route uses. */
   readonly provider: ProviderId;
-  readonly client: "anthropic" | "openai" | "openrouter";
+  /** The protocol of a model when its catalog entry does not give one. */
+  readonly protocol: Protocol;
   readonly apiUrl: string;
   readonly auth: RouteAuth;
-  readonly decisions: "systemOne" | "openaiDecisions" | undefined;
+  /** The models.dev provider whose entries give data about the models on this route. */
+  readonly catalogProvider: string | undefined;
+  /**
+   * Where a plan route lists the models that the plan allows. This list is different from the API
+   * list.
+   */
+  readonly liveList: LiveList | undefined;
+  readonly decisions: DecisionApi | undefined;
+  /** The headers that carry the conversation ID, for a provider that needs it. */
+  readonly conversationHeaders: "opencode" | undefined;
 };
 
 // Both clients are the providers' own CLI clients, which these subscription logins require.
@@ -123,45 +148,87 @@ const chatgptApp: ChatgptApp = {
   callback: { host: "127.0.0.1", port: 1455, path: "/auth/callback" },
 };
 
+// The models.dev decision list uses different model names from OpenRouter and does not include
+// Luna, so Tau keeps its own list. The Luna decision APIs do not give a limit. This value is the
+// Luna input limit on the Responses API.
+const LUNA_INPUT_TOKENS = 922_000;
+const JEV_CONTEXT_TOKENS = 64_000;
+
 export const builtInRoutes: ReadonlyArray<Route> = [
   {
     id: RouteId.make("anthropic"),
     provider: ProviderId.make("anthropic"),
-    client: "anthropic",
+    protocol: "anthropic",
     apiUrl: "https://api.anthropic.com",
     auth: { kind: "claudeSubscription", oauth: claudeOAuth },
+    catalogProvider: "anthropic",
+    liveList: undefined,
     decisions: undefined,
+    conversationHeaders: undefined,
   },
   {
     id: RouteId.make("openai"),
     provider: ProviderId.make("openai"),
-    client: "openai",
+    protocol: "openaiResponses",
     apiUrl: "https://api.openai.com/v1",
     auth: { kind: "apiKey", environmentVariable: "OPENAI_API_KEY" },
-    decisions: "openaiDecisions",
+    catalogProvider: "openai",
+    liveList: undefined,
+    decisions: {
+      kind: "openaiDecisions",
+      models: [{ id: "gpt-6-luna", name: "Luna", contextTokens: LUNA_INPUT_TOKENS }],
+    },
+    conversationHeaders: undefined,
   },
   {
     id: RouteId.make("chatgpt"),
     provider: ProviderId.make("chatgpt"),
-    client: "openai",
+    protocol: "openaiResponses",
     apiUrl: "https://api.openai.com/v1",
     auth: { kind: "chatgptApp", app: chatgptApp },
+    catalogProvider: "openai",
+    liveList: "openaiModels",
     decisions: undefined,
+    conversationHeaders: undefined,
   },
   {
     id: RouteId.make("codex"),
     provider: ProviderId.make("codex"),
-    client: "openai",
+    protocol: "openaiResponses",
     apiUrl: "https://chatgpt.com/backend-api/codex",
     auth: { kind: "codexLogin", oauth: codexOAuth },
+    catalogProvider: "openai",
+    liveList: "codexModels",
     decisions: undefined,
+    conversationHeaders: undefined,
   },
   {
     id: RouteId.make("openrouter"),
     provider: ProviderId.make("openrouter"),
-    client: "openrouter",
+    protocol: "openrouter",
     apiUrl: "https://openrouter.ai/api/v1",
     auth: { kind: "apiKey", environmentVariable: "OPENROUTER_API_KEY" },
-    decisions: "systemOne",
+    catalogProvider: "openrouter",
+    liveList: undefined,
+    decisions: {
+      kind: "systemOne",
+      models: [
+        { id: "~typesafe/jev-latest", name: "Jev", contextTokens: JEV_CONTEXT_TOKENS },
+        { id: "openai/gpt-6-luna-decisions", name: "Luna", contextTokens: LUNA_INPUT_TOKENS },
+      ],
+    },
+    conversationHeaders: undefined,
+  },
+  {
+    // One subscription. Its models use three protocols at the same address.
+    id: RouteId.make("opencode-go"),
+    provider: ProviderId.make("opencode-go"),
+    protocol: "openaiChat",
+    apiUrl: "https://opencode.ai/inference/go/v1",
+    auth: { kind: "apiKey", environmentVariable: "OPENCODE_API_KEY" },
+    catalogProvider: "opencode-go",
+    liveList: undefined,
+    decisions: undefined,
+    conversationHeaders: "opencode",
   },
 ];

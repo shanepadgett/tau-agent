@@ -58,7 +58,7 @@ modelsLayer(routes): Layer<Models, never, CredentialStore | HttpClient>
 - **Tests differ from production only by injection:** routes point at a `Bun.serve` replay server, the store lives in a temp directory, and the environment comes from `ConfigProvider.fromUnknown`. OpenRouter's key comes from that environment, so every run covers the fallback.
 - **Not yet built:**
   - the OpenCode Go route: its models span three protocols, so it waits for the catalog;
-  - `session-id` and the Codex priority tier, which need a session and the catalog;
+  - the Codex `session_id` header and the Codex priority tier, which need a session (the conversation ID they will use is built; see [model-catalog.md](model-catalog.md#as-built));
   - parsing a `provider/model` string, until the first caller needs it.
 
 ## Round 2 (implemented): log in, and refresh tokens instead of failing
@@ -415,5 +415,5 @@ The fake auth server gains a registration callback with `client_id`, an ID token
 
 ## Later rounds
 
-- Round 3: the model catalog, the `host` settings file (user routes), and the OpenCode Go route through `@effect/ai-openai-compat` (ignored by Fallow until then). The same refresh also looks up the Claude Code version the Claude subscription route sends: the `version` of `https://registry.npmjs.org/@anthropic-ai/claude-code/latest` (the `latest` tag), with the version current at build time bundled as the floor. Tau checks at most once a day, caches the result in `~/.tau`, never makes a request wait for it, and keeps the last version it saw when npm cannot be reached.
+- Round 3: the model catalog, the `host` settings file (user routes), the OpenCode Go route, and the Claude Code version lookup. Planned in [model-catalog.md](model-catalog.md).
 - Round 4: structured-output forced-tool fallback and the one retry on invalid output.

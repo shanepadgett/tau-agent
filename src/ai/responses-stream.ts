@@ -1,4 +1,7 @@
-/** Lets non-streaming requests, such as structured output, reach the ChatGPT plan routes, which only answer with a stream. */
+/**
+ * Sends non-streaming requests, such as structured output, to the ChatGPT plan routes as streams.
+ * These routes reply only with a stream.
+ */
 
 import { Array, Effect, Option, Predicate, Schema } from "effect";
 import { Sse } from "effect/encoding";

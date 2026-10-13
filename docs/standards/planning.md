@@ -8,7 +8,7 @@
 - Record each agreed decision in the plan file in the same reply. A correction rewrites the affected part; do not append history.
 - Search `docs/reference/copies/index.md` and the dependency's docs and types before proposing any helper, type, or dependency. Name the library module and function that provides each capability. Propose new code only after the reference shows nothing that fits, and name no API that you did not find there.
 - Plan in rounds. Each round asks a small batch of related decisions.
-- Unanswered questions go in Open in `docs/plan/README.md` and are re-asked each reply until answered. Remove or reword them when another answer settles or changes them.
+- Unanswered questions go in `docs/plan/questions.md`.
 
 ## Reader
 
@@ -49,5 +49,5 @@ Show, don't tell. Prose is limited to tradeoffs and open questions, one line eac
 - The call path from entry point to leaves as a Mermaid sequence diagram or flowchart.
 - Logic as pseudocode: one action per line, names from the domain, indentation for nesting, no language noise.
 - Show where behavior is injected. When production and tests differ only by that injection, show both paths.
-- `docs/plan/deferred.md` lists decisions to make later, one line each: the question and what brings it up. When that happens, move the item to Open in README.md.
+- `docs/plan/deferred.md` lists decisions to make later, one line each: the question and what brings it up. When that happens, move the item to `questions.md`.
 - Code-level plans live in `docs/plan/work/`, one file per piece of work, and are deleted once the work ships.

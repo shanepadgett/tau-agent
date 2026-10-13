@@ -115,7 +115,11 @@ const fakeAuthServer = Effect.acquireRelease(
 const fakeOAuth = (id: string, authUrl: string): OAuthClient => {
   const route = routeNamed(id);
 
-  if (route.auth.kind === "apiKey" || route.auth.kind === "chatgptApp")
+  if (
+    route.auth.kind === "none" ||
+    route.auth.kind === "apiKey" ||
+    route.auth.kind === "chatgptApp"
+  )
     throw new Error(`${id} has no OAuth client`);
 
   const { oauth } = route.auth;
@@ -140,7 +144,8 @@ const fakeOAuth = (id: string, authUrl: string): OAuthClient => {
 
 const fakeRoute = (id: string, authUrl: string): Route => {
   const route = routeNamed(id);
-  if (route.auth.kind === "apiKey" || route.auth.kind === "chatgptApp") return route;
+  const hasOAuth = route.auth.kind === "claudeSubscription" || route.auth.kind === "codexLogin";
+  if (!hasOAuth) return route;
   return { ...route, auth: { ...route.auth, oauth: fakeOAuth(id, authUrl) } };
 };
 

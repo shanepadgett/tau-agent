@@ -1,4 +1,4 @@
-/** The `tau` command line: logging in to model providers and out of them. */
+/** The `tau` command line. It logs in to model providers and logs out of them. */
 
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -11,11 +11,13 @@ import packageJson from "../../package.json" with { type: "json" };
 import { logInChatgptApp, revokeChatgptApp } from "../ai/chatgpt-app.ts";
 import { ApiKey, ChatgptAppTokens, CredentialStore, type Credential } from "../ai/credential.ts";
 import { type LoginFailed, logIn, LoginPrompt } from "../ai/login.ts";
-import { builtInRoutes, type ChatgptApp, type HeadlessLogin, type Route } from "../ai/routes.ts";
+import type { ChatgptApp, HeadlessLogin, Route } from "../ai/routes.ts";
 import { credentialStoreLayer } from "../host/credential-store.ts";
 import { readOrCreateHostId } from "../host/host-id.ts";
+import { readSettings, type SettingsInvalid } from "../host/settings.ts";
 
 const AUTH_TITLES = {
+  none: "no key",
   apiKey: "API key",
   claudeSubscription: "Claude subscription",
   chatgptApp: "ChatGPT plan: Sign in with ChatGPT",
@@ -23,6 +25,7 @@ const AUTH_TITLES = {
 } satisfies Record<Route["auth"]["kind"], string>;
 
 const AUTH_DESCRIPTIONS = {
+  none: "A server that needs no key",
   apiKey: "Saved in ~/.tau; without one, Tau reads the provider's environment variable",
   claudeSubscription: "Tau connects the way Claude Code does",
   chatgptApp: "Tau connects as its own app; set a usage cap in ChatGPT settings",
@@ -43,14 +46,23 @@ const routeChoice = (route: Route) => ({
 
 const tauDirectory = join(homedir(), ".tau");
 
+/** The routes that take a login or a key: the built-in ones and those in the user's settings. */
+const routesWithCredentials = readSettings(tauDirectory).pipe(
+  Effect.map(({ routes }) =>
+    routes.flatMap((route) => (route.auth.kind === "none" ? [] : [route])),
+  ),
+);
+
 const login = Command.make(
   "login",
   {},
   Effect.fn("login")(function* () {
     const route = yield* Prompt.Select({
       message: "Log in to",
-      choices: builtInRoutes.map(routeChoice),
+      choices: (yield* routesWithCredentials).map(routeChoice),
     });
+
+    if (route.auth.kind === "none") return yield* Console.log(`${route.provider} needs no login.`);
 
     if (route.auth.kind === "apiKey") {
       const key = yield* Prompt.Password({ message: `${route.provider} API key` });
@@ -80,7 +92,7 @@ const logout = Command.make(
   Effect.fn("logout")(function* () {
     const store = yield* CredentialStore;
 
-    const loggedIn = yield* Effect.filter(builtInRoutes, (route) =>
+    const loggedIn = yield* Effect.filter(yield* routesWithCredentials, (route) =>
       store.read(route.provider).pipe(Effect.map(Option.isSome)),
     );
 
@@ -147,7 +159,7 @@ class ShownToUser extends Schema.TaggedError<ShownToUser>()("ShownToUser", {
   override readonly [Runtime.errorReported] = false;
 }
 
-const showFailure = (failure: LoginFailed) =>
+const showFailure = (failure: LoginFailed | SettingsInvalid) =>
   Console.error(failure.message).pipe(
     Effect.andThen(Effect.fail(new ShownToUser({ cause: failure }))),
   );
@@ -163,6 +175,7 @@ Command.make("tau").pipe(
   Command.run({ version: packageJson.version }),
   Effect.catchTags({
     LoginFailed: showFailure,
+    SettingsInvalid: showFailure,
     // Ctrl+C in a prompt ends the command quietly, like Ctrl+C anywhere else.
     QuitError: () => Effect.interrupt,
   }),

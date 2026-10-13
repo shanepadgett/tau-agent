@@ -2,7 +2,7 @@
 
 **Question:** do Tau's own route code, token refresh and decision adapters work against the live services, with the credentials `tau login` saved in `~/.tau`?
 
-**Run:** `bun spikes/live-routes/check.ts [full|chat|codex-stream] [--identity] [--claude-headers]`. Each run writes `results-<mode>.json` beside the script (gitignored: it holds account IDs from response headers). The script imports `src/` directly. It deliberately rewrites `~/.tau/credentials.db`: `full` marks each subscription's tokens expired to force a real refresh.
+**Run:** `bun spikes/live-routes/check.ts [full|chat|codex-stream|opencode-go] [--identity] [--claude-headers]`. `opencode-go` sends one chat, streamed and not streamed, to an OpenCode Go model on each protocol: Messages (`minimax-m2.7`), Responses (`gpt-6-luna`) and Chat Completions (`kimi-k2.6`). It also keeps each raw reply in the results file. Each run writes `results-<mode>.json` beside the script (gitignored: it holds account IDs from response headers). The script imports `src/` directly. It deliberately rewrites `~/.tau/credentials.db`: `full` marks each subscription's tokens expired to force a real refresh.
 
 ## Results (2026-10-12, macOS arm64, under `bun`)
 
@@ -24,3 +24,9 @@ The `--identity` and `--claude-headers` flags reproduce the Claude fix by hand. 
 - One run per check; the Claude 429 cause is inferred from which requests pass.
 - Streaming (`streamText`) on Codex was not checked for the empty-output case; Effect builds the streamed reply from the item events.
 - Not tested: the compiled binary, Linux, Sign in with ChatGPT.
+
+## OpenCode Go (2026-10-12)
+
+- **First run:** every request was refused with `MissingSessionID`. OpenCode Go requires a per-conversation `x-opencode-session` header and the client's own user agent. Tau now sends both.
+- **Second run:** Responses and Chat Completions passed. Messages failed to decode, because OpenCode Go leaves out fields that Anthropic always sends (`stop_sequence`, cache usage fields, a thinking block's starting `signature`). `src/ai/messages-defaults.ts` now adds them.
+- **Third run:** all six calls pass (three models, streamed and not streamed).

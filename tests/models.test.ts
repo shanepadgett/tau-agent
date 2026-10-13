@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BunFileSystem } from "@effect/platform-bun";
+import { BunCrypto, BunFileSystem } from "@effect/platform-bun";
 import {
   ConfigProvider,
   Context,
@@ -24,11 +24,19 @@ import {
   OAuthTokens,
   ProviderId,
 } from "../src/ai/credential.ts";
+import { catalogLayer, publicCatalogSources } from "../src/ai/catalog.ts";
+import snapshot from "../src/ai/catalog-snapshot.json" with { type: "json" };
 import { Models, modelsLayer } from "../src/ai/models.ts";
-import { builtInRoutes, RouteId } from "../src/ai/routes.ts";
+import { ConversationId } from "../src/ai/route-auth.ts";
+import { RouteId } from "../src/ai/routes.ts";
+import packageJson from "../package.json" with { type: "json" };
+import { catalogCacheLayer } from "../src/host/catalog-cache.ts";
 import { credentialStoreLayer } from "../src/host/credential-store.ts";
+import { readSettings } from "../src/host/settings.ts";
 
 const HOUR_MILLIS = 3_600_000;
+
+const conversation = ConversationId.make("conversation-1");
 
 const Recording = Schema.Struct({
   status: Schema.Number,
@@ -102,13 +110,14 @@ const storedCredentials: ReadonlyArray<readonly [string, Credential]> = [
   ],
 ];
 
-/** OpenRouter's key comes from the environment, so every run also covers the fallback. */
-const environment = { OPENROUTER_API_KEY: "openrouter-key" };
+/** These keys come from the environment, so every run also covers the fallback. */
+const environment = { OPENROUTER_API_KEY: "openrouter-key", OPENCODE_API_KEY: "opencode-key" };
 
 const runWithModels = <A, E>(
   serverUrl: string,
   credentials: ReadonlyArray<readonly [string, Credential]>,
   program: (models: Models["Service"]) => Effect.Effect<A, E, Scope.Scope>,
+  settingsText = "",
 ) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -123,13 +132,25 @@ const runWithModels = <A, E>(
       yield* store.save(ProviderId.make(provider), credential);
     }
 
-    // Each route keeps its path but talks to the replay server.
-    const routes = builtInRoutes.map((route) => ({
+    if (settingsText !== "")
+      yield* fileSystem.writeFileString(`${tauDirectory}/settings.json`, settingsText);
+
+    const settings = yield* readSettings(tauDirectory);
+
+    // Each built-in route keeps its path but talks to the replay server.
+    const routes = settings.routes.map((route) => ({
       ...route,
       apiUrl: route.apiUrl.replace(/^https:\/\/[^/]+/, serverUrl),
     }));
 
-    const layer = modelsLayer(routes).pipe(
+    const catalog = catalogLayer({
+      routes,
+      settings: settings.routeSettings,
+      sources: publicCatalogSources,
+    }).pipe(Layer.provide(catalogCacheLayer(tauDirectory)), Layer.provide(BunCrypto.layer));
+
+    const layer = modelsLayer.pipe(
+      Layer.provide(catalog),
       Layer.provide(credentialStoreLayer(tauDirectory)),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(environment))),
@@ -191,7 +212,7 @@ const chatRoutes = [
       authorization: "Bearer claude-token",
       // Appended after any beta the package itself sends.
       "anthropic-beta": "claude-code-20250219,oauth-2025-04-20",
-      "user-agent": "claude-cli/2.1.296",
+      "user-agent": `claude-cli/${snapshot.claudeCodeVersion}`,
       "x-app": "cli",
     },
   },
@@ -199,7 +220,7 @@ const chatRoutes = [
     route: "openai",
     model: "gpt-6-luna",
     path: "/v1/responses",
-    headers: { authorization: "Bearer openai-key" },
+    headers: { authorization: "Bearer openai-key", "user-agent": `tau/${packageJson.version}` },
   },
   {
     route: "codex",
@@ -224,23 +245,39 @@ const expectSigned = (received: Received | undefined, expected: (typeof chatRout
 
 type ChatModel = { readonly route: string; readonly model: string };
 
-const generateReview = (serverUrl: string, chat: ChatModel, prompt: Prompt.RawInput) =>
-  runWithModels(serverUrl, storedCredentials, (models) =>
-    Effect.gen(function* () {
-      const model = yield* models.languageModel({
+const review = (models: Models["Service"], chat: ChatModel, prompt: Prompt.RawInput) =>
+  Effect.gen(function* () {
+    const model = yield* models.languageModel(
+      {
         route: RouteId.make(chat.route),
         model: chat.model,
-      });
+      },
+      conversation,
+    );
 
-      const response = yield* LanguageModel.generateObject({
-        prompt,
-        schema: Review,
-        objectName: "review",
-      }).pipe(Effect.provideService(LanguageModel.LanguageModel, model));
+    const response = yield* LanguageModel.generateObject({
+      prompt,
+      schema: Review,
+      objectName: "review",
+    }).pipe(Effect.provideService(LanguageModel.LanguageModel, model));
 
-      return response.value;
-    }),
+    return response.value;
+  });
+
+const generateReview = (serverUrl: string, chat: ChatModel, prompt: Prompt.RawInput) =>
+  runWithModels(serverUrl, storedCredentials, (models) => review(models, chat, prompt));
+
+/** The first OpenCode Go model in the bundled snapshot that uses `npm`'s protocol, or the route's own. */
+const openCodeGoModel = (npm: string | undefined) => {
+  const models = Object.entries(snapshot.modelsDev["opencode-go"].models);
+
+  const found = models.find(
+    ([, model]) => ("provider" in model ? model.provider.npm : undefined) === npm,
   );
+
+  if (found === undefined) throw new Error(`The snapshot has no OpenCode Go model for ${npm}`);
+  return found[0];
+};
 
 const codex: ChatModel = { route: "codex", model: "gpt-6-luna" };
 
@@ -252,10 +289,13 @@ describe("models", () => {
 
         const parts = yield* runWithModels(server.url, storedCredentials, (models) =>
           Effect.gen(function* () {
-            const model = yield* models.languageModel({
-              route: RouteId.make(expected.route),
-              model: expected.model,
-            });
+            const model = yield* models.languageModel(
+              {
+                route: RouteId.make(expected.route),
+                model: expected.model,
+              },
+              conversation,
+            );
 
             const prompt = Prompt.make("Compute (2^61 - 17) * 3 with the run tool.");
 
@@ -403,13 +443,145 @@ describe("models", () => {
     ),
   );
 
+  test.each([
+    {
+      protocol: "Messages",
+      model: openCodeGoModel("@ai-sdk/anthropic"),
+      recording: "anthropic-object",
+      path: "/inference/go/v1/messages",
+      header: ["x-api-key", "opencode-key"],
+    },
+    {
+      protocol: "Chat Completions",
+      model: openCodeGoModel(undefined),
+      recording: "openrouter-object",
+      path: "/inference/go/v1/chat/completions",
+      header: ["authorization", "Bearer opencode-key"],
+    },
+  ])("OpenCode Go sends a $protocol model to its path at the same address", (expected) =>
+    run(
+      Effect.gen(function* () {
+        const server = yield* replayServer(expected.recording);
+        const goModel = { route: "opencode-go", model: expected.model };
+        const reviewed = yield* generateReview(server.url, goModel, "Review it.");
+        const [name = "", value] = expected.header;
+
+        expect(reviewed).toEqual(Schema.decodeUnknownSync(Review)(server.expected));
+        expect(server.received[0]?.path).toBe(expected.path);
+        expect(server.received[0]?.headers.get(name)).toBe(value);
+        expect(server.received[0]?.headers.get("x-opencode-session")).toBe(conversation);
+        expect(server.received[0]?.headers.get("x-opencode-client")).toBe("tau");
+      }),
+    ),
+  );
+
+  // Recorded from OpenCode Go, whose Messages replies leave out `stop_sequence` and cache usage.
+  test.each(["object", "stream"])(
+    "a Messages reply without the fields Anthropic always sends still gives its text (%s)",
+    (kind) =>
+      run(
+        Effect.gen(function* () {
+          const server = yield* replayServer(`opencode-go-messages-${kind}`);
+
+          const ref = {
+            route: RouteId.make("opencode-go"),
+            model: openCodeGoModel("@ai-sdk/anthropic"),
+          };
+
+          const text = yield* runWithModels(server.url, storedCredentials, (models) =>
+            Effect.gen(function* () {
+              const model = yield* models.languageModel(ref, conversation);
+              const prompt = "Reply with exactly: ok";
+
+              const reply =
+                kind === "stream"
+                  ? LanguageModel.streamText({ prompt }).pipe(
+                      Stream.runCollect,
+                      Effect.map((parts) =>
+                        parts
+                          .flatMap((part) => (part.type === "text-delta" ? [part.delta] : []))
+                          .join(""),
+                      ),
+                    )
+                  : LanguageModel.generateText({ prompt }).pipe(
+                      Effect.map((response) => response.text),
+                    );
+
+              return yield* reply.pipe(Effect.provideService(LanguageModel.LanguageModel, model));
+            }),
+          );
+
+          expect(text.trim()).toBe("ok");
+        }),
+      ),
+  );
+
+  test("a route from the settings file reaches its own address and sends no key", () =>
+    run(
+      Effect.gen(function* () {
+        const server = yield* replayServer("openrouter-object");
+
+        const settingsText = `{
+          // A local server that needs no key
+          "routes": {
+            "local": {
+              "protocol": "openaiChat",
+              "apiUrl": "${server.url}/v1",
+              "models": { "qwen": { "contextTokens": 32768, "outputTokens": 8192 } },
+            },
+          },
+        }`;
+
+        const local = { route: "local", model: "qwen" };
+
+        const reviewed = yield* runWithModels(
+          server.url,
+          [],
+          (models) => review(models, local, "Review it."),
+          settingsText,
+        );
+
+        expect(reviewed).toEqual(Schema.decodeUnknownSync(Review)(server.expected));
+        expect(server.received[0]?.path).toBe("/v1/chat/completions");
+        expect(server.received[0]?.headers.get("authorization")).toBeNull();
+      }),
+    ));
+
+  test.each([
+    { kind: "chat", route: "openai", model: "gpt-0-unknown" },
+    { kind: "decision", route: "openrouter", model: "unknown/decider" },
+  ])("an unknown $kind model fails with a hint to add it in settings", (unknown) =>
+    run(
+      Effect.gen(function* () {
+        const server = yield* replayServer("openai-stream");
+        const ref = { route: RouteId.make(unknown.route), model: unknown.model };
+
+        const exit = yield* runWithModels(server.url, storedCredentials, (models) =>
+          Effect.exit(
+            unknown.kind === "chat"
+              ? Effect.asVoid(models.languageModel(ref, conversation))
+              : Effect.asVoid(models.decisionModel(ref)),
+          ),
+        );
+
+        expect(Exit.isFailure(exit) && String(exit.cause)).toContain("~/.tau/settings.json");
+        expect(server.received).toHaveLength(0);
+      }),
+    ),
+  );
+
   test("a route without a credential fails before sending anything", () =>
     run(
       Effect.gen(function* () {
         const server = yield* replayServer("openai-stream");
 
         const exit = yield* runWithModels(server.url, [], (models) =>
-          Effect.exit(models.languageModel({ route: RouteId.make("openai"), model: "gpt-6-luna" })),
+          Effect.exit(
+            models.languageModel(
+              { route: RouteId.make("openai"), model: "gpt-6-luna" },
+              conversation,
+            ),
+          ),
         );
 
         expect(Exit.isFailure(exit) && String(exit.cause)).toContain(

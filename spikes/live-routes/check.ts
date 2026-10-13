@@ -2,14 +2,18 @@
 // Prints answers, usage and expiry times; never prints a token.
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { BunFileSystem } from "@effect/platform-bun";
-import { DateTime, Effect, Layer, Option, Predicate, Redacted, Schema } from "effect";
+import { BunCrypto, BunFileSystem } from "@effect/platform-bun";
+import { DateTime, Effect, Layer, Option, Predicate, Redacted, Schema, Stream } from "effect";
 import { Decision, DecisionModel, LanguageModel } from "effect/ai";
 import { FetchHttpClient } from "effect/http";
 import { CredentialStore, OAuthTokens, ProviderId } from "../../src/ai/credential.ts";
+import { catalogLayer, publicCatalogSources } from "../../src/ai/catalog.ts";
 import { Models, modelsLayer } from "../../src/ai/models.ts";
-import { builtInRoutes, RouteId } from "../../src/ai/routes.ts";
+import { ConversationId } from "../../src/ai/route-auth.ts";
+import { RouteId } from "../../src/ai/routes.ts";
+import { catalogCacheLayer } from "../../src/host/catalog-cache.ts";
 import { credentialStoreLayer } from "../../src/host/credential-store.ts";
+import { readSettings } from "../../src/host/settings.ts";
 
 const tauDirectory = join(homedir(), ".tau");
 
@@ -41,6 +45,9 @@ const subscriptions = [
   { route: "chatgpt", model: "gpt-6.1-sol" },
 ];
 
+// One model per protocol on OpenCode Go: Messages, Responses, Chat Completions.
+const openCodeGoModels = ["minimax-m2.7", "gpt-6-luna", "kimi-k2.6"];
+
 const decisionModels = [
   { route: "openrouter", model: "~typesafe/jev-latest" },
   { route: "openrouter", model: "openai/gpt-6-luna-decisions" },
@@ -51,6 +58,8 @@ const mode = process.argv[2] ?? "full";
 
 /** Raw Codex response bodies, captured by the fetch below. */
 const codexStreams: string[] = [];
+// Raw OpenCode Go replies, to see which fields its endpoints send.
+const openCodeGoBodies: string[] = [];
 
 const capturingFetch: typeof fetch = Object.assign(
   async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -62,9 +71,10 @@ const capturingFetch: typeof fetch = Object.assign(
       init = { ...init, headers };
     }
     const response = await fetch(input, init);
-    if (!String(input instanceof Request ? input.url : input).includes("/codex/responses")) return response;
+    const isCodex = url.includes("/codex/responses");
+    if (!isCodex && !url.includes("/inference/go/")) return response;
     const body = await response.text();
-    codexStreams.push(body);
+    (isCodex ? codexStreams : openCodeGoBodies).push(body);
     return new Response(body, { status: response.status, headers: response.headers });
   },
   { preconnect: fetch.preconnect },
@@ -75,7 +85,7 @@ const program = Effect.gen(function* () {
   const store = yield* CredentialStore;
 
   const chat = (route: string, model: string) =>
-    models.languageModel({ route: RouteId.make(route), model }).pipe(
+    models.languageModel({ route: RouteId.make(route), model }, ConversationId.make(crypto.randomUUID())).pipe(
       Effect.flatMap((languageModel) =>
         LanguageModel.generateText({
           prompt:
@@ -90,6 +100,19 @@ const program = Effect.gen(function* () {
         ),
       ),
       Effect.map((response) => ({ text: response.text.trim(), usage: response.usage })),
+    );
+
+  const streamedChat = (route: string, model: string) =>
+    models.languageModel({ route: RouteId.make(route), model }, ConversationId.make(crypto.randomUUID())).pipe(
+      Effect.flatMap((languageModel) =>
+        LanguageModel.streamText({ prompt: "Reply with exactly: ok" }).pipe(
+          Stream.runCollect,
+          Effect.provideService(LanguageModel.LanguageModel, languageModel),
+        ),
+      ),
+      Effect.map((parts) =>
+        parts.flatMap((part) => (part.type === "text-delta" ? [part.delta] : [])).join("").trim(),
+      ),
     );
 
   const storedTokens = (provider: string) =>
@@ -108,6 +131,18 @@ const program = Effect.gen(function* () {
       const tokens = yield* storedTokens(route);
       report[`${route} chat`] = yield* Effect.result(chat(route, model));
       report[`${route} stored expiry`] = tokens === undefined ? undefined : DateTime.formatIso(tokens.expiresAt);
+    }
+    return report;
+  }
+
+  if (mode === "opencode-go") {
+    for (const model of openCodeGoModels) {
+      openCodeGoBodies.length = 0;
+      report[`opencode-go ${model}`] = yield* Effect.result(chat("opencode-go", model));
+      report[`opencode-go ${model} raw`] = openCodeGoBodies.join("\n");
+      openCodeGoBodies.length = 0;
+      report[`opencode-go ${model} stream`] = yield* Effect.result(streamedChat("opencode-go", model));
+      report[`opencode-go ${model} stream raw`] = openCodeGoBodies.join("\n");
     }
     return report;
   }
@@ -172,7 +207,18 @@ const program = Effect.gen(function* () {
   return report;
 });
 
-const layer = modelsLayer(builtInRoutes).pipe(
+const settings = await Effect.runPromise(
+  readSettings(tauDirectory).pipe(Effect.provide(BunFileSystem.layer)),
+);
+
+const catalog = catalogLayer({
+  routes: settings.routes,
+  settings: settings.routeSettings,
+  sources: publicCatalogSources,
+}).pipe(Layer.provide(catalogCacheLayer(tauDirectory)), Layer.provide(BunCrypto.layer));
+
+const layer = modelsLayer.pipe(
+  Layer.provideMerge(catalog),
   Layer.provideMerge(credentialStoreLayer(tauDirectory)),
   Layer.provideMerge(FetchHttpClient.layer),
   Layer.provideMerge(Layer.succeed(FetchHttpClient.Fetch, capturingFetch)),

@@ -56,6 +56,7 @@ Read the Effect reference before writing Effect code. These rules cover how we u
 - Describe the code as it is now. No history ("previously", "now uses", "changed to").
 - Document an exported symbol only when its name and signature leave out something a caller needs: a guarantee, a failure, a unit.
 - An error message says what failed, names the value involved, and says what to do next. Text for the user is plain language.
+- Write comments and messages in simple technical English, as ASD-STE100 describes: short sentences, common words with one meaning each, and the active voice.
 
 ## Before you finish
 

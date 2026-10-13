@@ -1,4 +1,7 @@
-/** Answers Effect decision questions through OpenAI's Decisions API (`POST /v1/decisions`), which serves Luna. */
+/**
+ * Sends Effect decision questions to the OpenAI Decisions API (`POST /v1/decisions`), which serves
+ * Luna.
+ */
 
 import { Effect, Match, Schema } from "effect";
 import { AiError, type Decision, DecisionModel } from "effect/ai";

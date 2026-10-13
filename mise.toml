@@ -80,6 +80,10 @@ description = "Lint rule unit tests under Node"
 run = "bun tools/report-failures.ts node-test -- node --test --test-reporter=dot \"tools/lint/**/*.test.ts\""
 
 
+[tasks.catalog]
+description = "Refresh the model catalog snapshot bundled in the binary"
+run = ["bun tools/catalog-snapshot.ts", "mise run fix:fmt -- src/ai/catalog-snapshot.json"]
+
 [tasks.docs]
 description = "Copy version-matched dependency docs into docs/reference/copies/ and rebuild the index"
 run = "bun tools/reference-docs.ts"
