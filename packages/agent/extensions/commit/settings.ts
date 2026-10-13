@@ -5,7 +5,7 @@ export type CommitPushPolicy = boolean | "ask";
 
 export default defineTauExtensionSettings({
 	key: "commit",
-	defaults: { push: "ask" as CommitPushPolicy },
+	defaults: { push: "ask" as CommitPushPolicy, avoidBreakingChanges: false },
 	schema: Type.Object(
 		{
 			push: Type.Optional(
@@ -13,6 +13,12 @@ export default defineTauExtensionSettings({
 					default: "ask",
 					description:
 						'Push after /commit: true pushes automatically, false never pushes or asks, "ask" prompts (default).',
+				}),
+			),
+			avoidBreakingChanges: Type.Optional(
+				Type.Boolean({
+					default: false,
+					description: "When true, /commit avoids ! and BREAKING CHANGE: entries in generated commit messages.",
 				}),
 			),
 		},

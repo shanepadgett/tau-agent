@@ -90,11 +90,23 @@ export async function runCommitFlow(
 	root: string,
 	markerType: string,
 	temporaryOutput: TemporaryOutputStore,
-	options: { push: CommitPushPolicy },
+	options: { push: CommitPushPolicy; avoidBreakingChanges: boolean },
 ): Promise<void> {
 	await ctx.ui.custom<void>(
 		(tui, theme, _keybindings, done) =>
-			new CommitFlowPanel(pi, ctx, tui, theme, git, root, markerType, temporaryOutput, options.push, done),
+			new CommitFlowPanel(
+				pi,
+				ctx,
+				tui,
+				theme,
+				git,
+				root,
+				markerType,
+				temporaryOutput,
+				options.push,
+				options.avoidBreakingChanges,
+				done,
+			),
 	);
 }
 
@@ -172,6 +184,7 @@ class CommitFlowPanel implements Component, Focusable {
 	private readonly markerType: string;
 	private readonly temporaryOutput: TemporaryOutputStore;
 	private readonly pushPolicy: CommitPushPolicy;
+	private readonly avoidBreakingChanges: boolean;
 	private readonly done: () => void;
 	private readonly panelConfig: ToolPanelConfig;
 	private readonly panel: ToolPanel;
@@ -195,6 +208,7 @@ class CommitFlowPanel implements Component, Focusable {
 		markerType: string,
 		temporaryOutput: TemporaryOutputStore,
 		pushPolicy: CommitPushPolicy,
+		avoidBreakingChanges: boolean,
 		done: () => void,
 	) {
 		this.pi = pi;
@@ -206,6 +220,7 @@ class CommitFlowPanel implements Component, Focusable {
 		this.markerType = markerType;
 		this.temporaryOutput = temporaryOutput;
 		this.pushPolicy = pushPolicy;
+		this.avoidBreakingChanges = avoidBreakingChanges;
 		this.done = done;
 		this.groupList = this.createGroupList([]);
 		this.body = {
@@ -300,6 +315,7 @@ class CommitFlowPanel implements Component, Focusable {
 
 			this.startWorking("Generating plan", true);
 			const groups = await generatePlan(this.generationCtx(), evidence, [], "", {
+				avoidBreakingChanges: this.avoidBreakingChanges,
 				onStatus: (status) => this.setWorkingMessage(status),
 			});
 			if (this.isCancelled()) return this.cancelFlow();
@@ -469,7 +485,10 @@ class CommitFlowPanel implements Component, Focusable {
 				plan.groups,
 				group.id,
 				note,
-				{ onStatus: (status) => this.setWorkingMessage(status) },
+				{
+					avoidBreakingChanges: this.avoidBreakingChanges,
+					onStatus: (status) => this.setWorkingMessage(status),
+				},
 			);
 			this.plan = setMessage(this.requirePlan(), group.id, message);
 			this.showGroups(group.id);
@@ -489,6 +508,7 @@ class CommitFlowPanel implements Component, Focusable {
 				files: evidence.files,
 				worktreeSignature: await computeWorktreeSignature(this.git, this.root, evidence.files),
 				groups: await generatePlan(this.generationCtx(), evidence, this.requirePlan().groups, note, {
+					avoidBreakingChanges: this.avoidBreakingChanges,
 					onStatus: (status) => this.setWorkingMessage(status),
 				}),
 			};

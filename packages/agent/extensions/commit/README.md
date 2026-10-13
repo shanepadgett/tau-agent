@@ -22,6 +22,8 @@ Grouping is fixed: files cannot be moved between commits in the review UI. If th
 - `true`: push automatically without asking.
 - `false`: keep the commits local without offering to push.
 
+Set `extensions.commit.avoidBreakingChanges` to `true` to tell `/commit` not to add `!` or `BREAKING CHANGE:` entries to generated commit messages. It defaults to `false`.
+
 Without an interactive UI, only `true` pushes; `"ask"` and `false` stop after committing.
 
 If the current branch has no upstream, pushing runs `git push --set-upstream origin <branch>` to establish tracking. Branches with an upstream use normal `git push` behavior.

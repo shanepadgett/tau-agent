@@ -56,7 +56,10 @@ async function runCommit(
 	const settings = await loadTauExtensionSettings(ctx, commitSettings);
 
 	if (ctx.hasUI) {
-		await runCommitFlow(pi, ctx, git, repo.root, COMMIT_MARKER_TYPE, temporaryOutput, { push: settings.push });
+		await runCommitFlow(pi, ctx, git, repo.root, COMMIT_MARKER_TYPE, temporaryOutput, {
+			push: settings.push,
+			avoidBreakingChanges: settings.avoidBreakingChanges,
+		});
 		return;
 	}
 
@@ -76,7 +79,7 @@ async function runCommit(
 	const state: CommitPlanState = {
 		files: evidence.files,
 		worktreeSignature,
-		groups: await generatePlan(ctx, evidence),
+		groups: await generatePlan(ctx, evidence, [], "", { avoidBreakingChanges: settings.avoidBreakingChanges }),
 	};
 	try {
 		const completed = await executeCommitPlan(pi, git, repo.root, state, COMMIT_MARKER_TYPE);

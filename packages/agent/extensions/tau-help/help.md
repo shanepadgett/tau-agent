@@ -36,7 +36,7 @@ Automatically requests Fast mode for `gpt-6-luna` on `openai-codex`. Fast mode c
 
 ## commit
 
-Use `/commit` to group changes, review messages, and commit. `extensions.commit.push` controls pushing: `"ask"` by default, `true` to push automatically, or `false` to skip. Pushing a branch without an upstream sets tracking on `origin`. Registered pre-commit checks run once first; failures stop the commit and go to the agent.
+Use `/commit` to group changes, review messages, and commit. `extensions.commit.push` controls pushing: `"ask"` by default, `true` to push automatically, or `false` to skip. Set `extensions.commit.avoidBreakingChanges` to `true` to omit `!` and `BREAKING CHANGE:` entries from generated messages. Pushing a branch without an upstream sets tracking on `origin`. Registered pre-commit checks run once first; failures stop the commit and go to the agent.
 
 ## cost-report
 

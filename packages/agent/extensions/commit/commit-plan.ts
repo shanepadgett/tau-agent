@@ -46,6 +46,7 @@ interface CommitPlanToolCommit {
 }
 
 export interface CommitGenerationOptions {
+	avoidBreakingChanges: boolean;
 	onStatus?: (status: string) => void | Promise<void>;
 }
 
@@ -56,7 +57,7 @@ export async function generatePlan(
 	regenerationNote = "",
 	options?: CommitGenerationOptions,
 ): Promise<CommitGroup[]> {
-	const prompt = buildPlanPrompt(evidence, previousPlan, regenerationNote);
+	const prompt = buildPlanPrompt(evidence, previousPlan, regenerationNote, options?.avoidBreakingChanges ?? false);
 	const { value } = await generateToolValidated(
 		ctx,
 		await resolveEffortCandidates(ctx, commitEffort(evidence.files), { includeParentModel: true }),
@@ -92,7 +93,14 @@ export async function regenerateMessage(
 	options?: CommitGenerationOptions,
 ): Promise<string> {
 	const selected = evidence.files.filter((file) => files.includes(file.path));
-	const prompt = buildMessagePrompt(evidence, selected, previousPlan, selectedGroupId, regenerationNote);
+	const prompt = buildMessagePrompt(
+		evidence,
+		selected,
+		previousPlan,
+		selectedGroupId,
+		regenerationNote,
+		options?.avoidBreakingChanges ?? false,
+	);
 	return generateValidated(
 		ctx,
 		await resolveEffortCandidates(ctx, commitEffort(selected), { includeParentModel: true }),
@@ -190,6 +198,7 @@ function buildPlanPrompt(
 	evidence: CommitEvidence,
 	previousPlan: readonly CommitGroup[],
 	regenerationNote: string,
+	avoidBreakingChanges: boolean,
 ): string {
 	return [
 		"Create the fewest useful commits for the dirty repository files.",
@@ -226,6 +235,7 @@ function buildPlanPrompt(
 		"- Breaking means downstream code must be edited to keep working: removed or renamed exports, changed signatures, changed event payloads, or changed schema or settings shapes.",
 		"- Output text, formatting, TUI layout, and internal behavior changes are never breaking, even for documented commands and tools.",
 		"- For breaking changes, prefer ! plus one body paragraph starting with BREAKING CHANGE:.",
+		...breakingChangeOverride(avoidBreakingChanges),
 		"Recent commit subjects are style guidance. User intent explains why. File evidence is authoritative.",
 		"When regenerating, use the previous plan and user note to understand what to change; do not copy mistakes.",
 		"",
@@ -250,6 +260,7 @@ function buildMessagePrompt(
 	previousPlan: readonly CommitGroup[],
 	selectedGroupId: string | undefined,
 	regenerationNote: string,
+	avoidBreakingChanges: boolean,
 ): string {
 	return [
 		"Write one git commit message for the selected dirty files.",
@@ -262,6 +273,7 @@ function buildMessagePrompt(
 		"Breaking means downstream code must be edited to keep working: removed or renamed exports, changed signatures, changed event payloads, or changed schema or settings shapes.",
 		"Output text, formatting, TUI layout, and internal behavior changes are never breaking, even for documented commands and tools.",
 		"For breaking changes, use ! plus one body paragraph starting with BREAKING CHANGE:.",
+		...breakingChangeOverride(avoidBreakingChanges),
 		"Do not wrap the message in markdown or code fences.",
 		"",
 		"Recent commit subjects:",
@@ -274,6 +286,14 @@ function buildMessagePrompt(
 		"Selected files:",
 		truncAt(files.map(formatFileEvidence).join("\n\n"), MAX_PLAN_EVIDENCE_CHARS),
 	].join("\n");
+}
+
+function breakingChangeOverride(avoidBreakingChanges: boolean): string[] {
+	return avoidBreakingChanges
+		? [
+				"Setting: Do not generate breaking-change commit entries. Never use ! or add a BREAKING CHANGE: paragraph; use a normal conventional commit message instead.",
+			]
+		: [];
 }
 
 function formatFileCatalog(files: readonly DirtyFile[]): string {
