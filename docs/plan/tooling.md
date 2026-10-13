@@ -53,6 +53,25 @@ Decision: enforce every readability rule a syntax check can decide. Rules are cl
 - **Thresholds** (depth, parameters, function length, magic-number allowlist) live in `.oxlintrc.json`. Revisit with real code.
 - **Complexity metrics stay out** of fallow; the caps above are lint syntax checks.
 
+## Live model matrix
+
+The models every live check runs on. Together they cover each route Tau ships, each protocol, and each model family that handles tool calls or reasoning in its own way. Run the matrix after a change to the tools, the agent loop, a protocol or a route: `bun spikes/live-models/check.ts` (see its `NOTES.md`). Change this table when a newer model replaces one; keep one model per reason.
+
+| Route | Model | Covers |
+| --- | --- | --- |
+| `chatgpt` | `gpt-6-luna`, `gpt-6.1-sol` | Sign in with ChatGPT; OpenAI's two current models |
+| `codex` | `gpt-6-luna`, `gpt-6.1-sol` | the same models through the Codex server |
+| `anthropic` | `claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5` | the Claude subscription; the three current Claude sizes |
+| `opencode-go` | `deepseek-v4.1-flash` | Chat Completions, with reasoning sent back in `reasoning_content` |
+| `opencode-go` | `kimi-k3` | Chat Completions; a second popular family for agent work |
+| `opencode-go` | `muse-spark-1.3-contributor` | Responses from a model that is not OpenAI's |
+| `opencode-go` | `minimax-m3` | Messages from a model that is not Claude |
+| `openrouter` | `google/gemini-3.8-flash` | the OpenRouter protocol; the only Google model |
+
+The `openai` route (API key) is left out: it is paid per token, and the `chatgpt` route sends the same protocol to the same models.
+
+Each model runs the same prompts, one session, in a fresh git repository: tools (`sh`, `read`), file edits, fixing a failed script, finding and using a project skill, and following a subfolder's `AGENTS.md`. Every prompt after the first is a follow-up, so each also checks that reasoning goes back to the provider correctly and that the prompt cache is read. Results are graded from the saved session entries and files, not from what the model says it did. Whether a model fixes a script with edits or sends it again is reported, not graded.
+
 ## Libraries
 
 Preference order: Bun built-in, then an Effect module, then a small vetted package.
