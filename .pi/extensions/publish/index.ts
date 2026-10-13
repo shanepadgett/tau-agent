@@ -68,6 +68,7 @@ async function publish(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<
 		throw new Error("Working tree is not clean. Commit or stash every change before publishing.");
 	await run(pi, ctx, "gh", ["auth", "status"], repo.root, DEFAULT_COMMAND_TIMEOUT_MS);
 	await run(pi, ctx, "npm", ["run", "check:package-sources"], repo.root, DEFAULT_COMMAND_TIMEOUT_MS);
+	await run(pi, ctx, "npm", ["run", "check:pi-compatibility"], repo.root, DEFAULT_COMMAND_TIMEOUT_MS);
 
 	const manifests = await loadManifests(repo.root);
 	const currentVersion = sharedVersion(manifests);

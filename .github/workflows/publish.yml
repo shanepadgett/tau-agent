@@ -20,6 +20,7 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm run check:package-sources
       - run: npm ci --ignore-scripts
+      - run: npm run check:pi-compatibility
       - run: npm pack --dry-run --workspace @shanepadgett/tau-tui
       - run: npm pack --dry-run --workspace @shanepadgett/tau-agent
       - run: npm publish --workspace @shanepadgett/tau-tui --access public

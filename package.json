@@ -18,6 +18,7 @@
 	],
 	"scripts": {
 		"check:package-sources": "node --experimental-strip-types packages/agent/scripts/check-package-sources.ts",
+		"check:pi-compatibility": "node --experimental-strip-types packages/agent/scripts/check-pi-compatibility.ts",
 		"fallow:pi-scope": "node --experimental-strip-types .pi/extensions/.fallow-scope.ts",
 		"test:unit": "vitest --run --reporter=agent"
 	},
