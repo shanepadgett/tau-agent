@@ -29,6 +29,7 @@ import type { ModelProfile } from "./model-profile.ts";
 import { withMessagesDefaults } from "./messages-defaults.ts";
 import { openAiDecisionModel } from "./openai-decisions.ts";
 import { collectResponseStream } from "./responses-stream.ts";
+import { withStructuredOutput } from "./structured-output.ts";
 import {
   type ConversationId,
   type CredentialUnavailable,
@@ -79,7 +80,7 @@ const makeModels = Effect.fn("makeModels")(function* () {
   ) {
     const { route, profile } = yield* catalog.model(ref);
     const sign = yield* signedFor(route, { protocol: profile.protocol, conversationId });
-    return yield* chatModel(route, profile, sign);
+    return withStructuredOutput(yield* chatModel(route, profile, sign), profile.supports);
   });
 
   const decisionModel = Effect.fn("Models.decisionModel")(function* (ref: ModelRef) {
@@ -102,7 +103,12 @@ const chatModel = (route: Route, profile: ModelProfile, sign: ClientTransform) =
 
   switch (profile.protocol) {
     case "anthropic":
-      return AnthropicLanguageModel.make({ model }).pipe(
+      // The catalog decides whether the model has native structured output. Effect guesses it from
+      // Claude model names, and takes any other name as native.
+      return AnthropicLanguageModel.make({
+        model,
+        config: { structuredOutputs: profile.supports.structuredOutput },
+      }).pipe(
         Effect.provideServiceEffect(
           AnthropicClient.AnthropicClient,
           AnthropicClient.make({

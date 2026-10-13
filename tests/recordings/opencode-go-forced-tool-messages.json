@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "contentType": "application/json",
+  "body": "{\"id\":\"071cee922ea81a3878e77d06552d441d\",\"type\":\"message\",\"role\":\"assistant\",\"stop_reason\":\"tool_use\",\"model\":\"minimax-m2.7\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"The user wants me to review a rename from `update` to `refresh` in a specific file. Let me first read the file to understand the changes and their implications.\",\"signature\":\"21df8bbb918a3fe793570f0e0fcb8bb070b45dcc1b91cedfb2b91970d1fb343c\"},{\"type\":\"tool_use\",\"id\":\"call_function_74bkvbufjup1_1\",\"name\":\"review\",\"input\":{\"files\":[\"src/ai/credential.ts\"],\"risk\":\"low\",\"summary\":\"Reviewing the rename of `update` to `refresh` in src/ai/credential.ts\"}}],\"usage\":{\"input_tokens\":252,\"output_tokens\":106}}",
+  "expected": {
+    "risk": "low",
+    "files": ["src/ai/credential.ts"],
+    "summary": "Reviewing the rename of `update` to `refresh` in src/ai/credential.ts"
+  }
+}

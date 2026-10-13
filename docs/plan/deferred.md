@@ -1,6 +1,6 @@
 # Deferred
 
-Decisions to make later. Each line is the question and what brings it up. When that happens, move the item to Open in README.md.
+Decisions to make later. Each line is the question and what brings it up. When that happens, move the item to [questions.md](questions.md).
 
 - OpenTelemetry tracing for enterprises. Comes up when enterprise tracing is requested.
 - How npm delivers the binary: a launcher plus one package per platform, or the npm package holds only SDK types and the binary installs separately. Comes up at build step 8.
@@ -20,4 +20,9 @@ Decisions to make later. Each line is the question and what brings it up. When t
 - Whether Fallow follows dynamically loaded default exports. Comes up when the extension host loads modules by path.
 - The exact 49/50-token duplicate thresholds. Comes up when a duplicate report looks wrong near the threshold.
 - Whether development hooks rerun checks after a live session's files change. Comes up when a hook misses a change in a live session.
+- The Codex `session_id` header and priority tier. Comes up at build step 3, when sessions supply the conversation ID.
+- Parsing a `provider/model` string. Comes up with the first caller that takes a model name from the user.
+- ChatGPT plan usage-limit errors, with a link to the usage settings. Comes up at build step 4, when the turn loop handles errors.
+- Refreshing OAuth tokens in the background before a request needs them. Comes up if a refresh noticeably delays a request.
+- A live token refresh on the `chatgpt` route through Tau's code (offline tests cover it). Comes up at the next live check.
 - Whether Tau reloads `~/.tau/settings.json` when it changes, or only on start. Comes up at build step 7, with extension hot reload.

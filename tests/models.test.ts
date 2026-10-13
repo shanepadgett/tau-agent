@@ -47,11 +47,16 @@ const Recording = Schema.Struct({
 
 type Received = { readonly path: string; readonly headers: Headers; readonly body: string };
 
-/** Answers every request with one recorded provider response and keeps what each request carried. */
-const replayServer = (name: string) =>
+/**
+ * Answers the requests with recorded provider responses, in order, and keeps what each request
+ * carried. After the last recording, it answers with the last one again.
+ */
+const replayServer = (...names: [string, ...string[]]) =>
   Effect.gen(function* () {
-    const recording = Schema.decodeUnknownSync(Schema.fromJsonString(Recording))(
-      yield* Effect.promise(() => Bun.file(`${import.meta.dir}/recordings/${name}.json`).text()),
+    const recordings = yield* Effect.forEach(names, (name) =>
+      Effect.promise(() => Bun.file(`${import.meta.dir}/recordings/${name}.json`).text()).pipe(
+        Effect.map(Schema.decodeUnknownSync(Schema.fromJsonString(Recording))),
+      ),
     );
 
     const received: Received[] = [];
@@ -61,6 +66,9 @@ const replayServer = (name: string) =>
         Bun.serve({
           port: 0,
           fetch: async (request) => {
+            const recording = recordings[Math.min(received.length, recordings.length - 1)];
+            if (recording === undefined) return new Response(null, { status: 500 });
+
             received.push({
               path: new URL(request.url).pathname,
               headers: request.headers,
@@ -77,7 +85,11 @@ const replayServer = (name: string) =>
       (running) => Effect.promise(() => running.stop(true)),
     );
 
-    return { url: `http://localhost:${server.port}`, received, expected: recording.expected };
+    return {
+      url: `http://localhost:${server.port}`,
+      received,
+      expected: recordings.at(-1)?.expected,
+    };
   });
 
 /** A JWT whose payload carries the ChatGPT account claim Codex needs. */
@@ -267,12 +279,18 @@ const review = (models: Models["Service"], chat: ChatModel, prompt: Prompt.RawIn
 const generateReview = (serverUrl: string, chat: ChatModel, prompt: Prompt.RawInput) =>
   runWithModels(serverUrl, storedCredentials, (models) => review(models, chat, prompt));
 
-/** The first OpenCode Go model in the bundled snapshot that uses `npm`'s protocol, or the route's own. */
+/**
+ * The first OpenCode Go model in the bundled snapshot with native structured output that uses
+ * `npm`'s protocol, or the route's own.
+ */
 const openCodeGoModel = (npm: string | undefined) => {
   const models = Object.entries(snapshot.modelsDev["opencode-go"].models);
 
   const found = models.find(
-    ([, model]) => ("provider" in model ? model.provider.npm : undefined) === npm,
+    ([, model]) =>
+      ("provider" in model ? model.provider.npm : undefined) === npm &&
+      "structured_output" in model &&
+      model.structured_output,
   );
 
   if (found === undefined) throw new Error(`The snapshot has no OpenCode Go model for ${npm}`);
@@ -527,7 +545,13 @@ describe("models", () => {
             "local": {
               "protocol": "openaiChat",
               "apiUrl": "${server.url}/v1",
-              "models": { "qwen": { "contextTokens": 32768, "outputTokens": 8192 } },
+              "models": {
+                "qwen": {
+                  "contextTokens": 32768,
+                  "outputTokens": 8192,
+                  "supports": { "structuredOutput": true },
+                },
+              },
             },
           },
         }`;
@@ -588,6 +612,84 @@ describe("models", () => {
           "openai has no stored credential",
         );
 
+        expect(server.received).toHaveLength(0);
+      }),
+    ));
+});
+
+const openai: ChatModel = { route: "openai", model: "gpt-6-luna" };
+
+describe("structured output", () => {
+  // Recorded from OpenCode Go. Neither model has native structured output.
+  test.each([
+    { protocol: "chat", model: "kimi-k2.6" },
+    { protocol: "messages", model: "minimax-m2.7" },
+  ])("$model returns the object through a forced tool call", (expected) =>
+    run(
+      Effect.gen(function* () {
+        const server = yield* replayServer(`opencode-go-forced-tool-${expected.protocol}`);
+        const goModel = { route: "opencode-go", model: expected.model };
+        const reviewed = yield* generateReview(server.url, goModel, "Review it.");
+        const request = server.received[0]?.body ?? "";
+
+        expect(reviewed).toEqual(Schema.decodeUnknownSync(Review)(server.expected));
+        expect(server.received).toHaveLength(1);
+        expect(request).toContain('"name":"review"');
+        expect(request).not.toContain("response_format");
+        expect(request).not.toContain("output_format");
+
+        expect(server.received[0]?.headers.get("anthropic-beta") ?? "").not.toContain(
+          "structured-outputs",
+        );
+      }),
+    ),
+  );
+
+  // `openai-object-invalid` is `openai-object` with `risk` changed to a value the schema refuses.
+  test("an invalid object gets one retry that tells the model why", () =>
+    run(
+      Effect.gen(function* () {
+        const server = yield* replayServer("openai-object-invalid", "openai-object");
+        const reviewed = yield* generateReview(server.url, openai, "Review it.");
+
+        expect(reviewed).toEqual(Schema.decodeUnknownSync(Review)(server.expected));
+        expect(server.received).toHaveLength(2);
+        expect(server.received[1]?.body).toContain('\\"risk\\":\\"severe\\"');
+        expect(server.received[1]?.body).toContain("That answer does not match the schema");
+      }),
+    ));
+
+  test("a second invalid object fails with a structured output error", () =>
+    run(
+      Effect.gen(function* () {
+        const server = yield* replayServer("openai-object-invalid");
+        const exit = yield* Effect.exit(generateReview(server.url, openai, "Review it."));
+
+        expect(Exit.isFailure(exit) && String(exit.cause)).toContain("StructuredOutputError");
+        expect(server.received).toHaveLength(2);
+      }),
+    ));
+
+  test("a model that cannot call tools is hidden, unless settings say it can", () =>
+    run(
+      Effect.gen(function* () {
+        const server = yield* replayServer("openai-object");
+        const ref = { route: RouteId.make("openai"), model: "gpt-3.5-turbo" };
+
+        const languageModel = (models: Models["Service"]) =>
+          Effect.exit(models.languageModel(ref, conversation));
+
+        const hidden = yield* runWithModels(server.url, storedCredentials, languageModel);
+
+        const shown = yield* runWithModels(
+          server.url,
+          storedCredentials,
+          languageModel,
+          `{ "routes": { "openai": { "models": { "gpt-3.5-turbo": { "supports": { "tools": true } } } } } }`,
+        );
+
+        expect(Exit.isFailure(hidden) && String(hidden.cause)).toContain("cannot call tools");
+        expect(Exit.isSuccess(shown)).toBe(true);
         expect(server.received).toHaveLength(0);
       }),
     ));

@@ -50,4 +50,4 @@ Show, don't tell. Prose is limited to tradeoffs and open questions, one line eac
 - Logic as pseudocode: one action per line, names from the domain, indentation for nesting, no language noise.
 - Show where behavior is injected. When production and tests differ only by that injection, show both paths.
 - `docs/plan/deferred.md` lists decisions to make later, one line each: the question and what brings it up. When that happens, move the item to `questions.md`.
-- Code-level plans live in `docs/plan/work/`, one file per piece of work, and are deleted once the work ships.
+- Code-level plans live in `docs/plan/work/`, one file per piece of work. When a round is built, checks pass and any live check the user asked for has passed, move each decision that still matters into a lasting plan file, delete the round's plan, and fix links to it. Do this before planning the next round.

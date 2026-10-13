@@ -147,6 +147,33 @@ const program = Effect.gen(function* () {
     return report;
   }
 
+  // Models without native structured output answer through a forced tool call.
+  if (mode === "opencode-go-object") {
+    const Review = Schema.Struct({
+      risk: Schema.Literals(["low", "medium", "high"]),
+      files: Schema.Array(Schema.String),
+      summary: Schema.String,
+    });
+
+    for (const model of ["kimi-k2.6", "minimax-m2.7"]) {
+      openCodeGoBodies.length = 0;
+      report[`opencode-go ${model} object`] = yield* Effect.result(
+        models.languageModel({ route: RouteId.make("opencode-go"), model }, ConversationId.make(crypto.randomUUID())).pipe(
+          Effect.flatMap((languageModel) =>
+            LanguageModel.generateObject({
+              prompt: "Review the rename of `update` to `refresh` in src/ai/credential.ts.",
+              schema: Review,
+              objectName: "review",
+            }).pipe(Effect.provideService(LanguageModel.LanguageModel, languageModel)),
+          ),
+          Effect.map((response) => response.value),
+        ),
+      );
+      report[`opencode-go ${model} object raw`] = [...openCodeGoBodies];
+    }
+    return report;
+  }
+
   if (mode === "codex-stream") {
     const runs = [];
     for (let attempt = 0; attempt < 5; attempt++) {

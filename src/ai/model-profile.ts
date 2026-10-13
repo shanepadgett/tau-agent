@@ -31,7 +31,7 @@ const Abilities = Schema.Struct({
   images: Schema.Boolean,
 });
 
-type Abilities = typeof Abilities.Type;
+export type Abilities = typeof Abilities.Type;
 
 export type ModelProfile = {
   readonly id: string;

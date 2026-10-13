@@ -143,6 +143,16 @@ const makeCatalog = Effect.fn("makeCatalog")(function* (options: CatalogOptions)
     const catalogData = yield* Ref.get(current);
     const profile = chatProfile(route, ref.model, catalogData, settings.get(route.id));
     if (Option.isNone(profile)) return yield* unknownModel(route, ref.model, "models");
+
+    // Tau works only through tools, so it hides models that cannot call them.
+    if (!profile.value.supports.tools) {
+      return yield* new UnknownModel({
+        route: route.id,
+        model: ref.model,
+        message: `${ref.model} on ${route.id} cannot call tools, so Tau cannot use it. If it can, set routes.${route.id}.models.${ref.model}.supports.tools to true in ~/.tau/settings.json.`,
+      });
+    }
+
     return { route, profile: profile.value };
   });
 
