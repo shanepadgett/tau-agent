@@ -14,13 +14,13 @@ const CANDIDATES = [
 	{ family: "luna", provider: "openai", id: "gpt-6-luna" },
 	{ family: "luna", provider: "openrouter", id: "openai/gpt-6-luna-decisions" },
 	{ family: "luna", provider: "vercel-ai-gateway", id: "openai/gpt-6-luna-decisions" },
-];
+] as const;
 
 export async function selectClassifier(
 	ctx: ExtensionContext,
 	settings: Settings,
 	signal: AbortSignal,
-): Promise<ClassifierModel<ClassifierApi> | undefined> {
+): Promise<{ family: "jev" | "luna"; model: ClassifierModel<ClassifierApi> } | undefined> {
 	if (!settings.enabled) return undefined;
 	const providers = new Map<string, readonly ClassifierModel<ClassifierApi>[]>();
 	for (const candidate of CANDIDATES) {
@@ -31,7 +31,7 @@ export async function selectClassifier(
 			providers.set(candidate.provider, models);
 		}
 		const model = models.find((model) => model.id === candidate.id);
-		if (model) return model;
+		if (model) return { family: candidate.family, model };
 	}
 	return undefined;
 }
@@ -89,7 +89,7 @@ export function createDecisionClient(
 				result = await Promise.race([
 					aborted,
 					(async (): Promise<DecisionResult> => {
-						const model = await selectClassifier(ctx, getSettings(), signal);
+						const model = (await selectClassifier(ctx, getSettings(), signal))?.model;
 						if (signal.aborted) throw new Error("Decision cancelled");
 						if (!model) return failure("unavailable", "No Jev or Luna credentials");
 						modelName = `${model.provider}/${model.id}`;

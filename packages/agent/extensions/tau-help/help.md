@@ -56,13 +56,19 @@ At the hard cutoff, the agent must compact before using other tools. Failures ar
 
 Uses Jev or Luna to approve routine tool requests, remind the agent to answer questions first, and select a model for the work. Routing uses ChatGPT and Claude subscription logins; choosing a model yourself stops automatic routing for that session.
 
-Design work defaults to Sonnet under `simple-design` for bounded component design, including creative redesigns. `complex-design` uses Opus for substantial whole-page design, multi-screen experiences, design systems, or major interaction changes across a workflow.
+Bounded questions, investigation, fixes, and planning use Luna or Haiku under `quick`. Substantial engineering and ordinary architecture planning use Sol or Sonnet under `general`. Frontend and design within an established system prefer Sonnet, including whole pages. Opus is reserved for new design systems, fundamentally new interaction models, exceptional creative scope, or unusually difficult architecture with major unresolved constraints.
+
+Peer candidates favor the less-used provider relative to an OpenAI-to-Anthropic target of 2:1 over a rolling 24 hours. This uses estimated costs recorded locally, not remaining subscription allowance. Configure `extensions.decisions.routing.balance.windowHours` and `balance.providerWeights` to adjust the target. Configure each route with a description and ordered `candidates`, each containing `provider`, `model`, and `thinking`; replace former route-level model settings with a candidates list. Settings changes require `/reload`.
 
 Configure these features under `extensions.decisions`. Set `enabled` to `false` to disable them, or choose `auto`, `jev`, or `luna` for `classifier`. Missing credentials or failed decisions do not stop work.
 
+## editor-border
+
+Lets extensions display text in five slots across the editor's top and bottom borders. The footer places the context bar in the top-center slot; the session name appears in the footer.
+
 ## footer
 
-Shows the highlighted work type, models, context usage as a bar with threshold markers and colors, cache-hit rate, costs, and project status. Use `/footer` to toggle it, `/footer on` or `/footer off` to set visibility, and `/footer refresh` to refresh it.
+Shows the model and thinking level, decision classifier, cache-hit rate, and costs in the first of two footer rows below the editor. The second row shows the working directory, git branch and changes, extension statuses, and session name. The context bar appears in the editor's top-center border slot. Use `/footer` to toggle it, `/footer on` or `/footer off` to set visibility, and `/footer refresh` to refresh it.
 
 ## handoff
 

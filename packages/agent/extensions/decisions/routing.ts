@@ -1,7 +1,8 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { DecisionClient, DecisionResult, DecisionRoute } from "../../shared/decisions.ts";
 import { emitTauEvent, onTauEvent } from "../../shared/events.ts";
-import settingsSpec, { type Route } from "./settings.ts";
+import type { readUsageCosts } from "../../shared/usage.ts";
+import settingsSpec, { type RouteCandidate } from "./settings.ts";
 
 type Settings = typeof settingsSpec.defaults;
 
@@ -10,6 +11,7 @@ export function registerRouting(
 	client: DecisionClient,
 	getSettings: () => Settings,
 	sessionSignal: () => AbortSignal,
+	readUsage: typeof readUsageCosts,
 ): void {
 	let eligible = false;
 	let explicit = false;
@@ -33,7 +35,7 @@ export function registerRouting(
 				route: {
 					type: "choice",
 					instructions:
-						"Which work type does this prompt start? Choose by the scope and difficulty of the requested work. For UI design, prefer simple-design unless the prompt clearly establishes major design scope. Requests to brainstorm, be creative, show renderings, or redesign something do not by themselves justify complex-design. When uncertain between these two work types, choose simple-design.",
+						"Which work type does this prompt start? Judge the requested work, not possible future implementation. Prefer quick for bounded questions, investigation, changes, and planning using existing patterns. Reserve general for substantial engineering or deep investigation. Frontend implementation prefers frontend; design within an established system, including whole pages, prefers simple-design. Ordinary architecture and implementation planning belong in quick or general. Choose architecture or complex-design only with clear evidence of exceptional difficulty, unresolved constraints, or substantial invention. Words such as architecture, redesign, creative, and multi-screen do not alone justify these exceptional routes. When uncertain between ordinary and exceptional design, choose simple-design; between ordinary and exceptional architecture, choose general.",
 					criteria: Object.fromEntries(
 						Object.entries(getSettings().routing.routes).map(([name, route]) => [name, route.description]),
 					),
@@ -45,7 +47,7 @@ export function registerRouting(
 		if (explicit || signal.aborted || ctx.signal?.aborted || !client.enabled("routing")) return;
 		// No classifier setup preserves the user's current model, like the other decision features.
 		if (result.status === "disabled" || (result.status === "unavailable" && result.model === null)) return;
-		const routes = getSettings().routing.routes;
+		const { routes, balance } = getSettings().routing;
 		let name: keyof typeof routes = "general";
 		let probabilities: Record<string, number> = {};
 		if (result.status === "ok" && result.answers.route?.type === "choice") {
@@ -53,14 +55,33 @@ export function registerRouting(
 			const best = Object.entries(probabilities).sort((a, b) => b[1] - a[1])[0];
 			if (best && best[1] >= 0.5 && Object.hasOwn(routes, best[0])) name = best[0] as keyof typeof routes;
 		}
-		const fallback: Route = {
-			description: "",
+		const peers = [...routes[name].candidates];
+		if (new Set(peers.map((candidate) => candidate.provider)).size > 1) {
+			try {
+				const endMs = Date.now();
+				const costs = await readUsage(
+					{ startMs: endMs - balance.windowHours * 60 * 60 * 1000, endMs },
+					AbortSignal.any([signal, AbortSignal.timeout(3000), ...(ctx.signal ? [ctx.signal] : [])]),
+				);
+				const pressure = {
+					"openai-codex": costs.openai / balance.providerWeights["openai-codex"],
+					anthropic: costs.anthropic / balance.providerWeights.anthropic,
+				};
+				peers.sort((a, b) => pressure[a.provider] - pressure[b.provider]);
+			} catch {
+				// Usage is approximate; unavailable accounting preserves configured preference.
+			}
+		}
+		if (explicit || signal.aborted || ctx.signal?.aborted || !client.enabled("routing")) return;
+		const fallback: RouteCandidate = {
 			provider: "anthropic",
 			model: name === "quick" ? "claude-haiku-5-5" : "claude-sonnet-5-5",
 			thinking: "high",
 		};
-		const candidates = [routes[name], routes.general, fallback];
-		if (name === "quick") candidates.splice(1, 0, fallback);
+		const candidates =
+			name === "quick"
+				? [...peers, fallback, ...routes.general.candidates]
+				: [...peers, ...routes.general.candidates, fallback];
 		for (const route of candidates) {
 			const model = ctx.modelRegistry
 				.getAvailable()
@@ -71,7 +92,7 @@ export function registerRouting(
 						ctx.modelRegistry.isUsingOAuth(model),
 				);
 			if (!model) continue;
-			if (signal.aborted || explicit) return;
+			if (signal.aborted || ctx.signal?.aborted || explicit || !client.enabled("routing")) return;
 			selecting = true;
 			try {
 				if (!(await pi.setModel(model))) continue;

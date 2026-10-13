@@ -128,53 +128,68 @@
 													"type": "string",
 													"minLength": 1
 												},
-												"provider": {
-													"anyOf": [
-														{
-															"type": "string",
-															"const": "openai-codex"
+												"candidates": {
+													"type": "array",
+													"items": {
+														"type": "object",
+														"required": [
+															"provider",
+															"model",
+															"thinking"
+														],
+														"properties": {
+															"provider": {
+																"anyOf": [
+																	{
+																		"type": "string",
+																		"const": "openai-codex"
+																	},
+																	{
+																		"type": "string",
+																		"const": "anthropic"
+																	}
+																]
+															},
+															"model": {
+																"type": "string",
+																"minLength": 1
+															},
+															"thinking": {
+																"anyOf": [
+																	{
+																		"type": "string",
+																		"const": "off"
+																	},
+																	{
+																		"type": "string",
+																		"const": "minimal"
+																	},
+																	{
+																		"type": "string",
+																		"const": "low"
+																	},
+																	{
+																		"type": "string",
+																		"const": "medium"
+																	},
+																	{
+																		"type": "string",
+																		"const": "high"
+																	},
+																	{
+																		"type": "string",
+																		"const": "xhigh"
+																	},
+																	{
+																		"type": "string",
+																		"const": "max"
+																	}
+																]
+															}
 														},
-														{
-															"type": "string",
-															"const": "anthropic"
-														}
-													]
-												},
-												"model": {
-													"type": "string",
-													"minLength": 1
-												},
-												"thinking": {
-													"anyOf": [
-														{
-															"type": "string",
-															"const": "off"
-														},
-														{
-															"type": "string",
-															"const": "minimal"
-														},
-														{
-															"type": "string",
-															"const": "low"
-														},
-														{
-															"type": "string",
-															"const": "medium"
-														},
-														{
-															"type": "string",
-															"const": "high"
-														},
-														{
-															"type": "string",
-															"const": "xhigh"
-														},
-														{
-															"type": "string",
-															"const": "max"
-														}
-													]
+														"additionalProperties": false
+													},
+													"minItems": 1
 												}
 											},
 											"additionalProperties": false
@@ -186,53 +201,68 @@
 													"type": "string",
 													"minLength": 1
 												},
-												"provider": {
-													"anyOf": [
-														{
-															"type": "string",
-															"const": "openai-codex"
+												"candidates": {
+													"type": "array",
+													"items": {
+														"type": "object",
+														"required": [
+															"provider",
+															"model",
+															"thinking"
+														],
+														"properties": {
+															"provider": {
+																"anyOf": [
+																	{
+																		"type": "string",
+																		"const": "openai-codex"
+																	},
+																	{
+																		"type": "string",
+																		"const": "anthropic"
+																	}
+																]
+															},
+															"model": {
+																"type": "string",
+																"minLength": 1
+															},
+															"thinking": {
+																"anyOf": [
+																	{
+																		"type": "string",
+																		"const": "off"
+																	},
+																	{
+																		"type": "string",
+																		"const": "minimal"
+																	},
+																	{
+																		"type": "string",
+																		"const": "low"
+																	},
+																	{
+																		"type": "string",
+																		"const": "medium"
+																	},
+																	{
+																		"type": "string",
+																		"const": "high"
+																	},
+																	{
+																		"type": "string",
+																		"const": "xhigh"
+																	},
+																	{
+																		"type": "string",
+																		"const": "max"
+																	}
+																]
+															}
 														},
-														{
-															"type": "string",
-															"const": "anthropic"
-														}
-													]
-												},
-												"model": {
-													"type": "string",
-													"minLength": 1
-												},
-												"thinking": {
-													"anyOf": [
-														{
-															"type": "string",
-															"const": "off"
-														},
-														{
-															"type": "string",
-															"const": "minimal"
-														},
-														{
-															"type": "string",
-															"const": "low"
-														},
-														{
-															"type": "string",
-															"const": "medium"
-														},
-														{
-															"type": "string",
-															"const": "high"
-														},
-														{
-															"type": "string",
-															"const": "xhigh"
-														},
-														{
-															"type": "string",
-															"const": "max"
-														}
-													]
+														"additionalProperties": false
+													},
+													"minItems": 1
 												}
 											},
 											"additionalProperties": false
@@ -244,53 +274,68 @@
 													"type": "string",
 													"minLength": 1
 												},
-												"provider": {
-													"anyOf": [
-														{
-															"type": "string",
-															"const": "openai-codex"
+												"candidates": {
+													"type": "array",
+													"items": {
+														"type": "object",
+														"required": [
+															"provider",
+															"model",
+															"thinking"
+														],
+														"properties": {
+															"provider": {
+																"anyOf": [
+																	{
+																		"type": "string",
+																		"const": "openai-codex"
+																	},
+																	{
+																		"type": "string",
+																		"const": "anthropic"
+																	}
+																]
+															},
+															"model": {
+																"type": "string",
+																"minLength": 1
+															},
+															"thinking": {
+																"anyOf": [
+																	{
+																		"type": "string",
+																		"const": "off"
+																	},
+																	{
+																		"type": "string",
+																		"const": "minimal"
+																	},
+																	{
+																		"type": "string",
+																		"const": "low"
+																	},
+																	{
+																		"type": "string",
+																		"const": "medium"
+																	},
+																	{
+																		"type": "string",
+																		"const": "high"
+																	},
+																	{
+																		"type": "string",
+																		"const": "xhigh"
+																	},
+																	{
+																		"type": "string",
+																		"const": "max"
+																	}
+																]
+															}
 														},
-														{
-															"type": "string",
-															"const": "anthropic"
-														}
-													]
-												},
-												"model": {
-													"type": "string",
-													"minLength": 1
-												},
-												"thinking": {
-													"anyOf": [
-														{
-															"type": "string",
-															"const": "off"
-														},
-														{
-															"type": "string",
-															"const": "minimal"
-														},
-														{
-															"type": "string",
-															"const": "low"
-														},
-														{
-															"type": "string",
-															"const": "medium"
-														},
-														{
-															"type": "string",
-															"const": "high"
-														},
-														{
-															"type": "string",
-															"const": "xhigh"
-														},
-														{
-															"type": "string",
-															"const": "max"
-														}
-													]
+														"additionalProperties": false
+													},
+													"minItems": 1
 												}
 											},
 											"additionalProperties": false
@@ -302,53 +347,68 @@
 													"type": "string",
 													"minLength": 1
 												},
-												"provider": {
-													"anyOf": [
-														{
-															"type": "string",
-															"const": "openai-codex"
+												"candidates": {
+													"type": "array",
+													"items": {
+														"type": "object",
+														"required": [
+															"provider",
+															"model",
+															"thinking"
+														],
+														"properties": {
+															"provider": {
+																"anyOf": [
+																	{
+																		"type": "string",
+																		"const": "openai-codex"
+																	},
+																	{
+																		"type": "string",
+																		"const": "anthropic"
+																	}
+																]
+															},
+															"model": {
+																"type": "string",
+																"minLength": 1
+															},
+															"thinking": {
+																"anyOf": [
+																	{
+																		"type": "string",
+																		"const": "off"
+																	},
+																	{
+																		"type": "string",
+																		"const": "minimal"
+																	},
+																	{
+																		"type": "string",
+																		"const": "low"
+																	},
+																	{
+																		"type": "string",
+																		"const": "medium"
+																	},
+																	{
+																		"type": "string",
+																		"const": "high"
+																	},
+																	{
+																		"type": "string",
+																		"const": "xhigh"
+																	},
+																	{
+																		"type": "string",
+																		"const": "max"
+																	}
+																]
+															}
 														},
-														{
-															"type": "string",
-															"const": "anthropic"
-														}
-													]
-												},
-												"model": {
-													"type": "string",
-													"minLength": 1
-												},
-												"thinking": {
-													"anyOf": [
-														{
-															"type": "string",
-															"const": "off"
-														},
-														{
-															"type": "string",
-															"const": "minimal"
-														},
-														{
-															"type": "string",
-															"const": "low"
-														},
-														{
-															"type": "string",
-															"const": "medium"
-														},
-														{
-															"type": "string",
-															"const": "high"
-														},
-														{
-															"type": "string",
-															"const": "xhigh"
-														},
-														{
-															"type": "string",
-															"const": "max"
-														}
-													]
+														"additionalProperties": false
+													},
+													"minItems": 1
 												}
 											},
 											"additionalProperties": false
@@ -360,53 +420,68 @@
 													"type": "string",
 													"minLength": 1
 												},
-												"provider": {
-													"anyOf": [
-														{
-															"type": "string",
-															"const": "openai-codex"
+												"candidates": {
+													"type": "array",
+													"items": {
+														"type": "object",
+														"required": [
+															"provider",
+															"model",
+															"thinking"
+														],
+														"properties": {
+															"provider": {
+																"anyOf": [
+																	{
+																		"type": "string",
+																		"const": "openai-codex"
+																	},
+																	{
+																		"type": "string",
+																		"const": "anthropic"
+																	}
+																]
+															},
+															"model": {
+																"type": "string",
+																"minLength": 1
+															},
+															"thinking": {
+																"anyOf": [
+																	{
+																		"type": "string",
+																		"const": "off"
+																	},
+																	{
+																		"type": "string",
+																		"const": "minimal"
+																	},
+																	{
+																		"type": "string",
+																		"const": "low"
+																	},
+																	{
+																		"type": "string",
+																		"const": "medium"
+																	},
+																	{
+																		"type": "string",
+																		"const": "high"
+																	},
+																	{
+																		"type": "string",
+																		"const": "xhigh"
+																	},
+																	{
+																		"type": "string",
+																		"const": "max"
+																	}
+																]
+															}
 														},
-														{
-															"type": "string",
-															"const": "anthropic"
-														}
-													]
-												},
-												"model": {
-													"type": "string",
-													"minLength": 1
-												},
-												"thinking": {
-													"anyOf": [
-														{
-															"type": "string",
-															"const": "off"
-														},
-														{
-															"type": "string",
-															"const": "minimal"
-														},
-														{
-															"type": "string",
-															"const": "low"
-														},
-														{
-															"type": "string",
-															"const": "medium"
-														},
-														{
-															"type": "string",
-															"const": "high"
-														},
-														{
-															"type": "string",
-															"const": "xhigh"
-														},
-														{
-															"type": "string",
-															"const": "max"
-														}
-													]
+														"additionalProperties": false
+													},
+													"minItems": 1
 												}
 											},
 											"additionalProperties": false
@@ -418,53 +493,68 @@
 													"type": "string",
 													"minLength": 1
 												},
-												"provider": {
-													"anyOf": [
-														{
-															"type": "string",
-															"const": "openai-codex"
+												"candidates": {
+													"type": "array",
+													"items": {
+														"type": "object",
+														"required": [
+															"provider",
+															"model",
+															"thinking"
+														],
+														"properties": {
+															"provider": {
+																"anyOf": [
+																	{
+																		"type": "string",
+																		"const": "openai-codex"
+																	},
+																	{
+																		"type": "string",
+																		"const": "anthropic"
+																	}
+																]
+															},
+															"model": {
+																"type": "string",
+																"minLength": 1
+															},
+															"thinking": {
+																"anyOf": [
+																	{
+																		"type": "string",
+																		"const": "off"
+																	},
+																	{
+																		"type": "string",
+																		"const": "minimal"
+																	},
+																	{
+																		"type": "string",
+																		"const": "low"
+																	},
+																	{
+																		"type": "string",
+																		"const": "medium"
+																	},
+																	{
+																		"type": "string",
+																		"const": "high"
+																	},
+																	{
+																		"type": "string",
+																		"const": "xhigh"
+																	},
+																	{
+																		"type": "string",
+																		"const": "max"
+																	}
+																]
+															}
 														},
-														{
-															"type": "string",
-															"const": "anthropic"
-														}
-													]
-												},
-												"model": {
-													"type": "string",
-													"minLength": 1
-												},
-												"thinking": {
-													"anyOf": [
-														{
-															"type": "string",
-															"const": "off"
-														},
-														{
-															"type": "string",
-															"const": "minimal"
-														},
-														{
-															"type": "string",
-															"const": "low"
-														},
-														{
-															"type": "string",
-															"const": "medium"
-														},
-														{
-															"type": "string",
-															"const": "high"
-														},
-														{
-															"type": "string",
-															"const": "xhigh"
-														},
-														{
-															"type": "string",
-															"const": "max"
-														}
-													]
+														"additionalProperties": false
+													},
+													"minItems": 1
 												}
 											},
 											"additionalProperties": false
@@ -476,53 +566,95 @@
 													"type": "string",
 													"minLength": 1
 												},
-												"provider": {
-													"anyOf": [
-														{
-															"type": "string",
-															"const": "openai-codex"
+												"candidates": {
+													"type": "array",
+													"items": {
+														"type": "object",
+														"required": [
+															"provider",
+															"model",
+															"thinking"
+														],
+														"properties": {
+															"provider": {
+																"anyOf": [
+																	{
+																		"type": "string",
+																		"const": "openai-codex"
+																	},
+																	{
+																		"type": "string",
+																		"const": "anthropic"
+																	}
+																]
+															},
+															"model": {
+																"type": "string",
+																"minLength": 1
+															},
+															"thinking": {
+																"anyOf": [
+																	{
+																		"type": "string",
+																		"const": "off"
+																	},
+																	{
+																		"type": "string",
+																		"const": "minimal"
+																	},
+																	{
+																		"type": "string",
+																		"const": "low"
+																	},
+																	{
+																		"type": "string",
+																		"const": "medium"
+																	},
+																	{
+																		"type": "string",
+																		"const": "high"
+																	},
+																	{
+																		"type": "string",
+																		"const": "xhigh"
+																	},
+																	{
+																		"type": "string",
+																		"const": "max"
+																	}
+																]
+															}
 														},
-														{
-															"type": "string",
-															"const": "anthropic"
-														}
-													]
+														"additionalProperties": false
+													},
+													"minItems": 1
+												}
+											},
+											"additionalProperties": false
+										}
+									},
+									"additionalProperties": false
+								},
+								"balance": {
+									"type": "object",
+									"properties": {
+										"windowHours": {
+											"type": "number",
+											"exclusiveMinimum": 0,
+											"default": 24
+										},
+										"providerWeights": {
+											"type": "object",
+											"properties": {
+												"openai-codex": {
+													"type": "number",
+													"exclusiveMinimum": 0,
+													"default": 2
 												},
-												"model": {
-													"type": "string",
-													"minLength": 1
-												},
-												"thinking": {
-													"anyOf": [
-														{
-															"type": "string",
-															"const": "off"
-														},
-														{
-															"type": "string",
-															"const": "minimal"
-														},
-														{
-															"type": "string",
-															"const": "low"
-														},
-														{
-															"type": "string",
-															"const": "medium"
-														},
-														{
-															"type": "string",
-															"const": "high"
-														},
-														{
-															"type": "string",
-															"const": "xhigh"
-														},
-														{
-															"type": "string",
-															"const": "max"
-														}
-													]
+												"anthropic": {
+													"type": "number",
+													"exclusiveMinimum": 0,
+													"default": 1
 												}
 											},
 											"additionalProperties": false

@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { onTauEvent } from "../../shared/events.ts";
+import { emitTauEvent, onTauEvent } from "../../shared/events.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
+import { readUsageCosts } from "../../shared/usage.ts";
 import { registerAnswerFirst } from "./answer-first.ts";
 import { createDecisionClient, selectClassifier } from "./classifier.ts";
 import { registerRouting } from "./routing.ts";
@@ -18,21 +19,14 @@ export default function decisionsExtension(pi: ExtensionAPI): void {
 	async function refresh(ctx: ExtensionContext) {
 		settings = await loadTauExtensionSettings(ctx, settingsSpec);
 		try {
-			const model = await selectClassifier(
+			const selected = await selectClassifier(
 				ctx,
 				settings,
 				AbortSignal.any([lifetime.signal, AbortSignal.timeout(3000)]),
 			);
-			ctx.ui.setStatus(
-				"decisions",
-				!settings.enabled
-					? "decisions off"
-					: model
-						? `${model.provider}/${model.id}`
-						: "decisions unavailable, no Jev or Luna credentials",
-			);
+			emitTauEvent(pi, "tau:decisions.classifier", selected ? (selected.family === "jev" ? "Jev" : "Luna") : null);
 		} catch {
-			ctx.ui.setStatus("decisions", "decisions unavailable");
+			emitTauEvent(pi, "tau:decisions.classifier", null);
 		}
 	}
 	pi.on("session_start", async (_event, ctx) => {
@@ -53,10 +47,11 @@ export default function decisionsExtension(pi: ExtensionAPI): void {
 		client,
 		() => settings,
 		() => lifetime.signal,
+		readUsageCosts,
 	);
 	registerAnswerFirst(pi, client);
-	pi.on("session_shutdown", (_event, ctx) => {
+	pi.on("session_shutdown", () => {
 		lifetime.abort();
-		ctx.ui.setStatus("decisions", undefined);
+		emitTauEvent(pi, "tau:decisions.classifier", null);
 	});
 }
