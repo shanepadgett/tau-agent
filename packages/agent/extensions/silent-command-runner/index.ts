@@ -449,7 +449,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			}
 			if (failed.length > 0) {
 				await output.append(
-					`${passed.length ? "\n" : ""}The following checks failed: ${failed.map((failure) => failure.name).join(", ")}\nRepair failures within the approved scope, then call checks after any further writes. If blocked or a fix needs permission, report the failures and ask the user.`,
+					`${passed.length ? "\n" : ""}The following checks failed: ${failed.map((failure) => failure.name).join(", ")}\nFix the reported problems directly, then call checks again. Ask the user only if resolving a failure requires changing the check infrastructure itself.`,
 				);
 			}
 			controller.signal.throwIfAborted();
@@ -544,7 +544,7 @@ function formatCheckInstructions(commands: readonly CommandConfig[]): string {
 		"Required repository verification for runs with file edits: Call checks only when you have edited repository files during the current run, including additions, modifications, moves, or deletions. Skip it for discussion, read-only investigation, and in-memory eval or codemode work that does not edit repository files. Calling a write-capable tool alone does not require checks. For runs with file edits, you MUST call checks after all implementation, investigation, builds, and focused testing are complete, immediately before your final summary. Do not send the final summary first or rely on automatic settlement checks to satisfy this requirement. Never use checks for intermediate validation.",
 		"Never manually run any repository check listed below or its equivalent, during development or final verification. This includes their task-runner commands, direct binaries, wrappers, and alternate flags through bash, eval, or codemode. Configured formatting, lint, type checking, full test suites, dependency/schema validation, dead-code checks, and duplicate-code checks belong exclusively to checks.",
 		"During development, builds and focused tests are allowed only when needed for the work in progress; batch them at meaningful boundaries. The focused-test exception allows a relevant subset of a registered suite, never the full suite. Do not use a build or another command name to bypass the restriction on configured checks.",
-		"A completed checks call counts as current whether commands pass or fail. Repair failures within the approved scope; if blocked or a fix needs permission, report the failures and ask the user. In a run with file edits, any later write-capable call invalidates the result, even if it changes nothing; finish that work and call checks again. Summarize file-editing work only after checks are current, and report unresolved failures clearly.",
+		"A completed checks call counts as current whether commands pass or fail. Treat failures as actionable problems and fix them directly. Ask the user only if resolving a failure requires changing the check infrastructure itself. In a run with file edits, any later write-capable call invalidates the result, even if it changes nothing; finish that work and call checks again. Summarize file-editing work only after checks are current, and report unresolved failures clearly.",
 		"You may call it last in the same codemode script as your final edits: await all writes, then text(await tools.checks({})). Pending automatic fixes finish before checks.",
 		`Checks: ${commands.length ? commands.map((command) => `${command.name} [${command.command}]${command.details ? `: ${command.details}` : ""}`).join("; ") : "none configured"}`,
 	].join("\n");
