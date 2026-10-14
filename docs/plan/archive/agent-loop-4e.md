@@ -1,6 +1,6 @@
 # Slice 4e: output limits
 
-Status: round 1 and round 2 agreed, output capture and warning implemented, 2026-10-13. The [version-pinned codemode patch](agent-loop-4e-memory.md) is approved and implemented. It bounds console capture and formatting, not total script memory. Code plan: [agent-loop-4e-code.md](agent-loop-4e-code.md).
+Status: archived. Built 2026-10-13; lasting decisions in [architecture.md](../architecture.md#core-ideas) (Output limits as built); its live checks are in [live-checks.md](../live-checks.md).
 
 **What the user gets:** a command that prints without end, such as `yes` or a runaway test, cannot fill Tau's memory, and a big result does not fill the model's context. The model sees the start and the end, and gets the path of a file with the output it can search with `sh`. For scripts past codemode's bound, discarded output cannot be recovered.
 

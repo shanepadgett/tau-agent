@@ -18,6 +18,7 @@ const ANSWERED = endWith({ reason: "answered" });
 /** The operations in the order a step tries them. Calling the model is always last. */
 const operations = <R>(run: RunContext<R>): ReadonlyArray<Operation<R | Platform>> => [
   interruptStartedCalls(run),
+  ...run.contextOperations,
   runToolCalls(run),
   stopRepeatedCalls,
   stopAtTurnLimit(run),

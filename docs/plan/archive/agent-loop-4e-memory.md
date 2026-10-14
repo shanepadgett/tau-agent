@@ -1,6 +1,6 @@
 # Slice 4e: script output memory
 
-Status: version-pinned codemode patch approved and implemented, 2026-10-13. The user chose to keep codemode and patch it directly without another code plan. The QuickJS experiment is on hold. All 49 focused tests and compiled smoke checks pass.
+Status: archived. Built 2026-10-13; lasting decisions in [architecture.md](../architecture.md#core-ideas) (Output limits as built); its live checks are in [live-checks.md](../live-checks.md).
 
 **Decision:** keep `@opencode/codemode` and patch output capture inside the package. Bound console formatting and retained logs during execution, rather than only cutting them afterwards. This protects against runaway printing; it does not impose a total script-memory ceiling.
 

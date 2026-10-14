@@ -6,13 +6,11 @@
 import { Chunk, Effect, Option, Ref, Stream } from "effect";
 import { AiError, type Response } from "effect/ai";
 import type { Entry } from "../../../session/Entry.ts";
-import { contextView } from "../../../session/ContextView.ts";
 import { BASE_PROMPT } from "../run-tool/soul.ts";
 import { toolkit } from "../tools/model-tool.ts";
 import { interruptedEntry, replyEntry } from "./reply.ts";
 import { retrySchedule } from "./retry.ts";
 import { CONTINUE, endWith, type Operation, type RunContext } from "./run-context.ts";
-import { needsReply } from "./tool-history.ts";
 
 const OUTPUT_LIMIT = endWith({ reason: "output-limit" });
 
@@ -31,10 +29,16 @@ const EMPTY_REPLY = AiError.make({
 export const callModel =
   <R>(run: RunContext<R>): Operation<R> =>
   (entries) =>
-    needsReply(entries) ? Option.some(reply(run, entries)) : Option.none();
+    run.shouldReply(entries) ? Option.some(reply(run, entries)) : Option.none();
 
 const reply = Effect.fn("reply")(function* <R>(run: RunContext<R>, saved: readonly Entry[]) {
-  const entries = yield* withInstructions(run, saved);
+  const instructed = yield* withInstructions(run, saved);
+  const nudge = run.nudge(instructed);
+
+  const entries = Option.isSome(nudge)
+    ? [...instructed, ...(yield* run.sessions.append(run.session, [nudge.value]))]
+    : instructed;
+
   const parts = yield* streamReply(run, entries).pipe(Effect.retry(retrySchedule(run.emit)));
 
   const body = yield* replyEntry(run.model, parts);
@@ -54,7 +58,7 @@ const streamReply = Effect.fn("streamReply")(function* <R>(
   const received = yield* Ref.make(Chunk.empty<Response.AnyPart>());
 
   const stream = run.languageModel.streamText({
-    prompt: contextView(BASE_PROMPT, entries),
+    prompt: yield* run.view(BASE_PROMPT, entries),
     toolkit: toolkit(run.tools),
     disableToolCallResolution: true,
   });

@@ -12,6 +12,7 @@ import {
   RouteTable,
 } from "../ai/Routes.ts";
 import { TauHome } from "../database/TauHome.ts";
+import { CompactionSettings, ContextSettings } from "../core/ContextSettings.ts";
 
 const RouteEntry = Schema.Struct({
   protocol: Schema.optional(Protocol),
@@ -38,6 +39,7 @@ const SettingsFile = Schema.Struct({
   ),
   /** `false` turns off every agents file, the user's and the project's. */
   agentsFiles: Schema.optional(Schema.Boolean),
+  compaction: Schema.optional(CompactionSettings),
 });
 
 /** What a run uses from the settings file. Each value is absent when the file does not set it. */
@@ -66,9 +68,10 @@ export class Settings extends Context.Service<
   /** Reads `settings.json` in Tau's home folder once, and gives the run settings and the route table. */
   static readonly layer = Layer.effectContext(
     TauHome.use(({ directory }) => readSettingsFile(join(directory, "settings.json"))).pipe(
-      Effect.map(({ routes, routeSettings, run, agentsFiles }) =>
+      Effect.map(({ routes, routeSettings, run, agentsFiles, compaction }) =>
         Context.make(Settings, { run, agentsFiles }).pipe(
           Context.add(RouteTable, { routes, settings: routeSettings }),
+          Context.add(ContextSettings, compaction),
         ),
       ),
     ),
@@ -80,6 +83,7 @@ type SettingsFileContent = {
   readonly routeSettings: ReadonlyMap<RouteId, RouteSettings>;
   readonly run: RunSettings;
   readonly agentsFiles: boolean;
+  readonly compaction: CompactionSettings;
 };
 
 const noRunSettings: RunSettings = {
@@ -98,6 +102,7 @@ const readSettingsFile = Effect.fn("readSettingsFile")(function* (path: string) 
     routeSettings: new Map(),
     run: noRunSettings,
     agentsFiles: true,
+    compaction: {},
   };
 
   if (!(yield* fileSystem.exists(path))) return noSettings;
@@ -137,6 +142,7 @@ const readSettingsFile = Effect.fn("readSettingsFile")(function* (path: string) 
     routeSettings,
     run,
     agentsFiles: file.agentsFiles ?? true,
+    compaction: file.compaction ?? {},
   };
 
   return content;

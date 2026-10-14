@@ -42,6 +42,15 @@ const MISSING_RESULT = "The call ended before it returned a result.";
  * Checks Tau ran itself go in only when they failed.
  */
 export const contextView = (soul: string, entries: readonly Entry[]): Prompt.Prompt => {
+  const messages = [...conversationMessages(entries)];
+  const last = messages.pop();
+  if (last !== undefined) messages.push(withCacheMark(last));
+
+  return Prompt.fromMessages([systemMessage(soul, entries), ...messages]);
+};
+
+/** Converts only the conversation; each tool call and its result must be in the same range. */
+export const conversationMessages = (entries: readonly Entry[]): readonly Prompt.Message[] => {
   const savedResults = new Map<string, SavedResult>();
 
   for (const { number, body } of entries) {
@@ -52,7 +61,7 @@ export const contextView = (soul: string, entries: readonly Entry[]): Prompt.Pro
   const messages: Prompt.Message[] = [];
 
   for (const { body } of entries) {
-    if (body.type === "user") {
+    if (body.type === "user" || body.type === "nudge") {
       messages.push(Prompt.userMessage({ content: [Prompt.textPart({ text: body.text })] }));
     }
 
@@ -70,6 +79,10 @@ export const contextView = (soul: string, entries: readonly Entry[]): Prompt.Pro
     }
   }
 
+  return messages;
+};
+
+export const systemMessage = (soul: string, entries: readonly Entry[]) => {
   const instructions = entries.findLast(
     ({ body }) => body.type === "instructions" && body.placement === "system",
   );
@@ -77,16 +90,10 @@ export const contextView = (soul: string, entries: readonly Entry[]): Prompt.Pro
   const system =
     instructions?.body.type === "instructions" ? `${soul}\n\n${instructions.body.text}` : soul;
 
-  const last = messages.pop();
-  if (last !== undefined) messages.push(withCacheMark(last));
-
-  return Prompt.fromMessages([
-    Prompt.systemMessage({ content: system, options: CACHE_MARK }),
-    ...messages,
-  ]);
+  return Prompt.systemMessage({ content: system, options: CACHE_MARK });
 };
 
-const withCacheMark = (message: Prompt.Message): Prompt.Message => {
+export const withCacheMark = (message: Prompt.Message): Prompt.Message => {
   switch (message.role) {
     case "system":
       return Prompt.systemMessage({ content: message.content, options: CACHE_MARK });

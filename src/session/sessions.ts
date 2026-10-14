@@ -9,6 +9,8 @@ import { type Database, openDatabase, type Transaction } from "../database/Datab
 import { TauHome } from "../database/TauHome.ts";
 import { type Entry, EntryBody, SessionId } from "./Entry.ts";
 import { makeSkillUses, SKILL_USE_TABLE, SkillUses } from "./SkillUses.ts";
+import { makeNotes, NOTE_TABLE, Notes } from "./Notes.ts";
+import { SessionStoreError } from "./SessionStoreError.ts";
 import { CHECK_REPORT_TEXT_MIGRATION } from "./internal/check-report-migration.ts";
 
 const MIGRATIONS = [
@@ -26,6 +28,7 @@ const MIGRATIONS = [
     "json(coalesce(body -> '$.files', '[]')), 'script', body ->> '$.script'))) ELSE body END, " +
     "'$.files', '$.script') WHERE body ->> '$.type' = 'tool-result'",
   CHECK_REPORT_TEXT_MIGRATION,
+  NOTE_TABLE,
 ];
 
 const Origin = Schema.Union([
@@ -65,14 +68,6 @@ const LastNumber = Schema.Struct({ last: Schema.Int });
 
 const SESSION_COLUMNS = "id, directory, origin, created_at, updated_at";
 
-export class SessionStoreError extends Schema.TaggedError<SessionStoreError>()(
-  "SessionStoreError",
-  {
-    path: Schema.String,
-    cause: Schema.Defect(),
-  },
-) {}
-
 export class SessionNotFound extends Schema.TaggedError<SessionNotFound>()("SessionNotFound", {
   session: SessionId,
 }) {}
@@ -111,8 +106,7 @@ export class Sessions extends Context.Service<
   }
 >()("tau/session/Sessions") {
   /**
-   * Stores sessions in `sessions.db` in Tau's home folder. Gives the skill uses too, because they
-   * are in the same file, which only one connection migrates.
+   * Gives sessions, notes and skill uses from one connection, which migrates their shared file.
    */
   static readonly layer = Layer.effectContext(
     TauHome.use((home) => openSessionStore(join(home.directory, "sessions.db"))),
@@ -127,7 +121,11 @@ const openSessionStore = Effect.fn("openSessionStore")(function* (path: string) 
   );
 
   const sessions = makeSessions(path, database, yield* Crypto.Crypto);
-  return Context.make(Sessions, sessions).pipe(Context.add(SkillUses, makeSkillUses(database)));
+
+  return Context.make(Sessions, sessions).pipe(
+    Context.add(SkillUses, makeSkillUses(database)),
+    Context.add(Notes, makeNotes(database, path)),
+  );
 });
 
 const makeSessions = (path: string, database: Database, crypto: Crypto.Crypto) => {
@@ -209,6 +207,12 @@ const forkWithin = (database: Database, newSession: NewSession, from: SessionId,
     yield* transaction.run(
       "INSERT INTO entry (session_id, number, at, body) " +
         "SELECT ?, number, at, body FROM entry WHERE session_id = ? AND number <= ?",
+      [branch.id, from, through],
+    );
+
+    yield* transaction.run(
+      "INSERT INTO note SELECT ?, number, from_entry, through_entry, text, route, model, at " +
+        "FROM note WHERE session_id = ? AND through_entry <= ?",
       [branch.id, from, through],
     );
 

@@ -1,10 +1,11 @@
 /** What the operations of one run share, and the shape every operation has. */
 
 import type { Effect, Option } from "effect";
-import type { AiError, LanguageModel } from "effect/ai";
+import type { AiError, LanguageModel, Prompt } from "effect/ai";
 import type { ModelRef } from "../../../ai/Catalog.ts";
-import type { Entry, EntryBody, SessionId } from "../../../session/Entry.ts";
-import type { SessionNotFound, Sessions, SessionStoreError } from "../../../session/Sessions.ts";
+import type { Entry, EntryBody, NudgeEntry, SessionId } from "../../../session/Entry.ts";
+import type { SessionNotFound, Sessions } from "../../../session/Sessions.ts";
+import type { SessionStoreError } from "../../../session/SessionStoreError.ts";
 import type { AgentEvent, RunEnd } from "../../Client.ts";
 import type { ProjectChecks } from "../checks/checks-file.ts";
 import type { ModelTool } from "../tools/model-tool.ts";
@@ -24,6 +25,13 @@ export type RunContext<R> = {
   readonly sessions: Sessions["Service"];
   /** The tools the model can call. */
   readonly tools: readonly ModelTool<R>[];
+  readonly view: (
+    soul: string,
+    entries: readonly Entry[],
+  ) => Effect.Effect<Prompt.Prompt, SessionStoreError>;
+  readonly nudge: (entries: readonly Entry[]) => Option.Option<NudgeEntry>;
+  readonly contextOperations: readonly Operation<never>[];
+  readonly shouldReply: (entries: readonly Entry[]) => boolean;
   /** The project's checks, read once at the start of the run. */
   readonly checks: Option.Option<ProjectChecks>;
   /** The instructions entry to save before the next model call, if any source changed. */

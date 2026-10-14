@@ -25,6 +25,8 @@ import type { SessionId } from "../../../session/Entry.ts";
 import type { Session, Sessions } from "../../../session/Sessions.ts";
 import type { SkillUses } from "../../../session/SkillUses.ts";
 import type { AgentEvent, Command, RunEnd } from "../../Client.ts";
+import type { ContextMethod } from "../../ContextMethod.ts";
+import { historyFunction } from "../context/history.ts";
 import type { UserInstructions } from "../../UserInstructions.ts";
 import type { OutputFolder } from "../../OutputFolder.ts";
 import { makeOutputFiles, OutputFiles } from "../output/output-files.ts";
@@ -43,6 +45,7 @@ import { failureText } from "./failure-text.ts";
 export type RunServices = {
   readonly sessions: Sessions["Service"];
   readonly models: Models["Service"];
+  readonly contextMethod: ContextMethod["Service"];
   readonly fileSystem: FileSystem.FileSystem;
   readonly spawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
   readonly userInstructions: UserInstructions["Service"];
@@ -67,6 +70,7 @@ type QueuedPrompt = Extract<Command, { type: "prompt" }>;
 export const makeRunner = Effect.fn("makeRunner")(function* (services: RunServices, id: SessionId) {
   const session = yield* services.sessions.get(id);
   const events = yield* PubSub.unbounded<AgentEvent>();
+  yield* services.contextMethod.background(id, PubSub.subscribe(events));
   const prompts = yield* Queue.unbounded<QueuedPrompt>();
   const current = yield* FiberHandle.make<RunEnd, unknown>();
 
@@ -118,10 +122,12 @@ const runPrompt = (
     const checks = yield* readProjectChecks(session.directory, root);
     const used = (skill: Skill) => services.skillUses.record(skill.name, session.directory);
     const user = services.userInstructions;
+    const method = yield* services.contextMethod.forRun(session.id, model);
 
     const run = runTool<Platform>(
       (touched) => ({
         ...scriptFunctions(session.directory, timeouts, touched, services.writeQueue),
+        history: historyFunction(session.id, sessions),
         [SKILLS_GROUP]: skillFunctions(skills.skills, touched, used),
       }),
       timeouts,
@@ -133,7 +139,11 @@ const runPrompt = (
       model,
       languageModel: yield* models.languageModel(model, ConversationId.make(session.id)),
       sessions,
-      tools: [run, ...Option.toArray(Option.flatMap(checks, checksTool))],
+      tools: [run, ...Option.toArray(Option.flatMap(checks, checksTool)), ...method.tools],
+      view: method.view,
+      nudge: method.nudge,
+      contextOperations: method.operations,
+      shouldReply: method.shouldReply,
       checks,
       updateInstructions: (entries) =>
         instructionSources({ directory: session.directory, user, skills }, entries).pipe(

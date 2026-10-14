@@ -1,72 +1,76 @@
 {
-  "terms": [
-    {
-      "term": "Agent loop",
-      "definition": "The loop that runs steps until a run ends."
-    },
-    {
-      "term": "Branch",
-      "definition": "A new session that starts with a copy of another session up to a chosen entry."
-    },
-    {
-      "term": "Compaction",
-      "definition": "Replacing older context with a summary entry; the older entries stay saved."
-    },
-    {
-      "term": "Context",
-      "definition": "What the model sees on one model call, built from the entries."
-    },
-    {
-      "term": "Entry",
-      "definition": "One saved record in a session: a prompt, a reply, a tool result, an instructions update or a summary."
-    },
-    {
-      "term": "Event",
-      "definition": "Live progress, such as text as it streams; not saved."
-    },
-    {
-      "term": "Follow-up",
-      "definition": "A message sent during a run that waits for the run to end, then starts a new run."
-    },
-    {
-      "term": "Instructions",
-      "definition": "Guidance other than the base prompt, such as AGENTS.md, the date and the environment; a change is saved as an entry."
-    },
-    {
-      "term": "Interrupted",
-      "definition": "A reply or tool call cut short by the user or a crash."
-    },
-    {
-      "term": "Model call",
-      "definition": "One request to a model; a turn makes more than one when a call is retried."
-    },
-    {
-      "term": "Operation",
-      "definition": "One rule a step tries, such as running open tool calls or calling the model."
-    },
-    {
-      "term": "Prompt",
-      "definition": "What the user submits."
-    },
-    {
-      "term": "Run",
-      "definition": "Everything Tau does for one prompt, until it answers, fails or is stopped."
-    },
-    {
-      "term": "Session",
-      "definition": "One saved conversation in one working directory."
-    },
-    {
-      "term": "Steering message",
-      "definition": "A message sent during a run; it joins the run after the current turn."
-    },
-    {
-      "term": "Step",
-      "definition": "One pass of the agent loop: read the entries, try the operations in order, save what the first one produces."
-    },
-    {
-      "term": "Turn",
-      "definition": "One model reply and the tool calls it makes."
-    }
-  ]
+	"terms": [
+		{
+			"term": "Agent loop",
+			"definition": "The loop that runs steps until a run ends."
+		},
+		{
+			"term": "Branch",
+			"definition": "A new session that starts with a copy of another session up to a chosen entry."
+		},
+		{
+			"term": "Checkpoint",
+			"definition": "A compaction the agent starts by calling `checkpoint` with a handoff. Its context becomes the session's memory, its notes, the recent entries not yet noted, and the handoff."
+		},
+		{
+			"term": "Compaction",
+			"definition": "Replacing older context with a summary entry; the older entries stay saved."
+		},
+		{
+			"term": "Context",
+			"definition": "What the model sees on one model call, built from the entries."
+		},
+		{
+			"term": "Entry",
+			"definition": "One saved record in a session: a prompt, a reply, a tool result, an instructions update or a summary."
+		},
+		{
+			"term": "Event",
+			"definition": "Live progress, such as text as it streams; not saved."
+		},
+		{
+			"term": "Follow-up",
+			"definition": "A message sent during a run that waits for the run to end, then starts a new run."
+		},
+		{
+			"term": "Instructions",
+			"definition": "Guidance other than the base prompt, such as AGENTS.md, the date and the environment; a change is saved as an entry."
+		},
+		{
+			"term": "Interrupted",
+			"definition": "A reply or tool call cut short by the user or a crash."
+		},
+		{
+			"term": "Model call",
+			"definition": "One request to a model; a turn makes more than one when a call is retried."
+		},
+		{
+			"term": "Operation",
+			"definition": "One rule a step tries, such as running open tool calls or calling the model."
+		},
+		{
+			"term": "Prompt",
+			"definition": "What the user submits."
+		},
+		{
+			"term": "Run",
+			"definition": "Everything Tau does for one prompt, until it answers, fails or is stopped."
+		},
+		{
+			"term": "Session",
+			"definition": "One saved conversation in one working directory."
+		},
+		{
+			"term": "Steering message",
+			"definition": "A message sent during a run; it joins the run after the current turn."
+		},
+		{
+			"term": "Step",
+			"definition": "One pass of the agent loop: read the entries, try the operations in order, save what the first one produces."
+		},
+		{
+			"term": "Turn",
+			"definition": "One model reply and the tool calls it makes."
+		}
+	]
 }

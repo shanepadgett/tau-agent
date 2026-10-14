@@ -96,6 +96,8 @@ export type Route = {
    */
   readonly liveList: LiveList | undefined;
   readonly decisions: DecisionApi | undefined;
+  /** The cheap chat model used for background notes, when the catalog allows it. */
+  readonly noteModel?: string;
   /**
    * The headers that carry the conversation ID, for a provider that needs it. OpenAI reads the
    * prompt cache of a conversation only when its requests carry a `session-id` header.
@@ -181,6 +183,7 @@ export const builtInRoutes: ReadonlyArray<Route> = [
     apiUrl: "https://api.anthropic.com",
     auth: { kind: "claudeSubscription", oauth: claudeOAuth },
     catalogProvider: "anthropic",
+    noteModel: "claude-haiku-5-5",
     liveList: undefined,
     decisions: undefined,
     conversationHeaders: undefined,
@@ -192,6 +195,7 @@ export const builtInRoutes: ReadonlyArray<Route> = [
     apiUrl: "https://api.openai.com/v1",
     auth: { kind: "apiKey", environmentVariable: "OPENAI_API_KEY" },
     catalogProvider: "openai",
+    noteModel: "gpt-6-luna",
     liveList: undefined,
     decisions: {
       kind: "openaiDecisions",
@@ -207,6 +211,7 @@ export const builtInRoutes: ReadonlyArray<Route> = [
     auth: { kind: "chatgptApp", app: chatgptApp },
     catalogProvider: "openai",
     liveList: "openaiModels",
+    noteModel: "gpt-6-luna",
     decisions: undefined,
     conversationHeaders: "openai",
   },
@@ -218,6 +223,7 @@ export const builtInRoutes: ReadonlyArray<Route> = [
     auth: { kind: "codexLogin", oauth: codexOAuth },
     catalogProvider: "openai",
     liveList: "codexModels",
+    noteModel: "gpt-6-luna",
     decisions: undefined,
     conversationHeaders: "openai",
   },
@@ -228,6 +234,7 @@ export const builtInRoutes: ReadonlyArray<Route> = [
     apiUrl: "https://openrouter.ai/api/v1",
     auth: { kind: "apiKey", environmentVariable: "OPENROUTER_API_KEY" },
     catalogProvider: "openrouter",
+    noteModel: "openai/gpt-6-luna",
     liveList: undefined,
     decisions: {
       kind: "systemOne",
@@ -246,6 +253,7 @@ export const builtInRoutes: ReadonlyArray<Route> = [
     apiUrl: "https://opencode.ai/inference/go/v1",
     auth: { kind: "apiKey", environmentVariable: "OPENCODE_API_KEY" },
     catalogProvider: "opencode-go",
+    noteModel: "gpt-6-luna",
     liveList: undefined,
     decisions: undefined,
     conversationHeaders: "opencode",

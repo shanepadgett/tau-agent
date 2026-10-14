@@ -1,6 +1,6 @@
 # Slice 4e: code plan
 
-Status: round 2 agreed, output capture and warning implemented, 2026-10-13. Output behavior and warning wording are agreed in [agent-loop-4e.md](agent-loop-4e.md). The [codemode console-output patch](agent-loop-4e-memory.md) is approved and implemented.
+Status: archived. Built 2026-10-13; lasting decisions in [architecture.md](../architecture.md#core-ideas) (Output limits as built); its live checks are in [live-checks.md](../live-checks.md).
 
 **Shape:** one bounded capture implementation for shell streams and finite script text. `core` owns the folder contract and model-facing notes; `host` supplies the production folder. Save the rendered check report as well as its structured pass/fail list, so combined failures stay bounded on replay.
 

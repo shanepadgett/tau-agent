@@ -1,6 +1,6 @@
 # Build step 4: the agent loop
 
-Status: round 1 (architecture) agreed, 2026-10-13. Slices 4a and 4b are built and confirmed live; their decisions are in [architecture.md](../architecture.md#core-ideas). Instruction files and skills are built ([archive](../archive/instruction-files-and-skills.md)). Slice 4c is built and checked live ([archive](../archive/agent-loop-4c.md)). Slice 4d is built ([archive](../archive/agent-loop-4d.md)); its live checks wait in [live-checks.md](../live-checks.md). Next: slice 4e ([agent-loop-4e.md](agent-loop-4e.md)).
+Status: round 1 (architecture) agreed, 2026-10-13. Slices 4a and 4b are built and confirmed live; their decisions are in [architecture.md](../architecture.md#core-ideas). Instruction files and skills are built ([archive](../archive/instruction-files-and-skills.md)). Slice 4c is built and checked live ([archive](../archive/agent-loop-4c.md)). Slices 4d and 4e are built ([4d archive](../archive/agent-loop-4d.md), [4e archive](../archive/agent-loop-4e.md)); their live checks wait in [live-checks.md](../live-checks.md). Slice 4f is deferred ([deferred.md](../deferred.md)), so step 4 is done.
 
 After step 4, `tau -p "fix the failing test"` works from a terminal: Tau sends the prompt to a model, runs the model's `run` scripts in the working directory, saves every entry to the session, and prints the answer. The TUI (step 6) later drives the same core.
 
@@ -40,7 +40,7 @@ flowchart LR
 | **4c: script tools** | edit a failed script by ID; queue writes to one file |
 | **4d: checks** | the `checks` tool and change detection (the `workspace` layer); a limit on repeated failing calls |
 | **4e: output limits** | command output keeps only its start and end while it arrives, so a command like `yes` cannot fill Tau's memory; a `run` result over 50 KB or 2,000 lines shows its start and end, and the full text is saved to a file under `$TMPDIR/tau/<session>/` whose path the result gives, with a note to ask for less (folder and cap agreed 2026-10-13, as Pi and OpenCode do). When nudges exist, an overflow also adds a nudge (agreed 2026-10-13) |
-| **4f: hardening** | from the 2026-10-13 review: two processes running one session can run the same tool call twice, so a run claims the session (or the call) in SQLite, tested with overlapping `--session` runs; database migration reads `user_version` before it takes the write lock, so two openers can apply a migration twice; a retried reply leaves the failed attempt's text in redirected print-mode stdout (open: buffer each attempt, or emit an attempt-failed event); the turn limit counts interrupted replies as turns |
+| **4f: hardening** | deferred 2026-10-13 to reach the TUI sooner; every item is in [deferred.md](../deferred.md) |
 
 Slice 4c's architecture round split the third slice in two. Each slice ends with checks and one live run. A slice is planned in its own code round.
 

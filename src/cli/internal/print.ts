@@ -8,6 +8,7 @@ import { Argument, Command, Flag } from "effect/cli";
 import { Catalog, parseModelRef } from "../../ai/Catalog.ts";
 import { Models } from "../../ai/Models.ts";
 import { Agent } from "../../core/Agent.ts";
+import { ContextMethod } from "../../core/ContextMethod.ts";
 import type { AgentEvent, RunOptions } from "../../core/Client.ts";
 import { type RunSettings, Settings } from "../../host/Settings.ts";
 import { userInstructionsLayer } from "../../host/UserInstructions.ts";
@@ -43,6 +44,7 @@ const config = {
 
 /** The agent with everything it needs: the models of the catalog, and the session store. */
 const agentLayer = Agent.layer.pipe(
+  Layer.provideMerge(ContextMethod.layer),
   Layer.provideMerge(Models.layer),
   Layer.provideMerge(Catalog.layer),
   Layer.provide(Sessions.layer),

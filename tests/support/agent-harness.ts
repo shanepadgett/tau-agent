@@ -7,14 +7,17 @@ import type { ChildProcessSpawner } from "effect/process";
 import { Models } from "../../src/ai/Models.ts";
 import { RouteId } from "../../src/ai/Routes.ts";
 import { Agent, type OpenSession } from "../../src/core/Agent.ts";
+import { ContextMethod } from "../../src/core/ContextMethod.ts";
 import { OutputFolder } from "../../src/core/OutputFolder.ts";
 import type { AgentEvent, RunOptions } from "../../src/core/Client.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { Settings } from "../../src/host/Settings.ts";
 import { userInstructionsLayer } from "../../src/host/UserInstructions.ts";
 import { Sessions } from "../../src/session/Sessions.ts";
+import { Notes } from "../../src/session/Notes.ts";
 
 export type Reply = Stream.Stream<Response.StreamPartEncoded, AiError.AiError>;
+type NoteReply = Effect.Effect<Response.PartEncoded[], AiError.AiError>;
 
 export const options: RunOptions = {
   model: { route: RouteId.make("scripted"), model: "scripted" },
@@ -41,12 +44,25 @@ export const checksReply = (id: string): Reply =>
   Stream.make<Response.StreamPartEncoded[]>({ type: "tool-call", id, name: "checks", params: {} });
 
 /** A model that answers with the next scripted reply and keeps each request it gets. */
-const scriptedModels = (replies: readonly Reply[], requests: Requests) =>
+const scriptedModels = (
+  replies: readonly Reply[],
+  requests: Requests,
+  noteReplies: readonly NoteReply[],
+) =>
   Layer.effect(
     Models,
     Effect.gen(function* () {
       const model = yield* LanguageModel.make({
-        generateText: () => Effect.die("Tau streams every model call."),
+        generateText: (request) => {
+          requests.notePrompts.push(request.prompt);
+
+          return (
+            noteReplies[requests.notePrompts.length - 1] ??
+            Effect.succeed<Response.PartEncoded[]>([
+              { type: "text", text: "Saved background note." },
+            ])
+          );
+        },
         streamText: (request) => {
           const reply = replies[requests.prompts.length] ?? textReply("No more script.");
           requests.prompts.push(request.prompt);
@@ -63,7 +79,13 @@ const scriptedModels = (replies: readonly Reply[], requests: Requests) =>
   );
 
 /** What the model got in each call: the prompt, and the descriptions of the tools. */
-type Requests = { readonly prompts: Prompt.Prompt[]; readonly tools: string[] };
+type Requests = {
+  readonly prompts: Prompt.Prompt[];
+  readonly tools: string[];
+  readonly notePrompts: Prompt.Prompt[];
+};
+
+type MethodLayer = Layer.Layer<ContextMethod, never, Models | Sessions | Notes>;
 
 /** How reading the user's settings and folders can fail when an agent starts. */
 type StartError = Layer.Error<typeof Settings.layer>;
@@ -75,10 +97,17 @@ type Harness = {
   readonly prompts: Prompt.Prompt[];
   /** The tool descriptions of each model call. */
   readonly tools: string[];
+  readonly notePrompts: Prompt.Prompt[];
   readonly startAgent: (
     replies: readonly Reply[],
   ) => Effect.Effect<Agent["Service"], StartError, Scope.Scope>;
+  readonly startAgentUsing: (
+    replies: readonly Reply[],
+    method: MethodLayer,
+    noteReplies?: readonly NoteReply[],
+  ) => Effect.Effect<Agent["Service"], StartError, Scope.Scope>;
   readonly sessions: Sessions["Service"];
+  readonly notes: Notes["Service"];
 };
 
 type HarnessServices =
@@ -109,7 +138,7 @@ export const withPreparedHarness = <A, E, P>(
 
       const tauHome = TauHome.at(`${home}/.tau`);
       const store = yield* Layer.build(Sessions.layer.pipe(Layer.provide(tauHome)));
-      const requests: Requests = { prompts: [], tools: [] };
+      const requests: Requests = { prompts: [], tools: [], notePrompts: [] };
 
       // Settings are read when an agent starts, so a test can write settings.json first.
       const user = userInstructionsLayer.pipe(
@@ -118,10 +147,15 @@ export const withPreparedHarness = <A, E, P>(
         Layer.provide(BunServices.layer),
       );
 
-      const startAgent = (replies: readonly Reply[]) =>
+      const startAgentUsing = (
+        replies: readonly Reply[],
+        method: MethodLayer,
+        noteReplies: readonly NoteReply[] = [],
+      ) =>
         Layer.build(
           Agent.layer.pipe(
-            Layer.provide(scriptedModels(replies, requests)),
+            Layer.provide(method),
+            Layer.provide(scriptedModels(replies, requests, noteReplies)),
             Layer.provide(Layer.succeedContext(store)),
             Layer.provide(BunServices.layer),
             Layer.provide(user),
@@ -133,8 +167,10 @@ export const withPreparedHarness = <A, E, P>(
         home,
         directory,
         ...requests,
-        startAgent,
+        startAgent: (replies) => startAgentUsing(replies, ContextMethod.wholeHistory),
+        startAgentUsing,
         sessions: Context.get(store, Sessions),
+        notes: Context.get(store, Notes),
       });
     }).pipe(Effect.scoped, Effect.provide(BunServices.layer)),
   );

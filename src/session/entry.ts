@@ -102,7 +102,17 @@ const ChecksDetails = Schema.Struct({
   output: Schema.optional(Schema.String),
 });
 
-const ToolDetails = Schema.Union([RunDetails, ChecksDetails]);
+const CheckpointDetails = Schema.Struct({
+  tool: Schema.Literal("checkpoint"),
+  handoff: Schema.String,
+  notes: Schema.Array(Schema.Int),
+  noteTokens: Schema.Int,
+  tailFrom: Schema.Int,
+});
+
+export type CheckpointDetails = typeof CheckpointDetails.Type;
+
+const ToolDetails = Schema.Union([RunDetails, ChecksDetails, CheckpointDetails]);
 export type ToolDetails = typeof ToolDetails.Type;
 
 /**
@@ -137,6 +147,15 @@ const InstructionsEntry = Schema.Struct({
   text: Schema.String,
 });
 
+/** Hidden from the chat; read by the model at its position in the conversation. */
+const NudgeEntry = Schema.Struct({
+  type: Schema.Literal("nudge"),
+  key: Schema.String,
+  text: Schema.String,
+});
+
+export type NudgeEntry = typeof NudgeEntry.Type;
+
 export const EntryBody = Schema.Union([
   UserEntry,
   AssistantEntry,
@@ -144,6 +163,7 @@ export const EntryBody = Schema.Union([
   ToolResultEntry,
   InstructionsEntry,
   ChecksEntry,
+  NudgeEntry,
 ]);
 
 export type EntryBody = typeof EntryBody.Type;

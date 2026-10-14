@@ -8,11 +8,13 @@ import { ChildProcessSpawner } from "effect/process";
 import { Models } from "../ai/Models.ts";
 import { makeWriteQueue } from "../sandbox/WriteQueue.ts";
 import type { SessionId } from "../session/Entry.ts";
-import { type SessionNotFound, Sessions, type SessionStoreError } from "../session/Sessions.ts";
+import { type SessionNotFound, Sessions } from "../session/Sessions.ts";
+import type { SessionStoreError } from "../session/SessionStoreError.ts";
 import { SkillUses } from "../session/SkillUses.ts";
 import { makeRunner, type OpenSession, type RunServices } from "./internal/runner/runner.ts";
 import { UserInstructions } from "./UserInstructions.ts";
 import { OutputFolder } from "./OutputFolder.ts";
+import { ContextMethod } from "./ContextMethod.ts";
 
 export type { OpenSession } from "./internal/runner/runner.ts";
 
@@ -35,6 +37,7 @@ export class Agent extends Context.Service<
       const services: RunServices = {
         sessions: yield* Sessions,
         models: yield* Models,
+        contextMethod: yield* ContextMethod,
         fileSystem: yield* FileSystem.FileSystem,
         spawner: yield* ChildProcessSpawner.ChildProcessSpawner,
         userInstructions: yield* UserInstructions,

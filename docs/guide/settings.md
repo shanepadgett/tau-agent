@@ -15,6 +15,11 @@
      "timeouts": { "run": 600, "shell": 120 },
      // false: Tau reads no AGENTS.md file, yours or the project's.
      "agentsFiles": true,
+     "compaction": {
+       "method": "notes",
+       "budgetTokens": 200000,
+       "notesStartTokens": 50000
+     },
      "routes": {
        // A server of your own that speaks the Chat Completions API.
        "local": {
@@ -35,6 +40,9 @@
 - An entry under `routes` with the name of a built-in route changes only its models. Any other name adds a route, which needs `protocol` (`anthropic`, `openaiResponses` or `openaiChat`) and `apiUrl`.
 - A route you add sends no key unless `apiKeyEnv` names the environment variable that holds it.
 - `"agentsFiles": false` turns off every `AGENTS.md` file. Instruction files and skills still load. See [Write instruction files](write-instruction-files.md).
+- `compaction.method` defaults to `notes`. Set it to `off` to send the whole history. Existing checkpoints and raw entries remain stored.
+- `compaction.budgetTokens` defaults to 200000, capped by the model's window less 16000 tokens and its long-context price threshold. Hidden nudges tell the model when it reaches 50%, 75% and 100% of this budget.
+- `compaction.notesStartTokens` defaults to 50000. Past this size, background notes cover complete message ranges of at least 16000 estimated tokens. See [Use checkpoints](checkpoints.md).
 
 ## Limits
 

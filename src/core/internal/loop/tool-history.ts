@@ -40,7 +40,8 @@ export const openCalls = (entries: readonly Entry[]) => {
  */
 export const needsReply = (entries: readonly Entry[]) => {
   const last = entries.findLast(
-    ({ body }) => body.type !== "tool-started" && body.type !== "instructions",
+    ({ body }) =>
+      body.type !== "tool-started" && body.type !== "instructions" && body.type !== "nudge",
   )?.body;
 
   if (last?.type === "checks") return hasFailures(last.report);
