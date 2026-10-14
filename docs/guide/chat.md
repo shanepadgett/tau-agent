@@ -47,7 +47,7 @@ Run `tau` with no `-p` to chat with Tau in your terminal: send prompts, watch th
 Tau restarts the chat into new code with the same session and the same unsent input. A restart happens only when no run is going and no prompt waits.
 
 - Type `/restart` and press Enter to restart now, or as soon as the current run ends.
-- When you run Tau from its source with `bun src/cli/main.ts`, Tau watches `src/`. After each change it builds the new code and checks that it starts. The line under the input says what happens. When the check passes, Tau restarts by itself. Set `"autoRestart": false` in `~/.tau/settings.json` to restart only with `/restart`. See [Change Tau's settings](settings.md).
+- When you run Tau from its source with `bun src/cli/main.ts` (in the Tau repository, `mise run dev`), Tau watches `src/`. After each change it builds the new code and checks that it starts. The line under the input says what happens. When the check passes, Tau restarts by itself. Set `"autoRestart": false` in `~/.tau/settings.json` to restart only with `/restart`. See [Change Tau's settings](settings.md).
 - When the new code does not build or does not start, the line under the input says why, and the chat keeps running on the old code.
 - When the chat crashes, Tau starts it again on the same session. When new code crashes twice within 10 seconds of its start, Tau goes back to the code that ran before it. When there is no older code, Tau stops and prints how to continue the session.
 

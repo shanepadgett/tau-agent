@@ -79,6 +79,11 @@ run = "bun tools/report-failures.ts bun-test -- bun test ./tests/binary --only-f
 description = "Lint rule unit tests under Node"
 run = "bun tools/report-failures.ts node-test -- node --test --test-reporter=dot \"tools/lint/**/*.test.ts\""
 
+[tasks.dev]
+description = "Open the chat from source; it restarts into each change in src/"
+# The chat reads the terminal's keys, so it gets the terminal directly.
+raw = true
+run = "bun src/cli/main.ts"
 
 [tasks.catalog]
 description = "Refresh the model catalog snapshot bundled in the binary"
