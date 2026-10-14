@@ -18,7 +18,7 @@ Each command runs through `sh -c` in the session's directory. With pipes (the de
 
 A process session belongs to the Tau session, not to the script or the run. It keeps running after the script and the run end, and a script that times out does not kill it. It ends when the command exits, when the agent kills it, or when you close the session, switch away from it or exit Tau. Closing it kills the whole process tree.
 
-`read` returns the output since the last read. `wait` returns the same, and when nothing new arrived it also returns `tail`, the last lines, so a hung command is visible. Each session keeps up to 1 MiB of output; past that it keeps the start and the end and marks the dropped part.
+`read` returns the output since the last read. `wait` returns the same, and when nothing new arrived it also returns `tail`, the last lines, so a hung command is visible. Each session keeps up to 1,048,576 characters of output; past that it keeps the start and the end and marks the dropped part.
 
 When a session exits by itself while the agent works, the agent gets one hidden notice with the exit code and the last output before its next model call. A session the agent killed gives no notice.
 
@@ -26,7 +26,7 @@ A checkpoint saves the running sessions. The agent's next view lists them (id an
 
 ## Limits
 
-- At most 64 sessions at once. `start` fails when the limit is reached.
+- At most 64 running sessions at once. Exited sessions do not count. `start` fails when the limit is reached.
 - A `wait` inside a script never outlasts the script's own timeout (10 minutes by default); the script ends first and the process keeps running.
 - Sessions do not survive Tau exiting. There is no way yet to attach to a session from the terminal or list them in a sidebar.
 - A command that starts new processes while a PTY session is being killed can leave them running.

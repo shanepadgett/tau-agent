@@ -1,6 +1,6 @@
 # Tau Standalone
 
-Status: spikes 1–11 and 13 complete on macOS (spike 12 planned; spike 14, the live model matrix, passes on all 12 models); OpenTUI, PTYs and file finding also verified on Linux arm64. Layers, package layout, Effect, the AI layer, the agent loop, SQLite access, tooling, FFF and helper reuse are settled. Use unpatched FFF first; reconsider the tested native workaround if a ranking bug is opened.
+Status: spikes 1–11 and 13 complete on macOS (spike 12 planned; spike 14, the live model matrix, passes on all 12 models; spike 15, reload under a supervisor, passes); OpenTUI, PTYs and file finding also verified on Linux arm64. Layers, package layout, Effect, the AI layer, the agent loop, SQLite access, tooling, FFF and helper reuse are settled. Use unpatched FFF first; reconsider the tested native workaround if a ranking bug is opened.
 
 Tau becomes its own coding agent, built from the ground up on this branch. It does not embed or depend on Pi. OpenCode and Pi are read-only references for learning which problems they solved and how; Tau writes its own code on its own architecture and copies none of theirs. Their published packages may be dependencies like any other, such as `@opencode/codemode` behind `run`. The `main` branch stays a Pi package and keeps shipping until this branch replaces it.
 
@@ -11,6 +11,7 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 | [sdk.md](sdk.md) | The SDK's shape: one public face for extensions, four kinds of extension point, the scoped context, public types. |
 | [sdk-packages.md](sdk-packages.md) | How extensions are packaged, installed, started and versioned. |
 | [sdk-catalog.md](sdk-catalog.md) | What each SDK area offers, the replaceable runtime parts, the stable-prefix rules and the named UI places. |
+| [reload.md](reload.md) | Reloading Tau while it runs: extension reload, restart when idle, the supervisor. |
 | [tooling.md](tooling.md) | Checks, lint rules, and library choices. |
 | [spikes.md](spikes.md) | Questions tested before building, with results. |
 | [loop-research.md](loop-research.md) | What other agents do about loops, context, caching and long sessions; the proposed vocabulary. |
@@ -20,6 +21,7 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 | [work/agent-loop.md](work/agent-loop.md) | Build step 4, the agent loop: slices and agreed decisions. |
 | [work/compaction.md](work/compaction.md) | Build step 5: background tasks, compaction and process sessions. |
 | [work/process-sessions.md](work/process-sessions.md) | Slice 5b: process sessions and the agent's wait. |
+| [work/tui.md](work/tui.md) | Build step 6: the TUI, in slices 6a to 6c. |
 | [compaction-research.md](compaction-research.md) | How Tau main, Pi durable and Mastra compact, what compaction costs, and how that led to step 5's design. |
 | `archive/` | Finished plans, kept as a record of how decisions were reached. Not kept up to date. |
 
