@@ -13,7 +13,11 @@ import { changesSincePrompt } from "./check-history.ts";
 import type { ProjectChecks } from "./checks-file.ts";
 import { dueChecks, runChecks } from "./run-checks.ts";
 
-const NO_PARAMETERS_JSON_SCHEMA = Tool.getJsonSchemaFromSchema(Schema.Struct({}));
+/**
+ * Written out because `Schema.Struct({})` becomes `{ not: { type: "null" } }`, and Anthropic needs
+ * every tool's input to be `type: "object"`.
+ */
+const NO_PARAMETERS_JSON_SCHEMA = { type: "object", properties: {} };
 
 const NOTHING_TO_CHECK = "No checks apply to the changes in this run.";
 

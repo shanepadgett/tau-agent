@@ -108,6 +108,12 @@ describe("project checks", () => {
         expect(harness.tools[0]).toContain(`${BAD_TOOL_DESCRIPTION}`);
         expect(harness.tools[0]).toContain("- no-bad: Finds the word bad.");
 
+        // Anthropic rejects a tool whose input is not an object.
+        expect(harness.toolInputs[0]).toEqual([
+          expect.objectContaining({ type: "object" }),
+          expect.objectContaining({ type: "object" }),
+        ]);
+
         const [, failed, , passed] = toolResults(harness.prompts[4]);
         expect(failed).toBe(yield* notesFailure(harness.directory));
         expect(passed).toBe("Passed: no-bad");

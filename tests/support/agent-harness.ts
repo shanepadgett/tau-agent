@@ -1,8 +1,18 @@
 /** A scripted model and a real agent on temp files, for tests of runs. */
 
 import { BunServices } from "@effect/platform-bun";
-import { Context, Duration, Effect, FileSystem, Layer, PubSub, type Scope, Stream } from "effect";
-import { type AiError, LanguageModel, type Prompt, type Response } from "effect/ai";
+import {
+  Context,
+  Duration,
+  Effect,
+  FileSystem,
+  type JsonSchema,
+  Layer,
+  PubSub,
+  type Scope,
+  Stream,
+} from "effect";
+import { type AiError, LanguageModel, type Prompt, type Response, Tool } from "effect/ai";
 import type { ChildProcessSpawner } from "effect/process";
 import { Models } from "../../src/ai/Models.ts";
 import { RouteId } from "../../src/ai/Routes.ts";
@@ -67,6 +77,7 @@ const scriptedModels = (
           const reply = replies[requests.prompts.length] ?? textReply("No more script.");
           requests.prompts.push(request.prompt);
           requests.tools.push(request.tools.map((tool) => tool.description ?? "").join("\n"));
+          requests.toolInputs.push(request.tools.map((tool) => Tool.getJsonSchema(tool)));
           return reply;
         },
       });
@@ -78,10 +89,14 @@ const scriptedModels = (
     }),
   );
 
-/** What the model got in each call: the prompt, and the descriptions of the tools. */
+/**
+ * What the model got in each call: the prompt, the descriptions of the tools, and the JSON schema
+ * of each tool's input.
+ */
 type Requests = {
   readonly prompts: Prompt.Prompt[];
   readonly tools: string[];
+  readonly toolInputs: JsonSchema.JsonSchema[][];
   readonly notePrompts: Prompt.Prompt[];
 };
 
@@ -97,6 +112,8 @@ type Harness = {
   readonly prompts: Prompt.Prompt[];
   /** The tool descriptions of each model call. */
   readonly tools: string[];
+  /** The JSON schema of each tool's input, in each model call. */
+  readonly toolInputs: JsonSchema.JsonSchema[][];
   readonly notePrompts: Prompt.Prompt[];
   readonly startAgent: (
     replies: readonly Reply[],
@@ -138,7 +155,7 @@ export const withPreparedHarness = <A, E, P>(
 
       const tauHome = TauHome.at(`${home}/.tau`);
       const store = yield* Layer.build(Sessions.layer.pipe(Layer.provide(tauHome)));
-      const requests: Requests = { prompts: [], tools: [], notePrompts: [] };
+      const requests: Requests = { prompts: [], tools: [], toolInputs: [], notePrompts: [] };
 
       // Settings are read when an agent starts, so a test can write settings.json first.
       const user = userInstructionsLayer.pipe(
