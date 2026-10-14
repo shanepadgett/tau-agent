@@ -100,6 +100,8 @@
     },
     { "files": ["src/cli/**"], "rules": { "tau/no-effect-run": "off", "tau/no-console": "off" } },
     { "files": ["src/sdk/**"], "rules": { "tau/no-effect-run": "off" } },
+    // The promise edge between Solid components and core.
+    { "files": ["src/tui/internal/chat-client.ts"], "rules": { "tau/no-effect-run": "off" } },
     { "files": ["src/host/**"], "rules": { "tau/no-env": "off" } },
     { "files": ["src/ai/**"], "rules": { "tau/no-fetch": "off" } },
     { "files": ["src/proc/**"], "rules": { "tau/no-spawn": "off" } },

@@ -73,7 +73,7 @@ Type definitions for Bun's APIs. The declarations are the API reference.
 Linter: configuration, rules and their options, and the JS plugin guide. The website pages are unversioned.
 
 - Docs: `docs/reference/copies/oxlint/1.87.0/` (896 files: README.md, src/)
-- From: https://github.com/oxc-project/website.git, branch main, commit 58980252fa48 (not pinned to the installed version)
+- From: https://github.com/oxc-project/website.git, branch main, commit ba272105fd3e (not pinned to the installed version)
 - API (schema): `node_modules/oxlint/configuration_schema.json`
 
 ## @oxlint/plugins 1.87.0
@@ -94,7 +94,7 @@ Type-aware lint rules for Oxlint.
 Formatter: options, ignore files and supported languages. The website pages are unversioned.
 
 - Docs: `docs/reference/copies/oxfmt/0.72.0/` (17 files: README.md, src/)
-- From: https://github.com/oxc-project/website.git, branch main, commit 58980252fa48 (not pinned to the installed version)
+- From: https://github.com/oxc-project/website.git, branch main, commit ba272105fd3e (not pinned to the installed version)
 - API (schema): `node_modules/oxfmt/configuration_schema.json`
 
 ## fallow 3.33.1
@@ -125,3 +125,26 @@ Runs model-written JavaScript in an interpreter written on Effect. Scripts reach
 
 - Docs: `docs/reference/copies/@opencode/codemode/2.0.27/` (1 file: README.md)
 - API (types): `node_modules/@opencode/codemode/dist/`, modules: `docs/reference/copies/@opencode/codemode/2.0.27/api-index/@opencode-codemode-dist.md`
+
+## @opentui/core 0.6.1
+
+Terminal UI renderer with a native Zig core: renderables (box, text, textarea, scrollbox, markdown), layout, keyboard input, test renderer. Backs Tau's TUI. Read the docs for components and keys; the declarations name every API.
+
+- Docs: `docs/reference/copies/@opentui/core/0.6.1/` (104 files: README.md, packages/)
+- From: https://github.com/anomalyco/opentui.git, tag v0.6.1, commit 8213fe8b1dbc
+- API (types): `node_modules/@opentui/core/`, modules: `docs/reference/copies/@opentui/core/0.6.1/api-index/@opentui-core.md`
+
+## @opentui/solid 0.6.1
+
+Solid renderer for OpenTUI: `render`, `testRender`, hooks such as `useKeyboard` and `useRenderer`, and the JSX elements. Needs the `@opentui/solid/preload` Bun preload to run `.tsx` from source.
+
+- Docs: `docs/reference/copies/@opentui/solid/0.6.1/` (1 file: README.md)
+- API (types): `node_modules/@opentui/solid/`, modules: `docs/reference/copies/@opentui/solid/0.6.1/api-index/@opentui-solid.md`
+
+## solid-js 1.9.12
+
+Fine-grained reactivity used by Tau's TUI: signals, memos, effects, control flow (`For`, `Show`), and stores (`createStore`, `reconcile`) in `solid-js/store`.
+
+- Docs: `docs/reference/copies/solid-js/1.9.12/` (1 file: README.md)
+- API (types): `node_modules/solid-js/types/`, modules: `docs/reference/copies/solid-js/1.9.12/api-index/solid-js-types.md`
+- API (types): `node_modules/solid-js/store/types/`, modules: `docs/reference/copies/solid-js/1.9.12/api-index/solid-js-store-types.md`

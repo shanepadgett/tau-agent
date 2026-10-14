@@ -1,4 +1,4 @@
-/** The `tau` command line: print mode, and logging in to and out of model providers. */
+/** The `tau` command line: the chat in the terminal, print mode, and logging in to and out of model providers. */
 
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -15,7 +15,7 @@ import { Settings } from "../host/Settings.ts";
 import { outputFolderLayer } from "../host/OutputFolder.ts";
 import { showFailure } from "./internal/failure.ts";
 import { loginCommand, logoutCommand, terminalLoginPrompt } from "./internal/login.ts";
-import { rootCommand } from "./internal/print.ts";
+import { rootCommand } from "./internal/root-command.ts";
 
 const appLayer = Layer.mergeAll(
   credentialStoreLayer,

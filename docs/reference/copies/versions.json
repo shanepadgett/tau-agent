@@ -50,7 +50,7 @@
     "version": "1.87.0",
     "fingerprint": "3d791fe261decdcc",
     "commits": [
-      "58980252fa4875a9cecb0626a37b1b4931558436"
+      "ba272105fd3eb1aa80d00219bd1f79c242962a6b"
     ]
   },
   "@oxlint/plugins": {
@@ -67,7 +67,7 @@
     "version": "0.72.0",
     "fingerprint": "81077607987d4be0",
     "commits": [
-      "58980252fa4875a9cecb0626a37b1b4931558436"
+      "ba272105fd3eb1aa80d00219bd1f79c242962a6b"
     ]
   },
   "fallow": {
@@ -92,6 +92,23 @@
   "@opencode/codemode": {
     "version": "2.0.27",
     "fingerprint": "e8048780529f0deb",
+    "commits": []
+  },
+  "@opentui/core": {
+    "version": "0.6.1",
+    "fingerprint": "fc63dfdd55bafcb8",
+    "commits": [
+      "8213fe8b1dbcaa95504284f158f1eabfe3b14e80"
+    ]
+  },
+  "@opentui/solid": {
+    "version": "0.6.1",
+    "fingerprint": "23f579a7b9f71a30",
+    "commits": []
+  },
+  "solid-js": {
+    "version": "1.9.12",
+    "fingerprint": "e2287ac004a69d86",
     "commits": []
   }
 }

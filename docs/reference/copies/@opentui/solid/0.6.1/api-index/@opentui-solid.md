@@ -1,0 +1,25 @@
+# @opentui/solid
+
+- `components`
+- `index`
+- `jsx-dev-runtime`
+- `jsx-runtime`
+- `scripts/runtime-plugin-support-configure`
+- `scripts/runtime-plugin-support`
+- `scripts/solid-plugin`
+- `scripts/solid-transform`
+- `src/elements/catalogue`
+- `src/elements/extras`
+- `src/elements/hooks`
+- `src/elements/index`
+- `src/elements/slot`
+- `src/plugins/slot`
+- `src/reconciler`
+- `src/renderer/index`
+- `src/renderer/universal`
+- `src/scrollback`
+- `src/testing/bun-test-node`
+- `src/time-to-first-draw`
+- `src/types/elements`
+- `src/utils/id-counter`
+- `src/utils/log`

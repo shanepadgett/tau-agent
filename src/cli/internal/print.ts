@@ -3,128 +3,31 @@
  * calls and the session ID on stderr, so `tau -p ... > answer.md` keeps only the answer.
  */
 
-import { Console, Duration, Effect, Layer, Option, PubSub, Schema, Stdio, Stream } from "effect";
-import { Argument, Command, Flag } from "effect/cli";
-import { Catalog, parseModelRef } from "../../ai/Catalog.ts";
-import { Models } from "../../ai/Models.ts";
-import { Agent } from "../../core/Agent.ts";
-import { ContextMethod } from "../../core/ContextMethod.ts";
-import type { AgentEvent, RunOptions } from "../../core/Client.ts";
-import { type RunSettings, Settings } from "../../host/Settings.ts";
-import { userInstructionsLayer } from "../../host/UserInstructions.ts";
-import { SessionId } from "../../session/Entry.ts";
-import { Sessions } from "../../session/Sessions.ts";
+import { Console, Effect, Option, PubSub, Stdio, Stream } from "effect";
+import { type AgentEvent, type RunOptions, runEndMessage } from "../../core/Client.ts";
+import { openSession } from "./agent-session.ts";
 import { showFailure } from "./failure.ts";
 
-const DEFAULT_RUN_MINUTES = 10;
-const DEFAULT_SHELL_MINUTES = 2;
-const DEFAULT_RUN_TIMEOUT = Duration.minutes(DEFAULT_RUN_MINUTES);
-const DEFAULT_SHELL_TIMEOUT = Duration.minutes(DEFAULT_SHELL_MINUTES);
-
-class NoModel extends Schema.TaggedError<NoModel>()("NoModel", { message: Schema.String }) {}
-
-const config = {
-  print: Flag.Boolean("print").pipe(
-    Flag.withAlias("p"),
-    Flag.withDescription("Run one prompt and print the answer."),
-  ),
-  session: Flag.String("session").pipe(
-    Flag.optional,
-    Flag.withDescription("Continue the session with this ID."),
-  ),
-  model: Flag.String("model").pipe(
-    Flag.optional,
-    Flag.withDescription("The model to use, as route/model."),
-  ),
-  prompt: Argument.String("prompt").pipe(
-    Argument.optional,
-    Argument.withDescription("The prompt. Without it, Tau reads the prompt from stdin."),
-  ),
-};
-
-/** The agent with everything it needs: the models of the catalog, and the session store. */
-const agentLayer = Agent.layer.pipe(
-  Layer.provideMerge(ContextMethod.layer),
-  Layer.provideMerge(Models.layer),
-  Layer.provideMerge(Catalog.layer),
-  Layer.provide(Sessions.layer),
-  Layer.provide(userInstructionsLayer),
-);
-
-/** The `tau` command itself. Without a subcommand, `-p` runs a prompt. */
-export const rootCommand = Command.make(
-  "tau",
-  config,
-  Effect.fn("tau")(function* (input) {
-    if (!input.print) {
-      return yield* Console.log(
-        'The interactive mode is not built yet. Run a prompt with tau -p "prompt".',
-      );
-    }
-
-    const { run } = yield* Settings;
-    const options = yield* runOptions(input.model, run);
-    const prompt = Option.isSome(input.prompt) ? input.prompt.value : yield* readStdin;
-    const session = Option.map(input.session, (id) => SessionId.make(id));
-    yield* printRun(session, prompt, options).pipe(Effect.provide(agentLayer));
-  }),
-);
-
-const runOptions = Effect.fn("runOptions")(function* (
-  flag: Option.Option<string>,
-  settings: RunSettings,
+/** Runs `prompt`, or the text on stdin when there is none. */
+export const printPrompt = Effect.fn("printPrompt")(function* (
+  session: Option.Option<string>,
+  prompt: Option.Option<string>,
+  options: RunOptions,
 ) {
-  const text = Option.getOrUndefined(
-    Option.orElse(flag, () => Option.fromUndefinedOr(settings.model)),
-  );
-
-  if (text === undefined) {
-    return yield* new NoModel({
-      message:
-        'No model is set. Add "model": "route/model" to ~/.tau/settings.json, such as "anthropic/claude-sonnet-5-5", or pass --model.',
-    });
-  }
-
-  const model = parseModelRef(text);
-
-  if (Option.isNone(model)) {
-    return yield* new NoModel({
-      message: `"${text}" is not a model. Write it as route/model, such as anthropic/claude-sonnet-5-5.`,
-    });
-  }
-
-  return {
-    model: model.value,
-    maxTurns: settings.maxTurns,
-    timeouts: {
-      run: secondsOr(settings.runTimeoutSeconds, DEFAULT_RUN_TIMEOUT),
-      shell: secondsOr(settings.shellTimeoutSeconds, DEFAULT_SHELL_TIMEOUT),
-    },
-  } satisfies RunOptions;
+  const text = Option.isSome(prompt) ? prompt.value : yield* readStdin;
+  yield* printRun(session, text, options);
 });
-
-const secondsOr = (seconds: number | undefined, fallback: Duration.Duration) =>
-  seconds === undefined ? fallback : Duration.seconds(seconds);
 
 const readStdin = Stdio.Stdio.use((stdio) =>
   stdio.stdin.pipe(Stream.decodeText(), Stream.mkString),
 );
 
 const printRun = Effect.fn("printRun")(function* (
-  id: Option.Option<SessionId>,
+  session: Option.Option<string>,
   prompt: string,
   options: RunOptions,
 ) {
-  yield* Effect.forkScoped((yield* Catalog).refreshIfStale);
-
-  const opened = yield* (yield* Agent)
-    .open(id, process.cwd())
-    .pipe(
-      Effect.catchTag("SessionNotFound", (error) =>
-        showFailure({ message: `There is no session ${error.session}.` }),
-      ),
-    );
-
+  const opened = yield* openSession(session);
   const events = yield* opened.subscribe;
   yield* opened.send({ type: "prompt", text: prompt, options });
 
@@ -133,31 +36,8 @@ const printRun = Effect.fn("printRun")(function* (
   );
 
   yield* Console.error(`\nSession: ${opened.session.id}`);
-
-  if (end.reason === "failed")
-    return yield* showFailure({ message: `The run failed: ${end.error}` });
-
-  if (end.reason === "turn-limit") {
-    return yield* showFailure({ message: "The run reached maxTurns in ~/.tau/settings.json." });
-  }
-
-  if (end.reason === "output-limit") {
-    return yield* showFailure({
-      message: "The reply reached the model's output limit, so the answer is cut short.",
-    });
-  }
-
-  if (end.reason === "repeated-call") {
-    return yield* showFailure({
-      message: `The model sent the same failing call again and again, so Tau stopped the run: ${end.call}`,
-    });
-  }
-
-  if (end.reason === "checks-failed") {
-    return yield* showFailure({
-      message: `The project's checks still fail after the model's tries to fix them: ${end.checks.join(", ")}.`,
-    });
-  }
+  const message = runEndMessage(end);
+  if (message !== undefined) return yield* showFailure({ message });
 }, Effect.scoped);
 
 type RunEnded = Extract<AgentEvent, { type: "run-ended" }>;
@@ -186,6 +66,7 @@ const printEvent = (stdio: Stdio.Stdio, event: AgentEvent) => {
       return Console.error(
         `\n${event.message}\nRetry ${event.attempt} in ${event.seconds} s.`,
       ).pipe(Effect.as(Option.none<RunEnded>()));
+    case "run-started":
     case "tool-ended":
     case "prompts-returned":
     case "checks-started":

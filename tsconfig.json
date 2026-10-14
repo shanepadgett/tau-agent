@@ -3,7 +3,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "target": "ESNext",
-    "lib": ["ESNext"],
+    "lib": ["ESNext", "DOM"],
     "types": ["bun"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
@@ -14,6 +14,8 @@
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "jsx": "preserve",
+    "jsxImportSource": "@opentui/solid",
     "plugins": [
       {
         "name": "@effect/language-service",

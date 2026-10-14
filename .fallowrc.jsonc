@@ -29,7 +29,7 @@
     "zones": [
       { "name": "cli", "patterns": ["src/cli/*.ts"] },
       { "name": "cli-internal", "patterns": ["src/cli/internal/**"] },
-      { "name": "tui", "patterns": ["src/tui/*.ts"] },
+      { "name": "tui", "patterns": ["src/tui/*.ts", "src/tui/*.tsx"] },
       { "name": "tui-internal", "patterns": ["src/tui/internal/**"] },
       { "name": "extensions", "patterns": ["src/extensions/*.ts"] },
       { "name": "extensions-internal", "patterns": ["src/extensions/internal/**"] },

@@ -1,0 +1,5 @@
+# Solid's JSX transform for the TUI's .tsx files, when Tau runs from source and in tests.
+preload = ["@opentui/solid/preload"]
+
+[test]
+preload = ["@opentui/solid/preload"]

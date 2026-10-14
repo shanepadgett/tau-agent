@@ -349,6 +349,80 @@
           "path": "@opencode/codemode/dist"
         }
       ]
+    },
+    {
+      "package": "@opentui/core",
+      "versionSource": "lock",
+      "summary": "Terminal UI renderer with a native Zig core: renderables (box, text, textarea, scrollbox, markdown), layout, keyboard input, test renderer. Backs Tau's TUI. Read the docs for components and keys; the declarations name every API.",
+      "docs": [
+        {
+          "origin": {
+            "kind": "installed"
+          },
+          "files": ["README.md"]
+        },
+        {
+          "origin": {
+            "kind": "git",
+            "repository": "https://github.com/anomalyco/opentui.git",
+            "ref": {
+              "tag": "v{version}"
+            }
+          },
+          "files": [
+            "packages/web/src/content/docs/**/*.md",
+            "packages/web/src/content/docs/**/*.mdx"
+          ]
+        }
+      ],
+      "api": [
+        {
+          "kind": "types",
+          "path": "@opentui/core"
+        }
+      ]
+    },
+    {
+      "package": "@opentui/solid",
+      "versionSource": "lock",
+      "summary": "Solid renderer for OpenTUI: `render`, `testRender`, hooks such as `useKeyboard` and `useRenderer`, and the JSX elements. Needs the `@opentui/solid/preload` Bun preload to run `.tsx` from source.",
+      "docs": [
+        {
+          "origin": {
+            "kind": "installed"
+          },
+          "files": ["README.md"]
+        }
+      ],
+      "api": [
+        {
+          "kind": "types",
+          "path": "@opentui/solid"
+        }
+      ]
+    },
+    {
+      "package": "solid-js",
+      "versionSource": "lock",
+      "summary": "Fine-grained reactivity used by Tau's TUI: signals, memos, effects, control flow (`For`, `Show`), and stores (`createStore`, `reconcile`) in `solid-js/store`.",
+      "docs": [
+        {
+          "origin": {
+            "kind": "installed"
+          },
+          "files": ["README.md"]
+        }
+      ],
+      "api": [
+        {
+          "kind": "types",
+          "path": "solid-js/types"
+        },
+        {
+          "kind": "types",
+          "path": "solid-js/store/types"
+        }
+      ]
     }
   ]
 }

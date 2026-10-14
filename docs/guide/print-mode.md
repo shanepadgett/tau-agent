@@ -36,4 +36,4 @@ Print mode runs one prompt, prints the answer and exits, so you can use Tau in s
 - Output files live in `$TMPDIR/tau/<session>/`, or the OS default temporary folder when `TMPDIR` is unset. Directories are private (`0700`), files are private (`0600`), and Tau does not remove them. The OS may remove them; a saved session still keeps its preview text.
 - Shell output files keep the whole stream received before exit, timeout or interruption. Script console capture stops at 10 MB (10,485,760 bytes), 65,536 entries, or a message too large to format safely. The script continues, but later console messages are discarded. Returned script output is also limited to 10 MB; script output files keep only what the interpreter returned. Discarded script output cannot be recovered. These limits do not bound all script allocations or oversized returned-value formatting.
 - When output cannot be saved, the call fails with a storage error. Check the output folder's permissions and free disk space.
-- There is no interactive mode yet.
+- To chat with Tau instead, run `tau` with no `-p` (see [chat.md](chat.md)).

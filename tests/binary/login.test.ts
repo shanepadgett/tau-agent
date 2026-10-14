@@ -34,9 +34,12 @@ const buildTau = Effect.fn("buildTau")(function* (directory: string) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const binary = join(directory, "tau");
 
+  // Without the flag, the binary reads the `bunfig.toml` of the folder it runs in, and fails on
+  // this repository's preload, which only Bun running from source can resolve.
   const build = ChildProcess.make("bun", [
     "build",
     "--compile",
+    "--no-compile-autoload-bunfig",
     "src/cli/main.ts",
     "--outfile",
     binary,

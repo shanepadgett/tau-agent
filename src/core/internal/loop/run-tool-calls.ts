@@ -33,7 +33,12 @@ const runToolCall = <R>(run: RunContext<R>, call: ToolCall, entries: readonly En
       { type: "tool-started", callId: call.id },
     ]);
 
-    yield* run.emit({ type: "tool-started", callId: call.id, summary: summary(call) });
+    yield* run.emit({
+      type: "tool-started",
+      callId: call.id,
+      name: call.name,
+      summary: summary(call),
+    });
 
     const outcome = yield* Option.match(toolNamed(run.tools, call.name), {
       onNone: () => Effect.succeed(unknownTool(run, call)),

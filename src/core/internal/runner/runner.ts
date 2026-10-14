@@ -28,11 +28,13 @@ import { ConversationId } from "../../../ai/ConversationId.ts";
 import type { Models } from "../../../ai/Models.ts";
 import type { WriteQueue } from "../../../sandbox/WriteQueue.ts";
 import type { RunningProcess, SessionId } from "../../../session/Entry.ts";
+import type { SessionStoreError } from "../../../session/SessionStoreError.ts";
 import type { Session, Sessions } from "../../../session/Sessions.ts";
 import type { SkillUses } from "../../../session/SkillUses.ts";
 import type { AgentEvent, Command, RunEnd } from "../../Client.ts";
 import type { ContextMethod } from "../../ContextMethod.ts";
 import { historyFunction } from "../context/history.ts";
+import { historyEvents } from "./history-events.ts";
 import { PROCESS_GROUP, processFunctions } from "../process/process-functions.ts";
 import { processNotices } from "../process/process-notices.ts";
 import type { UserInstructions } from "../../UserInstructions.ts";
@@ -70,6 +72,8 @@ export type OpenSession = {
   /** Events of the session from now on. Subscribe before sending, to miss nothing. */
   readonly subscribe: Effect.Effect<PubSub.Subscription<AgentEvent>, never, Scope.Scope>;
   readonly send: (command: Command) => Effect.Effect<void>;
+  /** The saved runs of the session as events, oldest first, for a client that shows a resumed chat. */
+  readonly history: Effect.Effect<readonly AgentEvent[], SessionStoreError>;
 };
 
 type QueuedPrompt = Extract<Command, { type: "prompt" }>;
@@ -118,7 +122,13 @@ export const makeRunner = Effect.fn("makeRunner")(function* (services: RunServic
   const send = (command: Command) =>
     command.type === "cancel" ? cancel : Queue.offer(prompts, command).pipe(Effect.asVoid);
 
-  const opened: OpenSession = { session, subscribe: PubSub.subscribe(events), send };
+  const opened: OpenSession = {
+    session,
+    subscribe: PubSub.subscribe(events),
+    send,
+    history: services.sessions.entries(id, 0).pipe(Effect.map(historyEvents)),
+  };
+
   return opened;
 });
 
@@ -136,6 +146,7 @@ const runPrompt = ({ services, session, processes, events }: SessionRuns, prompt
     const { sessions, models } = services;
     const { model, timeouts, maxTurns } = prompt.options;
     yield* sessions.append(session.id, [{ type: "user", text: prompt.text }]);
+    yield* PubSub.publish(events, { type: "run-started", prompt: prompt.text });
     const { root, folders } = yield* projectFolders(session.directory);
     const skills = yield* runSkills(services, session.directory, folders);
     const checks = yield* readProjectChecks(session.directory, root);

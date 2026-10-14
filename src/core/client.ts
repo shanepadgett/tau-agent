@@ -15,8 +15,15 @@ export type Command =
   | { readonly type: "cancel" };
 
 export type AgentEvent =
+  /** A prompt's run starts. Prompts sent during a run wait in order, so this tells a client which one started. */
+  | { readonly type: "run-started"; readonly prompt: string }
   | { readonly type: "text"; readonly delta: string }
-  | { readonly type: "tool-started"; readonly callId: string; readonly summary: string }
+  | {
+      readonly type: "tool-started";
+      readonly callId: string;
+      readonly name: string;
+      readonly summary: string;
+    }
   | { readonly type: "tool-ended"; readonly callId: string; readonly isFailure: boolean }
   /**
    * The prompts that were waiting when the user cancelled. They did not run; a client gives them
@@ -50,3 +57,25 @@ export type RunEnd =
   | { readonly reason: "answered" | "turn-limit" | "output-limit" }
   | { readonly reason: "repeated-call"; readonly call: string }
   | { readonly reason: "checks-failed"; readonly checks: readonly string[] };
+
+type RunEnded = Extract<AgentEvent, { type: "run-ended" }>;
+
+/** What to tell the user about how a run ended. An answer needs no message. */
+export const runEndMessage = (end: RunEnded): string | undefined => {
+  switch (end.reason) {
+    case "answered":
+      return undefined;
+    case "cancelled":
+      return "Cancelled.";
+    case "failed":
+      return `The run failed: ${end.error}`;
+    case "turn-limit":
+      return "The run reached maxTurns in ~/.tau/settings.json.";
+    case "output-limit":
+      return "The reply reached the model's output limit, so the answer is cut short.";
+    case "repeated-call":
+      return `The model sent the same failing call again and again, so Tau stopped the run: ${end.call}`;
+    case "checks-failed":
+      return `The project's checks still fail after the model's tries to fix them: ${end.checks.join(", ")}.`;
+  }
+};
