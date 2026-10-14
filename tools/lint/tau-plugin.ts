@@ -21,6 +21,7 @@ import {
 import { noRestatingJsdoc, requireFileDoc } from "./jsdoc-rules.ts";
 import { noGenericFilenames } from "./no-generic-filenames.ts";
 import { noModuleLet } from "./no-module-let.ts";
+import { noReexportOnlyModules } from "./no-reexport-only-modules.ts";
 import { noVagueIdentifiers } from "./naming-rules.ts";
 import {
   noBooleanParameters,
@@ -50,6 +51,7 @@ const plugin: Plugin = {
     "no-narration-comments": noNarrationComments,
     "no-object-parameters": noObjectParameters,
     "no-optional-parameters": noOptionalParameters,
+    "no-reexport-only-modules": noReexportOnlyModules,
     "no-restating-jsdoc": noRestatingJsdoc,
     "no-runtime-typeof": noRuntimeTypeof,
     "no-silent-error-swallow": noSilentErrorSwallow,

@@ -22,6 +22,7 @@
         "tau/no-fetch": "error",
         "tau/no-spawn": "error",
         "tau/no-generic-filenames": "error",
+        "tau/no-reexport-only-modules": "error",
         "tau/no-reflect": "error",
         // Readability. Our rules cover what the native rules cannot see; native rules
         // are only turned on here.

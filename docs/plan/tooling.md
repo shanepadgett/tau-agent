@@ -36,6 +36,7 @@ Decision: enforce every readability rule a syntax check can decide. Rules are cl
 | Flow | no filter-then-map (lazy iterators allowed); no `...(cond ? {} : {x})`; no `reduce` beyond simple arithmetic; no `forEach`; no accumulating spread | `tau/no-array-filter-map`, `tau/no-conditional-empty-spread`, native `unicorn/*`, `oxc/*` |
 | Flow | no nested ternary, negated condition, `else` after `return`, lonely `if`, parameter reassignment; depth ≤ 3, parameters ≤ 4, function ≤ 60 lines | native |
 | Naming | names of two or more characters (single capitals allowed for generics); no magic numbers other than -1, 0, 1, 2; no `utils`/`helpers` files | native `id-length`, `no-magic-numbers`; `tau/no-generic-filenames` |
+| Modules | no module that only re-exports other modules; import each name from the module that defines it | `tau/no-reexport-only-modules` |
 | Evidence | no `in` key probes (type guards excepted); no `const x: unknown = ...` asserted back with `as` | `tau/no-in-operator`, `tau/no-widen-then-assert` |
 | Parameters | no boolean parameters; take a named option or split the function; no optional (`?`) parameters | `tau/no-boolean-parameters`, `tau/no-optional-parameters` |
 | Naming | no `data`, `temp`, `result`, `obj` and similar names on variables and parameters (destructured names exempt) | `tau/no-vague-identifiers` |
@@ -45,7 +46,7 @@ Decision: enforce every readability rule a syntax check can decide. Rules are cl
 | Spacing | a multiline statement is separated from its neighbours by a blank line; guard clauses and short bindings stay grouped; overloads and imports are exempt; autofix | `tau/require-readable-spacing` |
 
 - **Effect rules mostly belong to the compiler.** `@effect/tsgo` already ships diagnostics for most of oxslop's Effect rules, written for Effect 4: `tryCatchInEffectGen`, `unnecessaryEffectGen`, `multipleEffectProvide`, `strictEffectProvide`, `layerMergeAllWithDependencies`, `schemaStructWithTag`, `catchUnfailableEffect`, `outdatedApi`. These are `error` in `tsconfig.json`, and `asyncFunction` and `newPromise` are also `error` for `src/**` only through a per-file override, because `tools/` and `tests/` use `async` freely. `asyncFunction` flags `Effect.tryPromise(async () => ...)` as well, so Promise interop is written as `Effect.tryPromise(() => promise)`. `effectFnOpportunity` never reports under `tsc`, even at `error`; `tau/prefer-effect-fn` replaces it. `strictEffectProvide` stays off: it cannot be scoped to entry points, so it flags the one legitimate `Effect.provide` in `cli`. Our lint rules cover only what the compiler does not.
-- **Not carried over from oxslop:** `no-disable-validation` (the option no longer exists in Effect 4), `prefer-option-from-nullable` (renamed `Option.fromNullishOr`; add if `src/` shows the pattern), `no-switch`/`no-try-catch` as lint (conflicts with `switch-exhaustiveness-check`; the compiler covers try/catch in generators), `no-reexport-only-modules` (layers use `index.ts`), `no-comments`, `pipe-max-arguments`, `no-known-value-widening`.
+- **Not carried over from oxslop:** `no-disable-validation` (the option no longer exists in Effect 4), `prefer-option-from-nullable` (renamed `Option.fromNullishOr`; add if `src/` shows the pattern), `no-switch`/`no-try-catch` as lint (conflicts with `switch-exhaustiveness-check`; the compiler covers try/catch in generators), `no-comments`, `pipe-max-arguments`, `no-known-value-widening`.
 - **From the main-branch anti-slop doc.** Built: `error-needs-cause`, `no-commented-code`, `no-restating-jsdoc` and `no-internal-references`. `no-reduce-copy` is covered by `unicorn/no-array-reduce` and `oxc/no-accumulating-spread`. `timer-needs-named-constant` and `unit-in-policy-names` wait for real cases, since `Duration` carries its unit and `restricted-api` bans raw timers. Its layer, island, route, Fresh and live-region rules do not apply; fallow boundaries own layer imports.
 - **Not built yet:** `shape` in names, and rules for "why, not what" comments beyond narration.
 - **Spacing and the formatter.** A dry run of anti-slop's spacing rule found no conflict with `oxfmt`; ours is narrower and the integration test checks that `fix:lint` output passes `check:fmt`.
@@ -95,6 +96,8 @@ Plans name the reuse decision for each helper; helpers live beside the concept t
 
 RepoReuse (arXiv 2609.35357) reported duplicated logic in 50.8% of agent task chains by turn 5. No study yet shows that an index or reuse prompt cuts duplication; fallow's duplication check does not establish semantic equivalence. Revisit a generated map only when missed discovery shows a need.
 
+Maintenance cost could be measured per change: tokens spent, files revisited and time spent verifying. Rising numbers would show the code getting harder to change.
+
 ## Standards to write
 
-- Adding a layer: folder, `index.ts`, fallow boundaries and entry, the import rule in architecture.md. Written in the scaffolding plan.
+- Adding a layer: folder, fallow boundaries and entry, the import rule in architecture.md. Written in the scaffolding plan.
