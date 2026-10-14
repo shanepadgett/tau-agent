@@ -1,6 +1,6 @@
 # Build step 5: background tasks and compaction
 
-Status: round 1 (architecture) decided, 2026-10-13. Round 2 (the code plan for slice 5a) is decided in [compaction-5a.md](compaction-5a.md). The research behind it is in [compaction-research.md](../compaction-research.md).
+Status: rounds 1–2 decided; slice 5a implemented and repository checks passed, 2026-10-14. Round 3 (dreaming) is implemented and repository checks are pending; its plan is in [compaction-round3.md](compaction-round3.md). Replay is deferred. The research behind the design is in [compaction-research.md](../compaction-research.md). Live calls remain deferred.
 
 **What the user gets:** the chat never stops for compaction. While the agent works, a cheap model writes notes on older entries in the background. When the agent decides to compact, it writes a handoff, and its context becomes the notes, the recent raw entries and the handoff at once, with most of the prompt cache intact. The agent can look up the raw entries behind any note. Slice 5b lets the model start long-running commands, such as a dev server, and come back to them.
 
@@ -68,7 +68,7 @@ flowchart LR
 | System | Change |
 | --- | --- |
 | `session` | expanded in 5a: separate append-only `note` table, checkpoint details in tool results, hidden `nudge` entries and reusable message builders; forks copy notes within their entry range |
-| `core` | expanded in 5a: `ContextMethod` service (default: notes), session-scoped note writer, `checkpoint` tool and `history` script function, context-stage nudges and forced-call blocking; dreaming and replay follow in round 3 |
+| `core` | expanded in 5a: `ContextMethod` service (default: notes), session-scoped note writer, `checkpoint` tool and `history` script function, context-stage nudges and forced-call blocking; round 3 adds dreaming and the context worker |
 | `ai` | expanded: picking the provider's cheap model |
 | `proc` | expanded in slice 5b: process sessions |
 
@@ -103,6 +103,17 @@ flowchart LR
 
 ## Round 2: code plan for 5a
 
-Implemented in [compaction-5a.md](compaction-5a.md): the note-table migration and fork copying, checkpoint metadata, context method injection, scoped note writing, same-route model selection, the `history` function and context-stage nudges. Context estimates use total input plus output and later growth; immediately after a checkpoint they include the pinned notes, raw tail, instructions and handoff.
+Implemented: the note-table migration and fork copying, checkpoint metadata, context method injection, scoped note writing, same-route model selection, the `history` function and context-stage nudges.
 
-Round 3 plans dreaming and replay comparisons; slice 5b plans process sessions. Automatic overflow recovery remains deferred.
+| Boundary | Lasting decision |
+| --- | --- |
+| Storage | Notes are not entries: a background entry would affect `needsReply` and could end the run. Forks copy only notes whose covered entries are within the fork range, keeping note numbers |
+| Checkpoint | A successful tool result pins note numbers, `noteTokens`, `tailFrom` and the handoff. Reject mixed calls and handoffs outside 1–24,000 characters; never wait for a note in flight |
+| Injection | `ContextMethod.forRun` supplies the view, tools, nudge, operations and reply policy; `background` owns session-scoped work. `wholeHistory` supplies the ordinary context view without checkpoint behavior |
+| Note writing | Wake on session opening, completed tools and run end. Cover at least 16k estimated tokens, keep the newest message raw, and never split a call from its result. Read the full model-visible transcript plus earlier notes; aim for notes of at most 2k tokens |
+| Model selection | Same route only: `claude-haiku-5-5` on Anthropic, `gpt-6-luna` elsewhere; fall back to the session model if the route does not offer the note model. Availability on subscription routes awaits live checks |
+| Settings | `compaction.method`: `notes` or `off`; `budgetTokens`: default 200k; `notesStartTokens`: default 50k |
+| Estimates | Use total input plus output and later growth; input already includes cache reads and writes. Immediately after checkpoint, estimate pinned notes, instructions, raw tail and handoff, not the checkpoint call and result |
+| Nudges | Save each reached stage once; it persists until checkpoint even if a later usage report is smaller. At forced, fail other tools without changing their definitions |
+
+Round 3 plans dreaming; slice 5b plans process sessions. Replay comparisons and automatic overflow recovery are deferred ([deferred.md](../deferred.md)).

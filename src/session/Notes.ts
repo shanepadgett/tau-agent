@@ -1,4 +1,7 @@
-/** Stores append-only notes on entry ranges in the session database. Forks keep their note numbers. */
+/**
+ * Stores append-only notes on entry ranges, and the memories that fold older notes, in the session
+ * database. Forks keep their note and memory numbers.
+ */
 
 import { Context, DateTime, Effect, Schema } from "effect";
 import type { ModelRef } from "../ai/Catalog.ts";
@@ -13,6 +16,12 @@ export const NOTE_TABLE =
   "text TEXT NOT NULL, route TEXT NOT NULL, model TEXT NOT NULL, at INTEGER NOT NULL, " +
   "PRIMARY KEY (session_id, number)) STRICT";
 
+export const MEMORY_TABLE =
+  "CREATE TABLE memory (session_id TEXT NOT NULL REFERENCES session (id), " +
+  "number INTEGER NOT NULL, through_note INTEGER NOT NULL, through_entry INTEGER NOT NULL, " +
+  "text TEXT NOT NULL, route TEXT NOT NULL, model TEXT NOT NULL, at INTEGER NOT NULL, " +
+  "PRIMARY KEY (session_id, number)) STRICT";
+
 type NewNote = {
   readonly from: number;
   readonly through: number;
@@ -21,6 +30,37 @@ type NewNote = {
 };
 
 export type Note = NewNote & { readonly number: number; readonly at: DateTime.Utc };
+
+/** `parent` is the number of the newest memory the writer read, or none. */
+type NewMemory = {
+  readonly parent: number | undefined;
+  readonly throughNote: number;
+  readonly text: string;
+  readonly model: ModelRef;
+};
+
+/** Folds notes 1 through `throughNote`, which end at entry `throughEntry`. A newer memory replaces it. */
+export type Memory = Omit<NewMemory, "parent"> & {
+  readonly number: number;
+  readonly throughEntry: number;
+  readonly at: DateTime.Utc;
+};
+
+class MemoryConflict extends Schema.TaggedError<MemoryConflict>()("MemoryConflict", {
+  session: SessionId,
+  reason: Schema.Literals(["newer memory exists", "note missing", "no new notes"]),
+}) {}
+
+const MemoryRow = Schema.Struct({
+  session_id: SessionId,
+  number: Schema.Int,
+  through_note: Schema.Int,
+  through_entry: Schema.Int,
+  text: Schema.String,
+  route: RouteId,
+  model: Schema.String,
+  at: Schema.DateTimeUtcFromMillis,
+});
 
 const NoteRow = Schema.Struct({
   session_id: SessionId,
@@ -38,6 +78,12 @@ export class Notes extends Context.Service<
   {
     readonly append: (session: SessionId, note: NewNote) => Effect.Effect<Note, SessionStoreError>;
     readonly list: (session: SessionId) => Effect.Effect<readonly Note[], SessionStoreError>;
+    readonly memories: (session: SessionId) => Effect.Effect<readonly Memory[], SessionStoreError>;
+    /** Fails when a newer memory exists, the note is missing, or the memory folds no new note. */
+    readonly appendMemory: (
+      session: SessionId,
+      memory: NewMemory,
+    ) => Effect.Effect<Memory, MemoryConflict | SessionStoreError>;
   }
 >()("tau/session/Notes") {}
 
@@ -77,8 +123,82 @@ export const makeNotes = (database: Database, path: string) => {
       )
       .pipe(Effect.mapError(fail));
 
-  return Notes.of({ append, list });
+  const memories = (session: SessionId) =>
+    database
+      .query("SELECT * FROM memory WHERE session_id = ? ORDER BY number", [session], MemoryRow)
+      .pipe(
+        Effect.map((rows) => rows.map(memoryFromRow)),
+        Effect.mapError(fail),
+      );
+
+  const appendMemory = (session: SessionId, memory: NewMemory) =>
+    database
+      .writeTransaction(
+        Effect.fn("Notes.appendMemory")(function* (transaction: Transaction) {
+          const newest = (yield* memories(session)).at(-1);
+
+          if (newest?.number !== memory.parent)
+            return yield* new MemoryConflict({ session, reason: "newer memory exists" });
+
+          const note = (yield* list(session)).find(({ number }) => number === memory.throughNote);
+
+          if (note === undefined)
+            return yield* new MemoryConflict({ session, reason: "note missing" });
+
+          if (memory.throughNote <= (newest?.throughNote ?? 0))
+            return yield* new MemoryConflict({ session, reason: "no new notes" });
+
+          return yield* insertMemory(transaction, { session, memory, newest, note });
+        }),
+      )
+      .pipe(Effect.catchTag("DatabaseError", (error) => Effect.fail(fail(error))));
+
+  return Notes.of({ append, list, memories, appendMemory });
 };
+
+type InsertedMemory = {
+  readonly session: SessionId;
+  readonly memory: NewMemory;
+  readonly newest: Memory | undefined;
+  readonly note: Note;
+};
+
+const insertMemory = Effect.fn("Notes.insertMemory")(function* (
+  transaction: Transaction,
+  { session, memory, newest, note }: InsertedMemory,
+) {
+  const number = (newest?.number ?? 0) + 1;
+  const at = yield* DateTime.now;
+
+  yield* transaction.run("INSERT INTO memory VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [
+    session,
+    number,
+    memory.throughNote,
+    note.through,
+    memory.text,
+    memory.model.route,
+    memory.model.model,
+    DateTime.toEpochMillis(at),
+  ]);
+
+  return {
+    number,
+    throughNote: memory.throughNote,
+    throughEntry: note.through,
+    text: memory.text,
+    model: memory.model,
+    at,
+  };
+});
+
+const memoryFromRow = (row: typeof MemoryRow.Type): Memory => ({
+  number: row.number,
+  throughNote: row.through_note,
+  throughEntry: row.through_entry,
+  text: row.text,
+  model: { route: row.route, model: row.model },
+  at: row.at,
+});
 
 const noteFromRow = (row: typeof NoteRow.Type): Note => ({
   number: row.number,

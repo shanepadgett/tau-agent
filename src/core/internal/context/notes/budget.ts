@@ -49,7 +49,7 @@ export const contextSize = (entries: readonly Entry[]) => {
 
   if (checkpoint === undefined) return estimatedTokens(entries);
   // The pinned note estimate is saved with the checkpoint so loop operations need only entries.
-  return estimatedPromptTokens(notesView("", entries, [])) + checkpoint.details.noteTokens;
+  return estimatedPromptTokens(notesView("", entries, [], [])) + checkpoint.details.noteTokens;
 };
 
 export const contextStage = (entries: readonly Entry[], budgetTokens: number): ContextStage => {

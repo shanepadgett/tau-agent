@@ -1,22 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { BunServices } from "@effect/platform-bun";
 import { Context, Deferred, Effect, FileSystem, Layer, Option, Schema, Stream } from "effect";
-import { AiError, type Prompt, type Response } from "effect/ai";
-import { Catalog, type ModelRef, UnknownModel } from "../../src/ai/Catalog.ts";
-import type { ModelProfile } from "../../src/ai/ModelProfile.ts";
-import { builtInRoutes } from "../../src/ai/Routes.ts";
-import { ContextMethod } from "../../src/core/ContextMethod.ts";
+import { AiError, type Response } from "effect/ai";
 import { CompactionSettings, ContextSettings } from "../../src/core/ContextSettings.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { Settings } from "../../src/host/Settings.ts";
-import type { EntryBody } from "../../src/session/Entry.ts";
 import { Notes } from "../../src/session/Notes.ts";
 import { Sessions } from "../../src/session/Sessions.ts";
 import { transcript } from "../../src/session/transcript.ts";
 import {
   options,
   prompt,
-  type Reply,
   isRunEnd,
   runEnd,
   runReply,
@@ -26,81 +20,16 @@ import {
   userTexts,
   withHarness,
 } from "../support/agent-harness.ts";
-
-const route = builtInRoutes.find((candidate) => candidate.id === "anthropic");
-if (route === undefined) throw new Error("Anthropic is a built-in route.");
-
-const profile: ModelProfile = {
-  id: "scripted",
-  name: "Scripted",
-  protocol: "openaiChat",
-  contextTokens: 128000,
-  outputTokens: 8000,
-  price: undefined,
-  longContextPrice: undefined,
-  supports: { tools: true, structuredOutput: false, reasoning: false, images: false },
-};
-
-const contextLayer = (
-  settings: CompactionSettings,
-  quick = "available",
-  limits: ModelProfile = profile,
-) =>
-  ContextMethod.layer.pipe(
-    Layer.provide(Layer.succeed(ContextSettings, settings)),
-    Layer.provide(
-      Layer.succeed(
-        Catalog,
-        Catalog.of({
-          model: (ref: ModelRef) =>
-            ref.model === route.noteModel && quick === "missing"
-              ? Effect.fail(
-                  new UnknownModel({ route: ref.route, model: ref.model, message: "Not offered." }),
-                )
-              : Effect.succeed({ route, profile: limits }),
-          decisionModel: () => Effect.die("Compaction uses chat models."),
-          claudeCodeVersion: Effect.succeed("test"),
-          refreshIfStale: Effect.void,
-        }),
-      ),
-    ),
-  );
-
-const assistant = (text: string): EntryBody => ({
-  type: "assistant",
-  model: options.model,
-  interrupted: false,
-  parts: [{ type: "text", text, providerData: {} }],
-});
-
-const checkpointReply = (id: string, handoff = "Keep working on the recent request."): Reply =>
-  Stream.make<Response.StreamPartEncoded[]>({
-    type: "tool-call",
-    id,
-    name: "checkpoint",
-    params: { handoff },
-  });
-
-const counted = (reply: Reply, input: number, cacheRead = 0): Reply =>
-  Stream.concat(
-    reply,
-    Stream.make<Response.StreamPartEncoded[]>({
-      type: "finish",
-      reason: "tool-calls",
-      usage: { inputTokens: { total: input, cacheRead }, outputTokens: { total: 0 } },
-    }),
-  );
-
-const waitForNotes = (
-  notes: Notes["Service"],
-  session: Parameters<Notes["Service"]["list"]>[0],
-  count: number,
-) =>
-  notes
-    .list(session)
-    .pipe(Effect.repeat({ until: (saved) => saved.length >= count }), Effect.timeout("5 seconds"));
-
-const promptText = (sent: Prompt.Prompt | undefined) => JSON.stringify(sent?.content);
+import {
+  assistant,
+  checkpointReply,
+  contextLayer,
+  counted,
+  profile,
+  promptText,
+  route,
+  waitForNotes,
+} from "../support/compaction.ts";
 
 describe("compaction", () => {
   test("settings supply compaction defaults and read the user's selected method and thresholds", () =>

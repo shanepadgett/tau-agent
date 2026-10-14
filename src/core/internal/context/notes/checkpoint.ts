@@ -7,7 +7,7 @@ import type { Notes } from "../../../../session/Notes.ts";
 import type { ToolCall } from "../../loop/tool-history.ts";
 import type { ModelTool, ToolOutcome } from "../../tools/model-tool.ts";
 import { estimatedPromptTokens } from "./budget.ts";
-import { notePrefix } from "./view.ts";
+import { summaryPrefix } from "./view.ts";
 
 const MAX_HANDOFF_CHARACTERS = 24_000;
 
@@ -18,7 +18,7 @@ const Parameters = Schema.Struct({
 export const checkpointTool = (session: SessionId, notes: Notes["Service"]): ModelTool<never> => ({
   definition: Tool.dynamic("checkpoint", {
     description:
-      "Compact your context instantly from the saved background notes, recent entries and your handoff. Call this tool alone. The handoff must state the goal, active work, decisions, blockers and exact next action, in at most 24000 characters. Old entries stay in storage; read the entries behind a note with tools.history in run.",
+      "Compact your context instantly from the saved background notes and memory, recent entries and your handoff. Call this tool alone. The handoff must state the goal, active work, decisions, blockers and exact next action, in at most 24000 characters. Old entries stay in storage; read the entries behind a note with tools.history in run.",
     parameters: Tool.getJsonSchemaFromSchema(Parameters),
     success: Schema.String,
   }).annotate(Tool.Strict, false),
@@ -39,7 +39,13 @@ export const checkpointTool = (session: SessionId, notes: Notes["Service"]): Mod
       if (calls.length !== 1)
         return failedCheckpoint("Call checkpoint alone, without any other tool call in the reply.");
 
-      const saved = (yield* notes.list(session)).filter((note) => note.through < reply.number);
+      const memory = (yield* notes.memories(session)).findLast(
+        (saved) => saved.throughEntry < reply.number,
+      );
+
+      const saved = (yield* notes.list(session)).filter(
+        (note) => note.number > (memory?.throughNote ?? 0) && note.through < reply.number,
+      );
 
       return {
         text: "Checkpoint saved. Your next model call starts from your notes, recent entries and this handoff.",
@@ -47,9 +53,10 @@ export const checkpointTool = (session: SessionId, notes: Notes["Service"]): Mod
         details: {
           tool: "checkpoint" as const,
           handoff: parsed.success.handoff,
+          memory: memory?.number,
           notes: saved.map((note) => note.number),
-          noteTokens: estimatedPromptTokens(notePrefix(saved)),
-          tailFrom: (saved.at(-1)?.through ?? 0) + 1,
+          noteTokens: estimatedPromptTokens(summaryPrefix(memory, saved)),
+          tailFrom: (saved.at(-1)?.through ?? memory?.throughEntry ?? 0) + 1,
         },
       };
     },

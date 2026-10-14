@@ -9,7 +9,7 @@ import { type Database, openDatabase, type Transaction } from "../database/Datab
 import { TauHome } from "../database/TauHome.ts";
 import { type Entry, EntryBody, SessionId } from "./Entry.ts";
 import { makeSkillUses, SKILL_USE_TABLE, SkillUses } from "./SkillUses.ts";
-import { makeNotes, NOTE_TABLE, Notes } from "./Notes.ts";
+import { makeNotes, MEMORY_TABLE, NOTE_TABLE, Notes } from "./Notes.ts";
 import { SessionStoreError } from "./SessionStoreError.ts";
 import { CHECK_REPORT_TEXT_MIGRATION } from "./internal/check-report-migration.ts";
 
@@ -29,6 +29,7 @@ const MIGRATIONS = [
     "'$.files', '$.script') WHERE body ->> '$.type' = 'tool-result'",
   CHECK_REPORT_TEXT_MIGRATION,
   NOTE_TABLE,
+  MEMORY_TABLE,
 ];
 
 const Origin = Schema.Union([
@@ -213,6 +214,12 @@ const forkWithin = (database: Database, newSession: NewSession, from: SessionId,
     yield* transaction.run(
       "INSERT INTO note SELECT ?, number, from_entry, through_entry, text, route, model, at " +
         "FROM note WHERE session_id = ? AND through_entry <= ?",
+      [branch.id, from, through],
+    );
+
+    yield* transaction.run(
+      "INSERT INTO memory SELECT ?, number, through_note, through_entry, text, route, model, at " +
+        "FROM memory WHERE session_id = ? AND through_entry <= ?",
       [branch.id, from, through],
     );
 

@@ -105,6 +105,7 @@ const ChecksDetails = Schema.Struct({
 const CheckpointDetails = Schema.Struct({
   tool: Schema.Literal("checkpoint"),
   handoff: Schema.String,
+  memory: Schema.optional(Schema.Int),
   notes: Schema.Array(Schema.Int),
   noteTokens: Schema.Int,
   tailFrom: Schema.Int,

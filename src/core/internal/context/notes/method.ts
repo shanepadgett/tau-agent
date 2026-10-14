@@ -10,16 +10,16 @@ import { needsReply } from "../../loop/tool-history.ts";
 import type { RunMethod } from "../run-method.ts";
 import { contextBudget, contextStage } from "./budget.ts";
 import { checkpointTool } from "./checkpoint.ts";
-import { makeNoteWriter } from "./note-writer.ts";
 import { stageNudge, refuseCallsWhenForced } from "./stage.ts";
 import { notesView } from "./view.ts";
+import { makeContextWorker } from "./worker.ts";
 
 export const makeNotesMethod = Effect.fn("makeNotesMethod")(function* () {
   const sessions = yield* Sessions;
   const notes = yield* Notes;
   const catalog = yield* Catalog;
   const settings = yield* ContextSettings;
-  const background = yield* makeNoteWriter();
+  const background = yield* makeContextWorker();
 
   const forRun = Effect.fn("notesForRun")(function* (session: SessionId, model: ModelRef) {
     const { profile } = yield* catalog.model(model);
@@ -27,7 +27,9 @@ export const makeNotesMethod = Effect.fn("makeNotesMethod")(function* () {
 
     const method: RunMethod = {
       view: (soul, entries) =>
-        notes.list(session).pipe(Effect.map((saved) => notesView(soul, entries, saved))),
+        Effect.all([notes.list(session), notes.memories(session)]).pipe(
+          Effect.map(([saved, memories]) => notesView(soul, entries, saved, memories)),
+        ),
       tools: [checkpointTool(session, notes)],
       nudge: (entries) => stageNudge(entries, budgetTokens),
       operations: [refuseCallsWhenForced({ session, sessions, budgetTokens })],

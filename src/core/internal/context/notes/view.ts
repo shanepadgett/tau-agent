@@ -1,4 +1,4 @@
-/** Rebuilds a checkpoint's stable note prefix and its unsummarized conversation. */
+/** Rebuilds a checkpoint's stable memory and note prefix and its unsummarized conversation. */
 
 import { Prompt } from "effect/ai";
 import {
@@ -8,7 +8,7 @@ import {
   withCacheMark,
 } from "../../../../session/ContextView.ts";
 import type { CheckpointDetails, Entry } from "../../../../session/Entry.ts";
-import type { Note } from "../../../../session/Notes.ts";
+import type { Memory, Note } from "../../../../session/Notes.ts";
 
 type SavedCheckpoint = { readonly entry: Entry; readonly details: CheckpointDetails };
 
@@ -28,16 +28,18 @@ export const notesView = (
   soul: string,
   entries: readonly Entry[],
   notes: readonly Note[],
+  memories: readonly Memory[],
 ): Prompt.Prompt => {
   const checkpoint = latestCheckpoint(entries);
   if (checkpoint === undefined) return contextView(soul, entries);
 
   const selected = notes.filter((note) => checkpoint.details.notes.includes(note.number));
+  const memory = memories.find(({ number }) => number === checkpoint.details.memory);
 
-  const messages: Prompt.Message[] = [...notePrefix(selected).content];
+  const messages: Prompt.Message[] = [...summaryPrefix(memory, selected).content];
 
-  const lastNote = messages.pop();
-  if (lastNote !== undefined) messages.push(withCacheMark(lastNote));
+  const lastSummary = messages.pop();
+  if (lastSummary !== undefined) messages.push(withCacheMark(lastSummary));
 
   const instructions = entries.flatMap(({ number, body }) =>
     number < checkpoint.details.tailFrom &&
@@ -89,9 +91,17 @@ export const notesView = (
 
 const textMessage = (text: string) => Prompt.userMessage({ content: [Prompt.textPart({ text })] });
 
-export const notePrefix = (notes: readonly Note[]): Prompt.Prompt =>
-  Prompt.fromMessages(
-    notes.map((note) =>
+export const memoryText = (memory: Memory) =>
+  `Session memory of entries 1–${memory.throughEntry}:\n${memory.text}`;
+
+export const notesText = (notes: readonly Note[]) =>
+  notes.map((note) => `Entries ${note.from}–${note.through}:\n${note.text}`).join("\n\n");
+
+/** The memory first, then the notes after it. */
+export const summaryPrefix = (memory: Memory | undefined, notes: readonly Note[]): Prompt.Prompt =>
+  Prompt.fromMessages([
+    ...(memory === undefined ? [] : [textMessage(memoryText(memory))]),
+    ...notes.map((note) =>
       textMessage(`Notes on entries ${note.from}–${note.through}:\n${note.text}`),
     ),
-  );
+  ]);

@@ -1,6 +1,6 @@
 # Slice 5a, round 2: notes and checkpoints (code plan)
 
-Status: round 2 implemented, 2026-10-14. The approved verification fixes use `flatMap`, a named transaction effect, schema-based test JSON, explicit settings types, error narrowing and platform-service injection. The design is in [compaction.md](compaction.md). Dreaming and the replay tool are round 3. Live calls remain deferred.
+Status: archived, 2026-10-14. Slice 5a is implemented and repository checks passed; lasting decisions live in [work/compaction.md](../work/compaction.md) and [architecture.md](../architecture.md#core-ideas). Live calls remain deferred.
 
 **What the code can do afterwards:** a cheap model writes notes on older entries while the agent works; the agent calls `checkpoint` with a handoff and its next model call sees notes, recent entries and the handoff; nudges (hidden notes for the model) tell it when to checkpoint; a `run` script can read the raw entries behind a note. The method is one service, so tests and later methods swap it.
 
