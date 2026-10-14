@@ -52,6 +52,7 @@ let activeController: AbortController | undefined;
 
 export default function autoNameExtension(pi: ExtensionAPI): void {
 	pi.on("before_agent_start", (event, ctx) => {
+		if (!("prompt" in event)) return;
 		const prompt = buildNamingInput(event.prompt, [
 			...getBranchInjectedContexts(ctx.sessionManager.getBranch()),
 			...getPendingInjectedContexts(),

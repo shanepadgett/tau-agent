@@ -62,6 +62,7 @@ export function registerAnswerFirst(pi: ExtensionAPI, client: DecisionClient): v
 	pi.on("before_agent_start", async (event, ctx) => {
 		const request = pending;
 		pending = undefined;
+		if (!("prompt" in event)) return;
 		if (!request || !client.enabled("answerFirst")) return;
 		const result = await (request.prompt === event.prompt ? request : classify(event.prompt, ctx)).result;
 		if (result.status !== "ok" || ctx.signal?.aborted) return;

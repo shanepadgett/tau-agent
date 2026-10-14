@@ -140,6 +140,7 @@ export function registerRouting(
 		pending = { prompt: event.text, result: classify(event.text, ctx) };
 	});
 	pi.on("before_agent_start", async (event, ctx) => {
+		if (!("prompt" in event)) return;
 		if (!eligible || explicit || !client.enabled("routing")) return;
 		eligible = false;
 		const request = pending;
