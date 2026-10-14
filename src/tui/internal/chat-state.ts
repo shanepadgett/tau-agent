@@ -36,14 +36,20 @@ export type ChatState = {
   readonly queued: readonly QueuedPrompt[];
   readonly returned: ReturnedPrompts | undefined;
   readonly run: RunState;
+  /** What the supervisor last said about new code, for the line under the input. */
+  readonly restartNotice: string | undefined;
   readonly nextId: number;
 };
 
-/** An agent event, a prompt the user just sent, or a prompt the chat could not send, and why. */
+/**
+ * An agent event, a prompt the user just sent, a prompt the chat could not send and why, or news
+ * about a restart into new code.
+ */
 export type ChatAction =
   | AgentEvent
   | { readonly type: "prompt-sent"; readonly text: string }
-  | { readonly type: "prompt-refused"; readonly text: string; readonly reason: string };
+  | { readonly type: "prompt-refused"; readonly text: string; readonly reason: string }
+  | { readonly type: "restart-notice"; readonly text: string };
 
 type RunEnded = Extract<AgentEvent, { type: "run-ended" }>;
 
@@ -52,6 +58,7 @@ const EMPTY_CHAT: ChatState = {
   queued: [],
   returned: undefined,
   run: "idle",
+  restartNotice: undefined,
   nextId: 1,
 };
 
@@ -77,14 +84,9 @@ export const reduce = (state: ChatState, action: ChatAction): ChatState => {
         nextId: state.nextId + 1,
       };
     case "prompt-refused":
-      return add(
-        {
-          ...state,
-          returned: { id: state.nextId, prompts: [action.text] },
-          nextId: state.nextId + 1,
-        },
-        { kind: "notice", text: action.reason },
-      );
+      return refusePrompt(state, action.text, action.reason);
+    case "restart-notice":
+      return { ...state, restartNotice: action.text };
     case "run-started":
       return startRun(state, action.prompt);
     case "text":
@@ -136,6 +138,13 @@ const add = (state: ChatState, item: DistributiveOmit<ChatItem, "id">): ChatStat
 });
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+/** The prompt goes back to the editor, and the transcript says why. */
+const refusePrompt = (state: ChatState, text: string, reason: string): ChatState =>
+  add(
+    { ...state, returned: { id: state.nextId, prompts: [text] }, nextId: state.nextId + 1 },
+    { kind: "notice", text: reason },
+  );
 
 /** The first queued prompt with this text leaves the queue; a prompt from history was never queued. */
 const startRun = (state: ChatState, prompt: string): ChatState => {

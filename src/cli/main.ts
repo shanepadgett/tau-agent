@@ -13,6 +13,7 @@ import { credentialStoreLayer } from "../host/CredentialStore.ts";
 import { hostIdLayer } from "../host/HostId.ts";
 import { Settings } from "../host/Settings.ts";
 import { outputFolderLayer } from "../host/OutputFolder.ts";
+import { ReloadLink } from "../supervisor/ReloadLink.ts";
 import { showFailure } from "./internal/failure.ts";
 import { loginCommand, logoutCommand, terminalLoginPrompt } from "./internal/login.ts";
 import { rootCommand } from "./internal/root-command.ts";
@@ -25,6 +26,7 @@ const appLayer = Layer.mergeAll(
   outputFolderLayer,
   FetchHttpClient.layer,
   terminalLoginPrompt,
+  ReloadLink.layer,
 ).pipe(
   Layer.provideMerge(TauHome.at(join(homedir(), ".tau"))),
   Layer.provideMerge(BunServices.layer),
@@ -38,6 +40,7 @@ rootCommand.pipe(
     LoginFailed: showFailure,
     SettingsInvalid: showFailure,
     NoModel: showFailure,
+    TauCrashed: showFailure,
     // Ctrl+C in a prompt ends the command quietly, like Ctrl+C anywhere else.
     QuitError: () => Effect.interrupt,
   }),

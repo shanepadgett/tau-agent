@@ -39,6 +39,8 @@ const SettingsFile = Schema.Struct({
   ),
   /** `false` turns off every agents file, the user's and the project's. */
   agentsFiles: Schema.optional(Schema.Boolean),
+  /** `false` makes `/restart` the only way to restart into Tau's changed code. */
+  autoRestart: Schema.optional(Schema.Boolean),
   compaction: Schema.optional(CompactionSettings),
 });
 
@@ -63,13 +65,15 @@ export class Settings extends Context.Service<
     readonly run: RunSettings;
     /** Whether Tau reads agents files. */
     readonly agentsFiles: boolean;
+    /** Whether Tau restarts into its changed code by itself when it is idle. */
+    readonly autoRestart: boolean;
   }
 >()("tau/host/Settings") {
   /** Reads `settings.json` in Tau's home folder once, and gives the run settings and the route table. */
   static readonly layer = Layer.effectContext(
     TauHome.use(({ directory }) => readSettingsFile(join(directory, "settings.json"))).pipe(
-      Effect.map(({ routes, routeSettings, run, agentsFiles, compaction }) =>
-        Context.make(Settings, { run, agentsFiles }).pipe(
+      Effect.map(({ routes, routeSettings, run, agentsFiles, autoRestart, compaction }) =>
+        Context.make(Settings, { run, agentsFiles, autoRestart }).pipe(
           Context.add(RouteTable, { routes, settings: routeSettings }),
           Context.add(ContextSettings, compaction),
         ),
@@ -83,6 +87,7 @@ type SettingsFileContent = {
   readonly routeSettings: ReadonlyMap<RouteId, RouteSettings>;
   readonly run: RunSettings;
   readonly agentsFiles: boolean;
+  readonly autoRestart: boolean;
   readonly compaction: CompactionSettings;
 };
 
@@ -102,6 +107,7 @@ const readSettingsFile = Effect.fn("readSettingsFile")(function* (path: string) 
     routeSettings: new Map(),
     run: noRunSettings,
     agentsFiles: true,
+    autoRestart: true,
     compaction: {},
   };
 
@@ -142,6 +148,7 @@ const readSettingsFile = Effect.fn("readSettingsFile")(function* (path: string) 
     routeSettings,
     run,
     agentsFiles: file.agentsFiles ?? true,
+    autoRestart: file.autoRestart ?? true,
     compaction: file.compaction ?? {},
   };
 

@@ -35,6 +35,8 @@ Times are from the compiled binary, from one run. `bun` runs differ by under 10 
 - **OpenTUI catches uncaught errors** and shows them in its console overlay instead of exiting. A thrown error does not crash the child; only a hard exit or a signal does.
 - **The supervisor restores the terminal after a hard crash.** It writes the reset sequences for the screen modes. The raw terminal mode was also restored when the supervisor exited, most likely by Bun's own exit handling, since the supervisor never changes it. That cause was not tested separately.
 - The supervisor ignores `SIGINT`, because Ctrl-C between two children reaches the whole process group.
+- **A compiled binary can start itself with IPC** (`ipc-self.ts`, compiled, run from `/tmp`). The child gets `process.send` and the arguments after the binary's path, and a message goes each way. A released Tau can supervise itself without `BUN_BE_BUN=1`.
+- **`bun --config=<empty bunfig.toml> <bundle>` ignores the current folder's `bunfig.toml`.** In `work/config-check/`, whose `bunfig.toml` has a preload, plain `bun <bundle>` ran the preload and `--config` did not. Tau's development children use this.
 
 ## Not tested
 

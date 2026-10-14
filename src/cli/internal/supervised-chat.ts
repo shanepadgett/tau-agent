@@ -1,0 +1,120 @@
+/**
+ * The chat under the supervisor. The first `tau` process supervises; each chat runs in a child
+ * process that the supervisor restarts into new code, with the same session and unsent input.
+ */
+
+import { dirname, resolve } from "node:path";
+import { Cause, Console, Effect, Layer, Option } from "effect";
+import { Builds } from "../../supervisor/Builds.ts";
+import { Children } from "../../supervisor/Children.ts";
+import type { SupervisedLink } from "../../supervisor/ReloadLink.ts";
+import type { SupervisorStart } from "../../supervisor/Supervisor.ts";
+import type { ChatOptions, ChatSetup, RestartLink } from "../../tui/Tui.ts";
+import { agentLayer, openSession } from "./agent-session.ts";
+
+/** The command line flags that the chat uses. */
+export type ChatFlags = {
+  readonly session: Option.Option<string>;
+  readonly model: Option.Option<string>;
+  readonly prompt: Option.Option<string>;
+};
+
+/**
+ * Run from source with `bun`, Tau rebuilds itself from the repository it runs from. A released
+ * binary has only itself to run.
+ */
+export const supervisorLayer = Layer.merge(
+  Bun.main.endsWith(".ts")
+    ? Builds.fromSource(resolve(dirname(Bun.main), "..", ".."))
+    : Builds.binary,
+  Children.layer,
+);
+
+/**
+ * The arguments of each chat child. A later child continues the session that the first one
+ * opened, and does not send the first prompt again.
+ */
+export const chatArgs =
+  (flags: ChatFlags): SupervisorStart["argsFor"] =>
+  (session) => {
+    const model = Option.match(flags.model, {
+      onNone: () => [],
+      onSome: (ref) => ["--model", ref],
+    });
+
+    const resumed = Option.fromUndefinedOr(session).pipe(Option.orElse(() => flags.session));
+
+    const sessionArgs = Option.match(resumed, {
+      onNone: () => [],
+      onSome: (id) => ["--session", id],
+    });
+
+    const prompt = session === undefined ? Option.toArray(flags.prompt) : [];
+    return [...model, ...sessionArgs, ...prompt];
+  };
+
+/**
+ * Runs what the supervisor asks for: the start check, which only loads the TUI, or the chat. The
+ * check opens no database, so a new build cannot change it before it passes.
+ */
+export const runSupervisedChat = Effect.fn("runSupervisedChat")(function* (
+  link: SupervisedLink,
+  flags: ChatFlags,
+  options: ChatOptions,
+) {
+  const start = yield* link.start;
+  if (start.type === "start-check") return yield* checkStart(link);
+
+  yield* chat(link, flags.session, {
+    options,
+    prompt: Option.getOrUndefined(flags.prompt),
+    link: restartLink(link, start.draft),
+  });
+});
+
+/** Loads the TUI, and tells the supervisor why when it does not load. */
+const checkStart = (link: SupervisedLink) =>
+  loadChat.pipe(
+    Effect.tapCause((cause) =>
+      link.send({ type: "check-failed", reason: String(Cause.squash(cause)) }),
+    ),
+    Effect.asVoid,
+  );
+
+/** Prints the session ID after the user quits, so the user can continue it with `--session`. */
+const chat = Effect.fn("chat")(
+  function* (link: SupervisedLink, sessionFlag: Option.Option<string>, setup: ChatSetup) {
+    const opened = yield* openSession(sessionFlag);
+    const session = opened.session.id;
+    yield* link.send({ type: "ready", session });
+    const chatInTerminal = yield* loadChat;
+    const end = yield* chatInTerminal(opened, setup);
+
+    if (end.reason === "restart") {
+      return yield* link.send({ type: "handoff", session, draft: end.draft });
+    }
+
+    yield* Console.error(`Session: ${session}`);
+  },
+  Effect.scoped,
+  Effect.provide(agentLayer),
+);
+
+/**
+ * Loads the chat from the TUI module. Solid's JSX transform must be in place before its .tsx files
+ * load. `bunfig.toml` adds it only when Bun starts in this repository, and Tau runs in other folders
+ * too. `ensureSolidTransformPlugin` is what `@opentui/solid/preload` runs; that module has no types.
+ */
+const loadChat = Effect.gen(function* () {
+  const solid = yield* Effect.promise(() => import("@opentui/solid/bun-plugin"));
+  solid.ensureSolidTransformPlugin();
+  return yield* Effect.promise(() => import("../../tui/Tui.ts").then((tui) => tui.chatInTerminal));
+});
+
+const restartLink = (link: SupervisedLink, draft: string): RestartLink => ({
+  draft,
+  reportActivity: (activity) => link.send({ type: "idle", idle: activity === "idle" }),
+  requestRestart: link.send({ type: "restart-request" }),
+  notices: link.notices,
+  exitRequested: link.exitRequested,
+});

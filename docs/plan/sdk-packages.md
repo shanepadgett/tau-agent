@@ -49,7 +49,7 @@ my-package/
 | `./api` export of typed extension points | OpenCode `./rpc` | `requires: [todoList]` in another package type-checks against it without loading the implementation |
 | One typed `definePackage` value listing everything | New | One file shows an agent the whole package. A missing extension or bad theme is a type error |
 | Skills and prompts stay files | Pi, Agent Skills | Plain Markdown; `tau check` validates their frontmatter |
-| UI in the same extension, no `./tui` split | Departure from OpenCode | OpenCode splits UI because its UI may run in another process; Tau is one process |
+| UI in a separate `./ui` export (changed 2026-10-14, see [reload.md](reload.md#decisions-2026-10-14)) | OpenCode's `./tui` | Tau is one process today, but a later split of TUI and core into two processes must not break every extension with UI code |
 | Local folders discovered and hot-reloaded: `~/.tau/extensions/`, `.tau/extensions/` | OpenCode, Pi | No install step for your own extensions |
 | Ordered `extensions` list in settings with `-id` to disable | OpenCode | One mechanism for enabling and disabling |
 | Per-package options typed by the extension's settings Schema | Improves on OpenCode | Tau generates JSON Schema for `settings.json`, so editors flag a misspelled option |

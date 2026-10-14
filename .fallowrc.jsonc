@@ -31,6 +31,8 @@
       { "name": "cli-internal", "patterns": ["src/cli/internal/**"] },
       { "name": "tui", "patterns": ["src/tui/*.ts", "src/tui/*.tsx"] },
       { "name": "tui-internal", "patterns": ["src/tui/internal/**"] },
+      { "name": "supervisor", "patterns": ["src/supervisor/*.ts"] },
+      { "name": "supervisor-internal", "patterns": ["src/supervisor/internal/**"] },
       { "name": "extensions", "patterns": ["src/extensions/*.ts"] },
       { "name": "extensions-internal", "patterns": ["src/extensions/internal/**"] },
       { "name": "host", "patterns": ["src/host/*.ts"] },
@@ -60,6 +62,7 @@
         "allow": [
           "cli-internal",
           "tui",
+          "supervisor",
           "extensions",
           "host",
           "sdk",
@@ -91,6 +94,7 @@
         "allow": [
           "cli",
           "tui",
+          "supervisor",
           "extensions",
           "host",
           "sdk",
@@ -103,6 +107,10 @@
           "ai",
         ],
       },
+      // The supervisor must keep running when Tau's own code is broken, so it loads no other layer
+      // except proc, which starts the chat process.
+      { "from": "supervisor", "allow": ["supervisor-internal", "proc"] },
+      { "from": "supervisor-internal", "allow": ["supervisor"] },
       { "from": "tui-internal", "allow": ["tui", "core", "sdk"] },
       { "from": "extensions-internal", "allow": ["extensions", "sdk"] },
       { "from": "host-internal", "allow": ["host", "sdk", "core", "session", "database", "ai"] },
@@ -126,6 +134,7 @@
           "ai-internal",
           "cli",
           "tui",
+          "supervisor",
           "extensions",
           "host",
           "sdk",

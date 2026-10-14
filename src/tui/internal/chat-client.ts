@@ -17,14 +17,49 @@ export type ChatOptions = Omit<RunOptions, "model"> & {
   readonly model: RunOptions["model"] | undefined;
 };
 
+/** Idle means that no run is going and no prompt waits. */
+type Activity = "idle" | "busy";
+
+/** The chat's connection to the supervisor, which restarts Tau into new code. */
+export type RestartLink = {
+  /** The unsent input of the chat that ran before this one, or empty. */
+  readonly draft: string;
+  readonly reportActivity: (activity: Activity) => Effect.Effect<void>;
+  /** Asks for a restart as soon as Tau is idle, for `/restart`. */
+  readonly requestRestart: Effect.Effect<void>;
+  /** What the supervisor says about new code. */
+  readonly notices: Stream.Stream<string>;
+  /** Completes when the supervisor wants the chat to end, so that the new code can start. */
+  readonly exitRequested: Effect.Effect<void>;
+};
+
+export type ChatSetup = {
+  readonly options: ChatOptions;
+  /** The prompt to send first, if any. */
+  readonly prompt: string | undefined;
+  readonly link: RestartLink;
+};
+
+/** Why the chat ended. A restart keeps the unsent input for the next chat. */
+export type ChatEnd =
+  | { readonly reason: "quit" }
+  | { readonly reason: "restart"; readonly draft: string };
+
 const NO_MODEL =
   'No model is set. Add "model": "route/model" to ~/.tau/settings.json, such as "anthropic/claude-sonnet-5-5", or pass --model, then open the chat again.';
+
+const RESTART_COMMAND = "/restart";
+const RESTART_REQUESTED = "Tau restarts as soon as no run is going.";
 
 export type ChatClient = {
   /** A Solid store: components that read it redraw when it changes. */
   readonly chat: ChatState;
   /** The model of each run, as `route/model`, or undefined when the user has not set one. */
   readonly model: string | undefined;
+  /** The text the input editor starts with. */
+  readonly draft: string;
+  /** The input editor gives the chat a way to read its text, for a restart. */
+  readonly readDraftWith: (read: () => string) => void;
   readonly send: (text: string) => void;
   readonly cancel: () => void;
   readonly quit: () => void;
@@ -32,37 +67,65 @@ export type ChatClient = {
 
 /**
  * Shows the session's history, then keeps the chat current with its events until the scope
- * closes. `quitting` completes when the user quits.
+ * closes. `ended` completes when the user quits or the supervisor restarts Tau.
  */
 export const chatClient = Effect.fn("chatClient")(function* (
   opened: OpenSession,
-  options: ChatOptions,
+  setup: ChatSetup,
 ) {
+  const { options, link } = setup;
   const events = yield* opened.subscribe;
   const [chat, setChat] = createStore(replay(yield* opened.history));
-  const quitRequested = yield* Deferred.make<void>();
+  const ended = yield* Deferred.make<ChatEnd>();
+  let readDraft = () => "";
+  const reportActivity = activityReporter(link, chat);
 
   // `reconcile` keeps the objects whose `id` stays, so only the changed items redraw.
   const apply = (action: ChatAction) => {
     setChat(reconcile(reduce(unwrap(chat), action), { key: "id" }));
+    reportActivity();
   };
 
-  yield* Effect.forkScoped(
-    Stream.fromSubscription(events).pipe(
-      Stream.runForEach((event) =>
-        Effect.sync(() => {
-          apply(event);
-        }),
+  const applyEach = <A extends ChatAction>(stream: Stream.Stream<A>) =>
+    Effect.forkScoped(
+      stream.pipe(
+        Stream.runForEach((action) =>
+          Effect.sync(() => {
+            apply(action);
+          }),
+        ),
       ),
-    ),
-  );
+    );
+
+  reportActivity();
+  yield* applyEach(Stream.fromSubscription(events));
+  yield* applyEach(link.notices.pipe(Stream.map((text) => restartNotice(text))));
+
+  // Prompts that wait for their run would be lost with this process, so they go back to the input.
+  const restart = Effect.suspend(() => {
+    const draft = [...chat.queued.map((queued) => queued.text), readDraft()];
+    const text = draft.filter((part) => part !== "").join("\n\n");
+    return Deferred.succeed(ended, { reason: "restart", draft: text });
+  });
+
+  yield* Effect.forkScoped(Effect.andThen(link.exitRequested, restart));
 
   const { model } = options;
 
   const client: ChatClient = {
     chat,
     model: model === undefined ? undefined : `${model.route}/${model.model}`,
+    draft: link.draft,
+    readDraftWith: (read) => {
+      readDraft = read;
+    },
     send: (text) => {
+      if (text === RESTART_COMMAND) {
+        apply(restartNotice(RESTART_REQUESTED));
+        Effect.runFork(link.requestRestart);
+        return;
+      }
+
       if (model === undefined) {
         apply({ type: "prompt-refused", text, reason: NO_MODEL });
         return;
@@ -72,8 +135,22 @@ export const chatClient = Effect.fn("chatClient")(function* (
       Effect.runFork(opened.send({ type: "prompt", text, options: { ...options, model } }));
     },
     cancel: () => Effect.runFork(opened.send({ type: "cancel" })),
-    quit: () => Effect.runFork(Deferred.complete(quitRequested, Effect.void)),
+    quit: () => Effect.runFork(Deferred.succeed(ended, { reason: "quit" })),
   };
 
-  return { client, quitting: Deferred.await(quitRequested) };
+  return { client, ended: Deferred.await(ended) };
 });
+
+/** Returns a function that tells the supervisor when the chat's activity changed since its last call. */
+const activityReporter = (link: RestartLink, chat: ChatState) => {
+  let reported: Activity | undefined;
+
+  return () => {
+    const activity = chat.run === "idle" && chat.queued.length === 0 ? "idle" : "busy";
+    if (activity === reported) return;
+    reported = activity;
+    Effect.runFork(link.reportActivity(activity));
+  };
+};
+
+const restartNotice = (text: string): ChatAction => ({ type: "restart-notice", text });

@@ -1,15 +1,17 @@
 /**
  * The `tau` command itself: with `-p` it runs one prompt in print mode; without it, it opens the
- * chat in the terminal.
+ * chat in the terminal under a supervisor, which restarts the chat into new code.
  */
 
-import { Console, Effect, Option } from "effect";
+import { Effect } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { Settings } from "../../host/Settings.ts";
-import type { ChatOptions } from "../../tui/Tui.ts";
-import { agentLayer, openSession } from "./agent-session.ts";
+import { ReloadLink } from "../../supervisor/ReloadLink.ts";
+import { superviseChat } from "../../supervisor/Supervisor.ts";
+import { agentLayer } from "./agent-session.ts";
 import { printPrompt } from "./print.ts";
 import { requireModel, runOptions } from "./run-options.ts";
+import { chatArgs, runSupervisedChat, supervisorLayer } from "./supervised-chat.ts";
 
 const config = {
   print: Flag.Boolean("print").pipe(
@@ -37,35 +39,23 @@ export const rootCommand = Command.make(
   "tau",
   config,
   Effect.fn("tau")(function* (input) {
-    const { run } = yield* Settings;
-    const options = yield* runOptions(input.model, run);
+    const settings = yield* Settings;
+    const options = yield* runOptions(input.model, settings.run);
 
     if (input.print) {
-      return yield* printPrompt(input.session, input.prompt, yield* requireModel(options));
+      return yield* printPrompt(input.session, input.prompt, yield* requireModel(options)).pipe(
+        Effect.provide(agentLayer),
+      );
     }
 
-    const session = yield* chat(input.session, input.prompt, options);
-    yield* Console.error(`Session: ${session}`);
-  }, Effect.provide(agentLayer)),
+    const link = yield* ReloadLink;
+    if (link.kind === "supervised") return yield* runSupervisedChat(link, input, options);
+
+    // Ctrl-C reaches the supervisor too. The chat decides what it does, so the supervisor waits for
+    // the chat to end.
+    yield* superviseChat({
+      argsFor: chatArgs(input),
+      mode: settings.autoRestart ? "automatic" : "manual",
+    }).pipe(Effect.provide(supervisorLayer), Effect.uninterruptible);
+  }),
 );
-
-/** Returns the session ID after the user quits, so the user can continue it with `--session`. */
-const chat = Effect.fn("chat")(function* (
-  session: Option.Option<string>,
-  prompt: Option.Option<string>,
-  options: ChatOptions,
-) {
-  const opened = yield* openSession(session);
-  // Solid's JSX transform must be in place before the TUI's .tsx files load. `bunfig.toml` adds it
-  // only when Bun starts in this repository, and Tau runs in other folders too.
-  // `ensureSolidTransformPlugin` is what `@opentui/solid/preload` runs; that module has no types.
-  const solid = yield* Effect.promise(() => import("@opentui/solid/bun-plugin"));
-  solid.ensureSolidTransformPlugin();
-
-  const chatInTerminal = yield* Effect.promise(() =>
-    import("../../tui/Tui.ts").then((tui) => tui.chatInTerminal),
-  );
-
-  yield* chatInTerminal(opened, options, prompt);
-  return opened.session.id;
-}, Effect.scoped);

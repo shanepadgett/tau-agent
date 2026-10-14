@@ -4,10 +4,10 @@
  */
 
 import { type CliRenderer, createCliRenderer } from "@opentui/core";
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 import type { OpenSession } from "../core/Agent.ts";
 import { showChat } from "./internal/App.tsx";
-import { type ChatOptions, chatClient } from "./internal/chat-client.ts";
+import { type ChatEnd, type ChatSetup, chatClient } from "./internal/chat-client.ts";
 
 /**
  * Takes over the terminal for the chat. Closing the scope gives the terminal back as it was. The
@@ -21,27 +21,26 @@ const openTerminal = Effect.acquireRelease(
     }),
 );
 
-export type { ChatOptions } from "./internal/chat-client.ts";
+export type { ChatOptions, ChatSetup, RestartLink } from "./internal/chat-client.ts";
 
-/** Shows the chat of `opened` in the terminal until the user quits. `prompt`, when given, is sent first. */
+/** Shows the chat of `opened` in the terminal until the user quits or Tau restarts. */
 export const chatInTerminal = Effect.fn("chatInTerminal")(function* (
   opened: OpenSession,
-  options: ChatOptions,
-  prompt: Option.Option<string>,
+  setup: ChatSetup,
 ) {
   const renderer = yield* openTerminal;
-  yield* runTui(renderer, opened, options, prompt);
+  return yield* runTui(renderer, opened, setup);
 }, Effect.scoped);
 
-/** Shows the chat of `opened` on `renderer` until the user quits. `prompt`, when given, is sent first. */
+/** Shows the chat of `opened` on `renderer` until the user quits or Tau restarts. */
 export const runTui = Effect.fn("runTui")(function* (
   renderer: CliRenderer,
   opened: OpenSession,
-  options: ChatOptions,
-  prompt: Option.Option<string>,
+  setup: ChatSetup,
 ) {
-  const { client, quitting } = yield* chatClient(opened, options);
-  if (Option.isSome(prompt)) client.send(prompt.value);
+  const { client, ended } = yield* chatClient(opened, setup);
+  if (setup.prompt !== undefined) client.send(setup.prompt);
   yield* Effect.promise(() => showChat(renderer, client));
-  yield* quitting;
+  const end: ChatEnd = yield* ended;
+  return end;
 }, Effect.scoped);

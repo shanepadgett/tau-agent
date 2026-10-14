@@ -1,6 +1,17 @@
 # Reloading Tau while it runs
 
-Status: round 1 (architecture) proposed, 2026-10-14. Spike 15 (`spikes/reload/`) passed: see [Spike result](#spike-result). Answers wait in [questions.md](questions.md#reloading-tau-while-it-runs).
+Status: round 1 (architecture) agreed, 2026-10-14; this slice comes next, before 6b and 6c. Spike 15 (`spikes/reload/`) passed: see [Spike result](#spike-result). Round 2, the code plan, is agreed in [work/reload.md](work/reload.md).
+
+## Decisions (2026-10-14)
+
+| Question | Decision |
+| --- | --- |
+| Pattern | A supervisor process restarts Tau when idle, after the new build passes a start check; a second crash in 10 s falls back to the last good build |
+| Builds in development | The supervisor runs a bundle of `src/`, not the source files |
+| Restart trigger | Automatic when idle, with a note first; also a `/restart` command and a setting that turns the automatic restart off |
+| Process sessions | They end at a restart, and the checkpoint list tells the model. The supervisor owning them is in [deferred.md](deferred.md) |
+| Extension UI | A separate `./ui` export, reversing [sdk-packages.md](sdk-packages.md), so a later split of TUI and core into two processes does not break extensions |
+| Order | 6a (done), this slice, then 6b and 6c |
 
 **What the user gets:** Tau can change itself while it is in use. When Tau edits an extension, the change shows at the next turn without a restart. When Tau edits its own code in `src/`, Tau waits until it is idle, checks that the new code builds and starts, and then restarts into the same session: same messages, same unsent input, about half a second of redraw. Broken code never replaces working code. The same path installs updates later (build step 8).
 
@@ -13,7 +24,7 @@ Status: round 1 (architecture) proposed, 2026-10-14. Spike 15 (`spikes/reload/`)
 | Tau's own code | Loaded once at start; a change needs a manual restart | `src/cli/main.ts` |
 | Session state | Every step is saved to SQLite; a session rebuilds after any step | [architecture.md](architecture.md#core-ideas) |
 | Process sessions | Children of Tau; they end when Tau exits | [work/process-sessions.md](work/process-sessions.md) |
-| Extension UI | In the same package entry as its logic; no `./tui` split, because Tau is one process | [sdk-packages.md](sdk-packages.md) |
+| Extension UI | Was: in the same package entry as its logic. Now agreed: a separate `./ui` export | [sdk-packages.md](sdk-packages.md) |
 
 ## Systems studied
 
@@ -35,7 +46,7 @@ flowchart LR
   sup -->|"spawns, terminal inherited"| child["Tau: TUI + core"]
   child <-->|"IPC: ready, restart-request, draft"| sup
   child --> db["sessions.db"]
-  sup --> builds["~/.tau/builds/: last good, candidate"]
+  sup --> builds["temporary build folder: last good, candidate"]
 ```
 
 - **Supervisor + restart when idle.** A small parent process starts Tau as a child that owns the terminal, and restarts it only when Tau is idle. Alternatives: the OpenCode split (only UI edits avoid a restart, at the cost of two processes always) and Vite hot swap (fast for components, fragile, and core still restarts). The split stays possible later, because clients use one `send`/`subscribe` interface.
@@ -80,7 +91,7 @@ type ChildStart = { session: Option<SessionId>; draft: string; build: BuildId };
 
 ## Costs and open points
 
-- **Process sessions end on restart.** The checkpoint list tells the model. Keeping them alive needs the supervisor to own them; see the questions.
+- **Process sessions end on restart.** The checkpoint list tells the model. Keeping them alive needs the supervisor to own them; see [deferred.md](deferred.md).
 - **Two terminals owners must never overlap.** The old child exits and restores the terminal before the new one starts. The start check runs headless.
 - **Releases.** Released binaries do not watch `src/`; they get extension reload, and `tau update` uses the same restart when idle.
 

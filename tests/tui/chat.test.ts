@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createTestRenderer, type TestRendererSetup } from "@opentui/core/testing";
-import { Effect, Fiber, Option } from "effect";
+import { Deferred, Effect, Fiber, Option, Queue, Stream } from "effect";
 import type { OpenSession } from "../../src/core/Agent.ts";
-import { type ChatOptions, runTui } from "../../src/tui/Tui.ts";
+import { type ChatOptions, type ChatSetup, type RestartLink, runTui } from "../../src/tui/Tui.ts";
 import { options, prompt, runReply, textReply, withHarness } from "../support/agent-harness.ts";
 
 const SCREEN = { width: 80, height: 24, kittyKeyboard: true };
@@ -12,13 +12,45 @@ const testTerminal = Effect.acquireRelease(
   (setup) => Effect.sync(() => setup.renderer.destroy()),
 );
 
-/** Starts the chat on a test terminal; the chat stops when the test's scope closes. */
-const startChat = Effect.fn("startChat")(function* (opened: OpenSession, chatOptions: ChatOptions) {
-  const terminal = yield* testTerminal;
+/** A supervisor that never restarts the chat. */
+const noRestarts: RestartLink = {
+  draft: "",
+  reportActivity: () => Effect.void,
+  requestRestart: Effect.void,
+  notices: Stream.never,
+  exitRequested: Effect.never,
+};
 
-  const chat = yield* Effect.forkScoped(
-    runTui(terminal.renderer, opened, chatOptions, Option.none()),
-  );
+const withoutRestarts = (chatOptions: ChatOptions): ChatSetup => ({
+  options: chatOptions,
+  prompt: undefined,
+  link: noRestarts,
+});
+
+/**
+ * A supervisor that the test drives: it records what the chat reports, sends notices, and asks the
+ * chat to end. Its draft is the unsent input of the chat before.
+ */
+const fakeSupervisor = Effect.fn("fakeSupervisor")(function* (draft: string) {
+  const exitRequested = yield* Deferred.make<void>();
+  const notices = yield* Queue.unbounded<string>();
+  const reports: string[] = [];
+
+  const link: RestartLink = {
+    draft,
+    reportActivity: (activity) => Effect.sync(() => reports.push(activity)),
+    requestRestart: Effect.sync(() => reports.push("restart-request")),
+    notices: Stream.fromQueue(notices),
+    exitRequested: Deferred.await(exitRequested),
+  };
+
+  return { link, exitRequested, notices, reports };
+});
+
+/** Starts the chat on a test terminal; the chat stops when the test's scope closes. */
+const startChat = Effect.fn("startChat")(function* (opened: OpenSession, setup: ChatSetup) {
+  const terminal = yield* testTerminal;
+  const chat = yield* Effect.forkScoped(runTui(terminal.renderer, opened, setup));
 
   yield* frameWith(terminal, "ctrl+d quit");
   return { terminal, chat };
@@ -52,7 +84,7 @@ describe("the chat in the terminal", () => {
         ]);
 
         const opened = yield* agent.open(Option.none(), harness.directory);
-        const { terminal } = yield* startChat(opened, options);
+        const { terminal } = yield* startChat(opened, withoutRestarts(options));
 
         yield* Effect.promise(() => terminal.mockInput.typeText("Say hi."));
         terminal.mockInput.pressEnter();
@@ -70,7 +102,7 @@ describe("the chat in the terminal", () => {
         const opened = yield* agent.open(Option.none(), harness.directory);
         yield* prompt(opened, "Earlier prompt.");
 
-        const { terminal } = yield* startChat(opened, options);
+        const { terminal } = yield* startChat(opened, withoutRestarts(options));
         const frame = yield* frameWith(terminal, "Earlier answer.");
 
         expect(frame).toContain("Earlier prompt.");
@@ -82,7 +114,7 @@ describe("the chat in the terminal", () => {
       Effect.gen(function* () {
         const agent = yield* harness.startAgent([]);
         const opened = yield* agent.open(Option.none(), harness.directory);
-        const { terminal, chat } = yield* startChat(opened, options);
+        const { terminal, chat } = yield* startChat(opened, withoutRestarts(options));
 
         yield* Effect.promise(() => terminal.mockInput.typeText("one"));
         terminal.mockInput.pressEnter({ shift: true });
@@ -91,7 +123,7 @@ describe("the chat in the terminal", () => {
 
         expect(frame).toMatch(/one\s*│?\s*\n.*two/);
         terminal.mockInput.pressKey("d", { ctrl: true });
-        yield* Fiber.join(chat);
+        expect(yield* Fiber.join(chat)).toEqual({ reason: "quit" });
       }).pipe(Effect.scoped),
     ));
 
@@ -100,7 +132,11 @@ describe("the chat in the terminal", () => {
       Effect.gen(function* () {
         const agent = yield* harness.startAgent([]);
         const opened = yield* agent.open(Option.none(), harness.directory);
-        const { terminal } = yield* startChat(opened, { ...options, model: undefined });
+
+        const { terminal } = yield* startChat(
+          opened,
+          withoutRestarts({ ...options, model: undefined }),
+        );
 
         yield* Effect.promise(() => terminal.mockInput.typeText("Say hi."));
         terminal.mockInput.pressEnter();
@@ -109,6 +145,48 @@ describe("the chat in the terminal", () => {
         expect(frame).toContain("no model set");
         // Only the editor can show it: a prompt that was not sent does not enter the transcript.
         expect(frame).toContain("Say hi.");
+      }).pipe(Effect.scoped),
+    ));
+
+  test("a restart ends the chat with its unsent input, and the next chat starts with it", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const supervisor = yield* fakeSupervisor("carried over");
+        const setup = { options, prompt: undefined, link: supervisor.link };
+        const { terminal, chat } = yield* startChat(opened, setup);
+
+        yield* Effect.promise(() => terminal.mockInput.typeText(" and more"));
+        yield* frameWith(terminal, "carried over and more");
+        yield* Deferred.succeed(supervisor.exitRequested, undefined);
+
+        expect(yield* Fiber.join(chat)).toEqual({
+          reason: "restart",
+          draft: "carried over and more",
+        });
+      }).pipe(Effect.scoped),
+    ));
+
+  test("the chat reports when it is idle, takes /restart, and shows the supervisor's notices", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([textReply("Hello.")]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const supervisor = yield* fakeSupervisor("");
+        const setup = { options, prompt: undefined, link: supervisor.link };
+        const { terminal } = yield* startChat(opened, setup);
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("Hi."));
+        terminal.mockInput.pressEnter();
+        yield* frameWith(terminal, "Hello.");
+        yield* Effect.promise(() => terminal.mockInput.typeText("/restart"));
+        terminal.mockInput.pressEnter();
+        yield* frameWith(terminal, "Tau restarts as soon as no run is going.");
+        yield* Queue.offer(supervisor.notices, "The new code does not build.");
+        yield* frameWith(terminal, "The new code does not build.");
+
+        expect(supervisor.reports).toEqual(["idle", "busy", "idle", "restart-request"]);
       }).pipe(Effect.scoped),
     ));
 });

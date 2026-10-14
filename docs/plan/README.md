@@ -22,6 +22,7 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 | [work/compaction.md](work/compaction.md) | Build step 5: background tasks, compaction and process sessions. |
 | [work/process-sessions.md](work/process-sessions.md) | Slice 5b: process sessions and the agent's wait. |
 | [work/tui.md](work/tui.md) | Build step 6: the TUI, in slices 6a to 6c. |
+| [work/reload.md](work/reload.md) | The reload slice: the supervisor, restart when idle, the start check. |
 | [compaction-research.md](compaction-research.md) | How Tau main, Pi durable and Mastra compact, what compaction costs, and how that led to step 5's design. |
 | `archive/` | Finished plans, kept as a record of how decisions were reached. Not kept up to date. |
 

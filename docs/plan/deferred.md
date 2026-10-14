@@ -2,6 +2,7 @@
 
 Decisions to make later. Each line is the question and what brings it up. When that happens, move the item to [questions.md](questions.md).
 
+- Whether the reload supervisor owns process sessions, so dev servers and watchers survive a restart of Tau. This moves the process registry and its output buffers across a process boundary. Comes up when restarts that end long-running processes get in the way ([reload.md](reload.md)).
 - OpenTelemetry tracing for enterprises. Comes up when enterprise tracing is requested, or with the live inspector ([features.md](features.md#interface)).
 - The live inspector's design: how processes find the server, what is kept, how bodies are captured. Comes up after the TUI (step 6), or sooner if debugging a provider needs it.
 - How npm delivers the binary: a launcher plus one package per platform, or the npm package holds only SDK types and the binary installs separately. Comes up at build step 8.

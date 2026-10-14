@@ -1,6 +1,6 @@
 /**
  * The input editor: Enter sends, and Shift-Enter, Ctrl-Enter, Alt-Enter or Ctrl-J add a line.
- * Prompts that were cancelled or not sent come back into it.
+ * Prompts that were cancelled or not sent come back into it, and its text survives a restart.
  */
 
 import type { KeyBinding, TextareaRenderable } from "@opentui/core";
@@ -39,6 +39,10 @@ export function Input(props: { readonly client: ChatClient }) {
 }
 
 const connectEditor = (editor: TextareaRenderable, client: ChatClient) => {
+  editor.setText(client.draft);
+  editor.gotoBufferEnd();
+  client.readDraftWith(() => editor.plainText);
+
   editor.onSubmit = () => {
     const text = editor.plainText.trim();
     if (text === "") return;
