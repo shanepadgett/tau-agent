@@ -33,9 +33,20 @@ export type AgentEvent =
       readonly seconds: number;
       readonly message: string;
     }
-  /** `output-limit`: the reply stopped at the model's output limit, so the answer is cut short. */
-  | {
-      readonly type: "run-ended";
-      readonly reason: "answered" | "turn-limit" | "output-limit" | "cancelled";
-    }
+  /** Tau runs the project's checks itself, because the model ended its turn without them. */
+  | { readonly type: "checks-started"; readonly checks: readonly string[] }
+  | { readonly type: "checks-ended"; readonly failed: readonly string[] }
+  | ({ readonly type: "run-ended" } & RunEnd)
+  | { readonly type: "run-ended"; readonly reason: "cancelled" }
   | { readonly type: "run-ended"; readonly reason: "failed"; readonly error: string };
+
+/**
+ * How a run ends on its own. `output-limit`: the reply stopped at the model's output limit, so the
+ * answer is cut short. `repeated-call`: the model sent the same failing call again and again;
+ * `call` shows what it was. `checks-failed`: the checks Tau ran itself still failed after the
+ * model had its tries to fix them.
+ */
+export type RunEnd =
+  | { readonly reason: "answered" | "turn-limit" | "output-limit" }
+  | { readonly reason: "repeated-call"; readonly call: string }
+  | { readonly reason: "checks-failed"; readonly checks: readonly string[] };

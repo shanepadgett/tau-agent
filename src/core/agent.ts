@@ -3,7 +3,7 @@
  * session share its runner, so the session has one writer.
  */
 
-import { Context, Effect, FileSystem, Layer, Option, RcMap, type Scope } from "effect";
+import { Context, Crypto, Effect, FileSystem, Layer, Option, RcMap, type Scope } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { Models } from "../ai/Models.ts";
 import { makeWriteQueue } from "../sandbox/WriteQueue.ts";
@@ -12,6 +12,7 @@ import { type SessionNotFound, Sessions, type SessionStoreError } from "../sessi
 import { SkillUses } from "../session/SkillUses.ts";
 import { makeRunner, type OpenSession, type RunServices } from "./internal/runner/runner.ts";
 import { UserInstructions } from "./UserInstructions.ts";
+import { OutputFolder } from "./OutputFolder.ts";
 
 export type { OpenSession } from "./internal/runner/runner.ts";
 
@@ -38,6 +39,8 @@ export class Agent extends Context.Service<
         spawner: yield* ChildProcessSpawner.ChildProcessSpawner,
         userInstructions: yield* UserInstructions,
         skillUses: yield* SkillUses,
+        outputFolder: yield* OutputFolder,
+        crypto: yield* Crypto.Crypto,
         writeQueue: yield* makeWriteQueue,
       };
 

@@ -9,6 +9,7 @@ import { type Database, openDatabase, type Transaction } from "../database/Datab
 import { TauHome } from "../database/TauHome.ts";
 import { type Entry, EntryBody, SessionId } from "./Entry.ts";
 import { makeSkillUses, SKILL_USE_TABLE, SkillUses } from "./SkillUses.ts";
+import { CHECK_REPORT_TEXT_MIGRATION } from "./internal/check-report-migration.ts";
 
 const MIGRATIONS = [
   "CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT NOT NULL, origin TEXT NOT NULL, " +
@@ -17,6 +18,14 @@ const MIGRATIONS = [
     "number INTEGER NOT NULL, at INTEGER NOT NULL, body TEXT NOT NULL, " +
     "PRIMARY KEY (session_id, number)) STRICT",
   SKILL_USE_TABLE,
+  // A tool result's `files` and `script` move into `details`, tagged by tool. json_patch drops a
+  // null `script`, which a result that ran nothing has.
+  "UPDATE entry SET body = json_remove(CASE WHEN body ->> '$.name' = 'run' AND " +
+    "(body -> '$.files' IS NOT NULL OR body -> '$.script' IS NOT NULL) THEN json_set(body, " +
+    "'$.details', json_patch('{}', json_object('tool', 'run', 'files', " +
+    "json(coalesce(body -> '$.files', '[]')), 'script', body ->> '$.script'))) ELSE body END, " +
+    "'$.files', '$.script') WHERE body ->> '$.type' = 'tool-result'",
+  CHECK_REPORT_TEXT_MIGRATION,
 ];
 
 const Origin = Schema.Union([

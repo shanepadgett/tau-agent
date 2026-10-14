@@ -2,10 +2,10 @@
 
 import { Effect, Option } from "effect";
 import type { Entry } from "../../../session/Entry.ts";
-import type { Operation, Outcome, RunContext } from "./run-context.ts";
+import { endWith, type Operation, type RunContext } from "./run-context.ts";
 import { needsReply } from "./tool-history.ts";
 
-const TURN_LIMIT: Outcome = { type: "end", reason: "turn-limit" };
+const TURN_LIMIT = endWith({ reason: "turn-limit" });
 
 export const stopAtTurnLimit =
   <R>(run: RunContext<R>): Operation<R> =>

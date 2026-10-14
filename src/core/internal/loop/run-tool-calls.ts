@@ -1,8 +1,8 @@
 /** Runs the tool calls of the latest reply, one at a time, saving each as started before it runs. */
 
-import { Effect, Option, Ref } from "effect";
+import { Effect, Option } from "effect";
 import type { Entry } from "../../../session/Entry.ts";
-import { runCall, type RunResult } from "../run-tool/run-tool.ts";
+import { toolNamed, toolNames, type ToolOutcome } from "../tools/model-tool.ts";
 import { CONTINUE, type Operation, type RunContext } from "./run-context.ts";
 import { failedResult, openCalls, summary, type ToolCall } from "./tool-history.ts";
 
@@ -14,47 +14,45 @@ export const runToolCalls =
     const calls = openCalls(entries);
     if (calls.length === 0) return Option.none();
 
-    const runAll = Effect.forEach(calls, (call) => runToolCall(run, call, entries));
+    const runAll = Effect.gen(function* () {
+      const saved = [...entries];
+      for (const call of calls) saved.push(...(yield* runToolCall(run, call, saved)));
+    });
+
     return Option.some(runAll.pipe(Effect.as(CONTINUE)));
   };
 
 /**
  * Saves the call as started, runs it and saves its result. A cancel at any point after the start
- * gives the call a result that says so. `entries` hold the scripts a call can edit.
+ * gives the call a result that says so. `entries` hold the scripts and changes of earlier calls,
+ * including those of the same reply. Gives the entries it saved.
  */
 const runToolCall = <R>(run: RunContext<R>, call: ToolCall, entries: readonly Entry[]) => {
   const execute = Effect.gen(function* () {
-    yield* run.sessions.append(run.session, [{ type: "tool-started", callId: call.id }]);
+    const started = yield* run.sessions.append(run.session, [
+      { type: "tool-started", callId: call.id },
+    ]);
+
     yield* run.emit({ type: "tool-started", callId: call.id, summary: summary(call) });
 
-    const touched = yield* Ref.make<ReadonlySet<string>>(new Set());
+    const outcome = yield* Option.match(toolNamed(run.tools, call.name), {
+      onNone: () => Effect.succeed(unknownTool(run, call)),
+      onSome: (tool) => tool.call(call, [...entries, ...started]),
+    });
 
-    const functions = run.functions((path) =>
-      Ref.update(touched, (paths) => new Set(paths).add(path)),
-    );
-
-    const scriptResult: RunResult =
-      call.name === "run"
-        ? yield* runCall(call.params, entries, functions, run.timeouts)
-        : {
-            text: `There is no tool named ${call.name}. The only tool is run.`,
-            isFailure: true,
-            script: undefined,
-          };
-
-    yield* run.sessions.append(run.session, [
+    const ended = yield* run.sessions.append(run.session, [
       {
         type: "tool-result",
         callId: call.id,
         name: call.name,
-        result: scriptResult.text,
-        isFailure: scriptResult.isFailure,
-        files: [...(yield* Ref.get(touched))],
-        script: scriptResult.script,
+        result: outcome.text,
+        isFailure: outcome.isFailure,
+        details: outcome.details,
       },
     ]);
 
-    yield* run.emit({ type: "tool-ended", callId: call.id, isFailure: scriptResult.isFailure });
+    yield* run.emit({ type: "tool-ended", callId: call.id, isFailure: outcome.isFailure });
+    return [...started, ...ended];
   });
 
   const saveInterrupted = run.sessions
@@ -63,3 +61,9 @@ const runToolCall = <R>(run: RunContext<R>, call: ToolCall, entries: readonly En
 
   return execute.pipe(Effect.onInterrupt(() => saveInterrupted));
 };
+
+const unknownTool = <R>(run: RunContext<R>, call: ToolCall): ToolOutcome => ({
+  text: `There is no tool named ${call.name}. The tools are ${toolNames(run.tools).join(", ")}.`,
+  isFailure: true,
+  details: undefined,
+});

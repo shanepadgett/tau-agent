@@ -144,6 +144,18 @@ const printRun = Effect.fn("printRun")(function* (
       message: "The reply reached the model's output limit, so the answer is cut short.",
     });
   }
+
+  if (end.reason === "repeated-call") {
+    return yield* showFailure({
+      message: `The model sent the same failing call again and again, so Tau stopped the run: ${end.call}`,
+    });
+  }
+
+  if (end.reason === "checks-failed") {
+    return yield* showFailure({
+      message: `The project's checks still fail after the model's tries to fix them: ${end.checks.join(", ")}.`,
+    });
+  }
 }, Effect.scoped);
 
 type RunEnded = Extract<AgentEvent, { type: "run-ended" }>;
@@ -174,6 +186,8 @@ const printEvent = (stdio: Stdio.Stdio, event: AgentEvent) => {
       ).pipe(Effect.as(Option.none<RunEnded>()));
     case "tool-ended":
     case "prompts-returned":
+    case "checks-started":
+    case "checks-ended":
       return Effect.succeed(Option.none<RunEnded>());
     case "run-ended":
       return Effect.succeed(Option.some(event));

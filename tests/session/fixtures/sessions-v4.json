@@ -1,0 +1,56 @@
+{
+  "description": "Version 4 reports have structured outcomes but no saved rendering.",
+  "migrations": [
+    "CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT NOT NULL, origin TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL) STRICT",
+    "CREATE TABLE entry (session_id TEXT NOT NULL REFERENCES session (id), number INTEGER NOT NULL, at INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY (session_id, number)) STRICT",
+    "CREATE TABLE skill_use (skill TEXT NOT NULL, directory TEXT NOT NULL, at INTEGER NOT NULL) STRICT",
+    "UPDATE entry SET body = json_remove(CASE WHEN body ->> '$.name' = 'run' AND (body -> '$.files' IS NOT NULL OR body -> '$.script' IS NOT NULL) THEN json_set(body, '$.details', json_patch('{}', json_object('tool', 'run', 'files', json(coalesce(body -> '$.files', '[]')), 'script', body ->> '$.script'))) ELSE body END, '$.files', '$.script') WHERE body ->> '$.type' = 'tool-result'"
+  ],
+  "session": "0199a000-0000-7000-8000-000000000002",
+  "entries": [
+    { "type": "user", "text": "Check." },
+    {
+      "type": "assistant",
+      "model": { "route": "scripted", "model": "scripted" },
+      "parts": [
+        {
+          "type": "tool-call",
+          "id": "old-checks",
+          "name": "checks",
+          "params": {},
+          "providerData": {}
+        }
+      ],
+      "interrupted": false
+    },
+    { "type": "tool-started", "callId": "old-checks" },
+    {
+      "type": "tool-result",
+      "callId": "old-checks",
+      "name": "checks",
+      "result": "Passed: z\n\nPassed: a\n\nFailed: unicode\nerror\n\nFailed: empty\n",
+      "isFailure": true,
+      "details": {
+        "tool": "checks",
+        "report": {
+          "passed": ["z", "a"],
+          "failed": [
+            { "name": "unicode", "output": "\ufeff\u00a0\t error\r\n\u2003" },
+            { "name": "empty", "output": " \n\t " }
+          ]
+        }
+      }
+    },
+    {
+      "type": "checks",
+      "report": {
+        "passed": ["z", "a"],
+        "failed": [
+          { "name": "unicode", "output": "\ufeff\u00a0\t error\r\n\u2003" },
+          { "name": "empty", "output": " \n\t " }
+        ]
+      }
+    },
+    { "type": "checks", "report": { "passed": [], "failed": [] } }
+  ]
+}

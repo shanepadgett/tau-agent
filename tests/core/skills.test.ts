@@ -58,7 +58,12 @@ describe("skills", () => {
 
         const entries = yield* harness.sessions.entries(opened.session.id, 0);
         const saved = entries.flatMap(({ body }) => (body.type === "tool-result" ? [body] : []));
-        expect(saved[0]?.files).toEqual([`${skills}/pdf-forms/SKILL.md`]);
+
+        expect(saved[0]?.details).toEqual({
+          tool: "run",
+          script: expect.any(String),
+          files: [`${skills}/pdf-forms/SKILL.md`],
+        });
 
         expect(harness.tools[0]).toContain("search(");
         expect(harness.tools[0]).not.toContain("pdf-forms");

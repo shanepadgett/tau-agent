@@ -5,6 +5,7 @@
 
 import { Predicate } from "effect";
 import { Prompt } from "effect/ai";
+import { checkReportText, hasFailures } from "./CheckReport.ts";
 import type { Entry, EntryBody } from "./Entry.ts";
 
 type AssistantEntry = Extract<EntryBody, { type: "assistant" }>;
@@ -23,6 +24,10 @@ const CACHE_MARK = {
   openrouter: { cacheControl: { type: "ephemeral" } },
 } as const;
 
+/** Starts the message for checks Tau ran itself that failed. */
+const CHECKS_FAILED =
+  "Tau ran the project's checks on your latest changes, and some failed. Fix the failures and end your turn again; Tau then runs the checks again. Call the checks tool yourself before your final message.";
+
 /** The result a call gets when no result was saved for it. */
 const MISSING_RESULT = "The call ended before it returned a result.";
 
@@ -34,6 +39,7 @@ const MISSING_RESULT = "The call ended before it returned a result.";
  * result: each call gets its result right after the reply that made it, a call without a saved
  * result (a cancel, a crash, a branch cut) gets an error result, and a result without a call is
  * left out. Interrupted replies are left out too. A failed script's result ends with its script ID.
+ * Checks Tau ran itself go in only when they failed.
  */
 export const contextView = (soul: string, entries: readonly Entry[]): Prompt.Prompt => {
   const savedResults = new Map<string, SavedResult>();
@@ -56,6 +62,11 @@ export const contextView = (soul: string, entries: readonly Entry[]): Prompt.Pro
 
     if (body.type === "instructions" && body.placement === "note") {
       messages.push(Prompt.userMessage({ content: [Prompt.textPart({ text: body.text })] }));
+    }
+
+    if (body.type === "checks" && hasFailures(body.report)) {
+      const text = `${CHECKS_FAILED}\n\n${checkReportText(body.report)}`;
+      messages.push(Prompt.userMessage({ content: [Prompt.textPart({ text })] }));
     }
   }
 
@@ -129,7 +140,10 @@ const toolResultPart = (call: ToolCall, saved: SavedResult | undefined) =>
  */
 const modelResult = ({ number, body }: SavedResult) => {
   const isFailedScript =
-    body.isFailure && body.script !== undefined && Predicate.isString(body.result);
+    body.isFailure &&
+    body.details?.tool === "run" &&
+    body.details.script !== undefined &&
+    Predicate.isString(body.result);
 
   return isFailedScript ? `${String(body.result)}\n\nScript ID: ${number}` : body.result;
 };

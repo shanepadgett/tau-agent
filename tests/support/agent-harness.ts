@@ -3,9 +3,11 @@
 import { BunServices } from "@effect/platform-bun";
 import { Context, Duration, Effect, FileSystem, Layer, PubSub, type Scope, Stream } from "effect";
 import { type AiError, LanguageModel, type Prompt, type Response } from "effect/ai";
+import type { ChildProcessSpawner } from "effect/process";
 import { Models } from "../../src/ai/Models.ts";
 import { RouteId } from "../../src/ai/Routes.ts";
 import { Agent, type OpenSession } from "../../src/core/Agent.ts";
+import { OutputFolder } from "../../src/core/OutputFolder.ts";
 import type { AgentEvent, RunOptions } from "../../src/core/Client.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { Settings } from "../../src/host/Settings.ts";
@@ -34,6 +36,9 @@ export const runReply = (id: string, code: string): Reply =>
     name: "run",
     params: { code },
   });
+
+export const checksReply = (id: string): Reply =>
+  Stream.make<Response.StreamPartEncoded[]>({ type: "tool-call", id, name: "checks", params: {} });
 
 /** A model that answers with the next scripted reply and keeps each request it gets. */
 const scriptedModels = (replies: readonly Reply[], requests: Requests) =>
@@ -76,9 +81,23 @@ type Harness = {
   readonly sessions: Sessions["Service"];
 };
 
+type HarnessServices =
+  | Scope.Scope
+  | FileSystem.FileSystem
+  | ChildProcessSpawner.ChildProcessSpawner;
+
 /** Real SQLite, codemode and shell in a temp directory. Each `startAgent` builds a new agent on the same files. */
 export const withHarness = <A, E>(
-  program: (harness: Harness) => Effect.Effect<A, E, Scope.Scope | FileSystem.FileSystem>,
+  program: (harness: Harness) => Effect.Effect<A, E, HarnessServices>,
+) => withPreparedHarness(() => Effect.void, program);
+
+/**
+ * `withHarness`, with `prepare` run before the session store opens, such as to write a sessions
+ * file in an earlier format. It gets the home folder and the session directory.
+ */
+export const withPreparedHarness = <A, E, P>(
+  prepare: (home: string, directory: string) => Effect.Effect<void, P, HarnessServices>,
+  program: (harness: Harness) => Effect.Effect<A, E, HarnessServices>,
 ) =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -86,6 +105,7 @@ export const withHarness = <A, E>(
       const home = yield* fileSystem.makeTempDirectoryScoped();
       const directory = `${home}/work`;
       yield* fileSystem.makeDirectory(directory);
+      yield* Effect.scoped(prepare(home, directory));
 
       const tauHome = TauHome.at(`${home}/.tau`);
       const store = yield* Layer.build(Sessions.layer.pipe(Layer.provide(tauHome)));
@@ -105,6 +125,7 @@ export const withHarness = <A, E>(
             Layer.provide(Layer.succeedContext(store)),
             Layer.provide(BunServices.layer),
             Layer.provide(user),
+            Layer.provide(Layer.succeed(OutputFolder, { directory: `${home}/output` })),
           ),
         ).pipe(Effect.map((context) => Context.get(context, Agent)));
 

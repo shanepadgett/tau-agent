@@ -4,11 +4,8 @@
  */
 
 import { dirname, isAbsolute, relative, sep } from "node:path";
-import { Duration, Effect, FileSystem, Option } from "effect";
-import { runCommand } from "../../../proc/Command.ts";
-
-const GIT_TIMEOUT_SECONDS = 10;
-export const GIT_TIMEOUT = Duration.seconds(GIT_TIMEOUT_SECONDS);
+import { Effect, FileSystem, Option } from "effect";
+import { repositoryRoot } from "../../../workspace/Repository.ts";
 
 type ProjectFolders = {
   /** The repository root, or none outside a repository. */
@@ -25,14 +22,6 @@ export const projectFolders = Effect.fn("projectFolders")(function* (directory: 
   const found: ProjectFolders = { root, folders: foldersFromRoot(directory, levels) };
   return found;
 });
-
-const repositoryRoot = (directory: string) =>
-  runCommand("git rev-parse --show-toplevel", directory, GIT_TIMEOUT).pipe(
-    Effect.map(({ exitCode, output }) =>
-      exitCode === 0 ? Option.some(output.trim()) : Option.none<string>(),
-    ),
-    Effect.orElseSucceed(() => Option.none<string>()),
-  );
 
 /** Git gives the root as a real path, so the session directory is compared as one too. */
 const realPath = (directory: string) =>

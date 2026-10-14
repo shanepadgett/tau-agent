@@ -25,6 +25,9 @@
       },
     },
   },
+  "patchedDependencies": {
+    "@opencode/codemode@2.0.27": "patches/@opencode%2Fcodemode@2.0.27.patch",
+  },
   "overrides": {
     "effect": "4.0.3",
   },

@@ -7,15 +7,14 @@ import { Chunk, Effect, Option, Ref, Stream } from "effect";
 import { AiError, type Response } from "effect/ai";
 import type { Entry } from "../../../session/Entry.ts";
 import { contextView } from "../../../session/ContextView.ts";
-import { runToolkit } from "../run-tool/run-tool.ts";
 import { BASE_PROMPT } from "../run-tool/soul.ts";
+import { toolkit } from "../tools/model-tool.ts";
 import { interruptedEntry, replyEntry } from "./reply.ts";
 import { retrySchedule } from "./retry.ts";
-import { CONTINUE, type Operation, type Outcome, type RunContext } from "./run-context.ts";
+import { CONTINUE, endWith, type Operation, type RunContext } from "./run-context.ts";
 import { needsReply } from "./tool-history.ts";
 
-const ANSWERED: Outcome = { type: "end", reason: "answered" };
-const OUTPUT_LIMIT: Outcome = { type: "end", reason: "output-limit" };
+const OUTPUT_LIMIT = endWith({ reason: "output-limit" });
 
 /**
  * Some models sometimes end a reply with no text and no tool call. Taken as the answer, it would end
@@ -43,10 +42,8 @@ const reply = Effect.fn("reply")(function* <R>(run: RunContext<R>, saved: readon
 
   // A reply cut off at the output limit can end in the middle of a tool call.
   const finish = parts.find((part) => part.type === "finish");
-  if (finish?.reason === "length") return OUTPUT_LIMIT;
-
-  const callsTools = body.parts.some((part) => part.type === "tool-call");
-  return callsTools ? CONTINUE : ANSWERED;
+  // A reply without tool calls is the answer only once no later operation applies, such as checks.
+  return finish?.reason === "length" ? OUTPUT_LIMIT : CONTINUE;
 });
 
 /** One attempt: streams the reply and gives its parts. */
@@ -58,10 +55,7 @@ const streamReply = Effect.fn("streamReply")(function* <R>(
 
   const stream = run.languageModel.streamText({
     prompt: contextView(BASE_PROMPT, entries),
-    toolkit: runToolkit(
-      run.functions(() => Effect.void),
-      run.timeouts,
-    ),
+    toolkit: toolkit(run.tools),
     disableToolCallResolution: true,
   });
 

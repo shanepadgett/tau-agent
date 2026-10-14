@@ -12,6 +12,7 @@ import { catalogCacheLayer } from "../host/CatalogCache.ts";
 import { credentialStoreLayer } from "../host/CredentialStore.ts";
 import { hostIdLayer } from "../host/HostId.ts";
 import { Settings } from "../host/Settings.ts";
+import { outputFolderLayer } from "../host/OutputFolder.ts";
 import { showFailure } from "./internal/failure.ts";
 import { loginCommand, logoutCommand, terminalLoginPrompt } from "./internal/login.ts";
 import { rootCommand } from "./internal/print.ts";
@@ -21,6 +22,7 @@ const appLayer = Layer.mergeAll(
   catalogCacheLayer,
   hostIdLayer,
   Settings.layer,
+  outputFolderLayer,
   FetchHttpClient.layer,
   terminalLoginPrompt,
 ).pipe(

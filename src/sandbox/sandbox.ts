@@ -8,15 +8,21 @@ import { CodeMode, type Namespace, Tool, toolError } from "@opencode/codemode";
 import { Duration, Effect, FileSystem, Predicate, Result, Schema } from "effect";
 import type { WriteQueue } from "./WriteQueue.ts";
 
-/** Logs and the final value are cut to this many bytes, keeping the start. */
-const MAX_OUTPUT_BYTES = 50_000;
+const MEBIBYTE = 1_048_576;
+const MAX_OUTPUT_MEBIBYTES = 10;
+/** Patched codemode bounds console capture during execution, not the script's entire heap. */
+const MAX_OUTPUT_BYTES = MAX_OUTPUT_MEBIBYTES * MEBIBYTE;
 const JSON_INDENT = 2;
 
 /** What a script can call: functions, and groups of functions such as `tools.skills.<name>`. */
 export type Functions<R> = Namespace.Namespace<R>["tools"];
 
 /** The text the model gets back from one script, and whether the script failed. */
-export type ScriptResult = { readonly text: string; readonly isFailure: boolean };
+export type ScriptResult = {
+  readonly text: string;
+  readonly isFailure: boolean;
+  readonly truncation: "none" | "interpreter";
+};
 
 /** The signature and description of each function, for the `run` tool's description. */
 export const describeFunctions = <R>(functions: Functions<R>) =>
@@ -34,12 +40,13 @@ export const runScript = <R>(code: string, functions: Functions<R>, timeout: Dur
 const scriptResult = (execution: CodeMode.Result): ScriptResult => {
   const logs = execution.logs ?? [];
   const truncated = execution.truncated === true ? ["[output cut]"] : [];
+  const truncation = execution.truncated === true ? "interpreter" : "none";
 
   if (!execution.ok) {
     const { kind, message, location } = execution.error;
     const where = location === undefined ? "" : ` (line ${location.line})`;
     const error = `${kind}${where}: ${message}`;
-    return { text: [...logs, ...truncated, error].join("\n"), isFailure: true };
+    return { text: [...logs, ...truncated, error].join("\n"), isFailure: true, truncation };
   }
 
   const value = execution.value === null ? [] : [renderValue(execution.value)];
@@ -49,7 +56,7 @@ const scriptResult = (execution: CodeMode.Result): ScriptResult => {
   );
 
   const text = [...logs, ...value, ...truncated, ...warnings].join("\n");
-  return { text: text === "" ? "(no output)" : text, isFailure: false };
+  return { text: text === "" ? "(no output)" : text, isFailure: false, truncation };
 };
 
 const renderValue = (value: Schema.Json) =>

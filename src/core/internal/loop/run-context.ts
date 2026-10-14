@@ -3,30 +3,33 @@
 import type { Effect, Option } from "effect";
 import type { AiError, LanguageModel } from "effect/ai";
 import type { ModelRef } from "../../../ai/Catalog.ts";
-import type { Functions, Touched } from "../../../sandbox/Sandbox.ts";
 import type { Entry, EntryBody, SessionId } from "../../../session/Entry.ts";
 import type { SessionNotFound, Sessions, SessionStoreError } from "../../../session/Sessions.ts";
-import type { AgentEvent } from "../../Client.ts";
-import type { Timeouts } from "../run-tool/run-tool.ts";
+import type { AgentEvent, RunEnd } from "../../Client.ts";
+import type { ProjectChecks } from "../checks/checks-file.ts";
+import type { ModelTool } from "../tools/model-tool.ts";
 
 export type Outcome =
   | { readonly type: "continue" }
-  | { readonly type: "end"; readonly reason: "answered" | "turn-limit" | "output-limit" };
+  | { readonly type: "end"; readonly end: RunEnd };
 
 export const CONTINUE: Outcome = { type: "continue" };
+
+export const endWith = (end: RunEnd): Outcome => ({ type: "end", end });
 
 export type RunContext<R> = {
   readonly session: SessionId;
   readonly model: ModelRef;
   readonly languageModel: LanguageModel.LanguageModel;
   readonly sessions: Sessions["Service"];
-  /** The functions of one script; they report each file they touch to `touched`. */
-  readonly functions: (touched: Touched) => Functions<R>;
+  /** The tools the model can call. */
+  readonly tools: readonly ModelTool<R>[];
+  /** The project's checks, read once at the start of the run. */
+  readonly checks: Option.Option<ProjectChecks>;
   /** The instructions entry to save before the next model call, if any source changed. */
   readonly updateInstructions: (
     entries: readonly Entry[],
   ) => Effect.Effect<Option.Option<EntryBody>, never, R>;
-  readonly timeouts: Timeouts;
   readonly maxTurns: number | undefined;
   readonly emit: (event: AgentEvent) => Effect.Effect<void>;
 };

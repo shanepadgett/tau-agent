@@ -1,0 +1,254 @@
+diff --git a/dist/interpreter/execute.js b/dist/interpreter/execute.js
+index 98a7e3bebfdbc25282a7837c6bc17132c2b9e200..6a71997f6d856bbe479cb16609b5232624ccfd33 100644
+--- a/dist/interpreter/execute.js
++++ b/dist/interpreter/execute.js
+@@ -6,6 +6,7 @@ import { normalizeError } from "./errors.js";
+ import { createBuiltins } from "./intrinsics.js";
+ import { Pending } from "./promises.js";
+ import { Interpreter } from "./interpreter.js";
++import { ConsoleLogs } from "../stdlib/console.js";
+ export const executeProgram = (code, prepared, limits, hooks, globals) => {
+     if (code.trim().length === 0) {
+         return Effect.succeed({
+@@ -18,7 +19,7 @@ export const executeProgram = (code, prepared, limits, hooks, globals) => {
+     return Effect.suspend(() => {
+         const builtins = createBuiltins();
+         const tools = ToolRuntime.make(prepared, limits.maxToolCalls, hooks);
+-        const logs = [];
++        const logs = new ConsoleLogs(limits.maxOutputBytes);
+         const logged = () => (logs.length > 0 ? { logs: [...logs] } : {});
+         // Set only after copy-out so timeouts cannot report invalid values as completed.
+         let returned;
+@@ -74,7 +75,7 @@ export const executeProgram = (code, prepared, limits, hooks, globals) => {
+                 error: normalizeError(Cause.squash(cause)),
+                 ...logged(),
+                 toolCalls: tools.calls,
+-            })), Effect.map((result) => limits.maxOutputBytes === undefined ? result : boundOutput(result, limits.maxOutputBytes)));
++            })), Effect.map((result) => limits.maxOutputBytes === undefined ? result : boundOutput(result, limits.maxOutputBytes, logs.count)));
+     });
+ };
+ const parseProgram = (code) => {
+@@ -96,7 +97,7 @@ const utf8Truncate = (value, maxBytes) => {
+     return text.endsWith("\uFFFD") ? text.slice(0, -1) : text;
+ };
+ // Warnings have a separate budget so result data cannot starve diagnostics.
+-const boundOutput = (result, maxOutputBytes) => {
++const boundOutput = (result, maxOutputBytes, attemptedLogs) => {
+     let truncated = false;
+     let value = null;
+     let valueBytes = 0;
+@@ -141,9 +142,9 @@ const boundOutput = (result, maxOutputBytes) => {
+         logBytes += lineBytes;
+         kept.push(line);
+     }
+-    if (kept.length < logs.length) {
++    if (kept.length < attemptedLogs) {
+         truncated = true;
+-        kept.push(`[logs truncated: showing ${kept.length} of ${logs.length} lines]`);
++        kept.push(`[logs truncated: showing ${kept.length} of ${attemptedLogs} lines]`);
+     }
+     if (!truncated)
+         return result;
+diff --git a/node_modules/@opencode/codemode/dist/stdlib/console-budget.js b/dist/stdlib/console-budget.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..b28e88d452f1605f6a65a25cbdef0d8b46bed87f
+--- /dev/null
++++ b/dist/stdlib/console-budget.js
+@@ -0,0 +1,143 @@
++import { Arr, Bytes, ErrorObj, get, HeadersObj, MapObj, Obj, Opaque, RegExpObj, SetObj, URLObj, URLSearchParamsObj, Wrapper } from "../interpreter/objects.js";
++
++// Check before console's map/join/JSON formatting allocates. Charge collection
++// entries too: a short printed value can still require a large temporary array.
++const MIN_FORMAT_BUDGET = 65_536;
++const ENTRY_BYTES = 32;
++const exhausted = Symbol("console formatting budget");
++
++export const canFormatConsole = (name, args, bytes) => {
++    if (bytes < 0) return false;
++    // The argument slot and root value must not reduce a single string's allowance.
++    let remaining = Math.max(bytes, MIN_FORMAT_BUDGET) + 2 * ENTRY_BYTES;
++    const charge = (size) => {
++        remaining -= size;
++        if (remaining < 0) throw exhausted;
++    };
++    const text = (value, quoted = false) => {
++        // UTF-8 and JSON escaping never use fewer bytes than UTF-16 code units.
++        if (value.length > remaining) throw exhausted;
++        if (quoted) charge(2);
++        for (let index = 0; index < value.length; index++) {
++            const code = value.charCodeAt(index);
++            if (quoted && (code === 34 || code === 92)) charge(2);
++            else if (quoted && code < 32) charge([8, 9, 10, 12, 13].includes(code) ? 2 : 6);
++            else if (code < 128) charge(1);
++            else if (code < 2048) charge(2);
++            else if (code >= 0xd800 && code <= 0xdbff && value.charCodeAt(index + 1) >= 0xdc00 && value.charCodeAt(index + 1) <= 0xdfff) {
++                charge(4);
++                index++;
++            }
++            else charge(quoted && code >= 0xd800 && code <= 0xdfff ? 6 : 3);
++        }
++    };
++    const seen = new Set();
++    const visit = (value, depth = 0, quoted = true) => {
++        charge(ENTRY_BYTES);
++        if (typeof value === "string") return text(value, quoted);
++        if (!(value instanceof Obj)) return;
++        if (depth > 32) {
++            // table's opaque-reference scan has no depth limit.
++            if (name === "table") throw exhausted;
++            return;
++        }
++        if (seen.has(value)) return;
++        seen.add(value);
++        try {
++            if (value instanceof Opaque) return;
++            if (value instanceof Arr) {
++                charge(value.items.length * ENTRY_BYTES);
++                for (const child of value.items) visit(child, depth + 1);
++            }
++            else if (value instanceof MapObj) {
++                charge(value.map.size * ENTRY_BYTES);
++                for (const [key, child] of value.map) {
++                    visit(key, depth + 1);
++                    visit(child, depth + 1);
++                }
++            }
++            else if (value instanceof SetObj) {
++                charge(value.set.size * ENTRY_BYTES);
++                for (const child of value.set) visit(child, depth + 1);
++            }
++            else if (value instanceof Bytes) charge(value.bytes.length * ENTRY_BYTES);
++            else if (value instanceof HeadersObj) {
++                for (const [key, child] of value.headers) {
++                    charge(ENTRY_BYTES);
++                    text(key, true);
++                    text(child, true);
++                }
++            }
++            else if (value instanceof URLSearchParamsObj) {
++                for (const [key, child] of value.params) charge(ENTRY_BYTES + (key.length + child.length) * 9);
++            }
++            else if (value instanceof RegExpObj) text(value.regex.source);
++            else if (value instanceof URLObj) text(value.url.href);
++            else if (value instanceof ErrorObj) {
++                const errorName = get(value, "name");
++                const message = get(value, "message");
++                if (typeof errorName === "string") text(errorName);
++                if (typeof message === "string") text(message);
++            }
++            // table scans own properties even when normal inspection ignores them.
++            if (!(value instanceof Wrapper) || name === "table") {
++                charge(value.props.size * ENTRY_BYTES);
++                for (const [key, slot] of value.props) {
++                    if (typeof key !== "string") {
++                        if (name === "table") visit(get(value, key), depth + 1);
++                        continue;
++                    }
++                    if (slot.enumerable) text(key, true);
++                    if (slot.enumerable || name === "table") visit(get(value, key), depth + 1);
++                }
++            }
++        }
++        finally {
++            seen.delete(value);
++        }
++    };
++    try {
++        charge(args.length * ENTRY_BYTES);
++        if (name === "dir" || name === "table") visit(args[0], 0, false);
++        else for (const value of args) visit(value, 0, false);
++        if (name !== "table") return true;
++
++        const data = args[0];
++        const selected = args[1] instanceof Arr ? args[1] : undefined;
++        if (selected !== undefined) visit(selected);
++        const columns = selected === undefined ? new Set() : selected.items.map(String);
++        const rows = function* () {
++            if (data instanceof Arr) yield* data.items;
++            else if (data instanceof Obj) {
++                for (const [key, slot] of data.props) {
++                    if (typeof key === "string" && slot.enumerable) yield get(data, key);
++                }
++            }
++            else yield data;
++        };
++        let rowCount = 0;
++        for (const row of rows()) {
++            rowCount++;
++            charge(ENTRY_BYTES);
++            if (selected !== undefined) {
++                for (const key of columns) visit(row instanceof Obj && !(row instanceof Arr) ? get(row, key) : key === "Value" ? row : undefined);
++            }
++            else if (row instanceof Obj && !(row instanceof Arr)) {
++                for (const [key, slot] of row.props) {
++                    if (typeof key !== "string" || !slot.enumerable || columns.has(key)) continue;
++                    charge(ENTRY_BYTES);
++                    text(key);
++                    columns.add(key);
++                }
++            }
++            else columns.add("Value");
++        }
++        // A sparse table can expand to rows times the union of all column names.
++        charge(rowCount * ((selected === undefined ? columns.size : columns.length) + 1) * ENTRY_BYTES);
++        return true;
++    }
++    catch (error) {
++        if (error !== exhausted) throw error;
++        return false;
++    }
++};
+diff --git a/dist/stdlib/console.js b/dist/stdlib/console.js
+index fcde7ca6a16eaddbbdca7398aebc73a6b0d54dff..70586cbd832907979db23cbca083d111705dfe72 100644
+--- a/dist/stdlib/console.js
++++ b/dist/stdlib/console.js
+@@ -2,8 +2,39 @@ import { methods } from "../interpreter/native.js";
+ import { entries, get, Arr, Obj } from "../interpreter/objects.js";
+ import { ToolReference } from "../tool-runtime.js";
+ import { containsOpaqueReference } from "../interpreter/references.js";
++import { canFormatConsole } from "./console-budget.js";
+ const consoleMethods = ["log", "info", "debug", "warn", "error", "dir", "table"];
+-/** Captured console: every method appends one formatted line to `logs`. */
++const MAX_LOG_ENTRIES = 65_536;
++
++/** One execution's prefix of whole log entries, bounded before formatting. */
++export class ConsoleLogs extends Array {
++    count = 0;
++    bytes = 0;
++    stopped = false;
++    constructor(maxBytes) {
++        super();
++        this.maxBytes = maxBytes;
++    }
++    append(name, args) {
++        this.count++;
++        if (this.stopped) return;
++        if (this.maxBytes !== undefined && (this.length >= MAX_LOG_ENTRIES || !canFormatConsole(name, args, this.maxBytes - this.bytes - 1))) {
++            this.stopped = true;
++            return;
++        }
++        const line = formatConsoleMessage(name, args);
++        if (this.maxBytes !== undefined) {
++            const bytes = new TextEncoder().encode(line).byteLength + 1;
++            if (this.bytes + bytes > this.maxBytes) {
++                this.stopped = true;
++                return;
++            }
++            this.bytes += bytes;
++        }
++        this.push(line);
++    }
++}
++/** Console methods share the execution's bounded log collector. */
+ export const consoleGlobal = (ctx) => {
+     const builtins = ctx.builtins;
+     const console = new Obj(builtins.Object);
+@@ -11,7 +42,7 @@ export const consoleGlobal = (ctx) => {
+         name,
+         0,
+         (_, args) => {
+-            ctx.logs.push(formatConsoleMessage(name, args));
++            ctx.logs.append(name, args);
+             return undefined;
+         },
+     ]));

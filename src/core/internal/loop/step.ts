@@ -6,17 +6,22 @@
 import { Effect, Option } from "effect";
 import { callModel } from "./call-model.ts";
 import { interruptStartedCalls } from "./interrupt-started-calls.ts";
-import type { Operation, Outcome, RunContext } from "./run-context.ts";
+import type { Platform } from "../tools/model-tool.ts";
+import { stopRepeatedCalls } from "./repeat-limit.ts";
+import { endWith, type Operation, type RunContext } from "./run-context.ts";
 import { runToolCalls } from "./run-tool-calls.ts";
+import { settleChecks } from "./settle-checks.ts";
 import { stopAtTurnLimit } from "./turn-limit.ts";
 
-const ANSWERED: Outcome = { type: "end", reason: "answered" };
+const ANSWERED = endWith({ reason: "answered" });
 
 /** The operations in the order a step tries them. Calling the model is always last. */
-const operations = <R>(run: RunContext<R>): ReadonlyArray<Operation<R>> => [
+const operations = <R>(run: RunContext<R>): ReadonlyArray<Operation<R | Platform>> => [
   interruptStartedCalls(run),
   runToolCalls(run),
+  stopRepeatedCalls,
   stopAtTurnLimit(run),
+  settleChecks(run),
   callModel(run),
 ];
 
@@ -36,6 +41,6 @@ const step = Effect.fn("step")(function* <R>(run: RunContext<R>) {
 export const runSteps = Effect.fn("runSteps")(function* <R>(run: RunContext<R>) {
   for (;;) {
     const outcome = yield* step(run);
-    if (outcome.type === "end") return outcome.reason;
+    if (outcome.type === "end") return outcome.end;
   }
 });

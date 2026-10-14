@@ -6,11 +6,12 @@
 import { arch, platform } from "node:os";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { Clock, Effect, FileSystem, Option } from "effect";
-import { runCommand } from "../../../proc/Command.ts";
+import { runProgram } from "../../../proc/Command.ts";
+import { GIT_TIMEOUT } from "../../../workspace/Repository.ts";
 import type { Entry } from "../../../session/Entry.ts";
 import type { UserInstructions } from "../../UserInstructions.ts";
 import { type FoundSkills, skillListSource } from "../skills/skills.ts";
-import { GIT_TIMEOUT, projectFolders } from "./folders.ts";
+import { projectFolders } from "./folders.ts";
 import { alwaysSources, findInstructionFiles, readWhenSource } from "./instruction-files.ts";
 import { fileSource, type InstructionSource, savedPaths } from "./instructions.ts";
 
@@ -80,7 +81,9 @@ const touchedFiles = (entries: readonly Entry[]) => {
 
   return entries
     .slice(lastReply + 1)
-    .flatMap(({ body }) => (body.type === "tool-result" ? (body.files ?? []) : []));
+    .flatMap(({ body }) =>
+      body.type === "tool-result" && body.details?.tool === "run" ? body.details.files : [],
+    );
 };
 
 /** The agents files in the folders between `directory` and each file, from the top down. */
@@ -162,7 +165,7 @@ const REPOSITORY_FILES =
   'git ls-files --cached --others --exclude-standard | awk -F/ \'NF > 1 { print $1 "/" } NF > 2 { print $1 "/" $2 "/" } NF <= 2 { print }\' | sort -u';
 
 const repositoryFiles = (directory: string) =>
-  runCommand(REPOSITORY_FILES, directory, GIT_TIMEOUT).pipe(
+  runProgram("sh", ["-c", REPOSITORY_FILES], directory, GIT_TIMEOUT).pipe(
     Effect.flatMap(({ exitCode, output }) =>
       exitCode === 0
         ? Effect.succeed(output.split("\n").filter((line) => line !== ""))

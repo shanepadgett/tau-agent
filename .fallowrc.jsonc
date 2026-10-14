@@ -84,7 +84,7 @@
       { "from": "database", "allow": ["database-internal"] },
       { "from": "sandbox", "allow": ["sandbox-internal"] },
       { "from": "proc", "allow": ["proc-internal"] },
-      { "from": "workspace", "allow": ["workspace-internal"] },
+      { "from": "workspace", "allow": ["workspace-internal", "proc"] },
       { "from": "ai", "allow": ["ai-internal"] },
       {
         "from": "cli-internal",
@@ -115,7 +115,7 @@
       { "from": "database-internal", "allow": ["database"] },
       { "from": "sandbox-internal", "allow": ["sandbox"] },
       { "from": "proc-internal", "allow": ["proc"] },
-      { "from": "workspace-internal", "allow": ["workspace"] },
+      { "from": "workspace-internal", "allow": ["workspace", "proc"] },
       { "from": "ai-internal", "allow": ["ai"] },
       { "from": "tools", "allow": [] },
       {

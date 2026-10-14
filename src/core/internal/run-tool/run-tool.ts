@@ -1,11 +1,11 @@
 /**
- * The model's one tool, `run`: the functions a script can call, the tool's description, and the
- * text one call returns.
+ * The `run` tool: the functions a script can call, the tool's description, and what one call
+ * returns. With project checks, a call also finds the files its script changed and runs the fixers.
  */
 
 import { searchSignature, Tool as ScriptFunction, toolError } from "@opencode/codemode";
-import { Duration, Effect, Option, Result, Schema } from "effect";
-import { Tool, Toolkit } from "effect/ai";
+import { Duration, Effect, Option, Ref, Result, Schema } from "effect";
+import { Tool } from "effect/ai";
 import { runCommand } from "../../../proc/Command.ts";
 import {
   describeFunctions,
@@ -19,8 +19,12 @@ import {
 } from "../../../sandbox/Sandbox.ts";
 import type { WriteQueue } from "../../../sandbox/WriteQueue.ts";
 import type { Entry } from "../../../session/Entry.ts";
-import { findScript } from "../loop/tool-history.ts";
+import { withChanges } from "../checks/changes.ts";
+import type { ProjectChecks } from "../checks/checks-file.ts";
+import { findScript, type ToolCall } from "../loop/tool-history.ts";
 import { SKILLS_GROUP } from "../skills/skills.ts";
+import type { ModelTool, Platform } from "../tools/model-tool.ts";
+import { OutputFiles, renderOutput, saveOutput } from "../output/output-files.ts";
 
 export type Timeouts = { readonly run: Duration.Duration; readonly shell: Duration.Duration };
 
@@ -38,7 +42,7 @@ const RunParameters = Schema.Struct({
 });
 
 /** `script` is the code that ran; a call that ran nothing has none. */
-export type RunResult = ScriptResult & { readonly script: string | undefined };
+type RunResult = ScriptResult & { readonly script: string | undefined };
 
 const ShellInput = Schema.Struct({
   command: Schema.String,
@@ -49,14 +53,25 @@ const ShellOutput = Schema.Struct({ exitCode: Schema.Number, output: Schema.Stri
 
 const sh = (directory: string, timeout: Duration.Duration) =>
   ScriptFunction.make({
-    description: `Runs a shell command in the session directory with \`sh -c\`. Returns the exit code and the output, stdout and stderr together. Throws after timeoutSeconds, default ${Duration.toSeconds(timeout)}, with the output so far, and stops the command and everything it started.`,
+    description: `Runs a shell command in the session directory with \`sh -c\`. Returns the exit code and the output, stdout and stderr together. Large output keeps the start and end, with a path to the whole output that you can search with sh. Throws after timeoutSeconds, default ${Duration.toSeconds(timeout)}, with the output so far, and stops the command and everything it started.`,
     input: ShellInput,
     output: ShellOutput,
     execute: (input) =>
-      runCommand(input.command, directory, secondsOr(input.timeoutSeconds, timeout)).pipe(
+      Effect.gen(function* () {
+        const outputPath = yield* (yield* OutputFiles).next("sh");
+
+        const ran = yield* runCommand(
+          { command: input.command, directory, args: [], env: {}, outputPath },
+          secondsOr(input.timeoutSeconds, timeout),
+        );
+
+        return { exitCode: ran.exitCode, output: renderOutput(ran.output, "whole").text };
+      }).pipe(
         Effect.catchTags({
-          CommandTimedOut: (error) => Effect.fail(toolError(`${error.message}\n${error.output}`)),
+          ShellTimedOut: (error) =>
+            Effect.fail(toolError(`${error.message}\n${renderOutput(error.output, "whole").text}`)),
           PlatformError: (error) => Effect.fail(toolError(error.message)),
+          OutputUnavailable: (error) => Effect.fail(toolError(error.message)),
         }),
       ),
   });
@@ -81,14 +96,59 @@ export const scriptFunctions = (
  */
 const RUN_PARAMETERS_JSON_SCHEMA = Tool.getJsonSchemaFromSchema(RunParameters);
 
-export const runToolkit = <R>(functions: Functions<R>, timeouts: Timeouts) =>
-  Toolkit.make(
-    Tool.dynamic("run", {
-      description: runDescription(describeFunctions(withoutSkills(functions)), timeouts),
-      parameters: RUN_PARAMETERS_JSON_SCHEMA,
-      success: Schema.String,
-    }).annotate(Tool.Strict, false),
-  );
+/**
+ * The `run` tool. `functions` gives the functions of one script, which report each file they touch.
+ * With `checks`, each call also saves the files its script changed, after the fixers ran.
+ */
+export const runTool = <R>(
+  functions: (touched: Touched) => Functions<R>,
+  timeouts: Timeouts,
+  checks: Option.Option<ProjectChecks>,
+): ModelTool<R | Platform> => ({
+  definition: Tool.dynamic("run", {
+    description: runDescription(
+      describeFunctions(withoutSkills(functions(() => Effect.void))),
+      timeouts,
+    ),
+    parameters: RUN_PARAMETERS_JSON_SCHEMA,
+    success: Schema.String,
+  }).annotate(Tool.Strict, false),
+
+  call: Effect.fn("runTool")(function* (call: ToolCall, entries: readonly Entry[]) {
+    const touched = yield* Ref.make<ReadonlySet<string>>(new Set());
+    const touch = (path: string) => Ref.update(touched, (paths) => new Set(paths).add(path));
+    const script = runCall(call.params, entries, functions(touch), timeouts);
+
+    const [ran, changes] = yield* Option.match(checks, {
+      onNone: () => script.pipe(Effect.map((outcome) => [outcome, undefined] as const)),
+      onSome: (project) => withChanges(project, script),
+    });
+
+    const files = [...(yield* Ref.get(touched))];
+    const extent = ran.truncation === "interpreter" ? "retained" : "whole";
+
+    const saved = yield* saveOutput([ran.text], "run", extent).pipe(
+      Effect.map((output) => ({ ...output, isFailure: ran.isFailure })),
+      Effect.catchTag("OutputUnavailable", (error) =>
+        Effect.succeed({
+          text: error.message,
+          output: undefined,
+          isFailure: true,
+        }),
+      ),
+    );
+
+    const details = {
+      tool: "run" as const,
+      script: ran.script,
+      files,
+      changes,
+      output: saved.output,
+    };
+
+    return { text: saved.text, isFailure: saved.isFailure, details };
+  }),
+});
 
 /**
  * The skills are left out of the description, so adding a skill never changes the tool and the
@@ -107,6 +167,7 @@ const runDescription = (functions: readonly string[], timeouts: Timeouts) =>
     searchSignature,
     "",
     "Only what the program prints with console.log and the value it returns come back. A function that fails throws.",
+    "Large results keep the start and end, with a path to the saved output. Search that file with sh, or print less. The interpreter bounds console capture and formatting while the script runs and limits returned output to 10 MB. Discarded script output cannot be recovered.",
     `The whole program stops after timeoutSeconds, default ${Duration.toSeconds(timeouts.run)}. This always wins over a shell command's own timeout.`,
     "",
     "When a program fails, its result ends with a Script ID. To fix it, send scriptId and edits instead of code. Each edit changes the one place in that program where `old` appears to `new`, in order. If an `old` appears zero times or more than once, nothing runs.",
@@ -116,7 +177,7 @@ const runDescription = (functions: readonly string[], timeouts: Timeouts) =>
  * Runs one `run` call: its code, or an earlier script with edits. Parameters the model got wrong
  * and edits that do not apply come back as a failed result.
  */
-export const runCall = <R>(
+const runCall = <R>(
   params: Schema.Json,
   entries: readonly Entry[],
   functions: Functions<R>,
@@ -132,7 +193,12 @@ export const runCall = <R>(
   );
 
   if (Result.isFailure(parsed))
-    return Effect.succeed({ text: parsed.failure, isFailure: true, script: undefined });
+    return Effect.succeed({
+      text: parsed.failure,
+      isFailure: true,
+      script: undefined,
+      truncation: "none",
+    });
 
   const { script, timeoutSeconds } = parsed.success;
 

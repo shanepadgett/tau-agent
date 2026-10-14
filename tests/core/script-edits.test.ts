@@ -56,7 +56,7 @@ describe("script edits", () => {
 
         expect(entries.find((entry) => entry.number === scriptId)?.body).toMatchObject({
           callId: "call-1",
-          script: BROKEN,
+          details: { tool: "run", script: BROKEN },
         });
 
         const edited = entries.find(
@@ -64,7 +64,7 @@ describe("script edits", () => {
         );
 
         expect(edited?.body).toMatchObject({
-          script: 'console.log("start")\nconsole.log("fixed")',
+          details: { tool: "run", script: 'console.log("start")\nconsole.log("fixed")' },
         });
       }),
     ));

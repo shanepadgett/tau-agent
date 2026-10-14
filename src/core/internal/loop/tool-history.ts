@@ -1,6 +1,7 @@
 /** Reads the tool calls of a session from its entries: which calls started, which have results. */
 
 import { Option, Predicate } from "effect";
+import { hasFailures } from "../../../session/CheckReport.ts";
 import type { Entry, EntryBody } from "../../../session/Entry.ts";
 
 type AssistantPart = Extract<EntryBody, { type: "assistant" }>["parts"][number];
@@ -34,16 +35,21 @@ export const openCalls = (entries: readonly Entry[]) => {
 };
 
 /**
- * The model answers next when the session ends with a prompt or a tool result. Started calls and
- * instructions saved for the next model call do not count.
+ * The model answers next when the session ends with a prompt, a tool result or checks that failed.
+ * Started calls and instructions saved for the next model call do not count.
  */
 export const needsReply = (entries: readonly Entry[]) => {
   const last = entries.findLast(
     ({ body }) => body.type !== "tool-started" && body.type !== "instructions",
-  );
+  )?.body;
 
-  return last?.body.type === "user" || last?.body.type === "tool-result";
+  if (last?.type === "checks") return hasFailures(last.report);
+  return last?.type === "user" || last?.type === "tool-result";
 };
+
+/** The entries after the latest prompt: the work of the current run. */
+export const sincePrompt = (entries: readonly Entry[]) =>
+  entries.slice(entries.findLastIndex(({ body }) => body.type === "user") + 1);
 
 export const failedResult = (call: ToolCall, text: string): EntryBody => ({
   type: "tool-result",
@@ -56,9 +62,9 @@ export const failedResult = (call: ToolCall, text: string): EntryBody => ({
 /** The script a `run` result with entry number `scriptId` ran, if that result exists. */
 export const findScript = (entries: readonly Entry[], scriptId: number) => {
   const body = entries.find((entry) => entry.number === scriptId)?.body;
-  if (body?.type !== "tool-result" || body.name !== "run") return Option.none<string>();
+  if (body?.type !== "tool-result" || body.details?.tool !== "run") return Option.none<string>();
 
-  return Option.fromUndefinedOr(body.script);
+  return Option.fromUndefinedOr(body.details.script);
 };
 
 /** The first line of the script, or the script it edits, so a client can show what is running. */

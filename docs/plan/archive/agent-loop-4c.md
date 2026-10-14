@@ -1,6 +1,6 @@
 # Slice 4c: script tools
 
-Status: archived. Built and checked live 2026-10-13; lasting decisions in [architecture.md](../architecture.md#core-ideas) (Script tools as built); slice 4d's architecture is in [work/agent-loop-4d.md](../work/agent-loop-4d.md).
+Status: archived. Built and checked live 2026-10-13; lasting decisions in [architecture.md](../architecture.md#core-ideas) (Script tools as built); slice 4d's architecture is in [agent-loop-4d.md](agent-loop-4d.md).
 
 **What the user gets:** when a `run` script fails, the model fixes it with a few small edits instead of sending the whole script again. Two edits to one file in the same script can no longer overwrite each other. Projects define checks (formatters, lint, type checks, tests): fixers run silently after the model changes matching files, and the model calls `checks` when it is done. If it skips them, or changes files after, Tau runs them before the run ends and sends the failures back.
 
