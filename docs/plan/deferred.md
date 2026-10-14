@@ -37,3 +37,4 @@ Decisions to make later. Each line is the question and what brings it up. When t
 - Not counting interrupted replies against `maxTurns`. Comes up if a user reports a run stopping a turn early.
 - More uses of nudges (hidden model notes, first built for context stages in slice 5a): user skill invocation at step 6, loop warnings, cut-output guidance and fallback-check reminders. Comes up when those flows use the shared nudge entry.
 - Recovering from a "context too long" error (an automatic checkpoint without a handoff, then one retry). The budget keeps the context at least 16k below the window and tool output is capped. Comes up if a session overflows anyway.
+- PTY process kill misses a child spawned during the kill, and signals descendants by pid, so a reused pid could be hit. Pipe sessions kill by process group and are not affected. Comes up if a leaked child is reported, or when a supervisor for surviving Tau's exit is built.

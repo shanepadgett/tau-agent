@@ -2,7 +2,7 @@
 
 import { Effect } from "effect";
 import { Catalog, type ModelRef } from "../../../../ai/Catalog.ts";
-import type { SessionId } from "../../../../session/Entry.ts";
+import type { RunningProcess, SessionId } from "../../../../session/Entry.ts";
 import { Notes } from "../../../../session/Notes.ts";
 import { Sessions } from "../../../../session/Sessions.ts";
 import { ContextSettings } from "../../../ContextSettings.ts";
@@ -21,7 +21,11 @@ export const makeNotesMethod = Effect.fn("makeNotesMethod")(function* () {
   const settings = yield* ContextSettings;
   const background = yield* makeContextWorker();
 
-  const forRun = Effect.fn("notesForRun")(function* (session: SessionId, model: ModelRef) {
+  const forRun = Effect.fn("notesForRun")(function* (
+    session: SessionId,
+    model: ModelRef,
+    running: Effect.Effect<readonly RunningProcess[]>,
+  ) {
     const { profile } = yield* catalog.model(model);
     const budgetTokens = contextBudget(profile, settings);
 
@@ -30,7 +34,7 @@ export const makeNotesMethod = Effect.fn("makeNotesMethod")(function* () {
         Effect.all([notes.list(session), notes.memories(session)]).pipe(
           Effect.map(([saved, memories]) => notesView(soul, entries, saved, memories)),
         ),
-      tools: [checkpointTool(session, notes)],
+      tools: [checkpointTool({ session, notes, running })],
       nudge: (entries) => stageNudge(entries, budgetTokens),
       operations: [refuseCallsWhenForced({ session, sessions, budgetTokens })],
       shouldReply: (entries) =>

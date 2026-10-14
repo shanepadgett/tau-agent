@@ -7,7 +7,7 @@ import {
   systemMessage,
   withCacheMark,
 } from "../../../../session/ContextView.ts";
-import type { CheckpointDetails, Entry } from "../../../../session/Entry.ts";
+import type { CheckpointDetails, Entry, RunningProcess } from "../../../../session/Entry.ts";
 import type { Memory, Note } from "../../../../session/Notes.ts";
 
 type SavedCheckpoint = { readonly entry: Entry; readonly details: CheckpointDetails };
@@ -75,7 +75,7 @@ export const notesView = (
 
   messages.push(
     textMessage(
-      `Your handoff at the checkpoint:\n${checkpoint.details.handoff}\n\nCheckpoint completed. Earlier context-stage nudges no longer apply.`,
+      `Your handoff at the checkpoint:\n${checkpoint.details.handoff}${runningText(checkpoint.details.processes ?? [])}\n\nCheckpoint completed. Earlier context-stage nudges no longer apply.`,
     ),
   );
 
@@ -88,6 +88,14 @@ export const notesView = (
 
   return Prompt.fromMessages([systemMessage(soul, entries), ...messages]);
 };
+
+/** The commands left running at the checkpoint, since the handoff may not name them. */
+const runningText = (processes: readonly RunningProcess[]) =>
+  processes.length === 0
+    ? ""
+    : `\n\nProcess sessions running at the checkpoint (see tools.process):\n${processes
+        .map((running) => `- ${running.id}${running.pty ? " (terminal)" : ""}: ${running.command}`)
+        .join("\n")}`;
 
 const textMessage = (text: string) => Prompt.userMessage({ content: [Prompt.textPart({ text })] });
 

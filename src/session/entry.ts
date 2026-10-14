@@ -102,6 +102,15 @@ const ChecksDetails = Schema.Struct({
   output: Schema.optional(Schema.String),
 });
 
+/** A command the agent left running, as a checkpoint lists it. */
+const RunningProcess = Schema.Struct({
+  id: Schema.String,
+  command: Schema.String,
+  pty: Schema.Boolean,
+});
+
+export type RunningProcess = typeof RunningProcess.Type;
+
 const CheckpointDetails = Schema.Struct({
   tool: Schema.Literal("checkpoint"),
   handoff: Schema.String,
@@ -109,6 +118,8 @@ const CheckpointDetails = Schema.Struct({
   notes: Schema.Array(Schema.Int),
   noteTokens: Schema.Int,
   tailFrom: Schema.Int,
+  /** The commands running at the checkpoint. Absent on checkpoints saved before process sessions. */
+  processes: Schema.optional(Schema.Array(RunningProcess)),
 });
 
 export type CheckpointDetails = typeof CheckpointDetails.Type;

@@ -18,15 +18,23 @@ import {
   type Scope,
 } from "effect";
 import { ChildProcessSpawner } from "effect/process";
+import {
+  makeProcessSessions,
+  PROCESS_LIMITS,
+  type ProcessSessions,
+  type ProcessSummary,
+} from "../../../proc/ProcessSessions.ts";
 import { ConversationId } from "../../../ai/ConversationId.ts";
 import type { Models } from "../../../ai/Models.ts";
 import type { WriteQueue } from "../../../sandbox/WriteQueue.ts";
-import type { SessionId } from "../../../session/Entry.ts";
+import type { RunningProcess, SessionId } from "../../../session/Entry.ts";
 import type { Session, Sessions } from "../../../session/Sessions.ts";
 import type { SkillUses } from "../../../session/SkillUses.ts";
 import type { AgentEvent, Command, RunEnd } from "../../Client.ts";
 import type { ContextMethod } from "../../ContextMethod.ts";
 import { historyFunction } from "../context/history.ts";
+import { PROCESS_GROUP, processFunctions } from "../process/process-functions.ts";
+import { processNotices } from "../process/process-notices.ts";
 import type { UserInstructions } from "../../UserInstructions.ts";
 import type { OutputFolder } from "../../OutputFolder.ts";
 import { makeOutputFiles, OutputFiles } from "../output/output-files.ts";
@@ -74,14 +82,22 @@ export const makeRunner = Effect.fn("makeRunner")(function* (services: RunServic
   const prompts = yield* Queue.unbounded<QueuedPrompt>();
   const current = yield* FiberHandle.make<RunEnd, unknown>();
 
+  const processes = yield* makeProcessSessions(PROCESS_LIMITS).pipe(
+    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, services.spawner),
+  );
+
   const runNext = Effect.gen(function* () {
     const prompt = yield* Queue.take(prompts);
 
     // The handle must hold the fiber before it starts: a run can publish an event, and a client
     // can cancel in answer, before a fiber that starts at once is handed back.
-    const run = yield* FiberHandle.run(current, runPrompt(services, session, prompt, events), {
-      startImmediately: false,
-    });
+    const run = yield* FiberHandle.run(
+      current,
+      runPrompt({ services, session, processes, events }, prompt),
+      {
+        startImmediately: false,
+      },
+    );
 
     yield* PubSub.publish(events, runEnded(yield* Fiber.await(run)));
   });
@@ -106,13 +122,16 @@ export const makeRunner = Effect.fn("makeRunner")(function* (services: RunServic
   return opened;
 });
 
+/** What the runs of one session share: its services, its commands and its event stream. */
+type SessionRuns = {
+  readonly services: RunServices;
+  readonly session: Session;
+  readonly processes: ProcessSessions;
+  readonly events: PubSub.PubSub<AgentEvent>;
+};
+
 /** Saves the prompt and runs the agent loop on it. */
-const runPrompt = (
-  services: RunServices,
-  session: Session,
-  prompt: QueuedPrompt,
-  events: PubSub.PubSub<AgentEvent>,
-) =>
+const runPrompt = ({ services, session, processes, events }: SessionRuns, prompt: QueuedPrompt) =>
   Effect.gen(function* () {
     const { sessions, models } = services;
     const { model, timeouts, maxTurns } = prompt.options;
@@ -122,12 +141,18 @@ const runPrompt = (
     const checks = yield* readProjectChecks(session.directory, root);
     const used = (skill: Skill) => services.skillUses.record(skill.name, session.directory);
     const user = services.userInstructions;
-    const method = yield* services.contextMethod.forRun(session.id, model);
+
+    const method = yield* services.contextMethod.forRun(
+      session.id,
+      model,
+      processes.list.pipe(Effect.map(runningProcesses)),
+    );
 
     const run = runTool<Platform>(
       (touched) => ({
         ...scriptFunctions(session.directory, timeouts, touched, services.writeQueue),
         history: historyFunction(session.id, sessions),
+        [PROCESS_GROUP]: processFunctions(processes, session.directory),
         [SKILLS_GROUP]: skillFunctions(skills.skills, touched, used),
       }),
       timeouts,
@@ -149,6 +174,7 @@ const runPrompt = (
         instructionSources({ directory: session.directory, user, skills }, entries).pipe(
           Effect.flatMap((sources) => instructionsUpdate(sources, entries)),
         ),
+      processNotices: processNotices(processes),
       maxTurns,
       emit: (event) => PubSub.publish(events, event).pipe(Effect.asVoid),
     };
@@ -179,6 +205,11 @@ const runSkills = Effect.fn("runSkills")(function* (
 
   return { skills, ranking: yield* services.skillUses.ranking(directory) };
 });
+
+const runningProcesses = (summaries: readonly ProcessSummary[]): readonly RunningProcess[] =>
+  summaries.flatMap(({ id, command, pty, state }) =>
+    state.type === "running" ? [{ id, command, pty }] : [],
+  );
 
 const runEnded = (exit: Exit.Exit<RunEnd, unknown>): AgentEvent => {
   if (Exit.isSuccess(exit)) return { type: "run-ended", ...exit.value };

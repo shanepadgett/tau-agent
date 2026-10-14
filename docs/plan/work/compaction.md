@@ -1,6 +1,6 @@
 # Build step 5: background tasks and compaction
 
-Status: rounds 1–2 decided; slice 5a implemented and repository checks passed, 2026-10-14. Round 3 (dreaming) is implemented and repository checks are pending; its plan is in [compaction-round3.md](compaction-round3.md). Replay is deferred. The research behind the design is in [compaction-research.md](../compaction-research.md). Live calls remain deferred.
+Status: rounds 1–2 decided; slice 5a implemented and repository checks passed, 2026-10-14. Round 3 (dreaming) is implemented and committed; its plan is archived in [compaction-round3.md](../archive/compaction-round3.md). Slice 5b (process sessions) is implemented; see [process-sessions.md](process-sessions.md). Replay is deferred. The research behind the design is in [compaction-research.md](../compaction-research.md). Live calls remain deferred.
 
 **What the user gets:** the chat never stops for compaction. While the agent works, a cheap model writes notes on older entries in the background. When the agent decides to compact, it writes a handoff, and its context becomes the notes, the recent raw entries and the handoff at once, with most of the prompt cache intact. The agent can look up the raw entries behind any note. Slice 5b lets the model start long-running commands, such as a dev server, and come back to them.
 
@@ -116,4 +116,17 @@ Implemented: the note-table migration and fork copying, checkpoint metadata, con
 | Estimates | Use total input plus output and later growth; input already includes cache reads and writes. Immediately after checkpoint, estimate pinned notes, instructions, raw tail and handoff, not the checkpoint call and result |
 | Nudges | Save each reached stage once; it persists until checkpoint even if a later usage report is smaller. At forced, fail other tools without changing their definitions |
 
-Round 3 plans dreaming; slice 5b plans process sessions. Replay comparisons and automatic overflow recovery are deferred ([deferred.md](../deferred.md)).
+## Round 3: dreaming
+
+Implemented: the memory table and fork copying, `appendMemory` with lineage checks, a per-session context worker (notes first, then memory), memory pinned by the checkpoint and rendered before the notes.
+
+| Boundary | Lasting decision |
+| --- | --- |
+| Storage | Memory is an append-only snapshot of notes 1 through `throughNote`; a newer one supersedes it. A mutable latest-memory row was rejected because a late write would change old checkpoints and forks. Source notes and entries stay |
+| Trigger and fold | Saved notes not covered by the latest memory pass 30k estimated tokens: fold the oldest whole notes, keep about 8k of the newest as notes, aim for at most 4k tokens of memory. Starting constants beside `NOTE_CHUNK_TOKENS`, not settings, not measured |
+| Input | The latest memory plus the notes being folded; the note writer reads the latest memory plus later notes, never folded notes |
+| Activation | Only at a checkpoint, which pins one memory and the notes after it; `memory` is optional on checkpoint details, so old checkpoints load unchanged |
+| Worker | One serial worker per session; a failed, empty or conflicting dream saves nothing and the next wake retries |
+| Model | The last folded note's model, resolved through the same-route summary model |
+
+Slice 5b plans process sessions. Replay comparisons and automatic overflow recovery are deferred ([deferred.md](../deferred.md)).

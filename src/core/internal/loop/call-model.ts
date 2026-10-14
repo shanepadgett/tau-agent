@@ -33,11 +33,12 @@ export const callModel =
 
 const reply = Effect.fn("reply")(function* <R>(run: RunContext<R>, saved: readonly Entry[]) {
   const instructed = yield* withInstructions(run, saved);
-  const nudge = run.nudge(instructed);
+  const noticed = yield* withNotices(run, instructed);
+  const nudge = run.nudge(noticed);
 
   const entries = Option.isSome(nudge)
-    ? [...instructed, ...(yield* run.sessions.append(run.session, [nudge.value]))]
-    : instructed;
+    ? [...noticed, ...(yield* run.sessions.append(run.session, [nudge.value]))]
+    : noticed;
 
   const parts = yield* streamReply(run, entries).pipe(Effect.retry(retrySchedule(run.emit)));
 
@@ -95,6 +96,17 @@ const withInstructions = Effect.fn("withInstructions")(function* <R>(
   if (Option.isNone(update)) return entries;
 
   return [...entries, ...(yield* run.sessions.append(run.session, [update.value]))];
+});
+
+/** Saves the notices that arrived since the last model call, and gives the entries with them. */
+const withNotices = Effect.fn("withNotices")(function* <R>(
+  run: RunContext<R>,
+  entries: readonly Entry[],
+) {
+  const notices = yield* run.processNotices;
+  if (notices.length === 0) return entries;
+
+  return [...entries, ...(yield* run.sessions.append(run.session, notices))];
 });
 
 const saveInterruptedReply = <R>(run: RunContext<R>, parts: Chunk.Chunk<Response.AnyPart>) => {

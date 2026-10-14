@@ -3,7 +3,7 @@
 import { Context, Effect, Layer, Option, type PubSub, type Scope } from "effect";
 import type { ModelRef, UnknownModel, UnknownRoute } from "../ai/Catalog.ts";
 import { contextView } from "../session/ContextView.ts";
-import type { SessionId } from "../session/Entry.ts";
+import type { RunningProcess, SessionId } from "../session/Entry.ts";
 import type { AgentEvent } from "./Client.ts";
 import { ContextSettings } from "./ContextSettings.ts";
 import { makeNotesMethod } from "./internal/context/notes/method.ts";
@@ -28,6 +28,8 @@ export class ContextMethod extends Context.Service<
     readonly forRun: (
       session: SessionId,
       model: ModelRef,
+      /** The commands the agent has running, which a checkpoint lists. */
+      running: Effect.Effect<readonly RunningProcess[]>,
     ) => Effect.Effect<RunMethod, UnknownModel | UnknownRoute>;
     readonly background: (
       session: SessionId,

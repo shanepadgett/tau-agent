@@ -38,6 +38,8 @@ export type RunContext<R> = {
   readonly updateInstructions: (
     entries: readonly Entry[],
   ) => Effect.Effect<Option.Option<EntryBody>, never, R>;
+  /** Notices to save before the next model call, such as a command that exited. */
+  readonly processNotices: Effect.Effect<readonly NudgeEntry[]>;
   readonly maxTurns: number | undefined;
   readonly emit: (event: AgentEvent) => Effect.Effect<void>;
 };

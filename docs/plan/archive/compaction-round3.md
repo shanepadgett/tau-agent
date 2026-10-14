@@ -1,6 +1,6 @@
 # Step 5, round 3: dreaming (code plan)
 
-Status: implemented, 2026-10-14; repository checks pending. Replay comparisons are deferred ([deferred.md](../deferred.md)). Slice 5a's design is in [compaction.md](compaction.md).
+Status: implemented, repository checks passed and committed, 2026-10-14. Archived; the lasting decisions are in [compaction.md](../work/compaction.md#round-3-dreaming). Replay comparisons are deferred ([deferred.md](../deferred.md)). Slice 5a's design is in [compaction.md](../work/compaction.md).
 
 **What the code can do afterwards:** in long sessions, a background job folds older notes into a short session memory. The next checkpoint shows that memory instead of the notes it covers, so the context stays small without losing what mattered early on. Between checkpoints nothing changes, so the prompt cache holds.
 

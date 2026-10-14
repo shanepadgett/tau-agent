@@ -2,7 +2,7 @@
 
 import { Effect, Result, Schema } from "effect";
 import { Tool } from "effect/ai";
-import type { Entry, SessionId } from "../../../../session/Entry.ts";
+import type { Entry, RunningProcess, SessionId } from "../../../../session/Entry.ts";
 import type { Notes } from "../../../../session/Notes.ts";
 import type { ToolCall } from "../../loop/tool-history.ts";
 import type { ModelTool, ToolOutcome } from "../../tools/model-tool.ts";
@@ -15,7 +15,17 @@ const Parameters = Schema.Struct({
   handoff: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(MAX_HANDOFF_CHARACTERS)),
 });
 
-export const checkpointTool = (session: SessionId, notes: Notes["Service"]): ModelTool<never> => ({
+type CheckpointServices = {
+  readonly session: SessionId;
+  readonly notes: Notes["Service"];
+  readonly running: Effect.Effect<readonly RunningProcess[]>;
+};
+
+export const checkpointTool = ({
+  session,
+  notes,
+  running,
+}: CheckpointServices): ModelTool<never> => ({
   definition: Tool.dynamic("checkpoint", {
     description:
       "Compact your context instantly from the saved background notes and memory, recent entries and your handoff. Call this tool alone. The handoff must state the goal, active work, decisions, blockers and exact next action, in at most 24000 characters. Old entries stay in storage; read the entries behind a note with tools.history in run.",
@@ -57,6 +67,7 @@ export const checkpointTool = (session: SessionId, notes: Notes["Service"]): Mod
           notes: saved.map((note) => note.number),
           noteTokens: estimatedPromptTokens(summaryPrefix(memory, saved)),
           tailFrom: (saved.at(-1)?.through ?? memory?.throughEntry ?? 0) + 1,
+          processes: yield* running,
         },
       };
     },
