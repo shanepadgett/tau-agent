@@ -5,6 +5,9 @@ import { Array, Crypto, Effect, FileSystem, Layer, Schema } from "effect";
 import { formatModelRef, type ModelRef, parseModelRef } from "../ai/Catalog.ts";
 import { FavoriteModels, FavoriteModelsError } from "../core/FavoriteModels.ts";
 import { TauHome } from "../database/TauHome.ts";
+import { replaceFile } from "./internal/replace-file.ts";
+
+const FAVORITES_FILE = "favorites.json";
 
 const FavoritesJson = Schema.fromJsonString(Schema.Array(Schema.String));
 
@@ -17,7 +20,7 @@ export const favoriteModelsLayer = Layer.effect(
 const makeFavoriteModels = Effect.fn("makeFavoriteModels")(function* (tauDirectory: string) {
   const fileSystem = yield* FileSystem.FileSystem;
   const crypto = yield* Crypto.Crypto;
-  const path = join(tauDirectory, "favorites.json");
+  const path = join(tauDirectory, FAVORITES_FILE);
 
   // A missing or damaged file is not an error: the list starts empty, and the next toggle
   // writes a good file.
@@ -27,16 +30,13 @@ const makeFavoriteModels = Effect.fn("makeFavoriteModels")(function* (tauDirecto
     Effect.orElseSucceed((): readonly ModelRef[] => []),
   );
 
-  // Two Tau processes can write at the same time. Each one writes a temporary file and renames
-  // it, so a reader never sees half a file.
   const write = (favorites: readonly ModelRef[]) =>
-    Effect.gen(function* () {
-      const text = yield* Schema.encodeEffect(FavoritesJson)(favorites.map(formatModelRef));
-      const temporary = `${path}.${yield* crypto.randomUUIDv4()}`;
-      yield* fileSystem.makeDirectory(tauDirectory, { recursive: true });
-      yield* fileSystem.writeFileString(temporary, text);
-      yield* fileSystem.rename(temporary, path);
-    }).pipe(Effect.mapError((cause) => new FavoriteModelsError({ path, cause })));
+    Schema.encodeEffect(FavoritesJson)(favorites.map(formatModelRef)).pipe(
+      Effect.flatMap((text) => replaceFile(tauDirectory, FAVORITES_FILE, text)),
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+      Effect.provideService(Crypto.Crypto, crypto),
+      Effect.mapError((cause) => new FavoriteModelsError({ path, cause })),
+    );
 
   const toggle = Effect.fn("FavoriteModels.toggle")(function* (ref: ModelRef) {
     const favorites = yield* read;
