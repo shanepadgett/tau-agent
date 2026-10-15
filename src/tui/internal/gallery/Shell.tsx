@@ -10,6 +10,7 @@ import { KeymapProvider, useBindings } from "@opentui/keymap/solid";
 import { render, useTerminalDimensions } from "@opentui/solid";
 import { ErrorBoundary, For, Show } from "solid-js";
 import { type GalleryState, galleryState } from "./gallery-state.ts";
+import { previewInsets } from "./preview-insets.ts";
 import { STORIES } from "./stories.ts";
 import { GROUPS, type StoryFill, type StoryState } from "./story.ts";
 
@@ -197,24 +198,27 @@ function Preview(props: { readonly gallery: GalleryState }) {
     return story === undefined || state === undefined ? "" : `${story.title} · ${state.name}`;
   };
 
-  const sizeLine = () => {
+  const insets = () => {
     const { width, height } = props.gallery.size();
-    const clipped = isClipped() ? ` · clipped to ${shown().width}x${shown().height}` : "";
-    return `${width}x${height}${clipped}`;
+    const short = `${width}x${height}`;
+    const full = isClipped() ? `${short} · clipped to ${shown().width}x${shown().height}` : short;
+    return previewInsets(terminal().width - LIST_COLUMNS, title(), full, short);
   };
 
   return (
     <box
       border
       borderColor={CHROME.accent}
-      title={sizeLine()}
-      titleAlignment="right"
-      bottomTitle={title()}
+      title={insets().name}
       flexGrow={1}
       flexDirection="column"
       alignItems="center"
       justifyContent="center"
     >
+      {/* A box has one top title, so the size is drawn over the border's top right. */}
+      <text position="absolute" top={-1} right={1} fg={CHROME.accent}>
+        {insets().size}
+      </text>
       <box width={shown().width} height={shown().height} flexShrink={0} overflow="hidden">
         <Show when={props.gallery.state()} keyed>
           {(state) => <Placed state={state} />}
