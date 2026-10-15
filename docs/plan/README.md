@@ -27,6 +27,7 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 | [work/reload.md](work/reload.md) | The reload slice: the supervisor, restart when idle, the start check. |
 | [work/notifications.md](work/notifications.md) | Terminal notification research and the draft bundled custom sound (proposed). |
 | [work/diagnostics.md](work/diagnostics.md) | Session logs and copying text from the chat (proposed). |
+| [work/gallery.md](work/gallery.md) | The new front end: design tiers, a dev gallery to approve components, screens and chat scenarios, then the swap (proposed). |
 | [work/messages.md](work/messages.md) | How Tau shows events, problems and errors to the user (proposed). |
 | [work/daily-driver.md](work/daily-driver.md) | The work that makes Tau the user's daily driver: the set, how it meets the systems, the order (built, waiting for live checks). |
 | [work/markdown.md](work/markdown.md) | Markdown in the chat, after OpenCode's use of OpenTUI (built). |

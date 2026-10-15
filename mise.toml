@@ -90,6 +90,12 @@ description = "Open the chat from source; it restarts into each change in src/"
 raw = true
 run = "bun src/cli/main.ts"
 
+[tasks.gallery]
+description = "Open the design gallery, where new front-end designs are approved"
+# The gallery reads the terminal's keys, so it gets the terminal directly.
+raw = true
+run = "bun src/tui/Gallery.ts"
+
 [tasks.catalog]
 description = "Refresh the model catalog snapshot bundled in the binary"
 run = ["bun tools/catalog-snapshot.ts", "mise run fix:fmt -- src/ai/catalog-snapshot.json"]

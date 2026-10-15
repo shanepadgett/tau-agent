@@ -10,6 +10,7 @@
     "tools/file-names-check.ts",
     "tools/report-failures.ts",
     "tools/catalog-snapshot.ts",
+    "src/tui/Gallery.ts",
   ],
   "rules": {
     "unused-dev-dependencies": "error",
