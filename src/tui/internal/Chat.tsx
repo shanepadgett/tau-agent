@@ -1,34 +1,24 @@
 /** The transcript: the user's prompts, the answers as Markdown, one line per tool call, and notices. */
 
-import { RGBA, SyntaxStyle } from "@opentui/core";
-import { useRenderer } from "@opentui/solid";
+import type { SyntaxStyle } from "@opentui/core";
 import { For } from "solid-js";
 import type { ChatItem, ChatState } from "./chat-state.ts";
+import { COLORS } from "./theme.ts";
 
 type ToolCall = Extract<ChatItem, { kind: "tool" }>;
 
 const TOOL_MARKS: Record<ToolCall["status"], string> = { running: "○", ok: "✓", failed: "✗" };
 
 const TOOL_COLORS: Record<ToolCall["status"], string> = {
-  running: "#888888",
-  ok: "#98c379",
-  failed: "#e06c75",
+  running: COLORS.muted,
+  ok: COLORS.success,
+  failed: COLORS.error,
 };
 
-export function Chat(props: { readonly chat: ChatState }) {
-  const syntax = SyntaxStyle.fromStyles(
-    {
-      keyword: { fg: RGBA.fromHex("#c678dd") },
-      string: { fg: RGBA.fromHex("#98c379") },
-      function: { fg: RGBA.fromHex("#61afef") },
-      default: { fg: RGBA.fromHex("#dddddd") },
-    },
-    useRenderer().nativeScene,
-  );
-
+export function Chat(props: { readonly chat: ChatState; readonly syntax: SyntaxStyle }) {
   return (
     <scrollbox flexGrow={1} stickyScroll stickyStart="bottom">
-      <For each={props.chat.items}>{(item) => <ChatLine item={item} syntax={syntax} />}</For>
+      <For each={props.chat.items}>{(item) => <ChatLine item={item} syntax={props.syntax} />}</For>
     </scrollbox>
   );
 }
@@ -40,22 +30,30 @@ function ChatLine(props: { readonly item: ChatItem; readonly syntax: SyntaxStyle
   switch (item.kind) {
     case "user":
       return (
-        <box border borderColor="#555555" paddingLeft={1} marginTop={1}>
+        <box border borderColor={COLORS.border} paddingLeft={1} marginTop={1}>
           <text>{item.text}</text>
         </box>
       );
     case "assistant":
       return (
         <box marginTop={1}>
-          <markdown syntaxStyle={props.syntax} content={item.text} streaming={item.streaming} />
+          {/* Top-level blocks render apart, so streaming redraws only the last one, as in OpenCode. */}
+          <markdown
+            syntaxStyle={props.syntax}
+            content={item.text}
+            streaming={item.streaming}
+            fg={COLORS.text}
+            internalBlockMode="top-level"
+            tableOptions={{ style: "grid", cellPaddingX: 1 }}
+          />
         </box>
       );
     case "tool":
       return <ToolLine call={item} />;
     case "notice":
-      return <text fg="#e5c07b">{item.text}</text>;
+      return <text fg={COLORS.warning}>{item.text}</text>;
     case "info":
-      return <text fg="#888888">{item.text}</text>;
+      return <text fg={COLORS.muted}>{item.text}</text>;
   }
 }
 
