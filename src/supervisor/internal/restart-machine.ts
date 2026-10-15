@@ -4,7 +4,7 @@
  */
 
 import type { Build } from "../Builds.ts";
-import type { ReloadCondition, ToChild, ToSupervisor } from "../messages.ts";
+import type { ReloadCondition, ToChild, ToSupervisor } from "../Messages.ts";
 
 /** A chat that crashes this soon after its start crashed early. Two early crashes end a build. */
 const EARLY_CRASH_MILLIS = 10_000;

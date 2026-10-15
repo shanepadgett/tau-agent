@@ -14,7 +14,7 @@ import {
   startingState,
   transition,
 } from "./internal/restart-machine.ts";
-import type { ToChild } from "./messages.ts";
+import type { ToChild } from "./Messages.ts";
 
 export type SupervisorStart = {
   /**

@@ -4,7 +4,7 @@ import { Tool, toolError } from "@opencode/codemode";
 import { Effect, Schema } from "effect";
 import type { SessionId } from "../../../session/Entry.ts";
 import type { Sessions } from "../../../session/Sessions.ts";
-import { transcript } from "../../../session/transcript.ts";
+import { transcript } from "../../../session/Transcript.ts";
 
 const EntryNumber = Schema.Int.check(Schema.isGreaterThan(0));
 const Parameters = Schema.Struct({ from: EntryNumber, through: EntryNumber });

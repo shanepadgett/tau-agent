@@ -5,7 +5,7 @@
 
 import { expect, test } from "bun:test";
 import type { Build } from "../Builds.ts";
-import type { ReloadCondition } from "../messages.ts";
+import type { ReloadCondition } from "../Messages.ts";
 import {
   type RestartCommand,
   type RestartEvent,

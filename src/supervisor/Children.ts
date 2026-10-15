@@ -6,7 +6,7 @@
 import { Context, Duration, Effect, Layer, Option, Schema, type Scope, Stream } from "effect";
 import { spawnIpcChild } from "../proc/IpcChild.ts";
 import type { Build } from "./Builds.ts";
-import { CheckFailedMessage, ToChild, ToSupervisor } from "./messages.ts";
+import { CheckFailedMessage, ToChild, ToSupervisor } from "./Messages.ts";
 
 /** A chat build that loads takes about 300 ms to finish its check; one that hangs is broken. */
 const CHECK_SECONDS = 10;

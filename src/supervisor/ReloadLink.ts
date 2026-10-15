@@ -4,7 +4,7 @@
  */
 
 import { Context, Deferred, Effect, Exit, Layer, Queue, Schema, Stream } from "effect";
-import { type ReloadCondition, ToChild, type ToSupervisor } from "./messages.ts";
+import { type ReloadCondition, ToChild, type ToSupervisor } from "./Messages.ts";
 
 type StartMessage = Extract<ToChild, { type: "start-check" | "start-chat" }>;
 

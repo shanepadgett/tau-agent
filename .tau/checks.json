@@ -104,6 +104,12 @@
       ]
     },
     {
+      "name": "File names",
+      "command": "mise run check:file-names",
+      "details": "Check that Git tracks each file under its name on disk, and that src/ file names follow the layer layout.",
+      "include": ["src/**", "tests/**", "tools/**", "mise.toml"]
+    },
+    {
       "name": "Application tests",
       "command": "mise run test",
       "details": "Run the application's integration tests.",

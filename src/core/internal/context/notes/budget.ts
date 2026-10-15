@@ -3,7 +3,7 @@
 import type { ModelProfile } from "../../../../ai/ModelProfile.ts";
 import type { Prompt } from "effect/ai";
 import type { Entry } from "../../../../session/Entry.ts";
-import { promptTranscript, transcript } from "../../../../session/transcript.ts";
+import { promptTranscript, transcript } from "../../../../session/Transcript.ts";
 import type { CompactionSettings } from "../../../ContextSettings.ts";
 import { latestCheckpoint, notesView } from "./view.ts";
 

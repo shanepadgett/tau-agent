@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { type Cause, Deferred, Effect, Fiber, type FileSystem, Layer, Queue, Stream } from "effect";
 import { type Build, Builds } from "../../src/supervisor/Builds.ts";
 import { Children } from "../../src/supervisor/Children.ts";
-import type { ToChild, ToSupervisor } from "../../src/supervisor/messages.ts";
+import type { ToChild, ToSupervisor } from "../../src/supervisor/Messages.ts";
 import { superviseChat } from "../../src/supervisor/Supervisor.ts";
 
 const FIRST: Build = { id: 1, command: ["tau-1"] };

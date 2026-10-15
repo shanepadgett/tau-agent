@@ -64,6 +64,7 @@ src/<layer>/
 tests/<layer>/<flow>.test.ts
 ```
 
+- **`mise run check:file-names` enforces the names:** PascalCase public modules (except `src/cli/main.ts`), kebab-case files in `internal/`, PascalCase `.tsx` components. It also fails when Git tracks a file under a name that differs in case from the file on disk; on macOS only `git mv` records a case-only rename.
 - **Fallow enforces it:** each layer has a zone for its root files and one for `internal/`, and only the layer itself may import its `internal/`. Tests may import `ai-internal` until the HTTP fake provider exists ([deferred.md](deferred.md)).
 - **No re-export files.** A public module defines what it exports; it may re-export a name defined in its own `internal/`.
 - **A service carries its layer:** `static readonly layer` on the `Context.Service` class. Paths and settings come from services, never arguments: `TauHome` (`src/database/TauHome.ts`) is Tau's home folder, which `cli` provides and tests point at a temporary folder.

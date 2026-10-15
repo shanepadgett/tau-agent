@@ -10,7 +10,7 @@ import { Status } from "../../core/Status.ts";
 import type { SessionId } from "../../session/Entry.ts";
 import { Builds } from "../../supervisor/Builds.ts";
 import { Children } from "../../supervisor/Children.ts";
-import type { ReloadCondition } from "../../supervisor/messages.ts";
+import type { ReloadCondition } from "../../supervisor/Messages.ts";
 import type { SupervisedLink } from "../../supervisor/ReloadLink.ts";
 import type { SupervisorStart } from "../../supervisor/Supervisor.ts";
 import type { ChatAgent, ChatOptions, ChatSetup, RestartLink } from "../../tui/Tui.ts";

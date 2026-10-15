@@ -218,6 +218,7 @@ const addedProviders = (path: string, id: string, entry: ProviderEntry) => {
     liveList: undefined,
     decisions: undefined,
     conversationHeaders: undefined,
+    hostedSearch: undefined,
   };
 
   return Effect.succeed([provider]);

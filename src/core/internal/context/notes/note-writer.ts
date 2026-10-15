@@ -3,7 +3,7 @@
 import { Effect } from "effect";
 import { ConversationId } from "../../../../ai/ConversationId.ts";
 import type { Entry, SessionId } from "../../../../session/Entry.ts";
-import { transcript } from "../../../../session/transcript.ts";
+import { transcript } from "../../../../session/Transcript.ts";
 import type { Sessions } from "../../../../session/Sessions.ts";
 import type { ContextSettings } from "../../../ContextSettings.ts";
 import { contextSize, DEFAULT_NOTES_START_TOKENS, estimatedTokens } from "./budget.ts";

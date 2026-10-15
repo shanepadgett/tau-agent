@@ -28,6 +28,7 @@ depends = [
   "check:lint",
   "check:types",
   "check:reference",
+  "check:file-names",
   "fallow:dead-code",
   "fallow:dupes",
   "test",
@@ -37,6 +38,10 @@ depends = [
 [tasks."check:mise"]
 description = "Validate mise tasks"
 run = "bun tools/report-failures.ts plain -- mise tasks validate --errors-only"
+
+[tasks."check:file-names"]
+description = "Git tracks each file under its name on disk; src/ file names follow the layer layout"
+run = "bun tools/file-names-check.ts"
 
 [tasks."check:types"]
 description = "Type and Effect diagnostics with the patched TypeScript compiler"

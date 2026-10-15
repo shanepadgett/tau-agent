@@ -22,6 +22,7 @@ import { ContextMethod } from "../../src/core/ContextMethod.ts";
 import { OutputFolder } from "../../src/core/OutputFolder.ts";
 import type { AgentEvent, RunOptions } from "../../src/core/Client.ts";
 import { Status } from "../../src/core/Status.ts";
+import { Web } from "../../src/core/Web.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { favoriteModelsLayer } from "../../src/host/FavoriteModels.ts";
 import { tuiMemoryLayer } from "../../src/host/TuiMemory.ts";
@@ -109,6 +110,15 @@ const scriptedModels = (
       });
     }),
   );
+
+/** Turn tests make no web calls; one that does is a bug in the test. */
+const noWeb = Layer.succeed(
+  Web,
+  Web.of({
+    search: () => Effect.die("Turn tests use no web search."),
+    fetch: () => Effect.die("Turn tests fetch no pages."),
+  }),
+);
 
 /**
  * What the model got in each call: the prompt, the descriptions of the tools, and the JSON schema
@@ -208,6 +218,7 @@ export const withPreparedHarness = <A, E, P>(
             ),
             Layer.provide(Layer.succeed(OutputFolder, { directory: `${home}/output` })),
             Layer.provide(Layer.succeedContext(status)),
+            Layer.provide(noWeb),
           ),
         ).pipe(Effect.map((context) => Context.get(context, Agent)));
 
