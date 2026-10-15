@@ -187,8 +187,8 @@ The code follows the plan with these changes. Each has a reason.
 | `Builds` has `changes` (the watch); there is no `SourceWatch` service | The watch and the build folder belong to the same source; a released binary gives `Stream.never` |
 | `Supervisor.ts` runs the commands itself; there is no `run-commands.ts` | It is about 40 lines and has one caller |
 | `supervisor` may import `proc` (user approved); Bun IPC is in `src/proc/IpcChild.ts` | The lint rule `tau/no-spawn` allows `Bun.spawn` only in `src/proc` |
-| Notices show on a line under the input (`restartNotice` in `chat-state.ts`), and `/restart` adds one | As planned; a notice is not part of the session, so it does not go in the transcript |
-| `ReloadLink` has `notices` and `exitRequested` instead of one message stream | Two readers of one queue would each get half the messages |
+| No footer notices: build failures, start-check failures, a fallback and new code that waits for `/restart` are conditions in the status strip above the input; crashes that restart go to the supervisor's log (user decisions, 2026-10-14; see [messages.md](messages.md)) | The footer is not a message area |
+| `ReloadLink` has `start`, `exitRequested` and `send`, not one message stream | Two readers of one queue would each get half the messages |
 | The start check reports why it failed with a `check-failed` IPC message | A process that exits at once loses what it wrote to a pipe, so its output was empty |
 | The supervisor reports a chat's exit only after its last message (`onDisconnect` ends the message stream) | The handoff must arrive before the exit, or the next chat starts without the draft |
 | A chat that fails before it opens a session stops the supervisor (`ChatFailed`, exit code 1) | Such as `--session` with a wrong ID: the chat printed why, and a restart cannot help |
@@ -196,4 +196,4 @@ The code follows the plan with these changes. Each has a reason.
 | No `checked` message: the check passes when the child exits 0 | The exit code says the same |
 | `ChatSetup` (`options`, `prompt`, `link`) is one parameter of `chatInTerminal` and `runTui` | The parameter limit is 4 |
 
-Open: `tests/support/compile-tau.ts` and `tests/binary/chat.test.ts` (build order step 5). The source path was checked by hand in a PTY: a change restarts the chat in about 0.9 s with the draft kept; a build error and a start-check error show under the input and the chat keeps running; the fix restarts it.
+Open: `tests/support/compile-tau.ts` and `tests/binary/chat.test.ts` (build order step 5). The source path was checked by hand in a PTY: a change restarts the chat in about 0.9 s with the draft kept; a build error and a start-check error showed under the input (since moved to the log file) and the chat kept running; the fix restarts it.

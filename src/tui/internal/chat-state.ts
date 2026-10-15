@@ -23,7 +23,9 @@ export type ChatItem =
       readonly summary: string;
       readonly status: "running" | "ok" | "failed";
     }
-  | { readonly id: number; readonly kind: "notice"; readonly text: string };
+  | { readonly id: number; readonly kind: "notice"; readonly text: string }
+  /** News that needs no action, such as when Tau restarts. */
+  | { readonly id: number; readonly kind: "info"; readonly text: string };
 
 /** A prompt the user sent whose run has not started. Core runs prompts in the order sent. */
 export type QueuedPrompt = { readonly id: number; readonly text: string };
@@ -36,20 +38,18 @@ export type ChatState = {
   readonly queued: readonly QueuedPrompt[];
   readonly returned: ReturnedPrompts | undefined;
   readonly run: RunState;
-  /** What the supervisor last said about new code, for the line under the input. */
-  readonly restartNotice: string | undefined;
   readonly nextId: number;
 };
 
 /**
- * An agent event, a prompt the user just sent, a prompt the chat could not send and why, or news
- * about a restart into new code.
+ * An agent event, a prompt the user just sent, a prompt the chat could not send and why, or a
+ * `/restart` that waits for the run to end.
  */
 export type ChatAction =
   | AgentEvent
   | { readonly type: "prompt-sent"; readonly text: string }
   | { readonly type: "prompt-refused"; readonly text: string; readonly reason: string }
-  | { readonly type: "restart-notice"; readonly text: string };
+  | { readonly type: "restart-waiting" };
 
 type RunEnded = Extract<AgentEvent, { type: "run-ended" }>;
 
@@ -58,7 +58,6 @@ const EMPTY_CHAT: ChatState = {
   queued: [],
   returned: undefined,
   run: "idle",
-  restartNotice: undefined,
   nextId: 1,
 };
 
@@ -85,8 +84,8 @@ export const reduce = (state: ChatState, action: ChatAction): ChatState => {
       };
     case "prompt-refused":
       return refusePrompt(state, action.text, action.reason);
-    case "restart-notice":
-      return { ...state, restartNotice: action.text };
+    case "restart-waiting":
+      return add(state, { kind: "info", text: "Tau restarts when this run ends." });
     case "run-started":
       return startRun(state, action.prompt);
     case "text":

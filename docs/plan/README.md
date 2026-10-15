@@ -24,6 +24,7 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 | [work/tui.md](work/tui.md) | Build step 6: the TUI, in slices 6a to 6c. |
 | [work/reload.md](work/reload.md) | The reload slice: the supervisor, restart when idle, the start check. |
 | [work/diagnostics.md](work/diagnostics.md) | Session logs and copying text from the chat (proposed). |
+| [work/messages.md](work/messages.md) | How Tau shows events, problems and errors to the user (proposed). |
 | [compaction-research.md](compaction-research.md) | How Tau main, Pi durable and Mastra compact, what compaction costs, and how that led to step 5's design. |
 | `archive/` | Finished plans, kept as a record of how decisions were reached. Not kept up to date. |
 

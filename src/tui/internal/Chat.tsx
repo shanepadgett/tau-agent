@@ -54,6 +54,8 @@ function ChatLine(props: { readonly item: ChatItem; readonly syntax: SyntaxStyle
       return <ToolLine call={item} />;
     case "notice":
       return <text fg="#e5c07b">{item.text}</text>;
+    case "info":
+      return <text fg="#888888">{item.text}</text>;
   }
 }
 

@@ -344,6 +344,7 @@ describe("agent loop", () => {
         const entries = yield* harness.sessions.entries(opened.session.id, 0);
         const userTexts = entries.flatMap(({ body }) => (body.type === "user" ? [body.text] : []));
         expect(userTexts).toEqual(["Wait."]);
+        expect(entries.map(({ body }) => body.type)).not.toContain("run-failed");
       }),
     ));
 
@@ -417,16 +418,25 @@ describe("agent loop", () => {
       }).pipe(Effect.provide(TestClock.layer())),
     ));
 
-  test("after four retries the run fails", () =>
+  test("after four retries the run fails, is saved, and the next model call is told", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
-        const agent = yield* harness.startAgent(Array.from({ length: 5 }, () => rateLimited));
+        const failures = Array.from({ length: 5 }, () => rateLimited);
+        const agent = yield* harness.startAgent([...failures, textReply("Again.")]);
         const opened = yield* agent.open(Option.none(), harness.directory);
         const events = yield* promptWithRetries(opened, "Answer.");
 
         expect(retries(events)).toHaveLength(4);
         expect(runEnd(events)).toMatchObject({ type: "run-ended", reason: "failed" });
         expect(harness.prompts).toHaveLength(5);
+
+        const entries = yield* harness.sessions.entries(opened.session.id, 0);
+        expect(entries.at(-1)?.body).toMatchObject({ type: "run-failed" });
+        expect(runEnd(yield* opened.history)).toEqual(runEnd(events));
+
+        yield* prompt(opened, "Try again.");
+        const told = userTexts(harness.prompts[5]);
+        expect(told).toContainEqual(expect.stringMatching(/^The previous run failed: /));
       }).pipe(Effect.provide(TestClock.layer())),
     ));
 

@@ -4,7 +4,7 @@
  */
 
 import { Context, Deferred, Effect, Exit, Layer, Queue, Schema, Stream } from "effect";
-import { ToChild, type ToSupervisor } from "./messages.ts";
+import { type ReloadCondition, ToChild, type ToSupervisor } from "./messages.ts";
 
 type StartMessage = Extract<ToChild, { type: "start-check" | "start-chat" }>;
 
@@ -12,10 +12,10 @@ export type SupervisedLink = {
   readonly kind: "supervised";
   /** How the supervisor wants this process to start. */
   readonly start: Effect.Effect<StartMessage>;
-  /** What the supervisor says about new code. */
-  readonly notices: Stream.Stream<string>;
   /** Completes when the supervisor wants the chat to end, so that the new code can start. */
   readonly exitRequested: Effect.Effect<void>;
+  /** Each new list of the supervisor's conditions. Each list goes to one reader only. */
+  readonly conditions: Stream.Stream<readonly ReloadCondition[]>;
   readonly send: (message: ToSupervisor) => Effect.Effect<void>;
 };
 
@@ -33,8 +33,8 @@ export class ReloadLink extends Context.Service<
       if (process.send === undefined) return { kind: "unsupervised" } as const;
 
       const starts = yield* Queue.unbounded<StartMessage>();
-      const notices = yield* Queue.unbounded<string>();
       const exitRequested = yield* Deferred.make<void>();
+      const conditions = yield* Queue.unbounded<readonly ReloadCondition[]>();
 
       const receive: NodeJS.MessageListener = (message) => {
         if (!Schema.is(ToChild)(message)) return;
@@ -44,11 +44,11 @@ export class ReloadLink extends Context.Service<
           case "start-chat":
             Queue.offerUnsafe(starts, message);
             return;
-          case "notice":
-            Queue.offerUnsafe(notices, message.text);
-            return;
           case "exit-for-restart":
             Deferred.doneUnsafe(exitRequested, Exit.void);
+            return;
+          case "conditions":
+            Queue.offerUnsafe(conditions, message.conditions);
         }
       };
 
@@ -64,8 +64,8 @@ export class ReloadLink extends Context.Service<
       const link: SupervisedLink = {
         kind: "supervised",
         start: Queue.take(starts),
-        notices: Stream.fromQueue(notices),
         exitRequested: Deferred.await(exitRequested),
+        conditions: Stream.fromQueue(conditions),
         // The callback runs once the message is on its way, so a handoff sent just before the
         // process disconnects still arrives.
         send: (message) =>

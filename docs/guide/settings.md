@@ -17,6 +17,8 @@
      "agentsFiles": true,
      // false: when run from source, Tau restarts into changed code only on /restart.
      "autoRestart": true,
+     // The least severe level that ~/.tau/logs keeps: Error, Warn, Info or Debug.
+     "logLevel": "Warn",
      "compaction": {
        "method": "notes",
        "budgetTokens": 200000,
@@ -43,6 +45,7 @@
 - A route you add sends no key unless `apiKeyEnv` names the environment variable that holds it.
 - `"agentsFiles": false` turns off every `AGENTS.md` file. Instruction files and skills still load. See [Write instruction files](write-instruction-files.md).
 - `"autoRestart": false` makes `/restart` the only way to restart the chat into code that changed. It matters only when you run Tau from its source. See [Chat with Tau in the terminal](chat.md).
+- `logLevel` defaults to `Warn`. `Info` or `Debug` keep more in the log files. See "Logs" in [Chat with Tau in the terminal](chat.md).
 - `compaction.method` defaults to `notes`. Set it to `off` to send the whole history. Existing checkpoints and raw entries remain stored.
 - `compaction.budgetTokens` defaults to 200000, capped by the model's window less 16000 tokens and its long-context price threshold. Hidden nudges tell the model when it reaches 50%, 75% and 100% of this budget.
 - `compaction.notesStartTokens` defaults to 50000. Past this size, background notes cover complete message ranges of at least 16000 estimated tokens. See [Use checkpoints](checkpoints.md).

@@ -7,10 +7,12 @@ import { Effect, Layer } from "effect";
 import { Command } from "effect/cli";
 import { FetchHttpClient } from "effect/http";
 import packageJson from "../../package.json" with { type: "json" };
+import { Status } from "../core/Status.ts";
 import { TauHome } from "../database/TauHome.ts";
 import { catalogCacheLayer } from "../host/CatalogCache.ts";
 import { credentialStoreLayer } from "../host/CredentialStore.ts";
 import { hostIdLayer } from "../host/HostId.ts";
+import { logFileLayer } from "../host/LogFile.ts";
 import { Settings } from "../host/Settings.ts";
 import { outputFolderLayer } from "../host/OutputFolder.ts";
 import { ReloadLink } from "../supervisor/ReloadLink.ts";
@@ -22,12 +24,14 @@ const appLayer = Layer.mergeAll(
   credentialStoreLayer,
   catalogCacheLayer,
   hostIdLayer,
-  Settings.layer,
   outputFolderLayer,
   FetchHttpClient.layer,
   terminalLoginPrompt,
   ReloadLink.layer,
+  Status.layer,
+  logFileLayer,
 ).pipe(
+  Layer.provideMerge(Settings.layer),
   Layer.provideMerge(TauHome.at(join(homedir(), ".tau"))),
   Layer.provideMerge(BunServices.layer),
 );

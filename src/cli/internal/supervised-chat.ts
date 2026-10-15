@@ -4,9 +4,11 @@
  */
 
 import { dirname, resolve } from "node:path";
-import { Cause, Console, Effect, Layer, Option } from "effect";
+import { Cause, Console, Effect, Layer, Option, Stream } from "effect";
+import { Status } from "../../core/Status.ts";
 import { Builds } from "../../supervisor/Builds.ts";
 import { Children } from "../../supervisor/Children.ts";
+import type { ReloadCondition } from "../../supervisor/messages.ts";
 import type { SupervisedLink } from "../../supervisor/ReloadLink.ts";
 import type { SupervisorStart } from "../../supervisor/Supervisor.ts";
 import type { ChatOptions, ChatSetup, RestartLink } from "../../tui/Tui.ts";
@@ -87,6 +89,7 @@ const chat = Effect.fn("chat")(
     const opened = yield* openSession(sessionFlag);
     const session = opened.session.id;
     yield* link.send({ type: "ready", session });
+    yield* Effect.forkScoped(showConditions(link));
     const chatInTerminal = yield* loadChat;
     const end = yield* chatInTerminal(opened, setup);
 
@@ -111,10 +114,33 @@ const loadChat = Effect.gen(function* () {
   return yield* Effect.promise(() => import("../../tui/Tui.ts").then((tui) => tui.chatInTerminal));
 });
 
+/**
+ * Shows the supervisor's conditions in the chat: sets each new or changed one, and clears each one
+ * that left the list.
+ */
+const showConditions = Effect.fn("showConditions")(function* (link: SupervisedLink) {
+  const status = yield* Status;
+  let shown: readonly ReloadCondition[] = [];
+
+  const isShown = (condition: ReloadCondition) =>
+    shown.some((old) => JSON.stringify(old) === JSON.stringify(condition));
+
+  const show = Effect.fn("show")(function* (conditions: readonly ReloadCondition[]) {
+    const keys = new Set(conditions.map((condition) => condition.key));
+    const cleared = shown.filter((old) => !keys.has(old.key));
+    yield* Effect.forEach(cleared, (old) => status.clear(old.key), { discard: true });
+    const changed = conditions.filter((condition) => !isShown(condition));
+    const set = ({ detail, ...condition }: ReloadCondition) => status.set(condition, detail);
+    yield* Effect.forEach(changed, set, { discard: true });
+    shown = conditions;
+  });
+
+  yield* link.conditions.pipe(Stream.runForEach(show));
+});
+
 const restartLink = (link: SupervisedLink, draft: string): RestartLink => ({
   draft,
   reportActivity: (activity) => link.send({ type: "idle", idle: activity === "idle" }),
   requestRestart: link.send({ type: "restart-request" }),
-  notices: link.notices,
   exitRequested: link.exitRequested,
 });

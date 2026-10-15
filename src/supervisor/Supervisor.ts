@@ -114,6 +114,9 @@ const runCommand = Effect.fn("runCommand")(function* (
     case "send":
       yield* chat.send(command.message);
       return chat;
+    case "log":
+      yield* Effect.logError(command.text);
+      return chat;
     case "start":
       yield* Scope.close(chat.scope, Exit.void);
       return yield* startChat(command, start, offer);

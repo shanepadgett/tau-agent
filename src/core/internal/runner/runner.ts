@@ -82,7 +82,8 @@ type QueuedPrompt = Extract<Command, { type: "prompt" }>;
 export const makeRunner = Effect.fn("makeRunner")(function* (services: RunServices, id: SessionId) {
   const session = yield* services.sessions.get(id);
   const events = yield* PubSub.unbounded<AgentEvent>();
-  yield* services.contextMethod.background(id, PubSub.subscribe(events));
+  const annotated = Effect.annotateLogs({ session: id });
+  yield* services.contextMethod.background(id, PubSub.subscribe(events)).pipe(annotated);
   const prompts = yield* Queue.unbounded<QueuedPrompt>();
   const current = yield* FiberHandle.make<RunEnd, unknown>();
 
@@ -92,21 +93,18 @@ export const makeRunner = Effect.fn("makeRunner")(function* (services: RunServic
 
   const runNext = Effect.gen(function* () {
     const prompt = yield* Queue.take(prompts);
+    const runs: SessionRuns = { services, session, processes, events };
 
     // The handle must hold the fiber before it starts: a run can publish an event, and a client
     // can cancel in answer, before a fiber that starts at once is handed back.
-    const run = yield* FiberHandle.run(
-      current,
-      runPrompt({ services, session, processes, events }, prompt),
-      {
-        startImmediately: false,
-      },
-    );
+    const run = yield* FiberHandle.run(current, runPrompt(runs, prompt), {
+      startImmediately: false,
+    });
 
-    yield* PubSub.publish(events, runEnded(yield* Fiber.await(run)));
+    yield* endRun(runs, yield* Fiber.await(run));
   });
 
-  yield* Effect.forkScoped(Effect.forever(runNext));
+  yield* Effect.forkScoped(Effect.forever(runNext).pipe(annotated));
 
   const cancel = Effect.gen(function* () {
     const waiting = yield* Queue.clear(prompts);
@@ -221,6 +219,24 @@ const runningProcesses = (summaries: readonly ProcessSummary[]): readonly Runnin
   summaries.flatMap(({ id, command, pty, state }) =>
     state.type === "running" ? [{ id, command, pty }] : [],
   );
+
+/**
+ * A failed run goes to the log with its whole cause, and into the session, so a resumed chat shows
+ * it and the next model call knows about it.
+ */
+const endRun = Effect.fn("endRun")(function* (runs: SessionRuns, exit: Exit.Exit<RunEnd, unknown>) {
+  const ended = runEnded(exit);
+
+  if (Exit.isFailure(exit) && ended.type === "run-ended" && ended.reason === "failed") {
+    yield* Effect.logError("The run failed", exit.cause);
+
+    yield* runs.services.sessions
+      .append(runs.session.id, [{ type: "run-failed", error: ended.error }])
+      .pipe(Effect.catch((error) => Effect.logError("Could not save the failed run", error)));
+  }
+
+  yield* PubSub.publish(runs.events, ended);
+});
 
 const runEnded = (exit: Exit.Exit<RunEnd, unknown>): AgentEvent => {
   if (Exit.isSuccess(exit)) return { type: "run-ended", ...exit.value };

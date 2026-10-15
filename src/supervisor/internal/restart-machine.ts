@@ -4,14 +4,10 @@
  */
 
 import type { Build } from "../Builds.ts";
-import type { ToChild, ToSupervisor } from "../messages.ts";
+import type { ReloadCondition, ToChild, ToSupervisor } from "../messages.ts";
 
 /** A chat that crashes this soon after its start crashed early. Two early crashes end a build. */
 const EARLY_CRASH_MILLIS = 10_000;
-
-const CHECKING = "Tau's code changed. Tau checks the new code now.";
-const WAITING = "The new code passed its check. Tau restarts into it when the run ends.";
-const MANUAL = "The new code passed its check. Type /restart to use it.";
 
 /**
  * What the supervisor is doing about new code. `changedAgain` says that the code changed again
@@ -42,6 +38,10 @@ export type RestartState = {
   readonly isAutomatic: boolean;
   readonly isRestartRequested: boolean;
   readonly hasCrashedEarly: boolean;
+  /** Why the newest code did not build or start, until new code passes its check. */
+  readonly newCodeFailure: string | undefined;
+  /** The chat runs the last good build because the newer one kept crashing. */
+  readonly isOnLastGood: boolean;
 };
 
 export type RestartEvent =
@@ -57,6 +57,8 @@ export type RestartCommand =
   | { readonly type: "build" }
   | { readonly type: "check"; readonly build: Build }
   | { readonly type: "send"; readonly message: ToChild }
+  /** A crash goes to the supervisor's log, since the chat that crashed cannot log it. */
+  | { readonly type: "log"; readonly text: string }
   | {
       readonly type: "start";
       readonly build: Build;
@@ -83,9 +85,56 @@ export const startingState = (first: Build, mode: RestartMode): RestartState => 
   isAutomatic: mode === "automatic",
   isRestartRequested: false,
   hasCrashedEarly: false,
+  newCodeFailure: undefined,
+  isOnLastGood: false,
 });
 
+/**
+ * Sends the chat the supervisor's conditions when they change, and to each new chat that has some
+ * to show.
+ */
 export const transition = (state: RestartState, event: RestartEvent): Step => {
+  const step = nextStep(state, event);
+  const conditions = reloadConditions(step.state);
+  const hasStarted = step.commands.some((command) => command.type === "start");
+  const isNews = hasStarted && conditions.length > 0;
+  const hasChanged = JSON.stringify(conditions) !== JSON.stringify(reloadConditions(state));
+  if (!isNews && !hasChanged) return step;
+
+  return {
+    ...step,
+    commands: [...step.commands, { type: "send", message: { type: "conditions", conditions } }],
+  };
+};
+
+/** What the chat shows about Tau's own code: a fallback, new code that fails, or code that waits. */
+export const reloadConditions = (state: RestartState): readonly ReloadCondition[] => {
+  const conditions: ReloadCondition[] = [];
+  if (state.isOnLastGood) conditions.push(condition("reload.fallback", "error", FALLBACK));
+
+  if (state.newCodeFailure !== undefined) {
+    const [firstLine = ""] = state.newCodeFailure.split("\n");
+
+    conditions.push({
+      ...condition("reload.code", "warning", firstLine),
+      detail: state.newCodeFailure,
+    });
+  } else if (state.phase.kind === "ready" && !state.isAutomatic) {
+    conditions.push(condition("reload.code", "info", "New code is ready: send /restart."));
+  }
+
+  return conditions;
+};
+
+const FALLBACK = "Tau crashed twice soon after it started, so the last good build is running.";
+
+const condition = (
+  key: string,
+  severity: ReloadCondition["severity"],
+  text: string,
+): ReloadCondition => ({ key, severity, text, detail: text });
+
+const nextStep = (state: RestartState, event: RestartEvent): Step => {
   if (state.phase.kind === "stopped") return stay(state);
 
   switch (event.type) {
@@ -96,9 +145,15 @@ export const transition = (state: RestartState, event: RestartEvent): Step => {
         { type: "check", build: event.build },
       ]);
     case "checked":
-      return checked(afterWork(state, { kind: "ready", candidate: event.build }, []));
+      return checked(
+        afterWork(
+          { ...state, newCodeFailure: undefined },
+          { kind: "ready", candidate: event.build },
+          [],
+        ),
+      );
     case "failed":
-      return afterWork(state, { kind: "running" }, [notice(event.reason)]);
+      return afterWork({ ...state, newCodeFailure: event.reason }, { kind: "running" }, []);
     case "message":
       return messageArrived(state, event.message);
     case "exited":
@@ -110,18 +165,13 @@ export const transition = (state: RestartState, event: RestartEvent): Step => {
 
 const stay = (state: RestartState): Step => ({ state, commands: [] });
 
-const notice = (text: string): RestartCommand => ({
-  type: "send",
-  message: { type: "notice", text },
-});
-
 const sourceChanged = (state: RestartState): Step => {
   const { phase } = state;
 
   if (phase.kind === "running" || phase.kind === "ready") {
     return {
       state: { ...state, phase: { kind: "building", changedAgain: false } },
-      commands: [notice(CHECKING), { type: "build" }],
+      commands: [{ type: "build" }],
     };
   }
 
@@ -144,13 +194,8 @@ const afterWork = (state: RestartState, next: Phase, commands: readonly RestartC
   return { state: { ...state, phase: next }, commands };
 };
 
-/** Switches to the checked build now, or says when the switch comes. */
-const checked = (step: Step): Step => {
-  const switched = switchWhenIdle(step.state);
-  if (switched.state.phase.kind !== "ready") return addCommands(step, switched);
-  const waitingFor = step.state.isAutomatic || step.state.isRestartRequested ? WAITING : MANUAL;
-  return { state: step.state, commands: [...step.commands, notice(waitingFor)] };
-};
+/** Switches to the checked build now, or waits until the chat is idle or `/restart` asks. */
+const checked = (step: Step): Step => addCommands(step, switchWhenIdle(step.state));
 
 const addCommands = (first: Step, second: Step): Step => ({
   state: second.state,
@@ -212,6 +257,7 @@ const handedOver = (state: RestartState, phase: Extract<Phase, { kind: "handing-
       isIdle: false,
       isRestartRequested: false,
       hasCrashedEarly: false,
+      isOnLastGood: isNewBuild ? false : state.isOnLastGood,
     },
     commands: [
       { type: "start", build: phase.next, session: state.session, draft: phase.draft },
@@ -233,18 +279,33 @@ const childEnded = (state: RestartState, exit: Extract<RestartEvent, { type: "ex
 
   const isEarly = exit.ranMillis < EARLY_CRASH_MILLIS;
 
+  const crash = `Tau exited with code ${exit.code} after ${exit.ranMillis} ms.`;
+
   if (!isEarly || !state.hasCrashedEarly) {
-    return restart({ ...state, hasCrashedEarly: isEarly }, state.current);
+    return restart(
+      { ...state, hasCrashedEarly: isEarly },
+      state.current,
+      `${crash} Restarting it.`,
+    );
   }
 
   if (state.lastGood === undefined) {
     return stay({ ...state, phase: { kind: "stopped", outcome: "crashed" } });
   }
 
-  return restart({ ...state, lastGood: undefined, hasCrashedEarly: false }, state.lastGood);
+  const fallback = `${crash} It crashed twice soon after it started, so the last good build starts.`;
+
+  return restart(
+    { ...state, lastGood: undefined, hasCrashedEarly: false, isOnLastGood: true },
+    state.lastGood,
+    fallback,
+  );
 };
 
-const restart = (state: RestartState, build: Build): Step => ({
+const restart = (state: RestartState, build: Build, reason: string): Step => ({
   state: { ...state, current: build, isIdle: false },
-  commands: [{ type: "start", build, session: state.session, draft: "" }],
+  commands: [
+    { type: "log", text: reason },
+    { type: "start", build, session: state.session, draft: "" },
+  ],
 });

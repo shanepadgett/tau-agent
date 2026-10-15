@@ -107,14 +107,6 @@ const cases: ReadonlyArray<readonly [string, readonly ChatAction[], Partial<Chat
       ],
     },
   ],
-  [
-    "the latest restart notice replaces the one before, outside the transcript",
-    [
-      { type: "restart-notice", text: "Checking." },
-      { type: "restart-notice", text: "Ready." },
-    ],
-    { items: [], restartNotice: "Ready." },
-  ],
 ];
 
 test.each(cases)("%s", (_name, actions, expected) => {

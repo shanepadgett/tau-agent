@@ -18,15 +18,18 @@ type FakeChat = {
   readonly exit: Deferred.Deferred<number>;
 };
 
-/** Builds and children that the test drives instead of real bundles and processes. */
-const fakeServices = Effect.gen(function* () {
+/**
+ * Builds and children that the test drives instead of real bundles and processes. A change in the
+ * code runs `build`.
+ */
+const fakeServices = Effect.fn("fakeServices")(function* (build: Builds["Service"]["build"]) {
   const changes = yield* Queue.unbounded<FileSystem.WatchEvent>();
   const started = yield* Queue.unbounded<FakeChat>();
 
   const builds = Layer.succeed(Builds, {
     first: Effect.succeed(FIRST),
     changes: Stream.fromQueue(changes),
-    build: Effect.succeed(SECOND),
+    build,
     prune: () => Effect.void,
   });
 
@@ -63,7 +66,7 @@ const argsFor = (session: string | undefined) =>
 const exitChat = (chat: FakeChat, code: number) =>
   Queue.end(chat.says).pipe(Effect.andThen(Deferred.succeed(chat.exit, code)));
 
-/** Waits for a message of `type`, past the notices before it. */
+/** Waits for a message of `type`, past the messages before it. */
 const received = (chat: FakeChat, type: ToChild["type"]): Effect.Effect<ToChild> =>
   Queue.take(chat.got).pipe(
     Effect.flatMap((message) =>
@@ -75,7 +78,7 @@ describe("the supervisor", () => {
   test("restarts an idle chat into new code, with its session and unsent input", () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const fakes = yield* fakeServices;
+        const fakes = yield* fakeServices(Effect.succeed(SECOND));
         const start = { argsFor, mode: "automatic" } as const;
 
         const supervising = yield* Effect.forkChild(
@@ -111,7 +114,7 @@ describe("the supervisor", () => {
   test("fails when the chat crashes twice soon after it starts and no older build is left", () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const fakes = yield* fakeServices;
+        const fakes = yield* fakeServices(Effect.succeed(SECOND));
         const start = { argsFor, mode: "automatic" } as const;
 
         const supervising = yield* Effect.forkChild(
@@ -127,6 +130,36 @@ describe("the supervisor", () => {
 
         expect(second.args).toEqual(["--session", "s1"]);
         expect(error).toMatchObject({ _tag: "TauCrashed", session: "s1" });
+      }),
+    ));
+
+  test("tells the chat why new code does not build, and keeps the chat", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const released = yield* Builds.pipe(Effect.provide(Builds.binary));
+        const fakes = yield* fakeServices(released.build);
+        const start = { argsFor, mode: "automatic" } as const;
+
+        const supervising = yield* Effect.forkChild(
+          superviseChat(start).pipe(Effect.provide(fakes.layer)),
+        );
+
+        const first = yield* Queue.take(fakes.started);
+        yield* Queue.offer(first.says, { type: "ready", session: "s1" });
+        yield* Queue.offer(fakes.changes, { _tag: "Update", path: "src/cli/main.ts" });
+        const message = yield* received(first, "conditions");
+        yield* exitChat(first, 0);
+        yield* Fiber.join(supervising);
+
+        expect(message).toMatchObject({
+          conditions: [
+            {
+              key: "reload.code",
+              severity: "warning",
+              text: "The new code does not build: A released Tau does not rebuild itself.",
+            },
+          ],
+        });
       }),
     ));
 });

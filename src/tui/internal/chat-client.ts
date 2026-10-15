@@ -4,9 +4,11 @@
  */
 
 import { Deferred, Effect, Stream } from "effect";
+import { type Accessor, createSignal } from "solid-js";
 import { createStore, reconcile, unwrap } from "solid-js/store";
 import type { OpenSession } from "../../core/Agent.ts";
 import type { RunOptions } from "../../core/Client.ts";
+import { type Condition, Status } from "../../core/Status.ts";
 import { type ChatAction, type ChatState, reduce, replay } from "./chat-state.ts";
 
 /**
@@ -27,8 +29,6 @@ export type RestartLink = {
   readonly reportActivity: (activity: Activity) => Effect.Effect<void>;
   /** Asks for a restart as soon as Tau is idle, for `/restart`. */
   readonly requestRestart: Effect.Effect<void>;
-  /** What the supervisor says about new code. */
-  readonly notices: Stream.Stream<string>;
   /** Completes when the supervisor wants the chat to end, so that the new code can start. */
   readonly exitRequested: Effect.Effect<void>;
 };
@@ -49,11 +49,12 @@ const NO_MODEL =
   'No model is set. Add "model": "route/model" to ~/.tau/settings.json, such as "anthropic/claude-sonnet-5-5", or pass --model, then open the chat again.';
 
 const RESTART_COMMAND = "/restart";
-const RESTART_REQUESTED = "Tau restarts as soon as no run is going.";
 
 export type ChatClient = {
   /** A Solid store: components that read it redraw when it changes. */
   readonly chat: ChatState;
+  /** The problems that are true now, as a Solid signal. */
+  readonly conditions: Accessor<readonly Condition[]>;
   /** The model of each run, as `route/model`, or undefined when the user has not set one. */
   readonly model: string | undefined;
   /** The text the input editor starts with. */
@@ -99,7 +100,8 @@ export const chatClient = Effect.fn("chatClient")(function* (
 
   reportActivity();
   yield* applyEach(Stream.fromSubscription(events));
-  yield* applyEach(link.notices.pipe(Stream.map((text) => restartNotice(text))));
+
+  const conditions = yield* conditionsSignal();
 
   // Prompts that wait for their run would be lost with this process, so they go back to the input.
   const restart = Effect.suspend(() => {
@@ -114,6 +116,7 @@ export const chatClient = Effect.fn("chatClient")(function* (
 
   const client: ChatClient = {
     chat,
+    conditions,
     model: model === undefined ? undefined : `${model.route}/${model.model}`,
     draft: link.draft,
     readDraftWith: (read) => {
@@ -121,7 +124,7 @@ export const chatClient = Effect.fn("chatClient")(function* (
     },
     send: (text) => {
       if (text === RESTART_COMMAND) {
-        apply(restartNotice(RESTART_REQUESTED));
+        if (!isIdle(chat)) apply({ type: "restart-waiting" });
         Effect.runFork(link.requestRestart);
         return;
       }
@@ -141,16 +144,25 @@ export const chatClient = Effect.fn("chatClient")(function* (
   return { client, ended: Deferred.await(ended) };
 });
 
+/** The conditions of `Status` as a Solid signal, kept current until the scope closes. */
+const conditionsSignal = Effect.fn("conditionsSignal")(function* () {
+  const [conditions, setConditions] = createSignal<readonly Condition[]>([]);
+  const { current } = yield* Status;
+  const update = (now: readonly Condition[]) => Effect.sync(() => setConditions(now));
+  yield* Effect.forkScoped(current.pipe(Stream.runForEach(update)));
+  return conditions;
+});
+
 /** Returns a function that tells the supervisor when the chat's activity changed since its last call. */
 const activityReporter = (link: RestartLink, chat: ChatState) => {
   let reported: Activity | undefined;
 
   return () => {
-    const activity = chat.run === "idle" && chat.queued.length === 0 ? "idle" : "busy";
+    const activity = isIdle(chat) ? "idle" : "busy";
     if (activity === reported) return;
     reported = activity;
     Effect.runFork(link.reportActivity(activity));
   };
 };
 
-const restartNotice = (text: string): ChatAction => ({ type: "restart-notice", text });
+const isIdle = (chat: ChatState) => chat.run === "idle" && chat.queued.length === 0;

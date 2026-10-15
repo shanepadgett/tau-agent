@@ -42,7 +42,11 @@ const SettingsFile = Schema.Struct({
   /** `false` makes `/restart` the only way to restart into Tau's changed code. */
   autoRestart: Schema.optional(Schema.Boolean),
   compaction: Schema.optional(CompactionSettings),
+  /** The least severe log level that `~/.tau/logs` keeps. */
+  logLevel: Schema.optional(Schema.Literals(["Error", "Warn", "Info", "Debug"])),
 });
+
+type LogLevel = NonNullable<typeof SettingsFile.Type.logLevel>;
 
 /** What a run uses from the settings file. Each value is absent when the file does not set it. */
 export type RunSettings = {
@@ -67,13 +71,14 @@ export class Settings extends Context.Service<
     readonly agentsFiles: boolean;
     /** Whether Tau restarts into its changed code by itself when it is idle. */
     readonly autoRestart: boolean;
+    readonly logLevel: LogLevel;
   }
 >()("tau/host/Settings") {
   /** Reads `settings.json` in Tau's home folder once, and gives the run settings and the route table. */
   static readonly layer = Layer.effectContext(
     TauHome.use(({ directory }) => readSettingsFile(join(directory, "settings.json"))).pipe(
-      Effect.map(({ routes, routeSettings, run, agentsFiles, autoRestart, compaction }) =>
-        Context.make(Settings, { run, agentsFiles, autoRestart }).pipe(
+      Effect.map(({ routes, routeSettings, compaction, ...settings }) =>
+        Context.make(Settings, settings).pipe(
           Context.add(RouteTable, { routes, settings: routeSettings }),
           Context.add(ContextSettings, compaction),
         ),
@@ -88,6 +93,7 @@ type SettingsFileContent = {
   readonly run: RunSettings;
   readonly agentsFiles: boolean;
   readonly autoRestart: boolean;
+  readonly logLevel: LogLevel;
   readonly compaction: CompactionSettings;
 };
 
@@ -108,6 +114,7 @@ const readSettingsFile = Effect.fn("readSettingsFile")(function* (path: string) 
     run: noRunSettings,
     agentsFiles: true,
     autoRestart: true,
+    logLevel: "Warn",
     compaction: {},
   };
 
@@ -149,6 +156,7 @@ const readSettingsFile = Effect.fn("readSettingsFile")(function* (path: string) 
     run,
     agentsFiles: file.agentsFiles ?? true,
     autoRestart: file.autoRestart ?? true,
+    logLevel: file.logLevel ?? "Warn",
     compaction: file.compaction ?? {},
   };
 

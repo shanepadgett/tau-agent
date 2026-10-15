@@ -5,14 +5,31 @@
 
 import { Schema } from "effect";
 
+/**
+ * A problem with Tau's own code that the chat shows until the supervisor clears it. The chat shows
+ * `text` and logs `detail`.
+ */
+const ReloadCondition = Schema.Struct({
+  key: Schema.String,
+  severity: Schema.Literals(["error", "warning", "info"]),
+  text: Schema.String,
+  detail: Schema.String,
+});
+
+export type ReloadCondition = typeof ReloadCondition.Type;
+
 export const ToChild = Schema.Union([
   /** Load Tau's code and exit, without opening the database or the terminal. */
   Schema.Struct({ type: Schema.Literal("start-check") }),
   /** Open the chat, with `draft` in the input editor. */
   Schema.Struct({ type: Schema.Literal("start-chat"), draft: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("notice"), text: Schema.String }),
   /** Send a handoff and exit, so the supervisor can start the new build. */
   Schema.Struct({ type: Schema.Literal("exit-for-restart") }),
+  /** All of the supervisor's conditions now; one that is not in the list has cleared. */
+  Schema.Struct({
+    type: Schema.Literal("conditions"),
+    conditions: Schema.Array(ReloadCondition),
+  }),
 ]);
 
 export type ToChild = typeof ToChild.Type;

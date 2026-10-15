@@ -39,7 +39,7 @@ const MISSING_RESULT = "The call ended before it returned a result.";
  * result: each call gets its result right after the reply that made it, a call without a saved
  * result (a cancel, a crash, a branch cut) gets an error result, and a result without a call is
  * left out. Interrupted replies are left out too. A failed script's result ends with its script ID.
- * Checks Tau ran itself go in only when they failed.
+ * Checks Tau ran itself go in only when they failed. A failed run goes in as one note with its error.
  */
 export const contextView = (soul: string, entries: readonly Entry[]): Prompt.Prompt => {
   const messages = [...conversationMessages(entries)];
@@ -71,6 +71,11 @@ export const conversationMessages = (entries: readonly Entry[]): readonly Prompt
 
     if (body.type === "instructions" && body.placement === "note") {
       messages.push(Prompt.userMessage({ content: [Prompt.textPart({ text: body.text })] }));
+    }
+
+    if (body.type === "run-failed") {
+      const text = `The previous run failed: ${body.error}`;
+      messages.push(Prompt.userMessage({ content: [Prompt.textPart({ text })] }));
     }
 
     if (body.type === "checks" && hasFailures(body.report)) {

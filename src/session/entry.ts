@@ -168,6 +168,9 @@ const NudgeEntry = Schema.Struct({
 
 export type NudgeEntry = typeof NudgeEntry.Type;
 
+/** A run that ended with an error, with the text the chat showed. Not saved for a cancelled run. */
+const RunFailedEntry = Schema.Struct({ type: Schema.Literal("run-failed"), error: Schema.String });
+
 export const EntryBody = Schema.Union([
   UserEntry,
   AssistantEntry,
@@ -176,6 +179,7 @@ export const EntryBody = Schema.Union([
   InstructionsEntry,
   ChecksEntry,
   NudgeEntry,
+  RunFailedEntry,
 ]);
 
 export type EntryBody = typeof EntryBody.Type;

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createTestRenderer, type TestRendererSetup } from "@opentui/core/testing";
-import { Deferred, Effect, Fiber, Option, Queue, Stream } from "effect";
+import { Context, Deferred, Effect, Fiber, Layer, Option, Stream } from "effect";
 import type { OpenSession } from "../../src/core/Agent.ts";
+import { Status } from "../../src/core/Status.ts";
 import { type ChatOptions, type ChatSetup, type RestartLink, runTui } from "../../src/tui/Tui.ts";
 import { options, prompt, runReply, textReply, withHarness } from "../support/agent-harness.ts";
 
@@ -17,7 +18,6 @@ const noRestarts: RestartLink = {
   draft: "",
   reportActivity: () => Effect.void,
   requestRestart: Effect.void,
-  notices: Stream.never,
   exitRequested: Effect.never,
 };
 
@@ -28,43 +28,50 @@ const withoutRestarts = (chatOptions: ChatOptions): ChatSetup => ({
 });
 
 /**
- * A supervisor that the test drives: it records what the chat reports, sends notices, and asks the
- * chat to end. Its draft is the unsent input of the chat before.
+ * A supervisor that the test drives: it records what the chat reports and asks the chat to end. Its
+ * draft is the unsent input of the chat before.
  */
 const fakeSupervisor = Effect.fn("fakeSupervisor")(function* (draft: string) {
   const exitRequested = yield* Deferred.make<void>();
-  const notices = yield* Queue.unbounded<string>();
   const reports: string[] = [];
 
   const link: RestartLink = {
     draft,
     reportActivity: (activity) => Effect.sync(() => reports.push(activity)),
     requestRestart: Effect.sync(() => reports.push("restart-request")),
-    notices: Stream.fromQueue(notices),
     exitRequested: Deferred.await(exitRequested),
   };
 
-  return { link, exitRequested, notices, reports };
-});
-
-/** Starts the chat on a test terminal; the chat stops when the test's scope closes. */
-const startChat = Effect.fn("startChat")(function* (opened: OpenSession, setup: ChatSetup) {
-  const terminal = yield* testTerminal;
-  const chat = yield* Effect.forkScoped(runTui(terminal.renderer, opened, setup));
-
-  yield* frameWith(terminal, "ctrl+d quit");
-  return { terminal, chat };
+  return { link, exitRequested, reports };
 });
 
 /**
- * Waits for a frame that shows `text`. The renderer draws a frame by itself after each change, such
+ * Starts the chat on a test terminal, with a status the test can set conditions in. The chat stops
+ * when the test's scope closes.
+ */
+const startChat = Effect.fn("startChat")(function* (opened: OpenSession, setup: ChatSetup) {
+  const terminal = yield* testTerminal;
+  const services = yield* Layer.build(Status.layer);
+  const tui = runTui(terminal.renderer, opened, setup).pipe(Effect.provideContext(services));
+  const chat = yield* Effect.forkScoped(tui);
+
+  yield* frameWith(terminal, "ctrl+d quit");
+  return { terminal, chat, status: Context.get(services, Status) };
+});
+
+/** Waits for a frame that shows `text`. */
+const frameWith = (terminal: TestRendererSetup, text: string) =>
+  frameWhere(terminal, (frame) => frame.includes(text));
+
+/**
+ * Waits for a frame that `isWanted`. The renderer draws a frame by itself after each change, such
  * as a new event in the chat or Markdown that its highlighter finished.
  */
-const frameWith = (terminal: TestRendererSetup, text: string) =>
+const frameWhere = (terminal: TestRendererSetup, isWanted: (frame: string) => boolean) =>
   Effect.callback<string>((resume) => {
     const check = () => {
       const frame = terminal.captureCharFrame();
-      if (!frame.includes(text)) return;
+      if (!isWanted(frame)) return;
       terminal.renderer.off("frame", check);
       resume(Effect.succeed(frame));
     };
@@ -168,7 +175,7 @@ describe("the chat in the terminal", () => {
       }).pipe(Effect.scoped),
     ));
 
-  test("the chat reports when it is idle, takes /restart, and shows the supervisor's notices", () =>
+  test("the chat reports when it is idle and takes /restart, with only the model and keys under the input", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
         const agent = yield* harness.startAgent([textReply("Hello.")]);
@@ -182,11 +189,57 @@ describe("the chat in the terminal", () => {
         yield* frameWith(terminal, "Hello.");
         yield* Effect.promise(() => terminal.mockInput.typeText("/restart"));
         terminal.mockInput.pressEnter();
-        yield* frameWith(terminal, "Tau restarts as soon as no run is going.");
-        yield* Queue.offer(supervisor.notices, "The new code does not build.");
-        yield* frameWith(terminal, "The new code does not build.");
+        const requested = () => supervisor.reports.includes("restart-request");
+        yield* Effect.yieldNow.pipe(Effect.repeat({ until: requested }));
+        yield* frameWith(terminal, "enter send · shift+enter new line · ctrl+d quit");
 
         expect(supervisor.reports).toEqual(["idle", "busy", "idle", "restart-request"]);
+      }).pipe(Effect.scoped),
+    ));
+
+  test("/restart during a run says that Tau restarts when the run ends", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([Stream.never]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const supervisor = yield* fakeSupervisor("");
+        const setup = { options, prompt: undefined, link: supervisor.link };
+        const { terminal } = yield* startChat(opened, setup);
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("Hi."));
+        terminal.mockInput.pressEnter();
+        yield* frameWith(terminal, "esc cancel");
+        yield* Effect.promise(() => terminal.mockInput.typeText("/restart"));
+        terminal.mockInput.pressEnter();
+        yield* frameWith(terminal, "Tau restarts when this run ends.");
+
+        expect(supervisor.reports).toContain("restart-request");
+      }).pipe(Effect.scoped),
+    ));
+
+  test("conditions show above the input, errors first, and go when cleared", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const { terminal, status } = yield* startChat(opened, withoutRestarts(options));
+
+        const warning = {
+          key: "build",
+          severity: "warning",
+          text: "The new code does not build.",
+        } as const;
+
+        yield* status.set(warning, "detail");
+        yield* status.set({ key: "crash", severity: "error", text: "Tau crashed." }, "detail");
+        const frame = yield* frameWith(terminal, "! The new code does not build.");
+
+        expect(frame).toMatch(/✗ Tau crashed\.\s*\n.*! The new code does not build\.\s*\n.*┌/);
+        yield* status.clear("build");
+        yield* status.clear("crash");
+        const cleared = yield* frameWhere(terminal, (now) => !now.includes("Tau crashed."));
+
+        expect(cleared).not.toContain("does not build");
       }).pipe(Effect.scoped),
     ));
 });

@@ -17,6 +17,8 @@ const bodyEvents = (body: EntryBody): readonly AgentEvent[] => {
       return body.parts.flatMap(partEvents);
     case "tool-result":
       return [{ type: "tool-ended", callId: body.callId, isFailure: body.isFailure }];
+    case "run-failed":
+      return [{ type: "run-ended", reason: "failed", error: body.error }];
     case "tool-started":
     case "checks":
     case "instructions":
