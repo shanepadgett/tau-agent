@@ -51,6 +51,8 @@ export type ListedModel = {
   readonly contextTokens: number;
   /** The thinking levels the model offers, lowest first; empty when it has no choice. */
   readonly thinking: readonly ThinkingLevel[];
+  /** Whether the model can see pictures. */
+  readonly images: boolean;
 };
 
 /** The models of one provider that Tau can use. */
@@ -293,9 +295,12 @@ const listedModels = (
   return [...ids].flatMap((id) => {
     const profile = chatProfile(provider, id, catalogData, settings);
     if (Option.isNone(profile) || !profile.value.supports.tools) return [];
-    const { name, contextTokens, thinking } = profile.value;
+    const { name, contextTokens, thinking, supports } = profile.value;
     const ref = { provider: provider.id, model: id };
-    return [{ ref, name, contextTokens, thinking: thinkingLevels(thinking) }];
+
+    return [
+      { ref, name, contextTokens, thinking: thinkingLevels(thinking), images: supports.images },
+    ];
   });
 };
 

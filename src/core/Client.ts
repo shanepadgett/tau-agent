@@ -34,7 +34,13 @@ export const nearestThinking = (
  * model call; with no run going, it is a prompt.
  */
 export type Command =
-  | { readonly type: "prompt" | "steer"; readonly text: string; readonly options: RunOptions }
+  | {
+      readonly type: "prompt" | "steer";
+      readonly text: string;
+      /** The pictures the text marks as `[Image N]`, as the user added them. */
+      readonly images?: readonly Uint8Array[];
+      readonly options: RunOptions;
+    }
   | { readonly type: "cancel" };
 
 /**

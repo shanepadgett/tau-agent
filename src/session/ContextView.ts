@@ -3,10 +3,11 @@
  * entries into Effect's prompt types.
  */
 
+import { pathToFileURL } from "node:url";
 import { Predicate } from "effect";
 import { Prompt } from "effect/ai";
 import { checkReportText, hasFailures } from "./CheckReport.ts";
-import type { Entry, EntryBody } from "./Entry.ts";
+import type { Entry, EntryBody, ImageRef } from "./Entry.ts";
 import { reminder, type ReminderKind } from "./Reminder.ts";
 
 type AssistantEntry = Extract<EntryBody, { type: "assistant" }>;
@@ -62,7 +63,7 @@ export const conversationMessages = (entries: readonly Entry[]): readonly Prompt
   const messages: Prompt.Message[] = [];
 
   for (const { body } of entries) {
-    if (body.type === "user") messages.push(userText(body.text));
+    if (body.type === "user") messages.push(userMessage(body.text, body.images ?? []));
     if (body.type === "nudge") messages.push(hiddenText("nudge", body.text));
     if (body.type === "folder-listings") messages.push(hiddenText("folder-listings", body.text));
 
@@ -87,6 +88,30 @@ export const conversationMessages = (entries: readonly Entry[]): readonly Prompt
 };
 
 const userText = (text: string) => Prompt.userMessage({ content: [Prompt.textPart({ text })] });
+
+/**
+ * An image part points at its saved file with a file URL. The run replaces each one with the
+ * picture's bytes, or with a note when the model cannot see images, right before the request.
+ */
+const imageParts = (images: readonly ImageRef[]) =>
+  images.flatMap((image, index) => [
+    Prompt.textPart({ text: `[Image ${index + 1}]` }),
+    Prompt.filePart({ mediaType: image.mediaType, data: pathToFileURL(image.path) }),
+  ]);
+
+const userMessage = (text: string, images: readonly ImageRef[]) =>
+  Prompt.userMessage({ content: [Prompt.textPart({ text }), ...imageParts(images)] });
+
+/** Provider tool results hold text only, so the pictures of a tool call follow as a reminder. */
+const toolImagesMessage = (callId: string, images: readonly ImageRef[]) =>
+  Prompt.userMessage({
+    content: [
+      Prompt.textPart({
+        text: reminder("tool-images", `The pictures the tool call ${callId} returned follow.`),
+      }),
+      ...imageParts(images),
+    ],
+  });
 
 /** A user-role message Tau wrote for the model, labeled as a reminder. */
 export const hiddenText = (kind: ReminderKind, text: string) => userText(reminder(kind, text));
@@ -121,7 +146,13 @@ const replyMessages = (reply: AssistantEntry, savedResults: ReadonlyMap<string, 
   if (calls.length === 0) return [assistant];
 
   const content = calls.map((call) => toolResultPart(call, savedResults.get(call.id)));
-  return [assistant, Prompt.toolMessage({ content })];
+
+  const pictures = calls.flatMap((call) => {
+    const images = savedResults.get(call.id)?.body.images ?? [];
+    return images.length === 0 ? [] : [toolImagesMessage(call.id, images)];
+  });
+
+  return [assistant, Prompt.toolMessage({ content }), ...pictures];
 };
 
 const assistantPart = (part: AssistantPart) => {

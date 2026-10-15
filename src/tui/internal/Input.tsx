@@ -5,14 +5,17 @@
 // Tab, Enter, Escape and Ctrl-C. Tags show in the accent color. Prompts that were cancelled or not sent come back into it, and its text survives
 // a restart.
 
-import type { SyntaxStyle, TextareaRenderable } from "@opentui/core";
+import type { PasteEvent, SyntaxStyle, TextareaRenderable } from "@opentui/core";
+import { Option } from "effect";
 import { useBindings } from "@opentui/keymap/solid";
-import { createEffect, on } from "solid-js";
+import { createEffect, on, Show } from "solid-js";
 import type { ChatClient } from "./chat-client.ts";
 import { enterBindings, PRIORITY } from "./keymap.ts";
 import type { Completion, InputSuggestions } from "./suggestion-list.ts";
 import { tagRanges } from "../../core/TagText.ts";
 import { COLORS, TAG_STYLE } from "./theme.ts";
+import { createPictures, droppedImagePath } from "./pictures.ts";
+import { isImagePath } from "../../core/ImagePath.ts";
 
 const MAX_INPUT_LINES = 10;
 
@@ -21,35 +24,88 @@ export function Input(props: {
   readonly suggestions: InputSuggestions;
   readonly syntax: SyntaxStyle;
 }) {
+  const pictures = createPictures();
+
   return (
-    <box border borderColor={COLORS.accent}>
-      <textarea
-        ref={(editor: TextareaRenderable) => {
-          editor.syntaxStyle = props.syntax;
-          connectEditor(editor, props.client, props.suggestions);
-        }}
-        // An open picker takes the keys; the text stays.
-        focused={
-          props.client.picker() === undefined &&
-          props.client.commit.step() === undefined &&
-          props.client.qna.state() === undefined
-        }
-        minHeight={1}
-        maxHeight={MAX_INPUT_LINES}
-        placeholder="Type a prompt"
-      />
+    <box>
+      <box border borderColor={COLORS.accent}>
+        <textarea
+          ref={(editor: TextareaRenderable) => {
+            editor.syntaxStyle = props.syntax;
+            connectEditor(editor, props.client, props.suggestions, pictures);
+          }}
+          // An open picker takes the keys; the text stays.
+          focused={
+            props.client.picker() === undefined &&
+            props.client.commit.step() === undefined &&
+            props.client.qna.state() === undefined
+          }
+          minHeight={1}
+          maxHeight={MAX_INPUT_LINES}
+          placeholder="Type a prompt"
+        />
+      </box>
+      <Show when={!props.client.sees() && pictures.named().length > 0}>
+        <text fg={COLORS.warning}>
+          this model cannot see images; {pictures.named().join(", ")} will be left out
+        </text>
+      </Show>
     </box>
   );
 }
+
+type Pictures = ReturnType<typeof createPictures>;
+
+/** Puts a picture's chip at the cursor. */
+const insertPicture = (editor: TextareaRenderable, pictures: Pictures, bytes: Uint8Array) => {
+  editor.insertText(pictures.add(bytes));
+};
+
+/**
+ * An empty paste means the terminal had a picture to paste, so the clipboard is read. A pasted path
+ * of a picture file becomes a chip; any other paste goes in as text.
+ */
+const pasteKeys = (editor: TextareaRenderable, client: ChatClient, pictures: Pictures) => {
+  editor.onPaste = (event: PasteEvent) => {
+    const text = new TextDecoder().decode(event.bytes);
+
+    if (text === "") {
+      event.preventDefault();
+      pasteClipboardPicture(editor, client, pictures);
+      return;
+    }
+
+    const path = droppedImagePath(text);
+    if (Option.isNone(path)) return;
+    event.preventDefault();
+
+    void client.readPicture(path.value).then((bytes) => {
+      if (bytes === undefined) editor.insertText(text);
+      else insertPicture(editor, pictures, bytes);
+    });
+  };
+};
+
+const pasteClipboardPicture = (
+  editor: TextareaRenderable,
+  client: ChatClient,
+  pictures: Pictures,
+) => {
+  void client.clipboardPicture().then((bytes) => {
+    if (bytes !== undefined) insertPicture(editor, pictures, bytes);
+  });
+};
 
 const connectEditor = (
   editor: TextareaRenderable,
   client: ChatClient,
   suggestions: InputSuggestions,
+  pictures: Pictures,
 ) => {
   const follow = () => {
     suggestions.setInput(editor.plainText, editor.cursorOffset);
     client.trackDraft(editor.plainText);
+    pictures.follow(editor.plainText);
   };
 
   editor.onContentChange = () => {
@@ -71,11 +127,12 @@ const connectEditor = (
   });
 
   editor.onSubmit = () => {
-    sendWith(editor, client.send);
+    sendWith(editor, client.send, pictures);
   };
 
-  listKeys(editor, client, suggestions);
-  inputKeys(editor, client);
+  pasteKeys(editor, client, pictures);
+  listKeys(editor, { client, suggestions, pictures });
+  inputKeys(editor, client, pictures);
 
   createEffect(
     on(
@@ -91,12 +148,14 @@ const connectEditor = (
   );
 };
 
+type ListParts = {
+  readonly client: ChatClient;
+  readonly suggestions: InputSuggestions;
+  readonly pictures: Pictures;
+};
+
 /** Up and Down move in the open list, Escape and Ctrl-C close it, Tab and Enter complete. */
-const listKeys = (
-  editor: TextareaRenderable,
-  client: ChatClient,
-  suggestions: InputSuggestions,
-) => {
+const listKeys = (editor: TextareaRenderable, { client, suggestions, pictures }: ListParts) => {
   const apply = (completion: Completion | undefined) => {
     if (completion === undefined) return false;
 
@@ -108,11 +167,12 @@ const listKeys = (
       );
 
       editor.cursorOffset = completion.start + completion.text.length;
+      pictureFromTag(editor, client, pictures, completion);
       return;
     }
 
     replaceText(editor, completion.name);
-    sendWith(editor, client.send);
+    sendWith(editor, client.send, pictures);
   };
 
   useBindings(() => ({
@@ -157,7 +217,7 @@ const listKeys = (
  * Ctrl-S stashes the text. During a run, Tab queues a prompt for after it. Shift+Tab steps the thinking level, which the chat
  * changes only between runs. Ctrl-C clears the input, and goes on to the chat when it is empty.
  */
-const inputKeys = (editor: TextareaRenderable, client: ChatClient) => {
+const inputKeys = (editor: TextareaRenderable, client: ChatClient, pictures: Pictures) => {
   useBindings(() => ({
     target: () => editor,
     targetMode: "focus",
@@ -167,10 +227,16 @@ const inputKeys = (editor: TextareaRenderable, client: ChatClient) => {
         name: "prompt.queue",
         run: () => {
           if (client.chat.run === "idle") return false;
-          sendWith(editor, client.queue);
+          sendWith(editor, client.queue, pictures);
         },
       },
       { name: "thinking.next", run: client.stepThinking },
+      {
+        name: "picture.paste",
+        run: () => {
+          pasteClipboardPicture(editor, client, pictures);
+        },
+      },
       {
         name: "prompt.stash",
         run: () => {
@@ -191,16 +257,48 @@ const inputKeys = (editor: TextareaRenderable, client: ChatClient) => {
       { key: "shift+tab", cmd: "thinking.next" },
       { key: "ctrl+c", cmd: "input.clear" },
       { key: "ctrl+s", cmd: "prompt.stash" },
+      { key: "ctrl+v", cmd: "picture.paste" },
+      { key: "super+v", cmd: "picture.paste" },
     ],
   }));
 };
 
 // Clear first: a prompt the chat cannot send comes back into the editor during `send`.
-const sendWith = (editor: TextareaRenderable, send: (text: string) => void) => {
-  const text = editor.plainText.trim();
-  if (text === "") return;
+const sendWith = (
+  editor: TextareaRenderable,
+  send: (text: string, images: readonly Uint8Array[]) => void,
+  pictures: Pictures,
+) => {
+  const typed = editor.plainText.trim();
+  if (typed === "") return;
   editor.clear();
-  send(text);
+  const { text, images } = pictures.take(typed);
+  send(text, images);
+};
+
+/**
+ * A tagged picture file turns into a chip once its bytes are read, if the tag is still where the
+ * list put it. A file that cannot be read stays a tag.
+ */
+const pictureFromTag = (
+  editor: TextareaRenderable,
+  client: ChatClient,
+  pictures: Pictures,
+  completion: { readonly start: number; readonly text: string },
+) => {
+  const tag = completion.text.trim();
+  const path = tag.replace(/^@"?|"$/g, "");
+  if (!tag.startsWith("@") || !isImagePath(path)) return;
+
+  void client.readPicture(path).then((bytes) => {
+    const text = editor.plainText;
+    const end = completion.start + tag.length;
+    if (bytes === undefined || text.slice(completion.start, end) !== tag) return;
+
+    const chip = pictures.add(bytes);
+    editor.setText(text.slice(0, completion.start) + chip + text.slice(end));
+    editor.cursorOffset = completion.start + chip.length;
+  });
 };
 
 const replaceText = (editor: TextareaRenderable, text: string) => {

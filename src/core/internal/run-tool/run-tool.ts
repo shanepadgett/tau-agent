@@ -4,7 +4,8 @@
  */
 
 import { searchSignature, Tool as ScriptFunction, toolError } from "@opencode/codemode";
-import { Duration, Effect, Option, Ref, Result, Schema } from "effect";
+import { resolve } from "node:path";
+import { Duration, Effect, FileSystem, Option, Ref, Result, Schema } from "effect";
 import { Tool } from "effect/ai";
 import { runCommand } from "../../../proc/Command.ts";
 import {
@@ -18,7 +19,8 @@ import {
   type Touched,
 } from "../../../sandbox/Sandbox.ts";
 import type { WriteQueue } from "../../../sandbox/WriteQueue.ts";
-import type { Entry } from "../../../session/Entry.ts";
+import type { Entry, ImageRef } from "../../../session/Entry.ts";
+import { saveImageBytes } from "../images/image-files.ts";
 import { withChanges } from "../checks/changes.ts";
 import type { ProjectChecks } from "../checks/checks-file.ts";
 import { findScript, type ToolCall } from "../loop/tool-history.ts";
@@ -76,15 +78,35 @@ const sh = (directory: string, timeout: Duration.Duration) =>
       ),
   });
 
+const ImageInput = Schema.Struct({ path: Schema.String });
+
+/** Adds a saved picture to the ones the model sees after the call. */
+export type Attach = (image: ImageRef) => Effect.Effect<void>;
+
+const image = (directory: string, attach: Attach) =>
+  ScriptFunction.make({
+    description:
+      "Shows a picture file (PNG, JPEG, WebP, GIF or BMP) to the model, shrunk to fit. The model sees the picture after the script ends. Returns a note that the picture is attached.",
+    input: ImageInput,
+    output: Schema.String,
+    execute: ({ path }) =>
+      Effect.gen(function* () {
+        const bytes = yield* (yield* FileSystem.FileSystem).readFile(resolve(directory, path));
+        const saved = yield* saveImageBytes(bytes);
+        yield* attach(saved);
+        return `${path} is attached as a ${saved.mediaType} picture.`;
+      }).pipe(Effect.mapError((error) => toolError(`${path}: ${error.message}`))),
+  });
+
 /** The functions a `run` script can call, working in `directory`. Skills are added beside them. */
 export const scriptFunctions = (
   directory: string,
   timeouts: Timeouts,
-  touched: Touched,
-  queue: WriteQueue,
+  hooks: { readonly touched: Touched; readonly attach: Attach; readonly queue: WriteQueue },
 ) => ({
   sh: sh(directory, timeouts.shell),
-  ...fileFunctions(directory, touched, queue),
+  image: image(directory, hooks.attach),
+  ...fileFunctions(directory, hooks.touched, hooks.queue),
 });
 
 /**
@@ -101,13 +123,20 @@ const RUN_PARAMETERS_JSON_SCHEMA = Tool.getJsonSchemaFromSchema(RunParameters);
  * With `checks`, each call also saves the files its script changed, after the fixers ran.
  */
 export const runTool = <R>(
-  functions: (touched: Touched) => Functions<R>,
+  functions: (touched: Touched, attach: Attach) => Functions<R>,
   timeouts: Timeouts,
   checks: Option.Option<ProjectChecks>,
 ): ModelTool<R | Platform> => ({
   definition: Tool.dynamic("run", {
     description: runDescription(
-      describeFunctions(withoutSkills(functions(() => Effect.void))),
+      describeFunctions(
+        withoutSkills(
+          functions(
+            () => Effect.void,
+            () => Effect.void,
+          ),
+        ),
+      ),
       timeouts,
     ),
     parameters: RUN_PARAMETERS_JSON_SCHEMA,
@@ -117,7 +146,9 @@ export const runTool = <R>(
   call: Effect.fn("runTool")(function* (call: ToolCall, entries: readonly Entry[]) {
     const touched = yield* Ref.make<ReadonlySet<string>>(new Set());
     const touch = (path: string) => Ref.update(touched, (paths) => new Set(paths).add(path));
-    const script = runCall(call.params, entries, functions(touch), timeouts);
+    const pictures = yield* Ref.make<readonly ImageRef[]>([]);
+    const attach = (picture: ImageRef) => Ref.update(pictures, (all) => [...all, picture]);
+    const script = runCall(call.params, entries, functions(touch, attach), timeouts);
 
     const [ran, changes] = yield* Option.match(checks, {
       onNone: () => script.pipe(Effect.map((outcome) => [outcome, undefined] as const)),
@@ -146,7 +177,12 @@ export const runTool = <R>(
       output: saved.output,
     };
 
-    return { text: saved.text, isFailure: saved.isFailure, details };
+    return {
+      text: saved.text,
+      isFailure: saved.isFailure,
+      details,
+      images: yield* Ref.get(pictures),
+    };
   }),
 });
 

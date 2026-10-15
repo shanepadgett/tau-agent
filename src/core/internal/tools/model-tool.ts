@@ -6,7 +6,7 @@
 import { type Effect, type FileSystem, Option, type Schema } from "effect";
 import { type Tool, Toolkit } from "effect/ai";
 import type { ChildProcessSpawner } from "effect/process";
-import type { Entry, ToolDetails } from "../../../session/Entry.ts";
+import type { Entry, ImageRef, ToolDetails } from "../../../session/Entry.ts";
 import type { ToolCall } from "../loop/tool-history.ts";
 import type { OutputFiles } from "../output/output-files.ts";
 
@@ -35,6 +35,8 @@ export type ToolOutcome = {
   readonly text: string;
   readonly isFailure: boolean;
   readonly details: ToolDetails | undefined;
+  /** The pictures the call returned, which the model sees after the result. */
+  readonly images?: readonly ImageRef[];
 };
 
 /**

@@ -21,7 +21,10 @@ class OutputUnavailable extends Schema.TaggedError<OutputUnavailable>()("OutputU
 export class OutputFiles extends Context.Service<
   OutputFiles,
   {
-    readonly next: (label: OutputLabel) => Effect.Effect<string, OutputUnavailable>;
+    readonly next: (
+      label: OutputLabel,
+      extension?: string,
+    ) => Effect.Effect<string, OutputUnavailable>;
   }
 >()("tau/core/OutputFiles") {}
 
@@ -32,13 +35,13 @@ export const makeOutputFiles = (
   crypto: Crypto.Crypto,
 ): OutputFiles["Service"] => ({
   next: Effect.fn("OutputFiles.next")(
-    function* (label: OutputLabel) {
+    function* (label: OutputLabel, extension = "log") {
       const parent = yield* fileSystem.realPath(dirname(folder.directory));
       const root = join(parent, basename(folder.directory));
       const directory = join(root, encodeURIComponent(session));
       yield* privateDirectory(fileSystem, root);
       yield* privateDirectory(fileSystem, directory);
-      return join(directory, `${label}-${yield* crypto.randomUUIDv4()}.log`);
+      return join(directory, `${label}-${yield* crypto.randomUUIDv4()}.${extension}`);
     },
     Effect.mapError((cause) => new OutputUnavailable({ path: folder.directory, cause })),
   ),
@@ -64,7 +67,7 @@ const privateDirectory = Effect.fn("privateDirectory")(function* (
 
 type RenderedOutput = { readonly text: string; readonly output: string | undefined };
 type OutputExtent = "whole" | "retained";
-type OutputLabel = "sh" | "run" | "check" | "checks";
+type OutputLabel = "sh" | "run" | "check" | "checks" | "image";
 
 export const renderOutput = (captured: CapturedOutput, extent: OutputExtent): RenderedOutput => {
   if (captured.type === "whole") return { text: captured.text, output: undefined };

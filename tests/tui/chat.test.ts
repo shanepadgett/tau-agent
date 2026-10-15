@@ -144,18 +144,21 @@ const MODELS = [
     ref: { provider: ProviderId.make("openai"), model: "gpt-6" },
     name: "GPT-6",
     contextTokens: 400_000,
+    images: true,
     thinking: ["off", "low", "medium", "high", "xhigh", "max"] as const,
   },
   {
     ref: { provider: ProviderId.make("anthropic"), model: "claude-sonnet-5-5" },
     name: "Claude Sonnet 5.5",
     contextTokens: 1_000_000,
+    images: true,
     thinking: ["off", "low", "medium", "high", "xhigh", "max"] as const,
   },
   {
     ref: { provider: ProviderId.make("anthropic"), model: "claude-opus-5" },
     name: "Claude Opus 5",
     contextTokens: 200_000,
+    images: true,
     thinking: ["low", "high"] as const,
   },
 ];
@@ -725,6 +728,7 @@ describe("the chat in the terminal", () => {
           ref: options.model,
           name: "Scripted",
           contextTokens: 128_000,
+          images: true,
           thinking: ["low", "medium", "high"] as const,
         };
 

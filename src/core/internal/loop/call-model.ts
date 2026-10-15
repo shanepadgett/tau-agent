@@ -124,15 +124,20 @@ export const withSteering = Effect.fn("withSteering")(function* <R>(
   run: RunContext<R>,
   entries: readonly Entry[],
 ) {
-  const texts = yield* run.takeSteering;
-  if (texts.length === 0) return entries;
+  const messages = yield* run.takeSteering;
+  if (messages.length === 0) return entries;
 
-  const bodies = yield* Effect.forEach(texts, (text) =>
-    run.withListings({ type: "user", text, steering: true }),
+  const bodies = yield* Effect.forEach(messages, ({ text, images }) =>
+    run.withListings({
+      type: "user",
+      text,
+      steering: true,
+      images: images.length > 0 ? images : undefined,
+    }),
   );
 
   const saved = yield* run.sessions.append(run.session, bodies.flat());
-  yield* Effect.forEach(texts, (text) => run.emit({ type: "steered", text }));
+  yield* Effect.forEach(messages, ({ text }) => run.emit({ type: "steered", text }));
 
   return [...entries, ...saved];
 });

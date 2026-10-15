@@ -49,6 +49,14 @@ const Tokens = Schema.Struct({
   cacheWrite: Schema.optional(Schema.Int),
 });
 
+/** A picture saved as a file. The text of the entry marks where it belongs as `[Image N]`. */
+const ImageRef = Schema.Struct({
+  path: Schema.String,
+  mediaType: Schema.Literals(["image/png", "image/jpeg", "image/webp"]),
+});
+
+export type ImageRef = typeof ImageRef.Type;
+
 /**
  * A prompt starts a run. A steering message is one the user sent during a run; the run takes it
  * before its next model call and goes on.
@@ -57,6 +65,7 @@ const UserEntry = Schema.Struct({
   type: Schema.Literal("user"),
   text: Schema.String,
   steering: Schema.optional(Schema.Literal(true)),
+  images: Schema.optional(Schema.Array(ImageRef)),
 });
 
 /**
@@ -159,6 +168,7 @@ const ToolResultEntry = Schema.Struct({
   result: Schema.Json,
   isFailure: Schema.Boolean,
   details: Schema.optional(ToolDetails),
+  images: Schema.optional(Schema.Array(ImageRef)),
 });
 
 /**

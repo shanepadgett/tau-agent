@@ -10,7 +10,7 @@ import { type ListedModel, modelSections, refText } from "../../src/tui/internal
 const listed = (text: string): ListedModel => {
   const slash = text.indexOf("/");
   const ref = { provider: ProviderId.make(text.slice(0, slash)), model: text.slice(slash + 1) };
-  return { ref, name: text, contextTokens: 200_000, thinking: [] };
+  return { ref, name: text, contextTokens: 200_000, thinking: [], images: true };
 };
 
 const MODELS = [

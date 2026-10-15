@@ -5,6 +5,7 @@ export type ReminderKind =
   | "nudge"
   | "checks"
   | "run-failed"
+  | "tool-images"
   | "handoff"
   | "folder-listings"
   | "short-term-memory"

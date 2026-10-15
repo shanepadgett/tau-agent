@@ -46,6 +46,8 @@ import { type SessionReferences } from "../references/references-source.ts";
 import { processNotices } from "../process/process-notices.ts";
 import type { UserInstructions } from "../../UserInstructions.ts";
 import type { OutputFolder } from "../../OutputFolder.ts";
+import { saveImages } from "../images/image-files.ts";
+import { resolveImages } from "../images/resolve-images.ts";
 import { makeOutputFiles, OutputFiles } from "../output/output-files.ts";
 import type { Commits, CommitSettings } from "../../Commits.ts";
 import { makeCommits } from "../commit/commits.ts";
@@ -179,6 +181,42 @@ const optionalTools = (checks: Option.Option<ProjectChecks>, options: RunOptions
   ...(options.askQuestions ? [askQuestionTool] : []),
 ];
 
+/** The user entry of a prompt, with its pictures prepared and saved. */
+const userEntry = Effect.fn("userEntry")(function* (prompt: QueuedPrompt) {
+  const images = yield* saveImages(prompt.images ?? []);
+
+  return {
+    type: "user",
+    text: prompt.text,
+    images: images.length > 0 ? images : undefined,
+  } as const;
+});
+
+/** Takes the waiting steering messages and saves their pictures. */
+const savedSteering = (steering: Ref.Ref<Steering>) =>
+  takeSteering(steering).pipe(
+    Effect.flatMap((waiting) =>
+      Effect.forEach(waiting, ({ text, images }) =>
+        saveImages(images ?? []).pipe(Effect.map((saved) => ({ text, images: saved }))),
+      ),
+    ),
+  );
+
+/** The view with each saved picture filled in, so the request holds the picture itself. */
+const withPictures =
+  (
+    view: RunContext<Platform>["view"],
+    options: { readonly fileSystem: FileSystem.FileSystem; readonly canSeeImages: boolean },
+  ) =>
+  (...args: Parameters<RunContext<Platform>["view"]>) =>
+    view(...args).pipe(
+      Effect.flatMap((prompt) =>
+        resolveImages(prompt, options).pipe(
+          Effect.provideService(FileSystem.FileSystem, options.fileSystem),
+        ),
+      ),
+    );
+
 /** Saves the prompt and runs the agent loop on it. */
 const runPrompt = (
   { services, session, processes, events, steering, savePrompt }: SessionRuns,
@@ -189,8 +227,7 @@ const runPrompt = (
     const { timeouts, maxTurns, thinking } = prompt.options;
     // The reply saves the level with its model, so a resumed chat goes on at the same level.
     const model = { ...prompt.options.model, thinking };
-    const entered = { type: "user", text: prompt.text } as const;
-    yield* savePrompt(yield* withListings(session.directory, entered));
+    yield* savePrompt(yield* withListings(session.directory, yield* userEntry(prompt)));
 
     yield* PubSub.publish(events, { type: "run-started", prompt: prompt.text });
     const { root, folders } = yield* projectFolders(session.directory);
@@ -213,14 +250,19 @@ const runPrompt = (
       checks,
     );
 
+    const profile = yield* models.profile(model);
+
     const context: RunContext<Platform> = {
       session: session.id,
       model,
-      profile: yield* models.profile(model),
+      profile,
       languageModel: yield* models.languageModel(model, ConversationId.make(session.id), thinking),
       sessions,
       tools: [run, ...optionalTools(checks, prompt.options), ...method.tools],
-      view: method.view,
+      view: withPictures(method.view, {
+        fileSystem: services.fileSystem,
+        canSeeImages: profile.supports.images,
+      }),
       nudge: method.nudge,
       contextOperations: method.operations,
       shouldReply: method.shouldReply,
@@ -235,9 +277,7 @@ const runPrompt = (
           Effect.tap(files.show),
         ),
       processNotices: processNotices(processes),
-      takeSteering: takeSteering(steering).pipe(
-        Effect.map((steered) => steered.map(({ text }) => text)),
-      ),
+      takeSteering: savedSteering(steering),
       withListings: (user) => withListings(session.directory, user),
       maxTurns,
       emit: (event) => PubSub.publish(events, event).pipe(Effect.asVoid),
@@ -261,8 +301,12 @@ const runToolOf = (
   const used = (skill: Skill) => services.skillUses.record(skill.name, session.directory);
 
   return runTool<Platform>(
-    (touched) => ({
-      ...scriptFunctions(session.directory, timeouts, touched, services.writeQueue),
+    (touched, attach) => ({
+      ...scriptFunctions(session.directory, timeouts, {
+        touched,
+        attach,
+        queue: services.writeQueue,
+      }),
       history: historyFunction(session.id, services.sessions),
       [PROCESS_GROUP]: processFunctions(processes, session.directory),
       [WEB_GROUP]: webFunctions(services.web, model, ConversationId.make(`${session.id}:web`)),

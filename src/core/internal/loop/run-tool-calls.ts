@@ -53,6 +53,7 @@ const runToolCall = <R>(run: RunContext<R>, call: ToolCall, entries: readonly En
         result: outcome.text,
         isFailure: outcome.isFailure,
         details: outcome.details,
+        images: outcome.images?.length ? outcome.images : undefined,
       },
     ]);
 

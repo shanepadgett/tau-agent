@@ -4,7 +4,7 @@ import type { Effect, Option } from "effect";
 import type { AiError, LanguageModel, Prompt } from "effect/ai";
 import type { ModelRef } from "../../../ai/Catalog.ts";
 import type { ModelProfile } from "../../../ai/ModelProfile.ts";
-import type { Entry, EntryBody, NudgeEntry, SessionId } from "../../../session/Entry.ts";
+import type { Entry, EntryBody, ImageRef, NudgeEntry, SessionId } from "../../../session/Entry.ts";
 import type { SessionNotFound, Sessions } from "../../../session/Sessions.ts";
 import type { SessionStoreError } from "../../../session/SessionStoreError.ts";
 import type { AgentEvent, RunEnd } from "../../Client.ts";
@@ -18,6 +18,9 @@ export type Outcome =
 export const CONTINUE: Outcome = { type: "continue" };
 
 export const endWith = (end: RunEnd): Outcome => ({ type: "end", end });
+
+/** A steering message with its pictures, already saved. */
+export type SteeringMessage = { readonly text: string; readonly images: readonly ImageRef[] };
 
 export type RunContext<R> = {
   readonly session: SessionId;
@@ -44,7 +47,7 @@ export type RunContext<R> = {
   /** Notices to save before the next model call, such as a command that exited. */
   readonly processNotices: Effect.Effect<readonly NudgeEntry[]>;
   /** The steering messages the user sent since the last model call. Taking them empties the list. */
-  readonly takeSteering: Effect.Effect<readonly string[]>;
+  readonly takeSteering: Effect.Effect<readonly SteeringMessage[], never, R>;
   /** A steering message's entry, then the listings of the folders it tags. */
   readonly withListings: (
     user: Extract<EntryBody, { type: "user" }>,

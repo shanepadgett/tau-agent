@@ -3,7 +3,8 @@
  * that core's events update, and turns the components' plain calls into Effects.
  */
 
-import { Deferred, Effect, Fiber, type Scope, Stream } from "effect";
+import { resolve } from "node:path";
+import { Deferred, Effect, Fiber, Option, type Scope, Stream } from "effect";
 import { type Accessor, createSignal } from "solid-js";
 import { createStore, reconcile, unwrap } from "solid-js/store";
 import type { Agent, OpenSession } from "../../core/Agent.ts";
@@ -22,6 +23,8 @@ import type { SidebarMemory } from "./sidebar-state.ts";
 import { turnAttention } from "./turn-attention.ts";
 import { thinkingChoice } from "./thinking-choice.ts";
 import type { PickerList } from "./Picker.tsx";
+import { clipboardPicture } from "../../core/ClipboardImage.ts";
+import { readPictureFile } from "./pictures.ts";
 import { type InputEditor, type StashTarget, stashInput } from "./stash.ts";
 
 /**
@@ -132,9 +135,15 @@ export type ChatClient = {
   /** Parks the input's text as a stash, and clears the input. */
   readonly stash: () => void;
   /** Sends a prompt, or during a run a steering message, or runs a command. */
-  readonly send: (text: string) => void;
+  readonly send: (text: string, images?: readonly Uint8Array[]) => void;
   /** Sends a prompt that waits for the running prompt to end. */
-  readonly queue: (text: string) => void;
+  readonly queue: (text: string, images?: readonly Uint8Array[]) => void;
+  /** Whether the model of the runs can see pictures; true while the model is not known. */
+  readonly sees: Accessor<boolean>;
+  /** Reads a picture file named relative to the session's folder; nothing when it cannot be read. */
+  readonly readPicture: (path: string) => Promise<Uint8Array | undefined>;
+  /** Reads the clipboard's picture; nothing when it holds none. */
+  readonly clipboardPicture: () => Promise<Uint8Array | undefined>;
   readonly cancel: () => void;
   readonly quit: () => void;
   /** Whether the user last left the docked sidebar open, and a way to save a new choice. */
@@ -200,21 +209,28 @@ export const chatClient = Effect.fn("chatClient")(function* (
     commands: list,
     draft: link.draft,
     ...input.client,
-    send: (text) => {
+    send: (text, images) => {
       const command = run(text);
 
-      if (command === undefined) prompts.send(chat.run === "idle" ? "prompt" : "steer", text);
+      if (command === undefined)
+        prompts.send(chat.run === "idle" ? "prompt" : "steer", text, undefined, images);
       else Effect.runFork(command);
     },
-    queue: (text) => {
-      prompts.send("prompt", text);
-    },
+    queue: prompts.queue,
+    sees: prompts.sees,
     cancel: () => Effect.runFork(opened.send({ type: "cancel" })),
     quit: () => end({ reason: "quit" }),
     sidebar: yield* sidebarMemory(agent, apply),
   };
 
   return { client, ended: Deferred.await(ended) };
+});
+
+/** Where the input gets pictures from: files and the clipboard. */
+const pictureReaders = (directory: string) => ({
+  readPicture: (path: string) =>
+    Effect.runPromise(readPictureFile(resolve(directory, path))).then(Option.getOrUndefined),
+  clipboardPicture: () => Effect.runPromise(clipboardPicture),
 });
 
 /**
@@ -270,7 +286,8 @@ const tagFinder = Effect.fn("tagFinder")(function* (
 ) {
   yield* Effect.forkScoped(agent.files.find(directory, [], ""));
 
-  const tags: Pick<ChatClient, "findTags" | "choseTag"> = {
+  const tags: Pick<ChatClient, "findTags" | "choseTag" | "readPicture" | "clipboardPicture"> = {
+    ...pictureReaders(directory),
     findTags: (query) => Effect.runPromise(agent.files.find(directory, chat.references, query)),
     choseTag: (query, row) => {
       runInBackground(agent.files.chose(directory, chat.references, query, row));
@@ -362,6 +379,7 @@ const promptSender = Effect.fn("promptSender")(function* (sender: {
     type: "prompt" | "steer",
     text: string,
     tools: Pick<RunOptions, "askQuestions"> = { askQuestions: false },
+    images: readonly Uint8Array[] = [],
   ) => {
     const ref = model();
 
@@ -372,7 +390,7 @@ const promptSender = Effect.fn("promptSender")(function* (sender: {
 
     apply({ type: type === "prompt" ? "prompt-sent" : "steer-sent", text });
     const runOptions = { ...options, model: ref, thinking: thinking.chosen(), ...tools };
-    Effect.runFork(opened.send({ type, text, options: runOptions }));
+    Effect.runFork(opened.send({ type, text, images, options: runOptions }));
   };
 
   const modelText = () => {
@@ -384,7 +402,16 @@ const promptSender = Effect.fn("promptSender")(function* (sender: {
     if (chat.run === "idle") thinking.step();
   };
 
-  return { send, model, setModel, modelText, thinking: thinking.shown, stepThinking };
+  const sees = () => {
+    const ref = model();
+    return listed().find((candidate) => sameModel(candidate.ref, ref))?.images ?? true;
+  };
+
+  const queue = (text: string, images: readonly Uint8Array[] = []) => {
+    send("prompt", text, undefined, images);
+  };
+
+  return { send, queue, model, setModel, modelText, thinking: thinking.shown, stepThinking, sees };
 });
 
 const sameModel = (left: ModelRef, right: ModelRef | undefined) =>
