@@ -16,7 +16,8 @@ export type CommitStep =
   | { readonly type: "planning"; readonly model: string }
   | { readonly type: "review"; readonly plan: readonly PlannedCommit[] }
   | { readonly type: "committing"; readonly index: number; readonly count: number }
-  | { readonly type: "push"; readonly target: string; readonly count: number };
+  | { readonly type: "push"; readonly target: string; readonly count: number }
+  | { readonly type: "pushing"; readonly target: string; readonly count: number };
 
 /** The user's answer to the review (commit the plan) or the push question. */
 export type CommitAnswer = "yes" | "no";
@@ -166,6 +167,8 @@ const committed = Effect.fn("committed")(function* (
   const done = committedText(hashes);
   const pushTo = yield* wantedPush(steps, start, hashes.length);
   if (Option.isNone(pushTo)) return yield* end(`${done}.`);
+
+  steps.show({ type: "pushing", target: pushTo.value.name, count: hashes.length });
 
   yield* steps.commits
     .push(start, pushTo.value)

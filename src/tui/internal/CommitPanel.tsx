@@ -50,6 +50,9 @@ export function CommitPanel(props: PanelProps) {
             <Working text={`Committing ${step.index + 1} of ${step.count}`} note="hooks included" />
           )}
         </Match>
+        <Match when={stepOf(props.step, "pushing")} keyed>
+          {(step) => <Working text={`Pushing ${commitsText(step.count)}`} note={step.target} />}
+        </Match>
         <Match when={stepOf(props.step, "review")} keyed>
           {(step) => <PlanLines step={step} top={top()} />}
         </Match>
@@ -67,8 +70,7 @@ const stepOf = <T extends CommitStep["type"]>(step: CommitStep, type: T) =>
 
 const titleOf = (step: CommitStep) => {
   if (step.type !== "push") return "Commit";
-  const commits = step.count === 1 ? "commit" : "commits";
-  return `Push ${step.count} ${commits} to ${step.target}?`;
+  return `Push ${commitsText(step.count)} to ${step.target}?`;
 };
 
 const hintOf = (step: CommitStep) => {
@@ -159,4 +161,5 @@ function Working(props: { readonly text: string; readonly note: string }) {
   );
 }
 
+const commitsText = (count: number) => (count === 1 ? "1 commit" : `${count} commits`);
 const filesText = (count: number) => (count === 1 ? "1 file" : `${count} files`);
