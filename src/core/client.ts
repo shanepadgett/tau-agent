@@ -83,8 +83,8 @@ export type AgentEvent =
 /**
  * How a run ends on its own. `output-limit`: the reply stopped at the model's output limit, so the
  * answer is cut short. `repeated-call`: the model sent the same failing call again and again;
- * `call` shows what it was. `checks-failed`: the checks Tau ran itself still failed after the
- * model had its tries to fix them.
+ * `call` shows what it was. `checks-failed`: the model ended its turn while the latest checks
+ * of its changes failed, or they still failed after the model had its tries to fix them.
  */
 export type RunEnd =
   | { readonly reason: "answered" | "turn-limit" | "output-limit" }
@@ -109,6 +109,6 @@ export const runEndMessage = (end: RunEnded): string | undefined => {
     case "repeated-call":
       return `The model sent the same failing call again and again, so Tau stopped the run: ${end.call}`;
     case "checks-failed":
-      return `The project's checks still fail after the model's tries to fix them: ${end.checks.join(", ")}.`;
+      return `The run ended while the project's checks fail: ${end.checks.join(", ")}.`;
   }
 };

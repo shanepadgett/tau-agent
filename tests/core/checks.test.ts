@@ -148,7 +148,33 @@ describe("project checks", () => {
       }),
     ));
 
-  test("checks that still fail after three send-backs end the run", () =>
+  test("a model that ends its turn after it saw the checks fail ends the run, without a send-back", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        yield* initRepository(harness.directory, {});
+        yield* writeChecks(harness.directory, { check: [NO_BAD_CHECK] });
+
+        const agent = yield* harness.startAgent([
+          runReply("call-1", writeNotes("bad")),
+          checksReply("call-2"),
+          textReply("May I change the check?"),
+        ]);
+
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const events = yield* prompt(opened, "Write notes.");
+
+        expect(runEnd(events)).toEqual({
+          type: "run-ended",
+          reason: "checks-failed",
+          checks: ["no-bad"],
+        });
+
+        expect(harness.prompts).toHaveLength(3);
+        expect(checkStarts(events)).toEqual([]);
+      }),
+    ));
+
+  test("a model that ends its turn again after a send-back, without a change, ends the run", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
         yield* initRepository(harness.directory, {});
@@ -157,8 +183,37 @@ describe("project checks", () => {
         const agent = yield* harness.startAgent([
           runReply("call-1", writeNotes("bad")),
           textReply("Done."),
+          textReply("The check is wrong."),
+        ]);
+
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const events = yield* prompt(opened, "Write notes.");
+
+        expect(runEnd(events)).toEqual({
+          type: "run-ended",
+          reason: "checks-failed",
+          checks: ["no-bad"],
+        });
+
+        expect(harness.prompts).toHaveLength(3);
+        expect(checkStarts(events)).toHaveLength(1);
+      }),
+    ));
+
+  test("changes that still fail after three send-backs end the run", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        yield* initRepository(harness.directory, {});
+        yield* writeChecks(harness.directory, { check: [NO_BAD_CHECK] });
+
+        const agent = yield* harness.startAgent([
+          runReply("call-1", writeNotes("bad1")),
           textReply("Done."),
+          runReply("call-2", writeNotes("bad2")),
           textReply("Done."),
+          runReply("call-3", writeNotes("bad3")),
+          textReply("Done."),
+          runReply("call-4", writeNotes("bad4")),
           textReply("Done."),
         ]);
 
@@ -171,7 +226,7 @@ describe("project checks", () => {
           checks: ["no-bad"],
         });
 
-        expect(harness.prompts).toHaveLength(5);
+        expect(harness.prompts).toHaveLength(8);
         expect(checkStarts(events)).toHaveLength(4);
       }),
     ));

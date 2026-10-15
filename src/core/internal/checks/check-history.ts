@@ -31,8 +31,8 @@ export const changesSincePrompt = (entries: readonly Entry[]): Changes => {
 };
 
 /**
- * The checks are due when the run changed files and no report since the last change passed. A
- * report that failed stays due, so the failure is sent back until it is fixed or the run ends.
+ * The checks are due when the run changed files and no report came after the last change. A report
+ * that failed is not due again: the model saw it, and may stop to ask the user what to do.
  */
 export const checksDue = (entries: readonly Entry[]) => {
   const run = sincePrompt(entries);
@@ -40,10 +40,18 @@ export const checksDue = (entries: readonly Entry[]) => {
   if (lastChange === -1) return false;
 
   const lastReport = run.findLastIndex((entry) => Option.isSome(reportOf(entry)));
-  if (lastReport < lastChange) return true;
+  return lastReport < lastChange;
+};
 
-  const report = Option.flatMap(Option.fromUndefinedOr(run[lastReport]), reportOf);
-  return Option.exists(report, hasFailures);
+/** The checks that failed in the current run's latest report, or none. */
+export const failingChecks = (entries: readonly Entry[]) => {
+  const latest = sincePrompt(entries).findLast((entry) => Option.isSome(reportOf(entry)));
+  const report = Option.flatMap(Option.fromUndefinedOr(latest), reportOf);
+
+  return Option.match(report, {
+    onNone: () => [],
+    onSome: ({ failed }) => failed.map(({ name }) => name),
+  });
 };
 
 /** How many times the current run's checks failed when Tau ran them itself. */

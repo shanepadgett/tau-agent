@@ -34,13 +34,15 @@ Project checks let Tau format the files the model changes and make sure lint, ty
 - After each `run` call, Tau compares `git status` and the content of the changed files with what they were before the call, so it finds changes made through `sh` too.
 - Fixers run after each `run` call that changed a file they match. The model does not see their output; large output is saved in a private temporary file.
 - When the project has `check` commands, the model gets a `checks` tool. It runs the checks that match the files changed since the user's prompt, and gives the model each check that passed and the output of each that failed.
-- When the model ends its turn and the changed files have no passing checks after the last change, Tau runs the checks itself and sends failures back to the model.
+- When the model ends its turn and no checks ran after its last change, Tau runs the checks itself and sends failures back to the model.
+- When the model ends its turn and has already seen the checks fail after its last change, from the `checks` tool or from Tau, the run ends and names the checks that fail. This lets the model stop to ask you something, such as permission to change a check.
 - A check passes when its command exits with code 0. `{files}` gives the command the full path of each changed file that still exists.
 - Outside a git repository, Tau cannot see which files changed. Fixers do not run, the `checks` tool runs every check, and Tau runs every check once at the end of a run that had a `run` call.
 
 ## Limits
 
-- After Tau sends failed checks back 3 times, the run ends and names the checks that still fail. In print mode, Tau exits with an error.
+- After Tau sends failed checks back 3 times, the run ends and names the checks that still fail.
+- In print mode, a run that ends with failing checks makes Tau exit with an error.
 - A check that matches only deleted files and takes `{files}` does not run.
 - A fixer that fails is ignored.
 - Check output and combined reports over 50 KB (51,200 bytes) or 2,000 lines keep half at the start and half at the end. Cut notes link to private output files in `$TMPDIR/tau/<session>/` (see [print-mode.md](print-mode.md)). Each command's file keeps its whole received output; a combined-report file keeps the report, including links to command logs. Saved sessions replay the same preview text.
