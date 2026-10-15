@@ -34,7 +34,7 @@ Status: built, with the compiled-binary test, 2026-10-14; the live check in [liv
 src/supervisor/                      new layer
   Supervisor.ts          superviseChat(start): the parent process loop
   ReloadLink.ts          child side of the IPC: ReloadLink service, ipc and none layers
-  messages.ts            ToChild, ToSupervisor as Schema unions; decoded at both ends
+  Messages.ts            ToChild, ToSupervisor as Schema unions; decoded at both ends
   internal/
     restart-machine.ts   RestartState, RestartEvent, RestartCommand, transition(): pure
     restart-machine.test.ts   table test, like chat-state.test.ts
@@ -58,7 +58,7 @@ docs/guide/chat.md                   changed: restart, /restart, autoRestart
 ## Boundaries
 
 ```ts
-// messages.ts: over Bun IPC (`Bun.spawn({ ipc })`, child `process.send` / `process.on("message")`)
+// Messages.ts: over Bun IPC (`Bun.spawn({ ipc })`, child `process.send` / `process.on("message")`)
 type ToChild =
   | { type: "start-check" }
   | { type: "start-chat"; draft: string }
@@ -172,7 +172,7 @@ Without `source` (released binary), there is no watcher and no build: the child 
 ## Build order
 
 1. Prep steps 1 and 2.
-2. `messages.ts`, `restart-machine.ts` and its table test.
+2. `Messages.ts`, `restart-machine.ts` and its table test.
 3. `Builds`, `Children`, `SourceWatch`, `run-commands.ts`, `superviseChat`, with `supervise.test.ts`.
 4. `ReloadLink`, the chat branch in `root-command.ts`, the TUI changes, the setting.
 5. `compile-tau.ts` and the binary PTY test; the guide page; a live check in [live-checks.md](../live-checks.md): edit `src/` from a running Tau.

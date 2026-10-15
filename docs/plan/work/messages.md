@@ -129,7 +129,7 @@ export const reloadConditions = (state: RestartState): readonly ReloadCondition[
 // phase ready && !isAutomatic               -> info    "reload.code"      "New code is ready: send /restart"
 ```
 
-`failed` events gain `stage: "build" | "check"` for the two texts. `messages.ts` adds `ReloadCondition` (the fields of `Condition` plus `detail`, since the supervisor cannot import core) and `ToChild` `{ type: "conditions", conditions }`. `Supervisor.ts`, after each step, sends the list when it differs from the last one sent, and sends it to each new chat right after `start-chat`. The `log` command stays for crashes that restart.
+`failed` events gain `stage: "build" | "check"` for the two texts. `Messages.ts` adds `ReloadCondition` (the fields of `Condition` plus `detail`, since the supervisor cannot import core) and `ToChild` `{ type: "conditions", conditions }`. `Supervisor.ts`, after each step, sends the list when it differs from the last one sent, and sends it to each new chat right after `start-chat`. The `log` command stays for crashes that restart.
 
 ### 3. cli: from IPC to `Status`
 
