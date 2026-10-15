@@ -6,6 +6,7 @@ import type { Agent, OpenSession } from "../../core/Agent.ts";
 import type { RunOptions } from "../../core/Client.ts";
 import { type ChatAction, type ChatState, isIdle } from "./chat-state.ts";
 import type { CommitFlow } from "./commit-flow.ts";
+import type { CommandInfo } from "./command-suggestions.ts";
 import { type ModelRef, modelPicker } from "./model-picker.ts";
 import type { PickerItem, PickerList } from "./Picker.tsx";
 
@@ -25,7 +26,8 @@ type ListedSession = Effect.Success<ReturnType<ChatAgent["sessions"]>>[number];
 type ChatCommand = {
   readonly description: string;
   readonly run: (argument: string) => Effect.Effect<void>;
-  readonly takesArgument?: true;
+  /** Text after the name is its argument, which it may take or must take. */
+  readonly argument?: "optional" | "required";
 };
 
 /** What the commands act on. */
@@ -131,7 +133,7 @@ export const chatCommands = (target: CommandTarget) => {
   const commands: Readonly<Record<string, ChatCommand>> = {
     "/commit": {
       description: "Commit every change, after the checks pass",
-      takesArgument: true,
+      argument: "optional",
       run: (instruction) =>
         Effect.sync(() => {
           whenIdle(
@@ -172,9 +174,10 @@ export const chatCommands = (target: CommandTarget) => {
     setPicker(undefined);
   };
 
-  const list = Object.entries(commands).map(([name, command]) => ({
+  const list = Object.entries(commands).map(([name, command]): CommandInfo => ({
     name,
     description: command.description,
+    argument: command.argument ?? "none",
   }));
 
   return { run: commandRun(commands), list, picker, closePicker };
@@ -190,7 +193,7 @@ const commandRun =
     const [, name = "", argument = ""] = /^(\/\S+)(?:\s+([\s\S]*))?$/u.exec(text) ?? [];
     const command = commands[name];
     if (command === undefined) return undefined;
-    if (argument.trim() !== "" && command.takesArgument !== true) return undefined;
+    if (argument.trim() !== "" && command.argument === undefined) return undefined;
     return command.run(argument.trim());
   };
 

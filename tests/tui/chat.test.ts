@@ -392,7 +392,7 @@ describe("the chat in the terminal", () => {
       }).pipe(Effect.scoped),
     ));
 
-  test("typing a command lists the matching ones, Tab completes it, and Enter then sends it", () =>
+  test("typing a command lists the matching ones, and Enter runs the chosen one", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
         const agent = yield* harness.startAgent([]);
@@ -404,12 +404,7 @@ describe("the chat in the terminal", () => {
 
         expect(listed).toContain("Open an earlier session of this folder");
         expect(listed).not.toContain("/model");
-        expect(listed).toContain("tab/enter complete · esc close");
-        terminal.mockInput.pressTab();
-        const completed = yield* frameWith(terminal, "enter send");
-
-        expect(completed).toContain("/sessions");
-        expect(completed).not.toContain("Commands");
+        expect(listed).toContain("tab complete · enter select · esc close");
         terminal.mockInput.pressEnter();
         yield* frameWith(terminal, "Type to filter");
       }).pipe(Effect.scoped),

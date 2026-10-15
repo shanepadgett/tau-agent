@@ -77,7 +77,10 @@ const connectEditor = (
   // During a run, Enter steers it and Tab queues a prompt for after it. Shift+Tab steps the thinking
   // level, which the chat changes only between runs.
   editor.onKeyDown = (key) => {
-    suggestions.takeKey(key, complete);
+    suggestions.takeKey(key, complete, (name) => {
+      complete(name);
+      sendWith(client.send);
+    });
 
     if (!key.defaultPrevented && key.name === "tab" && key.shift) {
       key.preventDefault();

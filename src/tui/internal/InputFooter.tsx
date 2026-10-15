@@ -11,7 +11,7 @@ import { COLORS } from "./theme.ts";
 const IDLE_KEYS = "enter send · shift+enter new line · ctrl+d quit";
 const IDLE_THINKING_KEYS = "enter send · shift+enter new line · shift+tab thinking · ctrl+d quit";
 const RUNNING_KEYS = "enter steer · tab queue · esc cancel · ctrl+d quit";
-const LIST_KEYS = "↑↓ move · tab/enter complete · esc close";
+const LIST_KEYS = "↑↓ move · tab complete · enter select · esc close";
 const TOKENS_PER_K = 1000;
 
 export function InputFooter(props: {
@@ -19,7 +19,7 @@ export function InputFooter(props: {
   readonly suggestions: CommandSuggestions;
 }) {
   const keys = () => {
-    if (props.suggestions.isOpen()) return LIST_KEYS;
+    if (props.suggestions.completes()) return LIST_KEYS;
     if (props.client.chat.run !== "idle") return RUNNING_KEYS;
     return props.client.thinking() === undefined ? IDLE_KEYS : IDLE_THINKING_KEYS;
   };

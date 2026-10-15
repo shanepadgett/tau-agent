@@ -8,7 +8,7 @@ Built differently from the mockups or the plan:
 - The model sees the session's prompts since the latest commit's time, not since the last `/commit`.
 - The push choices mark the chosen one with `›`.
 
-Code: `core/Commits.ts` (types), `core/internal/commit/commits.ts` and `commit-plan.ts`, `workspace/Git.ts`, `tui/internal/commit-flow.ts` and `CommitPanel.tsx`. Commands now take text after their name (`takesArgument` in `chat-commands.ts`).
+Code: `core/Commits.ts` (types), `core/internal/commit/commits.ts` and `commit-plan.ts`, `workspace/Git.ts`, `tui/internal/commit-flow.ts` and `CommitPanel.tsx`. Commands now take text after their name (`argument` in `chat-commands.ts`).
 
 `/commit` turns every changed file in the repository into one or more commits. It runs the project's commit checks, asks a model to group the files into conventional commits, shows the plan for approval, commits, then offers to push.
 
