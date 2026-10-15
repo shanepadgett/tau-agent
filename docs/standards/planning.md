@@ -4,7 +4,7 @@
 
 - A plan fits in one to two pages and is mostly visual: diagrams, tables and trees, with prose only for a decision, a tradeoff or a question. If it runs longer, split the work or cut detail; nobody reads page three.
 - Lead each section with the decision or the shape. Reasons come after, in short sentences.
-- Lasting plans live in `docs/plan/`. The table in `docs/plan/README.md` says which file holds what.
+- Lasting plans live in `docs/plan/`. `docs/plan/roadmap.md` lists what is left to do; a plan file exists only for an item that has been thought through, and the roadmap links to it.
 - Record each agreed decision in the plan file in the same reply. A correction rewrites the affected part; do not append history.
 - Search `docs/reference/copies/index.md` and the dependency's docs and types before proposing any helper, type, or dependency. Name the library module and function that provides each capability. Propose new code only after the reference shows nothing that fits, and name no API that you did not find there.
 - Plan in rounds. Each round asks a small batch of related decisions.
@@ -50,4 +50,4 @@ Show, don't tell. Prose is limited to tradeoffs and open questions, one line eac
 - Logic as pseudocode: one action per line, names from the domain, indentation for nesting, no language noise.
 - Show where behavior is injected. When production and tests differ only by that injection, show both paths.
 - `docs/plan/deferred.md` lists decisions to make later, one line each: the question and what brings it up. When that happens, move the item to `questions.md`.
-- Code-level plans live in `docs/plan/work/`, one file per piece of work. When a round is built, checks pass and any live check the user asked for has passed, move each decision that still matters into a lasting plan file, then move the round's plan to `docs/plan/archive/`. Change only its status line, to say where its decisions now live, and fix links to it. Archived plans are a record, not a source of truth: lasting plans never link to them. Do this before planning the next round.
+- Code-level plans live in `docs/plan/`, one file per piece of work. When the work is built and verified, delete the plan file and its roadmap line. Keep a decision that still matters in the code, the guide.

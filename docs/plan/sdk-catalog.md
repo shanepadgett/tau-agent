@@ -43,7 +43,7 @@ This round lists the areas and what each offers. Names are working names; the ev
 
 ## Stable prefix
 
-Providers cache by prefix ([architecture.md](architecture.md#core-ideas)), so these points only grow at the end between compactions:
+Providers cache by prefix, so these points only grow at the end between compactions:
 
 - **The base prompt** can be replaced until the session's first model call, then stays fixed.
 - **Everything else the model is told** comes from instruction sources, as in OpenCode's session design: the date and environment, `AGENTS.md` files, skills, the function catalog, and anything extensions contribute. A source has a key, a `read`, and three renderings: `initial`, `changed` and `removed`. Before each model call Tau reads every source and records which ones changed. The system prompt shows each source's value as of the last compaction; a later change is rendered once and appended to the chat as a short note, such as "Today's date is now …". Compaction makes the current values the new baseline. Extensions never touch the system prompt text, so they cannot break the cache by accident.

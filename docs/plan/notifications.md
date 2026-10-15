@@ -103,7 +103,7 @@ Use one alert per user turn, never per model step, tool completion or retry. Eve
 - Before implementation: agree event and focus policy, show banner wording and states for approval, then write the code-level plan and update the user guide.
 - Verify actual playback, absence or presence of duplicate sound, and a compiled binary running outside the repository. None of these live checks has run.
 
-Open questions are in [questions.md](../questions.md).
+Open questions are in questions.md.
 
 ## Implementation boundary
 
@@ -118,7 +118,7 @@ src/host/Settings.ts                     validates enabled/sound settings with t
 src/cli/internal/supervised-chat.ts      passes host settings into TUI setup
 tests/tui/notifications.test.ts          focus, events, settings, audio failure and scoped cleanup
 tests/host/settings.test.ts              notification settings defaults and validation
-docs/guide/notifications.md              settings, behavior, attribution and platform limits
+docs/guide/settings.md                   settings, behavior, attribution and platform limits
 ```
 
 Boundaries: `NotificationOptions = { enabled: boolean; sound: boolean }`; `openAttention(renderer, options): Effect<Attention, never, Scope>`; `NotificationAudio` supplies a scoped playback Effect, replaced in tests. The TUI client uses its existing event subscription; no new core event or second event reader. Run-started/run-ended form a two-state live-run tracker to ignore duplicate ends and history. Cancellation is silent; failed runs say Run failed; other terminal reasons say Response ready.

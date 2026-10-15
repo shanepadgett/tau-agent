@@ -1,11 +1,11 @@
 # Guide
 
-`docs/guide/` is the documentation for people who use Tau or write extensions. It will be published.
+`docs/guide/` tells people how to use Tau. It will be published. A page says what to do and nothing else.
 
-- One page per task: "Choose a model", "Write AGENTS.md", "Add a function".
-- Open with one sentence that says what the page lets the reader do.
-- Then numbered steps, one action each, with the exact command, setting or code.
-- Then "What happens" and "Limits", a few lines each.
-- No design history, no reasons from plans, no other agents.
-- Use the product vocabulary.
-- Every example works on the current build.
+- Reference pages are tables: commands, keys, flags, settings. One row per item, with what it does and any limit that changes how you use it.
+- Task pages open with one sentence, then steps with the exact command, setting or code.
+- No implementation, design history, reasons from plans, or other agents. Say what the user sees and does.
+- Put a fact on one page only. Link instead of repeating.
+- Add a row or step, not a page, when a feature fits an existing page.
+- Use the product vocabulary. Every example works on the current build.
+- Cut any sentence a reader can do without.

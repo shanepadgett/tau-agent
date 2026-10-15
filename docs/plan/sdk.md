@@ -1,6 +1,6 @@
 # SDK: what people build Tau with
 
-Status: round 1 (the shape) agreed. Round 2, what each area offers, is proposed in [sdk-catalog.md](sdk-catalog.md). Built at step 7 of [architecture.md](architecture.md#build-order), but its shape is settled now, because every service built before then ends up behind it.
+Status: round 1 (the shape) agreed. Round 2, what each area offers, is proposed in [sdk-catalog.md](sdk-catalog.md). Built at step 7, but its shape is settled now, because every service built before then ends up behind it.
 
 The SDK is everything outside Tau's core can use: extensions, extension packages and Tau's own built-ins. Tau is a personal interactive tool, not something deployed as a bot or service, so outside programs are not an audience. Today the plan only says the `sdk` layer is a "deliberate public facade" over `core` and `ai`, that built-ins use only the SDK, and that extensions add turn-loop operations, `run` functions, I/O middleware and TUI slots. This round decides the shape everything else hangs on.
 
@@ -54,7 +54,7 @@ Events come in two kinds:
 - **Facts** are committed session entries. They are durable, and a subscriber can resume from a cursor.
 - **Signals** are live progress, such as text deltas and tool progress. They are never stored.
 
-This is the existing split between effects and events in [architecture.md](architecture.md#core-ideas). Extension state is a projection of its own entries, never memory, so reload, branching and crash recovery need no extension code.
+This is the existing split between effects and events in the code. Extension state is a projection of its own entries, never memory, so reload, branching and crash recovery need no extension code.
 
 Replace exists because hooks can only nudge a part that Tau still owns; Pi cannot swap compaction as a whole. Backstage lets an installation replace a core service the same way, and Tau's internals are already swappable Effect services.
 

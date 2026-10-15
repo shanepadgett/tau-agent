@@ -24,7 +24,7 @@
   },
   "duplicates": { "mode": "mild", "minTokens": 50, "minLines": 5, "minOccurrences": 2 },
   "boundaries": {
-    // Layer import rules from docs/plan/architecture.md. Same-layer imports are
+    // Layer import rules. Same-layer imports are
     // always allowed. Type-only imports follow the same allowlists. Each layer has
     // two zones: its public modules at the root and its internal/ folder, which only
     // the layer itself may import.
@@ -132,7 +132,7 @@
         "from": "tests",
         "allow": [
           // Until the HTTP fake provider exists, login tests read signed headers
-          // from the internal signer. See docs/plan/deferred.md.
+          // from the internal signer.
           "ai-internal",
           "cli",
           "tui",

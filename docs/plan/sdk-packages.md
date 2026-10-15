@@ -1,6 +1,6 @@
 # SDK packages: how extensions are packaged, loaded and versioned
 
-Status: round 3 of the [SDK](sdk.md) agreed. Built at steps 7 and 8 of [architecture.md](architecture.md#build-order).
+Status: round 3 of the [SDK](sdk.md) agreed.
 
 Goal: the most extensible agent whose extensions are checked like ordinary code. `tsc`, lint and tests catch mistakes before Tau runs, which makes extensions easy for agents to write.
 
@@ -8,7 +8,7 @@ Already agreed:
 
 - An extension gets a scoped context with only the areas it asks for ([sdk.md](sdk.md)).
 - Local extensions reload on save, and a failed reload keeps the last working version.
-- Spike 1 (`spikes/extension-loading/`) showed that the compiled `tau` binary serves its own copy of `@shanepadgett/tau` to extensions and reloads them by clearing Bun's module cache.
+- A spike showed that the compiled `tau` binary serves its own copy of `@shanepadgett/tau` to extensions and reloads them by clearing Bun's module cache.
 
 ## Systems studied
 
@@ -49,7 +49,7 @@ my-package/
 | `./api` export of typed extension points | OpenCode `./rpc` | `requires: [todoList]` in another package type-checks against it without loading the implementation |
 | One typed `definePackage` value listing everything | New | One file shows an agent the whole package. A missing extension or bad theme is a type error |
 | Skills and prompts stay files | Pi, Agent Skills | Plain Markdown; `tau check` validates their frontmatter |
-| UI in a separate `./ui` export (changed 2026-10-14, see [reload.md](reload.md#decisions-2026-10-14)) | OpenCode's `./tui` | Tau is one process today, but a later split of TUI and core into two processes must not break every extension with UI code |
+| UI in a separate `./ui` export (changed 2026-10-14, see reload.md) | OpenCode's `./tui` | Tau is one process today, but a later split of TUI and core into two processes must not break every extension with UI code |
 | Local folders discovered and hot-reloaded: `~/.tau/extensions/`, `.tau/extensions/` | OpenCode, Pi | No install step for your own extensions |
 | Ordered `extensions` list in settings with `-id` to disable | OpenCode | One mechanism for enabling and disabling |
 | Per-package options typed by the extension's settings Schema | Improves on OpenCode | Tau generates JSON Schema for `settings.json`, so editors flag a misspelled option |
@@ -76,4 +76,4 @@ Rejected: Pi's folder scan alone, because nothing is type-checked until it runs.
 
 ## Spike before build step 8
 
-Spike 12 (`spikes/package-install/`): from the compiled binary, with no Bun on PATH, can `BUN_BE_BUN=1` install an npm package with its own dependency? And can the extension import that dependency together with the host's SDK and Effect?
+Untested: from the compiled binary, with no Bun on PATH, can `BUN_BE_BUN=1` install an npm package with its own dependency? And can the extension import that dependency together with the host's SDK and Effect?

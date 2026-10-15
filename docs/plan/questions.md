@@ -2,7 +2,7 @@
 
 Open questions for the user. Each is removed as soon as it is answered.
 
-Notifications ([work/notifications.md](work/notifications.md)):
+Notifications notifications.md:
 
 1. Must custom audio also work when Tau runs remotely over SSH? Terminal banners and host-local audio have different remote behavior.
 
