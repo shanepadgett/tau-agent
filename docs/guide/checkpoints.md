@@ -20,7 +20,7 @@ Notes show their entry ranges. The agent can recall their full transcript inside
 
 ## Limits
 
-Background notes and memory use `claude-haiku-5-5` on Anthropic and `gpt-6-luna` on the other built-in routes (`openai/gpt-6-luna` on OpenRouter). If the route does not list that model, notes use the session model on the same route. Note and memory requests incur model usage.
+Background notes and memory use the provider's small model: `claude-haiku-5-5` on Anthropic, `gpt-6-luna` on OpenAI, ChatGPT and Codex, and DeepSeek V4.1 Flash on OpenCode Go and OpenRouter. Set `providers.<id>.smallModel` in `~/.tau/settings.json` to use another one. If the provider does not list the small model, notes use the session model on the same provider. Note and memory requests incur model usage.
 
 A cancelled, failed or empty note or memory is not saved. The next completed tool call or run tries again. Closing Tau cancels unfinished background work; reopening the session resumes from the last saved note or memory.
 

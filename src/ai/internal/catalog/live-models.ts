@@ -5,7 +5,7 @@
 
 import { Effect, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
-import type { LiveList } from "../../Routes.ts";
+import type { LiveList } from "../../Providers.ts";
 
 export const LiveModel = Schema.Struct({
   id: Schema.String,
@@ -32,7 +32,7 @@ const CodexModels = Schema.Struct({
 const OpenAiModels = Schema.Struct({ data: Schema.Array(Schema.Struct({ id: Schema.String })) });
 
 /**
- * Reads the list at `apiUrl` through `client`. The client must already sign requests for the route.
+ * Reads the list at `apiUrl` through `client`. The client must already sign requests for the provider.
  */
 export const fetchLiveModels = Effect.fn("fetchLiveModels")(function* (
   apiUrl: string,

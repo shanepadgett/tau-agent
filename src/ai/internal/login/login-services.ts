@@ -1,8 +1,8 @@
 /** What a login needs from outside the AI layer: a way to talk to the user, the host ID, and its error. */
 
 import { Context, type Effect, type PlatformError, type Redacted, Schema } from "effect";
-import { ProviderId } from "../../Credential.ts";
-import type { HeadlessLogin } from "../../Routes.ts";
+import { ProviderId } from "../../Providers.ts";
+import type { HeadlessLogin } from "../../Providers.ts";
 
 export type LoginMethod = "browser" | "headless";
 

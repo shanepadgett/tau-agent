@@ -13,13 +13,8 @@ import {
   Schema,
   type Scope,
 } from "effect";
-import {
-  ApiKey,
-  Credential,
-  CredentialStore,
-  OAuthTokens,
-  ProviderId,
-} from "../../src/ai/Credential.ts";
+import { ApiKey, Credential, CredentialStore, OAuthTokens } from "../../src/ai/Credential.ts";
+import { ProviderId } from "../../src/ai/Providers.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { credentialStoreLayer } from "../../src/host/CredentialStore.ts";
 

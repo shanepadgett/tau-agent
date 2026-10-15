@@ -3,9 +3,7 @@
  */
 
 import { Context, Schema, type Effect, type Option } from "effect";
-
-export const ProviderId = Schema.String.pipe(Schema.brand("ProviderId"));
-export type ProviderId = typeof ProviderId.Type;
+import { ProviderId } from "./Providers.ts";
 
 const Secret = Schema.RedactedFromValue(Schema.String);
 

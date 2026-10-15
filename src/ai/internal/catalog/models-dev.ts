@@ -4,7 +4,13 @@
  */
 
 import { Option, Schema } from "effect";
-import type { ModelProfile, Price, Protocol } from "../../ModelProfile.ts";
+import {
+  type ModelProfile,
+  type Price,
+  type Protocol,
+  type Thinking,
+  ThinkingLevel,
+} from "../../ModelProfile.ts";
 
 /** models.dev entries by provider, then by model ID. */
 export const ModelsDevCatalog = Schema.Record(
@@ -42,6 +48,18 @@ const ModelsDevModel = Schema.Struct({
       ),
     }),
   ),
+  reasoning_options: Schema.optional(
+    Schema.NullOr(
+      Schema.Array(
+        Schema.Struct({
+          type: Schema.String,
+          values: Schema.optional(Schema.Array(Schema.String)),
+          min: Schema.optional(Schema.Number),
+          max: Schema.optional(Schema.Number),
+        }),
+      ),
+    ),
+  ),
   /** Set when the model uses a protocol that is different from the default of its provider. */
   provider: Schema.optional(Schema.Struct({ npm: Schema.optional(Schema.String) })),
 });
@@ -59,21 +77,21 @@ const PROTOCOL_BY_PACKAGE: Readonly<Record<string, Protocol>> = {
 const decodeModel = Schema.decodeUnknownOption(ModelsDevModel);
 
 /**
- * Gives the profile of `modelId` from `provider`. The protocol is `routeProtocol`, unless the entry
+ * Gives the profile of `modelId` from `provider`. The protocol is `providerProtocol`, unless the entry
  * gives a different one. Returns none if the entry is missing or bad, or if Tau cannot use its
  * protocol.
  */
 export const modelsDevProfile = (
   catalog: ModelsDevCatalog,
   ref: { readonly provider: string; readonly modelId: string },
-  routeProtocol: Protocol,
+  providerProtocol: Protocol,
 ): Option.Option<ModelProfile> => {
   const entry = decodeModel(catalog[ref.provider]?.models[ref.modelId]);
   if (Option.isNone(entry)) return Option.none();
 
   const model = entry.value;
   const packageName = model.provider?.npm;
-  const protocol = packageName === undefined ? routeProtocol : PROTOCOL_BY_PACKAGE[packageName];
+  const protocol = packageName === undefined ? providerProtocol : PROTOCOL_BY_PACKAGE[packageName];
   if (protocol === undefined) return Option.none();
 
   return Option.some({
@@ -90,10 +108,11 @@ export const modelsDevProfile = (
       reasoning: model.reasoning,
       images: model.modalities?.input.includes("image") ?? false,
     },
+    thinking: model.reasoning ? thinkingOf(model.reasoning_options ?? []) : undefined,
   });
 };
 
-/** Keeps only the providers that the routes of Tau read, so the cache stays small. */
+/** Keeps only the providers that the providers of Tau read, so the cache stays small. */
 export const keepProviders = (catalog: ModelsDevCatalog, providers: ReadonlyArray<string>) =>
   Object.fromEntries(Object.entries(catalog).filter(([provider]) => providers.includes(provider)));
 
@@ -107,4 +126,43 @@ const toPrice = (cost: typeof ModelsDevCost.Type): Price => ({
 const longContextPrice = (model: ModelsDevModel) => {
   const tier = model.cost?.tiers?.find((candidate) => candidate.tier.type === "context");
   return tier === undefined ? undefined : { aboveTokens: tier.tier.size, price: toPrice(tier) };
+};
+
+const isLevel = Schema.is(ThinkingLevel);
+
+/** The smallest budget Anthropic takes, used when models.dev gives none. */
+const MIN_BUDGET_TOKENS = 1024;
+
+/**
+ * Reads models.dev `reasoning_options`. A token budget wins over effort words, because a model that
+ * takes both takes a budget everywhere. Effort `none` is `off`; `minimal` is `low` when the model
+ * has no `low`.
+ */
+const thinkingOf = (
+  options: NonNullable<ModelsDevModel["reasoning_options"]>,
+): Thinking | undefined => {
+  const canTurnOff = options.some((option) => option.type === "toggle");
+  const budget = options.find((option) => option.type === "budget_tokens");
+  const effort = options.find((option) => option.type === "effort")?.values ?? [];
+
+  if (budget !== undefined) {
+    return { kind: "budget", minTokens: budget.min ?? MIN_BUDGET_TOKENS, maxTokens: budget.max };
+  }
+
+  if (effort.length === 0) return canTurnOff ? { kind: "toggle" } : undefined;
+
+  const values: Partial<Record<ThinkingLevel, string>> = {};
+
+  for (const value of effort) {
+    const level = ladderLevel(value, effort);
+    if (isLevel(level)) values[level] = value;
+  }
+
+  return { kind: "effort", values, canTurnOff };
+};
+
+const ladderLevel = (value: string, effort: readonly string[]) => {
+  if (value === "none") return "off";
+  if (value === "minimal" && !effort.includes("low")) return "low";
+  return value;
 };

@@ -1,14 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { BunCrypto } from "@effect/platform-bun";
 import { DateTime, Effect, Exit, FileSystem, Layer, Option, Redacted, Schema } from "effect";
-import { ChatgptAppTokens, type CredentialStore, ProviderId } from "../../src/ai/Credential.ts";
-import { HostId, logIn as logInRoute, logOut } from "../../src/ai/Login.ts";
-import type { ChatgptApp, Route } from "../../src/ai/Routes.ts";
+import { ChatgptAppTokens, type CredentialStore } from "../../src/ai/Credential.ts";
+import { ProviderId } from "../../src/ai/Providers.ts";
+import { HostId, logIn as logInProvider, logOut } from "../../src/ai/Login.ts";
+import type { ChatgptApp, Provider } from "../../src/ai/Providers.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { hostIdLayer } from "../../src/host/HostId.ts";
 import {
   neverPastes,
-  routeNamed,
+  providerNamed,
   run,
   sha256,
   signedAuthorization,
@@ -184,15 +185,15 @@ const fakeApp = (url: string): ChatgptApp => ({
   callback: { host: "127.0.0.1", port: 0, path: "/auth/callback" },
 });
 
-const fakeRoute = (url: string): Route => ({
-  ...routeNamed("chatgpt"),
+const fakeProvider = (url: string): Provider => ({
+  ...providerNamed("chatgpt"),
   auth: { kind: "chatgptApp", app: fakeApp(url) },
 });
 
 const savedLogin = (store: CredentialStore["Service"]) =>
   store.read(PROVIDER).pipe(Effect.map(Option.filter(Schema.is(ChatgptAppTokens))));
 
-const logIn = (url: string) => logInRoute(fakeRoute(url));
+const logIn = (url: string) => logInProvider(fakeProvider(url));
 
 describe("Sign in with ChatGPT", () => {
   test("a first login registers Tau and saves the issued app ID", () =>
@@ -287,7 +288,7 @@ describe("Sign in with ChatGPT", () => {
         const authorization = yield* withCredentials(neverPastes, (store) =>
           store
             .save(PROVIDER, expired)
-            .pipe(Effect.andThen(signedAuthorization(fakeRoute(openAi.url)))),
+            .pipe(Effect.andThen(signedAuthorization(fakeProvider(openAi.url)))),
         );
 
         expect(authorization).toBe("Bearer access-1");
@@ -307,7 +308,7 @@ describe("Sign in with ChatGPT", () => {
 
         yield* withCredentials(neverPastes, (store) =>
           logIn(openAi.url).pipe(
-            Effect.andThen(logOut(fakeRoute(openAi.url))),
+            Effect.andThen(logOut(fakeProvider(openAi.url))),
             Effect.andThen(savedLogin(store)),
             Effect.map((saved) => expect(Option.isNone(saved)).toBe(true)),
           ),

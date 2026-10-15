@@ -19,13 +19,8 @@ import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import { Catalog, CatalogCache, type CatalogData, CatalogSources } from "../../src/ai/Catalog.ts";
 import snapshot from "../../src/ai/catalog-snapshot.json" with { type: "json" };
-import {
-  type Credential,
-  CredentialStore,
-  OAuthTokens,
-  ProviderId,
-} from "../../src/ai/Credential.ts";
-import { builtInRoutes, RouteId, RouteTable } from "../../src/ai/Routes.ts";
+import { type Credential, CredentialStore, OAuthTokens } from "../../src/ai/Credential.ts";
+import { builtInProviders, ProviderId, ProviderTable } from "../../src/ai/Providers.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { catalogCacheLayer } from "../../src/host/CatalogCache.ts";
 import { credentialStoreLayer } from "../../src/host/CredentialStore.ts";
@@ -75,7 +70,7 @@ type Setup = {
   readonly credentials: ReadonlyArray<readonly [string, Credential]>;
 };
 
-/** Builds the catalog over a temporary `~/.tau`, with every route and source on the fake server. */
+/** Builds the catalog over a temporary `~/.tau`, with every provider and source on the fake server. */
 const withCatalog = <A, E>(
   setup: Setup,
   program: (catalog: Catalog["Service"], tauDirectory: string) => Effect.Effect<A, E, Scope.Scope>,
@@ -96,9 +91,9 @@ const withCatalog = <A, E>(
 
     if (setup.cache !== undefined) yield* Context.get(services, CatalogCache).write(setup.cache);
 
-    const routes = builtInRoutes.map((route) => ({
-      ...route,
-      apiUrl: route.apiUrl.replace(/^https:\/\/[^/]+/, setup.serverUrl),
+    const providers = builtInProviders.map((provider) => ({
+      ...provider,
+      apiUrl: provider.apiUrl.replace(/^https:\/\/[^/]+/, setup.serverUrl),
     }));
 
     const sources = {
@@ -107,7 +102,7 @@ const withCatalog = <A, E>(
     };
 
     const layer = Catalog.layer.pipe(
-      Layer.provide(Layer.succeed(RouteTable, { routes, settings: new Map() })),
+      Layer.provide(Layer.succeed(ProviderTable, { providers, settings: new Map() })),
       Layer.provide(Layer.succeed(CatalogSources, sources)),
       Layer.provide(Layer.succeedContext(services)),
       Layer.provide(FetchHttpClient.layer),
@@ -146,8 +141,8 @@ const claudeNew = {
   limit: { context: NEW_CONTEXT_TOKENS, output: 64_000 },
 };
 
-const anthropicRef = (model: string) => ({ route: RouteId.make("anthropic"), model });
-const codexRef = (model: string) => ({ route: RouteId.make("codex"), model });
+const anthropicRef = (model: string) => ({ provider: ProviderId.make("anthropic"), model });
+const codexRef = (model: string) => ({ provider: ProviderId.make("codex"), model });
 
 describe("catalog", () => {
   test("with no cache and no refresh, the snapshot in the binary describes a model", () =>
@@ -278,26 +273,26 @@ describe("catalog", () => {
   test.each([
     {
       problem: "a protocol Tau does not speak",
-      routes: { local: { protocol: "grpc", apiUrl: "http://localhost:1/v1" } },
+      providers: { local: { protocol: "grpc", apiUrl: "http://localhost:1/v1" } },
       message: "has a wrong value",
     },
     {
-      problem: "a new address for a built-in route",
-      routes: { openai: { apiUrl: "http://localhost:1/v1" } },
-      message: "routes.openai, a built-in route",
+      problem: "a new address for a built-in provider",
+      providers: { openai: { apiUrl: "http://localhost:1/v1" } },
+      message: "providers.openai, a built-in provider",
     },
     {
-      problem: "a new route with no address",
-      routes: { local: { protocol: "openaiChat" } },
-      message: "has no protocol or apiUrl for routes.local",
+      problem: "a new provider with no address",
+      providers: { local: { protocol: "openaiChat" } },
+      message: "has no protocol or apiUrl for providers.local",
     },
-  ])("settings with $problem fail, naming the file and the route", (fixture) =>
+  ])("settings with $problem fail, naming the file and the provider", (fixture) =>
     run(
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
         const tauDirectory = yield* fileSystem.makeTempDirectoryScoped();
         const settingsPath = `${tauDirectory}/settings.json`;
-        const settings = { routes: fixture.routes };
+        const settings = { providers: fixture.providers };
         const settingsText = Schema.encodeSync(Schema.fromJsonString(Schema.Json))(settings);
         yield* fileSystem.writeFileString(settingsPath, settingsText);
 

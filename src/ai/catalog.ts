@@ -1,4 +1,4 @@
-/** Finds the limits, prices and features of a model on a route. It uses models.dev data, the plan model lists and the user's settings. */
+/** Finds the limits, prices and features of a model on a provider. It uses models.dev data, the plan model lists and the user's settings. */
 
 import { Array, Context, DateTime, Duration, Effect, Layer, Option, Ref, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
@@ -10,14 +10,22 @@ import {
   applyModelSettings,
   type DecisionProfile,
   type ModelProfile,
+  type ThinkingLevel,
+  thinkingLevels,
 } from "./ModelProfile.ts";
 import {
   keepProviders,
   ModelsDevCatalog,
   modelsDevProfile,
 } from "./internal/catalog/models-dev.ts";
-import { credentialSigner, signRequests } from "./internal/signing/route-auth.ts";
-import { type LiveList, type Route, RouteId, type RouteSettings, RouteTable } from "./Routes.ts";
+import { credentialSigner, signRequests } from "./internal/signing/provider-auth.ts";
+import {
+  type LiveList,
+  type Provider,
+  ProviderId,
+  type ProviderSettings,
+  ProviderTable,
+} from "./Providers.ts";
 
 const REFRESH_INTERVAL = Duration.days(1);
 
@@ -34,18 +42,37 @@ export const CatalogData = Schema.Struct({
 
 export type CatalogData = typeof CatalogData.Type;
 
-export type ModelRef = { readonly route: RouteId; readonly model: string };
+export type ModelRef = { readonly provider: ProviderId; readonly model: string };
+
+/** A model the user can choose, with the name to show. */
+export type ListedModel = {
+  readonly ref: ModelRef;
+  readonly name: string;
+  readonly contextTokens: number;
+  /** The thinking levels the model offers, lowest first; empty when it has no choice. */
+  readonly thinking: readonly ThinkingLevel[];
+};
+
+/** The models of one provider that Tau can use. */
+type ProviderModels = { readonly provider: Provider; readonly models: readonly ListedModel[] };
 
 /**
- * Reads `route/model`. The route ends at the first slash, so a model name may hold slashes, as in
+ * Reads `provider/model`. The provider ends at the first slash, so a model name may hold slashes, as in
  * `openrouter/anthropic/claude-haiku-5.5`.
  */
 export const parseModelRef = (text: string): Option.Option<ModelRef> => {
   const slash = text.indexOf("/");
   const isRef = slash > 0 && slash < text.length - 1;
   if (!isRef) return Option.none();
-  return Option.some({ route: RouteId.make(text.slice(0, slash)), model: text.slice(slash + 1) });
+
+  return Option.some({
+    provider: ProviderId.make(text.slice(0, slash)),
+    model: text.slice(slash + 1),
+  });
 };
+
+/** Writes `provider/model`, the text that `parseModelRef` reads. */
+export const formatModelRef = (ref: ModelRef) => `${ref.provider}/${ref.model}`;
 
 /**
  * The addresses that the daily refresh reads for models.dev data and the latest Claude Code
@@ -60,19 +87,19 @@ export const CatalogSources = Context.Reference<CatalogSources>("tau/ai/CatalogS
   }),
 });
 
-export class UnknownRoute extends Schema.TaggedError<UnknownRoute>()("UnknownRoute", {
-  route: RouteId,
+export class UnknownProvider extends Schema.TaggedError<UnknownProvider>()("UnknownProvider", {
+  provider: ProviderId,
   message: Schema.String,
 }) {}
 
 export class UnknownModel extends Schema.TaggedError<UnknownModel>()("UnknownModel", {
-  route: RouteId,
+  provider: ProviderId,
   model: Schema.String,
   message: Schema.String,
 }) {}
 
 export class NoDecisionApi extends Schema.TaggedError<NoDecisionApi>()("NoDecisionApi", {
-  route: RouteId,
+  provider: ProviderId,
   message: Schema.String,
 }) {}
 
@@ -97,17 +124,22 @@ export class CatalogCache extends Context.Service<
   }
 >()("tau/ai/CatalogCache") {}
 
-type RoutedModel<Profile> = { readonly route: Route; readonly profile: Profile };
+type ResolvedModel<Profile> = { readonly provider: Provider; readonly profile: Profile };
 
 export class Catalog extends Context.Service<
   Catalog,
   {
     readonly model: (
       ref: ModelRef,
-    ) => Effect.Effect<RoutedModel<ModelProfile>, UnknownRoute | UnknownModel>;
+    ) => Effect.Effect<ResolvedModel<ModelProfile>, UnknownProvider | UnknownModel>;
     readonly decisionModel: (
       ref: ModelRef,
-    ) => Effect.Effect<RoutedModel<DecisionProfile>, UnknownRoute | UnknownModel | NoDecisionApi>;
+    ) => Effect.Effect<
+      ResolvedModel<DecisionProfile>,
+      UnknownProvider | UnknownModel | NoDecisionApi
+    >;
+    /** The models of each provider that can call tools: its plan list, or models.dev, and the settings. */
+    readonly providerModels: Effect.Effect<readonly ProviderModels[]>;
     readonly claudeCodeVersion: Effect.Effect<string>;
     /**
      * Gets new catalog data if the data is more than one day old. If one part fails, that part
@@ -116,19 +148,19 @@ export class Catalog extends Context.Service<
     readonly refreshIfStale: Effect.Effect<void>;
   }
 >()("tau/ai/Catalog") {
-  /** The catalog of the routes in the route table. */
+  /** The catalog of the providers in the provider table. */
   static readonly layer = Layer.effect(
     Catalog,
     Effect.gen(function* () {
-      const { routes, settings } = yield* RouteTable;
-      return yield* makeCatalog({ routes, settings, sources: yield* CatalogSources });
+      const { providers, settings } = yield* ProviderTable;
+      return yield* makeCatalog({ providers, settings, sources: yield* CatalogSources });
     }),
   );
 }
 
 type CatalogOptions = {
-  readonly routes: ReadonlyArray<Route>;
-  readonly settings: ReadonlyMap<RouteId, RouteSettings>;
+  readonly providers: ReadonlyArray<Provider>;
+  readonly settings: ReadonlyMap<ProviderId, ProviderSettings>;
   readonly sources: CatalogSources;
 };
 
@@ -136,57 +168,64 @@ type CatalogOptions = {
 const bundled = Schema.decodeUnknownSync(CatalogData)(bundledSnapshot);
 
 const makeCatalog = Effect.fn("makeCatalog")(function* (options: CatalogOptions) {
-  const { routes, settings } = options;
+  const { providers, settings } = options;
   const cache = yield* CatalogCache;
   const context = yield* Effect.context<CatalogCache | CredentialStore | HttpClient.HttpClient>();
   const current = yield* Ref.make(newerOf(bundled, yield* cache.read));
 
-  const findRoute = (id: RouteId) => {
-    const route = routes.find((candidate) => candidate.id === id);
-    if (route !== undefined) return Effect.succeed(route);
+  const findProvider = (id: ProviderId) => {
+    const provider = providers.find((candidate) => candidate.id === id);
+    if (provider !== undefined) return Effect.succeed(provider);
 
     return Effect.fail(
-      new UnknownRoute({
-        route: id,
-        message: `No route is named ${id}. Check the provider part of the model name.`,
+      new UnknownProvider({
+        provider: id,
+        message: `No provider is named ${id}. Check the provider part of the model name.`,
       }),
     );
   };
 
   const model = Effect.fn("Catalog.model")(function* (ref: ModelRef) {
-    const route = yield* findRoute(ref.route);
+    const provider = yield* findProvider(ref.provider);
     const catalogData = yield* Ref.get(current);
-    const profile = chatProfile(route, ref.model, catalogData, settings.get(route.id));
-    if (Option.isNone(profile)) return yield* unknownModel(route, ref.model, "models");
+    const profile = chatProfile(provider, ref.model, catalogData, settings.get(provider.id));
+    if (Option.isNone(profile)) return yield* unknownModel(provider, ref.model, "models");
 
     // Tau works only through tools, so it hides models that cannot call them.
     if (!profile.value.supports.tools) {
       return yield* new UnknownModel({
-        route: route.id,
+        provider: provider.id,
         model: ref.model,
-        message: `${ref.model} on ${route.id} cannot call tools, so Tau cannot use it. If it can, set routes.${route.id}.models.${ref.model}.supports.tools to true in ~/.tau/settings.json.`,
+        message: `${ref.model} on ${provider.id} cannot call tools, so Tau cannot use it. If it can, set providers.${provider.id}.models.${ref.model}.supports.tools to true in ~/.tau/settings.json.`,
       });
     }
 
-    return { route, profile: profile.value };
+    return { provider, profile: profile.value };
   });
 
   const decisionModel = Effect.fn("Catalog.decisionModel")(function* (ref: ModelRef) {
-    const route = yield* findRoute(ref.route);
+    const provider = yield* findProvider(ref.provider);
 
-    if (route.decisions === undefined) {
+    if (provider.decisions === undefined) {
       return yield* new NoDecisionApi({
-        route: route.id,
-        message: `${route.id} has no decision API. Choose a decision model on openai or openrouter.`,
+        provider: provider.id,
+        message: `${provider.id} has no decision API. Choose a decision model on openai or openrouter.`,
       });
     }
 
-    const known = route.decisions.models.find((candidate) => candidate.id === ref.model);
-    const corrections = settings.get(route.id)?.decisionModels[ref.model];
+    const known = provider.decisions.models.find((candidate) => candidate.id === ref.model);
+    const corrections = settings.get(provider.id)?.decisionModels[ref.model];
     const profile = applyDecisionSettings(Option.fromUndefinedOr(known), corrections, ref.model);
-    if (Option.isNone(profile)) return yield* unknownModel(route, ref.model, "decisionModels");
-    return { route, profile: profile.value };
+    if (Option.isNone(profile)) return yield* unknownModel(provider, ref.model, "decisionModels");
+    return { provider, profile: profile.value };
   });
+
+  const providerModels = Effect.map(Ref.get(current), (catalogData) =>
+    providers.map((provider) => ({
+      provider,
+      models: listedModels(provider, catalogData, settings.get(provider.id)),
+    })),
+  );
 
   const claudeCodeVersion = Ref.get(current).pipe(
     Effect.map((catalogData) => catalogData.claudeCodeVersion),
@@ -194,7 +233,7 @@ const makeCatalog = Effect.fn("makeCatalog")(function* (options: CatalogOptions)
 
   const refreshIfStale = refreshCatalog(current, options).pipe(Effect.provideContext(context));
 
-  return Catalog.of({ model, decisionModel, claudeCodeVersion, refreshIfStale });
+  return Catalog.of({ model, decisionModel, providerModels, claudeCodeVersion, refreshIfStale });
 });
 
 /** Gets new catalog data if `current` is more than one day old, and caches it. */
@@ -202,7 +241,7 @@ const refreshCatalog = Effect.fn("refreshCatalog")(function* (
   current: Ref.Ref<CatalogData>,
   options: CatalogOptions,
 ) {
-  const { routes } = options;
+  const { providers } = options;
   const cache = yield* CatalogCache;
   const last = yield* Ref.get(current);
   const now = yield* DateTime.now;
@@ -211,9 +250,9 @@ const refreshCatalog = Effect.fn("refreshCatalog")(function* (
 
   const [modelsDev, latestClaudeCode, liveModels] = yield* Effect.all(
     [
-      fetchModelsDev(options.sources.modelsDevUrl, catalogProviders(routes)),
+      fetchModelsDev(options.sources.modelsDevUrl, catalogProviders(providers)),
       fetchClaudeCodeVersion(options.sources.claudeCodeUrl),
-      fetchPlanLists(routes, last.claudeCodeVersion),
+      fetchPlanLists(providers, last.claudeCodeVersion),
     ],
     { concurrency: "unbounded" },
   );
@@ -236,29 +275,57 @@ const refreshCatalog = Effect.fn("refreshCatalog")(function* (
     .pipe(Effect.catch((error) => Effect.logWarning("Could not cache the model catalog", error)));
 });
 
+/** A plan provider lists only the models its plan allows; models from settings are added. */
+const listedModels = (
+  provider: Provider,
+  catalogData: CatalogData,
+  settings: ProviderSettings | undefined,
+): readonly ListedModel[] => {
+  const catalogProvider = provider.catalogProvider;
+  const planList = catalogData.liveModels?.[provider.id];
+
+  const providerModels =
+    catalogProvider === undefined ? {} : catalogData.modelsDev[catalogProvider]?.models;
+
+  const known = planList?.map((listed) => listed.id) ?? Object.keys(providerModels ?? {});
+  const ids = new Set([...known, ...Object.keys(settings?.models ?? {})]);
+
+  return [...ids].flatMap((id) => {
+    const profile = chatProfile(provider, id, catalogData, settings);
+    if (Option.isNone(profile) || !profile.value.supports.tools) return [];
+    const { name, contextTokens, thinking } = profile.value;
+    const ref = { provider: provider.id, model: id };
+    return [{ ref, name, contextTokens, thinking: thinkingLevels(thinking) }];
+  });
+};
+
 const chatProfile = (
-  route: Route,
+  provider: Provider,
   modelId: string,
   catalogData: CatalogData,
-  settings: RouteSettings | undefined,
+  settings: ProviderSettings | undefined,
 ) => {
-  const provider = route.catalogProvider;
+  const catalogProvider = provider.catalogProvider;
 
   const known =
-    provider === undefined
+    catalogProvider === undefined
       ? Option.none()
-      : modelsDevProfile(catalogData.modelsDev, { provider, modelId }, route.protocol);
+      : modelsDevProfile(
+          catalogData.modelsDev,
+          { provider: catalogProvider, modelId },
+          provider.protocol,
+        );
 
-  const allowed = planAllows(known, catalogData.liveModels?.[route.id], modelId);
+  const allowed = planAllows(known, catalogData.liveModels?.[provider.id], modelId);
 
   return applyModelSettings(allowed, settings?.models[modelId], {
     id: modelId,
-    protocol: route.protocol,
+    protocol: provider.protocol,
   });
 };
 
 /**
- * The model list of a plan route removes the models that the plan does not allow. Its context limit
+ * The model list of a plan provider removes the models that the plan does not allow. Its context limit
  * replaces the API limit.
  */
 const planAllows = (
@@ -293,8 +360,10 @@ const newerOf = (snapshot: CatalogData, cached: Option.Option<CatalogData>): Cat
 const laterVersion = (version: string, floor: string) =>
   Bun.semver.order(version, floor) >= 0 ? version : floor;
 
-const catalogProviders = (routes: ReadonlyArray<Route>) =>
-  routes.flatMap((route) => (route.catalogProvider === undefined ? [] : [route.catalogProvider]));
+const catalogProviders = (providers: ReadonlyArray<Provider>) =>
+  providers.flatMap((provider) =>
+    provider.catalogProvider === undefined ? [] : [provider.catalogProvider],
+  );
 
 /**
  * Runs one part of the refresh. If it fails, it logs a warning and returns none, so the caller
@@ -331,19 +400,19 @@ const fetchClaudeCodeVersion = (url: string) =>
   );
 
 /**
- * Gets the model list of each plan route. It skips a route that has no login, because that route
+ * Gets the model list of each plan provider. It skips a provider that has no login, because that provider
  * has no list.
  */
 const fetchPlanLists = Effect.fn("fetchPlanLists")(function* (
-  routes: ReadonlyArray<Route>,
+  providers: ReadonlyArray<Provider>,
   claudeCodeVersion: string,
 ) {
   const lists = yield* Effect.forEach(
-    routes,
-    (route) => {
-      const list = route.liveList;
+    providers,
+    (provider) => {
+      const list = provider.liveList;
       if (list === undefined) return Effect.succeed(Option.none());
-      return fetchPlanList(route, list, claudeCodeVersion);
+      return fetchPlanList(provider, list, claudeCodeVersion);
     },
     { concurrency: "unbounded" },
   );
@@ -352,29 +421,29 @@ const fetchPlanLists = Effect.fn("fetchPlanLists")(function* (
 });
 
 const fetchPlanList = Effect.fn("fetchPlanList")(function* (
-  route: Route,
+  provider: Provider,
   list: LiveList,
   claudeCodeVersion: string,
 ) {
-  const signing = { protocol: route.protocol, claudeCodeVersion, conversationId: undefined };
-  const hasLogin = Option.isSome(yield* Effect.option(credentialSigner(route, signing)));
+  const signing = { protocol: provider.protocol, claudeCodeVersion, conversationId: undefined };
+  const hasLogin = Option.isSome(yield* Effect.option(credentialSigner(provider, signing)));
   if (!hasLogin) return Option.none();
 
-  const client = (yield* signRequests(route, signing))(yield* HttpClient.HttpClient);
+  const client = (yield* signRequests(provider, signing))(yield* HttpClient.HttpClient);
 
   const models = yield* orKeepLast(
-    `the ${route.id} model list`,
-    fetchLiveModels(route.apiUrl, list, client),
+    `the ${provider.id} model list`,
+    fetchLiveModels(provider.apiUrl, list, client),
   );
 
-  return Option.map(models, (listed) => [route.id, listed] as const);
+  return Option.map(models, (listed) => [provider.id, listed] as const);
 });
 
-const unknownModel = (route: Route, model: string, section: "models" | "decisionModels") =>
+const unknownModel = (provider: Provider, model: string, section: "models" | "decisionModels") =>
   Effect.fail(
     new UnknownModel({
-      route: route.id,
+      provider: provider.id,
       model,
-      message: `${route.id} has no model ${model} that Tau knows. Check the name, or add it under routes.${route.id}.${section} in ~/.tau/settings.json with its limits.`,
+      message: `${provider.id} has no model ${model} that Tau knows. Check the name, or add it under providers.${provider.id}.${section} in ~/.tau/settings.json with its limits.`,
     }),
   );

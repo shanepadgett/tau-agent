@@ -6,7 +6,7 @@
 import { DateTime, Effect, Option, Schema, Stream } from "effect";
 import { AiError, type LanguageModel } from "effect/ai";
 import { PLAN_METADATA_KEY, type Plan } from "../../PlanLimit.ts";
-import type { RouteAuth } from "../../Routes.ts";
+import type { ProviderAuth } from "../../Providers.ts";
 
 type HttpContext = typeof AiError.HttpContext.Type;
 
@@ -69,7 +69,7 @@ const CLAUDE: PlanReader = {
 };
 
 /** The plan of a subscription login. Other logins have no plan. */
-export const planOf = (auth: RouteAuth): Option.Option<PlanReader> => {
+export const planOf = (auth: ProviderAuth): Option.Option<PlanReader> => {
   switch (auth.kind) {
     case "claudeSubscription":
       return Option.some(CLAUDE);

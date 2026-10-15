@@ -23,14 +23,13 @@ import {
   type Credential,
   CredentialStore,
   OAuthTokens,
-  ProviderId,
 } from "../../src/ai/Credential.ts";
 import { Catalog } from "../../src/ai/Catalog.ts";
 import snapshot from "../../src/ai/catalog-snapshot.json" with { type: "json" };
 import { Models } from "../../src/ai/Models.ts";
 import { planLimitOf } from "../../src/ai/PlanLimit.ts";
 import { ConversationId } from "../../src/ai/ConversationId.ts";
-import { RouteId, RouteTable } from "../../src/ai/Routes.ts";
+import { ProviderId, ProviderTable } from "../../src/ai/Providers.ts";
 import packageJson from "../../package.json" with { type: "json" };
 import { TauHome } from "../../src/database/TauHome.ts";
 import { catalogCacheLayer } from "../../src/host/CatalogCache.ts";
@@ -152,17 +151,17 @@ const runWithModels = <A, E>(
 
     const fromFile = Context.get(
       yield* Layer.build(Settings.layer.pipe(Layer.provide(home))),
-      RouteTable,
+      ProviderTable,
     );
 
-    // Each built-in route keeps its path but talks to the replay server.
-    const routes = fromFile.routes.map((route) => ({
-      ...route,
-      apiUrl: route.apiUrl.replace(/^https:\/\/[^/]+/, serverUrl),
+    // Each built-in provider keeps its path but talks to the replay server.
+    const providers = fromFile.providers.map((provider) => ({
+      ...provider,
+      apiUrl: provider.apiUrl.replace(/^https:\/\/[^/]+/, serverUrl),
     }));
 
     const catalog = Catalog.layer.pipe(
-      Layer.provide(Layer.succeed(RouteTable, { routes, settings: fromFile.settings })),
+      Layer.provide(Layer.succeed(ProviderTable, { providers, settings: fromFile.settings })),
       Layer.provide(catalogCacheLayer.pipe(Layer.provide(home))),
       Layer.provide(BunCrypto.layer),
     );
@@ -221,9 +220,9 @@ const routeDecisions = Decision.make({
   },
 });
 
-const chatRoutes = [
+const chatProviders = [
   {
-    route: "anthropic",
+    provider: "anthropic",
     model: "claude-sonnet-5-5",
     path: "/v1/messages",
     headers: {
@@ -235,39 +234,39 @@ const chatRoutes = [
     },
   },
   {
-    route: "openai",
+    provider: "openai",
     model: "gpt-6-luna",
     path: "/v1/responses",
     headers: { authorization: "Bearer openai-key", "user-agent": `tau/${packageJson.version}` },
   },
   {
-    route: "codex",
+    provider: "codex",
     model: "gpt-6-luna",
     path: "/backend-api/codex/responses",
     headers: { authorization: `Bearer ${codexAccessToken}`, "chatgpt-account-id": "account-123" },
   },
   {
-    route: "openrouter",
+    provider: "openrouter",
     model: "anthropic/claude-haiku-5.5",
     path: "/api/v1/chat/completions",
     headers: { authorization: "Bearer openrouter-key" },
   },
 ];
 
-const expectSigned = (received: Received | undefined, expected: (typeof chatRoutes)[number]) => {
+const expectSigned = (received: Received | undefined, expected: (typeof chatProviders)[number]) => {
   expect(received?.path).toBe(expected.path);
 
   for (const [name, value] of Object.entries(expected.headers))
     expect(received?.headers.get(name)).toEndWith(value);
 };
 
-type ChatModel = { readonly route: string; readonly model: string };
+type ChatModel = { readonly provider: string; readonly model: string };
 
 const review = (models: Models["Service"], chat: ChatModel, prompt: Prompt.RawInput) =>
   Effect.gen(function* () {
     const model = yield* models.languageModel(
       {
-        route: RouteId.make(chat.route),
+        provider: ProviderId.make(chat.provider),
         model: chat.model,
       },
       conversation,
@@ -287,7 +286,7 @@ const generateReview = (serverUrl: string, chat: ChatModel, prompt: Prompt.RawIn
 
 /**
  * The first OpenCode Go model in the bundled snapshot with native structured output that uses
- * `npm`'s protocol, or the route's own.
+ * `npm`'s protocol, or the provider's own.
  */
 const openCodeGoModel = (npm: string | undefined) => {
   const models = Object.entries(snapshot.modelsDev["opencode-go"].models);
@@ -303,19 +302,19 @@ const openCodeGoModel = (npm: string | undefined) => {
   return found[0];
 };
 
-const codex: ChatModel = { route: "codex", model: "gpt-6-luna" };
+const codex: ChatModel = { provider: "codex", model: "gpt-6-luna" };
 
 describe("models", () => {
-  test.each(chatRoutes)("$route streams a recorded turn that calls a tool", (expected) =>
+  test.each(chatProviders)("$provider streams a recorded turn that calls a tool", (expected) =>
     run(
       Effect.gen(function* () {
-        const server = yield* replayServer(`${expected.route}-stream`);
+        const server = yield* replayServer(`${expected.provider}-stream`);
 
         const parts = yield* runWithModels(server.url, storedCredentials, (models) =>
           Effect.gen(function* () {
             const model = yield* models.languageModel(
               {
-                route: RouteId.make(expected.route),
+                provider: ProviderId.make(expected.provider),
                 model: expected.model,
               },
               conversation,
@@ -342,10 +341,10 @@ describe("models", () => {
     ),
   );
 
-  test.each(chatRoutes)("$route returns a recorded structured object", (expected) =>
+  test.each(chatProviders)("$provider returns a recorded structured object", (expected) =>
     run(
       Effect.gen(function* () {
-        const server = yield* replayServer(`${expected.route}-object`);
+        const server = yield* replayServer(`${expected.provider}-object`);
 
         const review = yield* generateReview(
           server.url,
@@ -387,7 +386,7 @@ describe("models", () => {
     run(
       Effect.gen(function* () {
         const server = yield* replayServer("codex-object");
-        const chatgpt = { route: "chatgpt", model: "gpt-6.1-sol" };
+        const chatgpt = { provider: "chatgpt", model: "gpt-6.1-sol" };
         const review = yield* generateReview(server.url, chatgpt, "Review it.");
 
         const StreamingBody = Schema.fromJsonString(
@@ -405,11 +404,11 @@ describe("models", () => {
     ));
 
   test.each([
-    { chat: { route: "openai", model: "gpt-6-luna" }, recording: "openai-object" },
+    { chat: { provider: "openai", model: "gpt-6-luna" }, recording: "openai-object" },
     { chat: codex, recording: "codex-object" },
-    { chat: { route: "chatgpt", model: "gpt-6.1-sol" }, recording: "codex-object" },
+    { chat: { provider: "chatgpt", model: "gpt-6.1-sol" }, recording: "codex-object" },
   ])(
-    "$chat.route requests carry the conversation ID as the prompt cache key and session ID",
+    "$chat.provider requests carry the conversation ID as the prompt cache key and session ID",
     (expected) =>
       run(
         Effect.gen(function* () {
@@ -433,7 +432,7 @@ describe("models", () => {
     { name: "ChatGPT usage limit", chat: codex, recording: "codex-usage-limit", plan: "ChatGPT" },
     {
       name: "Claude usage limit",
-      chat: { route: "anthropic", model: "claude-sonnet-5-5" },
+      chat: { provider: "anthropic", model: "claude-sonnet-5-5" },
       recording: "anthropic-usage-limit",
       plan: "Claude",
     },
@@ -462,7 +461,7 @@ describe("models", () => {
       Effect.gen(function* () {
         const server = yield* replayServer("anthropic-object");
 
-        yield* generateReview(server.url, { route: "anthropic", model: "claude-sonnet-5-5" }, [
+        yield* generateReview(server.url, { provider: "anthropic", model: "claude-sonnet-5-5" }, [
           { role: "system", content: "You review renames." },
           { role: "user", content: "Review it." },
         ]);
@@ -482,26 +481,26 @@ describe("models", () => {
 
   test.each([
     {
-      route: "openrouter",
+      provider: "openrouter",
       model: "~typesafe/jev-latest",
       path: "/api/v1/systemone",
       authorization: "Bearer openrouter-key",
     },
     {
-      route: "openai",
+      provider: "openai",
       model: "gpt-6-luna",
       path: "/v1/decisions",
       authorization: "Bearer openai-key",
     },
-  ])("$route answers recorded decisions", (expected) =>
+  ])("$provider answers recorded decisions", (expected) =>
     run(
       Effect.gen(function* () {
-        const server = yield* replayServer(`${expected.route}-decision`);
+        const server = yield* replayServer(`${expected.provider}-decision`);
 
         const decided = yield* runWithModels(server.url, storedCredentials, (models) =>
           Effect.gen(function* () {
             const model = yield* models.decisionModel({
-              route: RouteId.make(expected.route),
+              provider: ProviderId.make(expected.provider),
               model: expected.model,
             });
 
@@ -539,7 +538,7 @@ describe("models", () => {
     run(
       Effect.gen(function* () {
         const server = yield* replayServer(expected.recording);
-        const goModel = { route: "opencode-go", model: expected.model };
+        const goModel = { provider: "opencode-go", model: expected.model };
         const reviewed = yield* generateReview(server.url, goModel, "Review it.");
         const [name = "", value] = expected.header;
 
@@ -561,7 +560,7 @@ describe("models", () => {
           const server = yield* replayServer(`opencode-go-messages-${kind}`);
 
           const ref = {
-            route: RouteId.make("opencode-go"),
+            provider: ProviderId.make("opencode-go"),
             model: openCodeGoModel("@ai-sdk/anthropic"),
           };
 
@@ -593,14 +592,14 @@ describe("models", () => {
       ),
   );
 
-  test("a route from the settings file reaches its own address and sends no key", () =>
+  test("a provider from the settings file reaches its own address and sends no key", () =>
     run(
       Effect.gen(function* () {
         const server = yield* replayServer("openrouter-object");
 
         const settingsText = `{
           // A local server that needs no key
-          "routes": {
+          "providers": {
             "local": {
               "protocol": "openaiChat",
               "apiUrl": "${server.url}/v1",
@@ -615,7 +614,7 @@ describe("models", () => {
           },
         }`;
 
-        const local = { route: "local", model: "qwen" };
+        const local = { provider: "local", model: "qwen" };
 
         const reviewed = yield* runWithModels(
           server.url,
@@ -631,13 +630,13 @@ describe("models", () => {
     ));
 
   test.each([
-    { kind: "chat", route: "openai", model: "gpt-0-unknown" },
-    { kind: "decision", route: "openrouter", model: "unknown/decider" },
+    { kind: "chat", provider: "openai", model: "gpt-0-unknown" },
+    { kind: "decision", provider: "openrouter", model: "unknown/decider" },
   ])("an unknown $kind model fails with a hint to add it in settings", (unknown) =>
     run(
       Effect.gen(function* () {
         const server = yield* replayServer("openai-stream");
-        const ref = { route: RouteId.make(unknown.route), model: unknown.model };
+        const ref = { provider: ProviderId.make(unknown.provider), model: unknown.model };
 
         const exit = yield* runWithModels(server.url, storedCredentials, (models) =>
           Effect.exit(
@@ -653,7 +652,7 @@ describe("models", () => {
     ),
   );
 
-  test("a route without a credential fails before sending anything", () =>
+  test("a provider without a credential fails before sending anything", () =>
     run(
       Effect.gen(function* () {
         const server = yield* replayServer("openai-stream");
@@ -661,7 +660,7 @@ describe("models", () => {
         const exit = yield* runWithModels(server.url, [], (models) =>
           Effect.exit(
             models.languageModel(
-              { route: RouteId.make("openai"), model: "gpt-6-luna" },
+              { provider: ProviderId.make("openai"), model: "gpt-6-luna" },
               conversation,
             ),
           ),
@@ -676,7 +675,7 @@ describe("models", () => {
     ));
 });
 
-const openai: ChatModel = { route: "openai", model: "gpt-6-luna" };
+const openai: ChatModel = { provider: "openai", model: "gpt-6-luna" };
 
 describe("structured output", () => {
   // Recorded from OpenCode Go. Neither model has native structured output.
@@ -687,7 +686,7 @@ describe("structured output", () => {
     run(
       Effect.gen(function* () {
         const server = yield* replayServer(`opencode-go-forced-tool-${expected.protocol}`);
-        const goModel = { route: "opencode-go", model: expected.model };
+        const goModel = { provider: "opencode-go", model: expected.model };
         const reviewed = yield* generateReview(server.url, goModel, "Review it.");
         const request = server.received[0]?.body ?? "";
 
@@ -733,7 +732,7 @@ describe("structured output", () => {
     run(
       Effect.gen(function* () {
         const server = yield* replayServer("openai-object");
-        const ref = { route: RouteId.make("openai"), model: "gpt-3.5-turbo" };
+        const ref = { provider: ProviderId.make("openai"), model: "gpt-3.5-turbo" };
 
         const languageModel = (models: Models["Service"]) =>
           Effect.exit(models.languageModel(ref, conversation));
@@ -744,7 +743,7 @@ describe("structured output", () => {
           server.url,
           storedCredentials,
           languageModel,
-          `{ "routes": { "openai": { "models": { "gpt-3.5-turbo": { "supports": { "tools": true } } } } } }`,
+          `{ "providers": { "openai": { "models": { "gpt-3.5-turbo": { "supports": { "tools": true } } } } } }`,
         );
 
         expect(Exit.isFailure(hidden) && String(hidden.cause)).toContain("cannot call tools");

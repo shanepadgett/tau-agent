@@ -1,12 +1,12 @@
 // Rewrites src/ai/catalog-snapshot.json: the models.dev entries for the providers Tau's built-in
-// routes read, and the latest Claude Code version, which becomes the floor the Claude
-// subscription route never goes below. Run with `mise run catalog`.
+// providers read, and the latest Claude Code version, which becomes the floor the Claude
+// subscription provider never goes below. Run with `mise run catalog`.
 import { join } from "node:path";
 
 const MODELS_DEV_URL = "https://models.dev/api.json";
 const CLAUDE_CODE_URL = "https://registry.npmjs.org/@anthropic-ai/claude-code/latest";
 
-// The `catalogProvider` of each built-in route in src/ai/Routes.ts. Tools cannot import src/.
+// The `catalogProvider` of each built-in provider in src/ai/Providers.ts. Tools cannot import src/.
 const CATALOG_PROVIDERS = ["anthropic", "openai", "openrouter", "opencode-go"];
 
 const OUTPUT = join(import.meta.dir, "../src/ai/catalog-snapshot.json");

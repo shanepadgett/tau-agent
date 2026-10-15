@@ -2,34 +2,36 @@
 
 import { join } from "node:path";
 import { Context, Effect, FileSystem, Layer, Schema } from "effect";
-import { ProviderId } from "../ai/Credential.ts";
 import { DecisionSettings, ModelSettings, Protocol } from "../ai/ModelProfile.ts";
 import {
-  builtInRoutes,
-  type Route,
-  RouteId,
-  type RouteSettings,
-  RouteTable,
-} from "../ai/Routes.ts";
+  builtInProviders,
+  type Provider,
+  ProviderId,
+  type ProviderSettings,
+  ProviderTable,
+} from "../ai/Providers.ts";
 import { TauHome } from "../database/TauHome.ts";
 import { CompactionSettings, ContextSettings } from "../core/ContextSettings.ts";
+import { CommitSettings } from "../core/Commits.ts";
 
-const RouteEntry = Schema.Struct({
+const ProviderEntry = Schema.Struct({
   protocol: Schema.optional(Protocol),
   apiUrl: Schema.optional(Schema.String),
-  /** The environment variable that holds the key. Without it, the route sends no key. */
+  /** The environment variable that holds the key. Without it, the provider sends no key. */
   apiKeyEnv: Schema.optional(Schema.String),
   models: Schema.optional(Schema.Record(Schema.String, ModelSettings)),
   decisionModels: Schema.optional(Schema.Record(Schema.String, DecisionSettings)),
+  /** The cheap model for background notes, memory and `/commit`, in place of the built-in one. */
+  smallModel: Schema.optional(Schema.String),
 });
 
-type RouteEntry = typeof RouteEntry.Type;
+type ProviderEntry = typeof ProviderEntry.Type;
 
 const Seconds = Schema.Finite.check(Schema.isGreaterThan(0));
 
 const SettingsFile = Schema.Struct({
-  routes: Schema.optional(Schema.Record(Schema.String, RouteEntry)),
-  /** The model a run uses, written `route/model`. */
+  providers: Schema.optional(Schema.Record(Schema.String, ProviderEntry)),
+  /** The model a run uses, written `provider/model`. */
   model: Schema.optional(Schema.String),
   /** Ends a run after this many turns. There is no limit without it. */
   maxTurns: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
@@ -42,6 +44,13 @@ const SettingsFile = Schema.Struct({
   /** `false` makes `/restart` the only way to restart into Tau's changed code. */
   autoRestart: Schema.optional(Schema.Boolean),
   compaction: Schema.optional(CompactionSettings),
+  /** How `/commit` ends: `push` is `"ask"` (the default), `true` or `false`. */
+  commit: Schema.optional(
+    Schema.Struct({
+      push: Schema.optional(Schema.Union([Schema.Literal("ask"), Schema.Boolean])),
+      avoidBreakingChanges: Schema.optional(Schema.Boolean),
+    }),
+  ),
   /** The least severe log level that `~/.tau/logs` keeps. */
   logLevel: Schema.optional(Schema.Literals(["Error", "Warn", "Info", "Debug"])),
 });
@@ -62,7 +71,7 @@ class SettingsInvalid extends Schema.TaggedError<SettingsInvalid>()("SettingsInv
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-/** The settings that change how a run behaves. The route table is a separate service of the AI layer. */
+/** The settings that change how a run behaves. The provider table is a separate service of the AI layer. */
 export class Settings extends Context.Service<
   Settings,
   {
@@ -74,13 +83,14 @@ export class Settings extends Context.Service<
     readonly logLevel: LogLevel;
   }
 >()("tau/host/Settings") {
-  /** Reads `settings.json` in Tau's home folder once, and gives the run settings and the route table. */
+  /** Reads `settings.json` in Tau's home folder once, and gives the run settings and the provider table. */
   static readonly layer = Layer.effectContext(
     TauHome.use(({ directory }) => readSettingsFile(join(directory, "settings.json"))).pipe(
-      Effect.map(({ routes, routeSettings, compaction, ...settings }) =>
+      Effect.map(({ providers, providerSettings, compaction, commit, ...settings }) =>
         Context.make(Settings, settings).pipe(
-          Context.add(RouteTable, { routes, settings: routeSettings }),
+          Context.add(ProviderTable, { providers, settings: providerSettings }),
           Context.add(ContextSettings, compaction),
+          Context.add(CommitSettings, commit),
         ),
       ),
     ),
@@ -88,13 +98,14 @@ export class Settings extends Context.Service<
 }
 
 type SettingsFileContent = {
-  readonly routes: ReadonlyArray<Route>;
-  readonly routeSettings: ReadonlyMap<RouteId, RouteSettings>;
+  readonly providers: ReadonlyArray<Provider>;
+  readonly providerSettings: ReadonlyMap<ProviderId, ProviderSettings>;
   readonly run: RunSettings;
   readonly agentsFiles: boolean;
   readonly autoRestart: boolean;
   readonly logLevel: LogLevel;
   readonly compaction: CompactionSettings;
+  readonly commit: CommitSettings;
 };
 
 const noRunSettings: RunSettings = {
@@ -104,18 +115,19 @@ const noRunSettings: RunSettings = {
   shellTimeoutSeconds: undefined,
 };
 
-/** If there is no file, Tau uses the built-in routes only. */
+/** If there is no file, Tau uses the built-in providers only. */
 const readSettingsFile = Effect.fn("readSettingsFile")(function* (path: string) {
   const fileSystem = yield* FileSystem.FileSystem;
 
   const noSettings: SettingsFileContent = {
-    routes: builtInRoutes,
-    routeSettings: new Map(),
+    providers: builtInProviders,
+    providerSettings: new Map(),
     run: noRunSettings,
     agentsFiles: true,
     autoRestart: true,
     logLevel: "Warn",
     compaction: {},
+    commit: { push: "ask", avoidBreakingChanges: false },
   };
 
   if (!(yield* fileSystem.exists(path))) return noSettings;
@@ -133,12 +145,12 @@ const readSettingsFile = Effect.fn("readSettingsFile")(function* (path: string) 
     Effect.mapError((cause) => unreadable(path, `has a wrong value: ${cause.message}`, cause)),
   );
 
-  const entries = Object.entries(file.routes ?? {});
-  const added = yield* Effect.forEach(entries, ([id, entry]) => addedRoutes(path, id, entry));
+  const entries = Object.entries(file.providers ?? {});
+  const added = yield* Effect.forEach(entries, ([id, entry]) => addedProviders(path, id, entry));
 
-  const routeSettings = new Map(
-    entries.map(([id, entry]): [RouteId, RouteSettings] => [
-      RouteId.make(id),
+  const providerSettings = new Map(
+    entries.map(([id, entry]): [ProviderId, ProviderSettings] => [
+      ProviderId.make(id),
       { models: entry.models ?? {}, decisionModels: entry.decisionModels ?? {} },
     ]),
   );
@@ -151,24 +163,30 @@ const readSettingsFile = Effect.fn("readSettingsFile")(function* (path: string) 
   };
 
   const content: SettingsFileContent = {
-    routes: [...builtInRoutes, ...added.flat()],
-    routeSettings,
+    providers: [...builtInProviders, ...added.flat()].map((provider) =>
+      withSmallModel(provider, file.providers?.[provider.id]?.smallModel),
+    ),
+    providerSettings,
     run,
     agentsFiles: file.agentsFiles ?? true,
     autoRestart: file.autoRestart ?? true,
     logLevel: file.logLevel ?? "Warn",
     compaction: file.compaction ?? {},
+    commit: {
+      push: file.commit?.push ?? "ask",
+      avoidBreakingChanges: file.commit?.avoidBreakingChanges ?? false,
+    },
   };
 
   return content;
 });
 
 /**
- * Gives the new route that `entry` defines. An entry for a built-in route changes only its models,
- * so it gives no route.
+ * Gives the new provider that `entry` defines. An entry for a built-in provider changes only its models,
+ * so it gives no provider. Its `smallModel` is applied afterwards.
  */
-const addedRoutes = (path: string, id: string, entry: RouteEntry) => {
-  const isBuiltIn = builtInRoutes.some((route) => route.id === RouteId.make(id));
+const addedProviders = (path: string, id: string, entry: ProviderEntry) => {
+  const isBuiltIn = builtInProviders.some((provider) => provider.id === ProviderId.make(id));
 
   const changesConnection =
     entry.protocol !== undefined || entry.apiUrl !== undefined || entry.apiKeyEnv !== undefined;
@@ -177,7 +195,7 @@ const addedRoutes = (path: string, id: string, entry: RouteEntry) => {
     return Effect.fail(
       invalid(
         path,
-        `sets the address or key of routes.${id}, a built-in route. Change only its models`,
+        `sets the address or key of providers.${id}, a built-in provider. Change only its models`,
       ),
     );
   }
@@ -186,11 +204,10 @@ const addedRoutes = (path: string, id: string, entry: RouteEntry) => {
   const { protocol, apiUrl, apiKeyEnv } = entry;
 
   if (protocol === undefined || apiUrl === undefined)
-    return Effect.fail(invalid(path, `has no protocol or apiUrl for routes.${id}. Add both`));
+    return Effect.fail(invalid(path, `has no protocol or apiUrl for providers.${id}. Add both`));
 
-  const route: Route = {
-    id: RouteId.make(id),
-    provider: ProviderId.make(id),
+  const provider: Provider = {
+    id: ProviderId.make(id),
     protocol,
     apiUrl,
     auth:
@@ -203,8 +220,11 @@ const addedRoutes = (path: string, id: string, entry: RouteEntry) => {
     conversationHeaders: undefined,
   };
 
-  return Effect.succeed([route]);
+  return Effect.succeed([provider]);
 };
+
+const withSmallModel = (provider: Provider, smallModel: string | undefined): Provider =>
+  smallModel === undefined ? provider : { ...provider, smallModel };
 
 const invalid = (path: string, problem: string) =>
   new SettingsInvalid({ path, message: `${path} ${problem}.` });

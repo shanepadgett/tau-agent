@@ -3,18 +3,18 @@ import { ConfigProvider, Context, Effect, FileSystem, Layer, type Scope } from "
 import { FetchHttpClient, HttpClientRequest } from "effect/http";
 import { CredentialStore } from "../../src/ai/Credential.ts";
 import { HostId, type LoginMethod, LoginPrompt } from "../../src/ai/Login.ts";
-import { credentialSigner } from "../../src/ai/internal/signing/route-auth.ts";
-import { builtInRoutes, type Route, RouteId } from "../../src/ai/Routes.ts";
+import { credentialSigner } from "../../src/ai/internal/signing/provider-auth.ts";
+import { builtInProviders, type Provider, ProviderId } from "../../src/ai/Providers.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { credentialStoreLayer } from "../../src/host/CredentialStore.ts";
 
 export const sha256 = (text: string) =>
   new Bun.CryptoHasher("sha256").update(text).digest("base64url");
 
-export const routeNamed = (id: string) => {
-  const route = builtInRoutes.find((candidate) => candidate.id === RouteId.make(id));
-  if (route === undefined) throw new Error(`No built-in route ${id}`);
-  return route;
+export const providerNamed = (id: string) => {
+  const provider = builtInProviders.find((candidate) => candidate.id === ProviderId.make(id));
+  if (provider === undefined) throw new Error(`No built-in provider ${id}`);
+  return provider;
 };
 
 export type Browser = {
@@ -94,9 +94,9 @@ export const withCredentials = <A, E, R>(
 export const run = <A, E>(program: Effect.Effect<A, E, Scope.Scope | FileSystem.FileSystem>) =>
   Effect.runPromise(program.pipe(Effect.scoped, Effect.provide(BunFileSystem.layer)));
 
-export const signedAuthorization = (route: Route) =>
-  credentialSigner(route, {
-    protocol: route.protocol,
+export const signedAuthorization = (provider: Provider) =>
+  credentialSigner(provider, {
+    protocol: provider.protocol,
     claudeCodeVersion: "2.1.296",
     conversationId: undefined,
   }).pipe(

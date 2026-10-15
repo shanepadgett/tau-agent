@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { DateTime, Effect, Exit, Option, Predicate, Redacted } from "effect";
-import { ApiKey, type CredentialStore, OAuthTokens, ProviderId } from "../../src/ai/Credential.ts";
+import { ApiKey, type CredentialStore, OAuthTokens } from "../../src/ai/Credential.ts";
+import { ProviderId } from "../../src/ai/Providers.ts";
 import { type LoginMethod, logIn } from "../../src/ai/Login.ts";
-import type { OAuthClient, Route } from "../../src/ai/Routes.ts";
+import type { OAuthClient, Provider } from "../../src/ai/Providers.ts";
 import {
   type Browser,
   neverPastes,
-  routeNamed,
+  providerNamed,
   run,
   sha256,
   signedAuthorization,
@@ -111,18 +112,18 @@ const fakeAuthServer = Effect.acquireRelease(
   ({ server }) => Effect.promise(() => server.stop(true)),
 ).pipe(Effect.map(({ auth }) => auth));
 
-/** The built-in route's OAuth client, pointed at the fake server and a free callback port. */
+/** The built-in provider's OAuth client, pointed at the fake server and a free callback port. */
 const fakeOAuth = (id: string, authUrl: string): OAuthClient => {
-  const route = routeNamed(id);
+  const provider = providerNamed(id);
 
   if (
-    route.auth.kind === "none" ||
-    route.auth.kind === "apiKey" ||
-    route.auth.kind === "chatgptApp"
+    provider.auth.kind === "none" ||
+    provider.auth.kind === "apiKey" ||
+    provider.auth.kind === "chatgptApp"
   )
     throw new Error(`${id} has no OAuth client`);
 
-  const { oauth } = route.auth;
+  const { oauth } = provider.auth;
 
   return {
     ...oauth,
@@ -142,11 +143,14 @@ const fakeOAuth = (id: string, authUrl: string): OAuthClient => {
   };
 };
 
-const fakeRoute = (id: string, authUrl: string): Route => {
-  const route = routeNamed(id);
-  const hasOAuth = route.auth.kind === "claudeSubscription" || route.auth.kind === "codexLogin";
-  if (!hasOAuth) return route;
-  return { ...route, auth: { ...route.auth, oauth: fakeOAuth(id, authUrl) } };
+const fakeProvider = (id: string, authUrl: string): Provider => {
+  const provider = providerNamed(id);
+
+  const hasOAuth =
+    provider.auth.kind === "claudeSubscription" || provider.auth.kind === "codexLogin";
+
+  if (!hasOAuth) return provider;
+  return { ...provider, auth: { ...provider.auth, oauth: fakeOAuth(id, authUrl) } };
 };
 
 const storedAccess = (store: CredentialStore["Service"], provider: string) =>
@@ -169,19 +173,19 @@ const expiredTokens = (refresh: string) =>
 
 const loginCases: ReadonlyArray<{
   readonly name: string;
-  readonly route: string;
+  readonly provider: string;
   readonly method: LoginMethod;
   readonly browser: Browser;
 }> = [
   {
     name: "Claude through the callback",
-    route: "anthropic",
+    provider: "anthropic",
     method: "browser",
     browser: neverPastes,
   },
   {
     name: "ChatGPT through a pasted address",
-    route: "codex",
+    provider: "codex",
     method: "browser",
     browser: {
       method: "browser",
@@ -191,7 +195,7 @@ const loginCases: ReadonlyArray<{
   },
   {
     name: "Claude through the copy-code page",
-    route: "anthropic",
+    provider: "anthropic",
     method: "headless",
     browser: {
       method: "headless",
@@ -202,20 +206,22 @@ const loginCases: ReadonlyArray<{
   },
   {
     name: "ChatGPT through a device code",
-    route: "codex",
+    provider: "codex",
     method: "headless",
     browser: neverPastes,
   },
 ];
 
 describe("login", () => {
-  test.each(loginCases)("$name saves tokens", ({ route, method, browser }) =>
+  test.each(loginCases)("$name saves tokens", ({ provider, method, browser }) =>
     run(
       Effect.gen(function* () {
         const auth = yield* fakeAuthServer;
 
         const access = yield* withCredentials({ ...browser, method }, (store) =>
-          logIn(fakeRoute(route, auth.url)).pipe(Effect.andThen(storedAccess(store, route))),
+          logIn(fakeProvider(provider, auth.url)).pipe(
+            Effect.andThen(storedAccess(store, provider)),
+          ),
         );
 
         // The fake server issues tokens only when the verifier matches the challenge.
@@ -230,7 +236,7 @@ describe("login", () => {
         const auth = yield* fakeAuthServer;
 
         yield* withCredentials({ ...neverPastes, method: "headless" }, () =>
-          logIn(fakeRoute("codex", auth.url)),
+          logIn(fakeProvider("codex", auth.url)),
         );
 
         expect(auth.devicePolls).toBe(3);
@@ -253,7 +259,7 @@ describe("login", () => {
 
         const [exit, access] = yield* withCredentials(browser, (store) =>
           Effect.all([
-            Effect.exit(logIn(fakeRoute("anthropic", auth.url))),
+            Effect.exit(logIn(fakeProvider("anthropic", auth.url))),
             storedAccess(store, "anthropic"),
           ]),
         );
@@ -272,16 +278,16 @@ describe("token refresh", () => {
     run(
       Effect.gen(function* () {
         const auth = yield* fakeAuthServer;
-        const route = fakeRoute("anthropic", auth.url);
+        const provider = fakeProvider("anthropic", auth.url);
 
         const [authorizations, access] = yield* withCredentials(neverPastes, (store) =>
-          store.save(route.provider, expiredTokens(auth.validRefresh)).pipe(
+          store.save(provider.id, expiredTokens(auth.validRefresh)).pipe(
             Effect.andThen(
               Effect.all(
                 [
-                  signedAuthorization(route),
-                  signedAuthorization(route),
-                  signedAuthorization(route),
+                  signedAuthorization(provider),
+                  signedAuthorization(provider),
+                  signedAuthorization(provider),
                 ],
                 {
                   concurrency: "unbounded",
@@ -304,12 +310,12 @@ describe("token refresh", () => {
     run(
       Effect.gen(function* () {
         const auth = yield* fakeAuthServer;
-        const route = fakeRoute("codex", auth.url);
+        const provider = fakeProvider("codex", auth.url);
 
         const exit = yield* withCredentials(neverPastes, (store) =>
           store
-            .save(route.provider, expiredTokens("revoked"))
-            .pipe(Effect.andThen(Effect.exit(signedAuthorization(route)))),
+            .save(provider.id, expiredTokens("revoked"))
+            .pipe(Effect.andThen(Effect.exit(signedAuthorization(provider)))),
         );
 
         expect(Exit.isFailure(exit) && String(exit.cause)).toContain(
@@ -322,12 +328,12 @@ describe("token refresh", () => {
 test("a saved API key wins over the environment variable", () =>
   run(
     Effect.gen(function* () {
-      const route = routeNamed("openrouter");
+      const provider = providerNamed("openrouter");
 
       const authorization = yield* withCredentials(neverPastes, (store) =>
         store
-          .save(route.provider, ApiKey.make({ key: Redacted.make("saved-key") }))
-          .pipe(Effect.andThen(signedAuthorization(route))),
+          .save(provider.id, ApiKey.make({ key: Redacted.make("saved-key") }))
+          .pipe(Effect.andThen(signedAuthorization(provider))),
       );
 
       expect(authorization).toBe("Bearer saved-key");

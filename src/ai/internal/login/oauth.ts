@@ -18,8 +18,8 @@ import {
   HttpClientRequest,
   HttpClientResponse,
 } from "effect/http";
-import type { ProviderId } from "../../Credential.ts";
-import type { HeadlessLogin, LoginCallback, OAuthClient } from "../../Routes.ts";
+import type { ProviderId } from "../../Providers.ts";
+import type { HeadlessLogin, LoginCallback, OAuthClient } from "../../Providers.ts";
 import { LoginFailed, type LoginMethod, LoginPrompt } from "./login-services.ts";
 import { oauthTokenEndpoint, requestTokens, type TokenRequestFailed } from "./token-endpoint.ts";
 

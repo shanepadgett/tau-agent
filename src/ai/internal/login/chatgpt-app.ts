@@ -6,10 +6,11 @@
 import { Clock, Crypto, Effect, Option, Redacted, Result, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
-import { ChatgptAppTokens, CredentialStore, type ProviderId } from "../../Credential.ts";
+import { ChatgptAppTokens, CredentialStore } from "../../Credential.ts";
+import type { ProviderId } from "../../Providers.ts";
 import { LoginFailed } from "./login-services.ts";
 import { asLoginFailed, type AuthorizedCode, authorizeInBrowser } from "./oauth.ts";
-import type { ChatgptApp } from "../../Routes.ts";
+import type { ChatgptApp } from "../../Providers.ts";
 import { chatgptAppTokenEndpoint, requestTokens } from "./token-endpoint.ts";
 
 /** The scope that lets requests spend the user's plan; a login can succeed without it. */

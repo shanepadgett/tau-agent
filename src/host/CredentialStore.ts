@@ -5,12 +5,8 @@
 
 import { join } from "node:path";
 import { Effect, Layer, Option, Schema } from "effect";
-import {
-  Credential,
-  CredentialStore,
-  CredentialStoreError,
-  type ProviderId,
-} from "../ai/Credential.ts";
+import { Credential, CredentialStore, CredentialStoreError } from "../ai/Credential.ts";
+import type { ProviderId } from "../ai/Providers.ts";
 import { openDatabase, type Transaction } from "../database/Database.ts";
 import { TauHome } from "../database/TauHome.ts";
 

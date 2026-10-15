@@ -1,5 +1,5 @@
 /**
- * Logs in to a route and saves the credential, and logs out. Every kind of login goes through
+ * Logs in to a provider and saves the credential, and logs out. Every kind of login goes through
  * here: API keys, Claude and Codex OAuth, and Sign in with ChatGPT.
  */
 
@@ -8,45 +8,45 @@ import { ApiKey, ChatgptAppTokens, CredentialStore } from "./Credential.ts";
 import { logInChatgptApp, revokeChatgptApp } from "./internal/login/chatgpt-app.ts";
 import { HostId, LoginPrompt } from "./internal/login/login-services.ts";
 import { logInWithOAuth } from "./internal/login/oauth.ts";
-import type { Route } from "./Routes.ts";
+import type { Provider } from "./Providers.ts";
 
 export { HostId, type LoginMethod, LoginPrompt } from "./internal/login/login-services.ts";
 
-/** Logs in to `route` and saves the credential, replacing any saved one. */
-export const logIn = Effect.fn("logIn")(function* (route: Route) {
+/** Logs in to `provider` and saves the credential, replacing any saved one. */
+export const logIn = Effect.fn("logIn")(function* (provider: Provider) {
   const store = yield* CredentialStore;
   const prompt = yield* LoginPrompt;
-  const { auth, provider } = route;
+  const { auth, id } = provider;
 
   switch (auth.kind) {
     case "none":
       return;
     case "apiKey": {
-      const key = yield* prompt.askSecret(`${provider} API key`);
-      return yield* store.save(provider, ApiKey.make({ key }));
+      const key = yield* prompt.askSecret(`${id} API key`);
+      return yield* store.save(id, ApiKey.make({ key }));
     }
     case "chatgptApp":
-      return yield* logInChatgptApp(provider, auth.app, yield* (yield* HostId).read);
+      return yield* logInChatgptApp(id, auth.app, yield* (yield* HostId).read);
     case "claudeSubscription":
     case "codexLogin": {
       const method = yield* prompt.chooseMethod(auth.oauth.headless);
-      return yield* store.save(provider, yield* logInWithOAuth(provider, auth.oauth, method));
+      return yield* store.save(id, yield* logInWithOAuth(id, auth.oauth, method));
     }
   }
 });
 
 /**
- * Removes the saved credential of `route`. A Sign in with ChatGPT login is also ended on OpenAI's
+ * Removes the saved credential of `provider`. A Sign in with ChatGPT login is also ended on OpenAI's
  * side; when that fails, the user is told how to end it by hand.
  */
-export const logOut = Effect.fn("logOut")(function* (route: Route) {
+export const logOut = Effect.fn("logOut")(function* (provider: Provider) {
   const store = yield* CredentialStore;
 
-  if (route.auth.kind === "chatgptApp") {
-    const saved = Option.filter(yield* store.read(route.provider), Schema.is(ChatgptAppTokens));
+  if (provider.auth.kind === "chatgptApp") {
+    const saved = Option.filter(yield* store.read(provider.id), Schema.is(ChatgptAppTokens));
 
     if (Option.isSome(saved)) {
-      yield* revokeChatgptApp(route.auth.app, saved.value).pipe(
+      yield* revokeChatgptApp(provider.auth.app, saved.value).pipe(
         Effect.catchTag("HttpClientError", (error) =>
           LoginPrompt.use((prompt) =>
             prompt.show(
@@ -58,5 +58,5 @@ export const logOut = Effect.fn("logOut")(function* (route: Route) {
     }
   }
 
-  yield* store.remove(route.provider);
+  yield* store.remove(provider.id);
 });

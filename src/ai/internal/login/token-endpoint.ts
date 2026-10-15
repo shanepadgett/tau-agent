@@ -5,8 +5,9 @@
 
 import { DateTime, Duration, Effect, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
-import { OAuthTokens, ProviderId } from "../../Credential.ts";
-import type { ChatgptApp, OAuthClient } from "../../Routes.ts";
+import { OAuthTokens } from "../../Credential.ts";
+import { ProviderId } from "../../Providers.ts";
+import type { ChatgptApp, OAuthClient } from "../../Providers.ts";
 
 /** Where and how a login's tokens are requested. */
 export type TokenEndpoint = {

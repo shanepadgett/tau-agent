@@ -13,8 +13,9 @@ import {
   Stream,
 } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { ApiKey, CredentialStore, ProviderId } from "../../src/ai/Credential.ts";
-import { builtInRoutes } from "../../src/ai/Routes.ts";
+import { ApiKey, CredentialStore } from "../../src/ai/Credential.ts";
+import { ProviderId } from "../../src/ai/Providers.ts";
+import { builtInProviders } from "../../src/ai/Providers.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { credentialStoreLayer } from "../../src/host/CredentialStore.ts";
 import { compileTau } from "../support/compile-tau.ts";
@@ -78,7 +79,7 @@ const readSaved = Effect.fn("readSaved")(function* (home: string) {
   return yield* Context.get(services, CredentialStore).read(openai);
 });
 
-const openaiChoice = DOWN.repeat(builtInRoutes.findIndex((route) => route.provider === openai));
+const openaiChoice = DOWN.repeat(builtInProviders.findIndex((provider) => provider.id === openai));
 
 describe("compiled tau", () => {
   test(

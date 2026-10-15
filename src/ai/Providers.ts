@@ -1,14 +1,13 @@
 /**
- * Defines the routes to model providers. A route gives the provider address, how Tau signs
- * requests, and where Tau gets data about the models.
+ * Defines the model providers Tau can call. A provider gives its API address, how Tau signs
+ * requests, and where Tau gets data about its models.
  */
 
 import { Context, Schema } from "effect";
-import { ProviderId } from "./Credential.ts";
 import type { DecisionProfile, DecisionSettings, ModelSettings, Protocol } from "./ModelProfile.ts";
 
-export const RouteId = Schema.String.pipe(Schema.brand("RouteId"));
-export type RouteId = typeof RouteId.Type;
+export const ProviderId = Schema.String.pipe(Schema.brand("ProviderId"));
+export type ProviderId = typeof ProviderId.Type;
 
 /** How to log in on a machine whose browser cannot reach Tau's callback, such as over SSH. */
 export type HeadlessLogin =
@@ -63,7 +62,7 @@ export type ChatgptApp = {
 };
 
 /** A subscription login changes more than the token: each one adds headers its provider checks. */
-export type RouteAuth =
+export type ProviderAuth =
   /** A local server that does not need a key. */
   | { readonly kind: "none" }
   | { readonly kind: "apiKey"; readonly environmentVariable: string }
@@ -74,30 +73,31 @@ export type RouteAuth =
 /** The model list of the Codex backend, or the standard `/v1/models` list. */
 export type LiveList = "codexModels" | "openaiModels";
 
-/** The decision API of a route, and the decision models that Tau knows on it. */
+/** The decision API of a provider, and the decision models that Tau knows on it. */
 type DecisionApi = {
   readonly kind: "systemOne" | "openaiDecisions";
   readonly models: ReadonlyArray<DecisionProfile>;
 };
 
-export type Route = {
-  readonly id: RouteId;
-  /** The credential the route uses. */
-  readonly provider: ProviderId;
+export type Provider = {
+  readonly id: ProviderId;
   /** The protocol of a model when its catalog entry does not give one. */
   readonly protocol: Protocol;
   readonly apiUrl: string;
-  readonly auth: RouteAuth;
-  /** The models.dev provider whose entries give data about the models on this route. */
+  readonly auth: ProviderAuth;
+  /** The models.dev provider whose entries give data about the models on this provider. */
   readonly catalogProvider: string | undefined;
   /**
-   * Where a plan route lists the models that the plan allows. This list is different from the API
+   * Where a plan provider lists the models that the plan allows. This list is different from the API
    * list.
    */
   readonly liveList: LiveList | undefined;
   readonly decisions: DecisionApi | undefined;
-  /** The cheap chat model used for background notes, when the catalog allows it. */
-  readonly noteModel?: string;
+  /**
+   * The cheap chat model for background notes, memory and `/commit`, when the catalog lists it.
+   * `providers.<id>.smallModel` in the settings file replaces it.
+   */
+  readonly smallModel?: string;
   /**
    * The headers that carry the conversation ID, for a provider that needs it. OpenAI reads the
    * prompt cache of a conversation only when its requests carry a `session-id` header.
@@ -159,43 +159,41 @@ const chatgptApp: ChatgptApp = {
 const LUNA_INPUT_TOKENS = 922_000;
 const JEV_CONTEXT_TOKENS = 64_000;
 
-/** The changes and additions that the user's settings make to the models of one route. */
-export type RouteSettings = {
+/** The changes and additions that the user's settings make to the models of one provider. */
+export type ProviderSettings = {
   readonly models: Readonly<Record<string, ModelSettings>>;
   readonly decisionModels: Readonly<Record<string, DecisionSettings>>;
 };
 
-/** The routes Tau knows, with the model settings of each. The host reads them from the settings file. */
-export class RouteTable extends Context.Service<
-  RouteTable,
+/** The providers Tau knows, with the model settings of each. The host reads them from the settings file. */
+export class ProviderTable extends Context.Service<
+  ProviderTable,
   {
-    /** The built-in routes, then the routes the user added. */
-    readonly routes: ReadonlyArray<Route>;
-    readonly settings: ReadonlyMap<RouteId, RouteSettings>;
+    /** The built-in providers, then the providers the user added. */
+    readonly providers: ReadonlyArray<Provider>;
+    readonly settings: ReadonlyMap<ProviderId, ProviderSettings>;
   }
->()("tau/ai/RouteTable") {}
+>()("tau/ai/ProviderTable") {}
 
-export const builtInRoutes: ReadonlyArray<Route> = [
+export const builtInProviders: ReadonlyArray<Provider> = [
   {
-    id: RouteId.make("anthropic"),
-    provider: ProviderId.make("anthropic"),
+    id: ProviderId.make("anthropic"),
     protocol: "anthropic",
     apiUrl: "https://api.anthropic.com",
     auth: { kind: "claudeSubscription", oauth: claudeOAuth },
     catalogProvider: "anthropic",
-    noteModel: "claude-haiku-5-5",
+    smallModel: "claude-haiku-5-5",
     liveList: undefined,
     decisions: undefined,
     conversationHeaders: undefined,
   },
   {
-    id: RouteId.make("openai"),
-    provider: ProviderId.make("openai"),
+    id: ProviderId.make("openai"),
     protocol: "openaiResponses",
     apiUrl: "https://api.openai.com/v1",
     auth: { kind: "apiKey", environmentVariable: "OPENAI_API_KEY" },
     catalogProvider: "openai",
-    noteModel: "gpt-6-luna",
+    smallModel: "gpt-6-luna",
     liveList: undefined,
     decisions: {
       kind: "openaiDecisions",
@@ -204,37 +202,34 @@ export const builtInRoutes: ReadonlyArray<Route> = [
     conversationHeaders: "openai",
   },
   {
-    id: RouteId.make("chatgpt"),
-    provider: ProviderId.make("chatgpt"),
+    id: ProviderId.make("chatgpt"),
     protocol: "openaiResponses",
     apiUrl: "https://api.openai.com/v1",
     auth: { kind: "chatgptApp", app: chatgptApp },
     catalogProvider: "openai",
     liveList: "openaiModels",
-    noteModel: "gpt-6-luna",
+    smallModel: "gpt-6-luna",
     decisions: undefined,
     conversationHeaders: "openai",
   },
   {
-    id: RouteId.make("codex"),
-    provider: ProviderId.make("codex"),
+    id: ProviderId.make("codex"),
     protocol: "openaiResponses",
     apiUrl: "https://chatgpt.com/backend-api/codex",
     auth: { kind: "codexLogin", oauth: codexOAuth },
     catalogProvider: "openai",
     liveList: "codexModels",
-    noteModel: "gpt-6-luna",
+    smallModel: "gpt-6-luna",
     decisions: undefined,
     conversationHeaders: "openai",
   },
   {
-    id: RouteId.make("openrouter"),
-    provider: ProviderId.make("openrouter"),
+    id: ProviderId.make("openrouter"),
     protocol: "openrouter",
     apiUrl: "https://openrouter.ai/api/v1",
     auth: { kind: "apiKey", environmentVariable: "OPENROUTER_API_KEY" },
     catalogProvider: "openrouter",
-    noteModel: "openai/gpt-6-luna",
+    smallModel: "deepseek/deepseek-v4.1-flash",
     liveList: undefined,
     decisions: {
       kind: "systemOne",
@@ -247,13 +242,12 @@ export const builtInRoutes: ReadonlyArray<Route> = [
   },
   {
     // One subscription. Its models use three protocols at the same address.
-    id: RouteId.make("opencode-go"),
-    provider: ProviderId.make("opencode-go"),
+    id: ProviderId.make("opencode-go"),
     protocol: "openaiChat",
     apiUrl: "https://opencode.ai/inference/go/v1",
     auth: { kind: "apiKey", environmentVariable: "OPENCODE_API_KEY" },
     catalogProvider: "opencode-go",
-    noteModel: "gpt-6-luna",
+    smallModel: "deepseek-v4.1-flash",
     liveList: undefined,
     decisions: undefined,
     conversationHeaders: "opencode",
