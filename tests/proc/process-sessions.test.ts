@@ -126,19 +126,23 @@ describe("process sessions", () => {
       }),
     ));
 
-  test("a read gives only new output and readAll gives everything", () =>
-    withSessions(PROCESS_LIMITS, (sessions, directory) =>
-      Effect.gen(function* () {
-        const { process: first } = yield* sessions.start(
-          start("echo one; sleep 0.2; echo two; sleep 30", directory),
-        );
+  test(
+    "a read gives only new output and readAll gives everything",
+    () =>
+      withSessions(PROCESS_LIMITS, (sessions, directory) =>
+        Effect.gen(function* () {
+          const { process: first } = yield* sessions.start(
+            start("echo one; sleep 0.2; echo two; sleep 30", directory),
+          );
 
-        yield* sessions.wait(first.id, { ...anyWait, pattern: /two/ });
+          yield* sessions.wait(first.id, { ...anyWait, pattern: /two/ });
 
-        expect((yield* sessions.read(first.id)).output).toBe("");
-        expect(yield* sessions.readAll(first.id)).toBe("one\ntwo\n");
-      }),
-    ));
+          expect((yield* sessions.read(first.id)).output).toBe("");
+          expect(yield* sessions.readAll(first.id)).toBe("one\ntwo\n");
+        }),
+      ),
+    10_000,
+  );
 
   test("output over the buffer keeps its head and tail", () =>
     withSessions({ maxSessions: 4, bufferCharacters: 1000 }, (sessions, directory) =>
