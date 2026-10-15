@@ -13,6 +13,7 @@ import type { SidebarChoice } from "../../core/TuiMemory.ts";
 import { type Condition, Status } from "../../core/Status.ts";
 import { chatCommands, type CommandTarget } from "./chat-commands.ts";
 import { type CommitFlow, commitFlow } from "./commit-flow.ts";
+import { type QnaFlow, qnaFlow } from "./qna-flow.ts";
 import { type ChatAction, type ChatState, isIdle, reduce, replay } from "./chat-state.ts";
 import type { CommandInfo } from "./command-suggestions.ts";
 import { type ListedModel, type ModelRef, refText } from "./model-picker.ts";
@@ -105,6 +106,8 @@ export type ChatClient = {
   readonly stepThinking: () => void;
   /** `/commit`, whose panel shows while it runs. */
   readonly commit: CommitFlow;
+  /** `/qna`, whose panel shows when the model has questions. */
+  readonly qna: QnaFlow;
   /** The open picker, if a command opened one. */
   readonly picker: Accessor<PickerList | undefined>;
   readonly closePicker: () => void;
@@ -150,12 +153,10 @@ export const chatClient = Effect.fn("chatClient")(function* (
 
   reportActivity();
 
-  yield* followSession(events, apply, { link, attention });
-
   yield* Effect.forkScoped(Effect.andThen(link.exitRequested, restart(chat, editor, end)));
   const prompts = yield* promptSender({ opened, agent, chat, apply, options: setup.options });
 
-  const { commit, run, list, picker, closePicker } = commandsOf(prompts, attention, {
+  const { commit, qna, run, list, picker, closePicker } = commandsOf(prompts, attention, {
     chat,
     apply,
     agent,
@@ -166,6 +167,8 @@ export const chatClient = Effect.fn("chatClient")(function* (
     openNew: () => end({ reason: "open", session: undefined }),
   });
 
+  yield* followSession(events, apply, { link, attention, qna });
+
   const client: ChatClient = {
     chat,
     conditions: yield* conditionsSignal(),
@@ -175,6 +178,7 @@ export const chatClient = Effect.fn("chatClient")(function* (
     picker,
     closePicker,
     commit,
+    qna,
     commands: list,
     draft: link.draft,
     readDraftWith: (read) => {
@@ -205,10 +209,20 @@ export const chatClient = Effect.fn("chatClient")(function* (
 const followSession = Effect.fn("followSession")(function* (
   events: Effect.Success<OpenSession["subscribe"]>,
   apply: (action: ChatAction) => void,
-  attending: { readonly link: RestartLink; readonly attention: Attention },
+  attending: {
+    readonly link: RestartLink;
+    readonly attention: Attention;
+    readonly qna: QnaFlow;
+  },
 ) {
-  const { link, attention } = attending;
-  const notify = turnAttention({ request: link.holdAttention });
+  const { link, attention, qna } = attending;
+  const attend = turnAttention({ request: link.holdAttention });
+
+  const notify = (event: AgentEvent) =>
+    Effect.sync(() => {
+      qna.offer(event);
+    }).pipe(Effect.andThen(attend(event)));
+
   yield* Effect.forkScoped(followEvents(events, apply, notify));
   yield* Effect.forkScoped(link.deliveries.pipe(Stream.runForEach(attention.request)));
   if (link.attention !== undefined) yield* Effect.forkScoped(attention.request(link.attention));
@@ -265,7 +279,11 @@ const promptSender = Effect.fn("promptSender")(function* (sender: {
     return found?.thinking ?? [];
   });
 
-  const send = (type: "prompt" | "steer", text: string) => {
+  const send = (
+    type: "prompt" | "steer",
+    text: string,
+    tools: Pick<RunOptions, "askQuestions"> = { askQuestions: false },
+  ) => {
     const ref = model();
 
     if (ref === undefined) {
@@ -274,7 +292,7 @@ const promptSender = Effect.fn("promptSender")(function* (sender: {
     }
 
     apply({ type: type === "prompt" ? "prompt-sent" : "steer-sent", text });
-    const runOptions = { ...options, model: ref, thinking: thinking.chosen() };
+    const runOptions = { ...options, model: ref, thinking: thinking.chosen(), ...tools };
     Effect.runFork(opened.send({ type, text, options: runOptions }));
   };
 
@@ -361,7 +379,7 @@ const runInBackground = (effect: Effect.Effect<void>) => {
 const commandsOf = (
   prompts: Pick<Effect.Success<ReturnType<typeof promptSender>>, "model" | "send">,
   attention: Attention,
-  target: Omit<CommandTarget, "commit" | "fork">,
+  target: Omit<CommandTarget, "commit" | "qna" | "fork">,
 ) => {
   const commit = commitFlow({
     attention,
@@ -374,7 +392,14 @@ const commandsOf = (
     start: runStoppable,
   });
 
-  return { commit, ...chatCommands({ ...target, fork: runInBackground, commit }) };
+  const qna = qnaFlow({
+    apply: target.apply,
+    prompt: (text, tools) => {
+      prompts.send("prompt", text, tools);
+    },
+  });
+
+  return { commit, qna, ...chatCommands({ ...target, fork: runInBackground, commit, qna }) };
 };
 
 /** Runs `effect` in the background, and gives a way to stop it. */

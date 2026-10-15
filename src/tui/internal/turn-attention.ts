@@ -20,6 +20,11 @@ export const turnAttention = (attention: Pick<Attention, "request">) => {
       run = "idle";
       if (event.reason === "cancelled") return Effect.void;
 
-      return attention.request(event.reason === "failed" ? "Run failed" : "Response ready");
+      return attention.request(attentionText(event.reason));
     });
+};
+
+const attentionText = (reason: Extract<AgentEvent, { type: "run-ended" }>["reason"]) => {
+  if (reason === "failed") return "Run failed";
+  return reason === "questions-asked" ? "Questions for you" : "Response ready";
 };

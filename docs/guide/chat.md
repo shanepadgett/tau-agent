@@ -48,6 +48,7 @@ While you type a command, a list of the commands that start with what you typed 
 | `/commit` | Runs the project's checks, plans commits of every changed file, and commits them once you press Enter. Text after it guides the plan. See [commit.md](commit.md). |
 | `/model` | Lists the models of the providers you have logged in to. The one you choose runs this chat's next prompts; your settings stay as they are. |
 | `/new` | Opens a new session in this folder. |
+| `/qna` | Has the model ask its open questions in a panel. Text after it frames them. See [qna.md](qna.md). |
 | `/restart` | Restarts Tau into new code (see below). |
 | `/sessions` | Lists the sessions of this folder, latest first, by their first prompt. Each entry takes one line: line breaks become spaces, and long prompts are shortened with an ellipsis in the middle. Choosing one opens it in place of this one. |
 

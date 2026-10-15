@@ -8,6 +8,7 @@ import { callModel, withSteering } from "./call-model.ts";
 import { interruptStartedCalls } from "./interrupt-started-calls.ts";
 import type { Platform } from "../tools/model-tool.ts";
 import { stopRepeatedCalls } from "./repeat-limit.ts";
+import { stopAtQuestions } from "./stop-at-questions.ts";
 import { CONTINUE, endWith, type Operation, type RunContext } from "./run-context.ts";
 import { runToolCalls } from "./run-tool-calls.ts";
 import { settleChecks } from "./settle-checks.ts";
@@ -20,6 +21,7 @@ const operations = <R>(run: RunContext<R>): ReadonlyArray<Operation<R | Platform
   interruptStartedCalls(run),
   ...run.contextOperations,
   runToolCalls(run),
+  stopAtQuestions,
   stopRepeatedCalls,
   stopAtTurnLimit(run),
   settleChecks(run),

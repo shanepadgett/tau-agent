@@ -40,6 +40,7 @@ export const options: RunOptions = {
   model: { provider: ProviderId.make("scripted"), model: "scripted" },
   thinking: "medium",
   maxTurns: undefined,
+  askQuestions: false,
   timeouts: { run: Duration.seconds(5), shell: Duration.seconds(5) },
 };
 

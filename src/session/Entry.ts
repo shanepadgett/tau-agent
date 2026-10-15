@@ -7,6 +7,7 @@ import { type DateTime, Schema } from "effect";
 import { ThinkingLevel } from "../ai/ModelProfile.ts";
 import { ProviderId } from "../ai/Providers.ts";
 import { CheckReport } from "./CheckReport.ts";
+import { Question } from "./Questions.ts";
 
 export const SessionId = Schema.String.pipe(Schema.brand("SessionId"));
 export type SessionId = typeof SessionId.Type;
@@ -138,7 +139,13 @@ const CheckpointDetails = Schema.Struct({
 
 export type CheckpointDetails = typeof CheckpointDetails.Type;
 
-const ToolDetails = Schema.Union([RunDetails, ChecksDetails, CheckpointDetails]);
+/** The questions an `ask_question` call put to the user, kept so the client can show them. */
+const QuestionsDetails = Schema.Struct({
+  tool: Schema.Literal("ask_question"),
+  questions: Schema.Array(Question),
+});
+
+const ToolDetails = Schema.Union([RunDetails, ChecksDetails, CheckpointDetails, QuestionsDetails]);
 export type ToolDetails = typeof ToolDetails.Type;
 
 /**

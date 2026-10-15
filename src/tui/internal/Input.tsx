@@ -26,7 +26,11 @@ export function Input(props: {
           connectEditor(editor, props.client, props.suggestions);
         }}
         // An open picker takes the keys; the text stays.
-        focused={props.client.picker() === undefined && props.client.commit.step() === undefined}
+        focused={
+          props.client.picker() === undefined &&
+          props.client.commit.step() === undefined &&
+          props.client.qna.state() === undefined
+        }
         minHeight={1}
         maxHeight={MAX_INPUT_LINES}
         placeholder="Type a prompt"

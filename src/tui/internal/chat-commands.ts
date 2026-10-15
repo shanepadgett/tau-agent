@@ -6,6 +6,7 @@ import type { Agent, OpenSession } from "../../core/Agent.ts";
 import type { RunOptions } from "../../core/Client.ts";
 import { type ChatAction, type ChatState, isIdle } from "./chat-state.ts";
 import type { CommitFlow } from "./commit-flow.ts";
+import type { QnaFlow } from "./qna-flow.ts";
 import type { CommandInfo } from "./command-suggestions.ts";
 import { type ModelRef, modelPicker } from "./model-picker.ts";
 import type { PickerItem, PickerList } from "./Picker.tsx";
@@ -46,10 +47,12 @@ export type CommandTarget = {
   /** Runs `effect` in the background. */
   readonly fork: (effect: Effect.Effect<void>) => void;
   readonly commit: CommitFlow;
+  readonly qna: QnaFlow;
 };
 
 const BUSY = "Wait for the run to end, or cancel it, before you switch sessions.";
 const BUSY_COMMIT = "Wait for the run to end, or cancel it, before you commit.";
+const BUSY_QNA = "Wait for the run to end, or cancel it, before you start /qna.";
 const ISO_MINUTE_LENGTH = 16;
 
 /** Returns a way to open a picker on what a list finds, or to say why it found nothing. */
@@ -75,6 +78,29 @@ const whenIdle = ({ chat, apply }: CommandTarget, act: () => void, busy = BUSY) 
   if (isIdle(chat)) act();
   else apply({ type: "notice", text: busy });
 };
+
+/** A command that starts a flow with the text after its name, and only between runs. */
+const flowCommand = (
+  target: CommandTarget,
+  flow: {
+    readonly description: string;
+    readonly busy: string;
+    readonly start: (argument: string) => void;
+  },
+): ChatCommand => ({
+  description: flow.description,
+  argument: "optional",
+  run: (argument) =>
+    Effect.sync(() => {
+      whenIdle(
+        target,
+        () => {
+          flow.start(argument);
+        },
+        flow.busy,
+      );
+    }),
+});
 
 const sessionPicker =
   (target: CommandTarget) =>
@@ -161,20 +187,11 @@ export const chatCommands = (target: CommandTarget) => {
 
   // In alphabetical order, the order of the suggestion list.
   const commands: Readonly<Record<string, ChatCommand>> = {
-    "/commit": {
+    "/commit": flowCommand(target, {
       description: "Commit every change, after the checks pass",
-      argument: "optional",
-      run: (instruction) =>
-        Effect.sync(() => {
-          whenIdle(
-            target,
-            () => {
-              target.commit.run(instruction);
-            },
-            BUSY_COMMIT,
-          );
-        }),
-    },
+      busy: BUSY_COMMIT,
+      start: target.commit.run,
+    }),
     "/model": {
       description: "Change the model for this chat",
       run: () => pick(Effect.all([agent.models, agent.favoriteModels]), modelPickerFor(target)),
@@ -186,6 +203,11 @@ export const chatCommands = (target: CommandTarget) => {
           whenIdle(target, target.openNew);
         }),
     },
+    "/qna": flowCommand(target, {
+      description: "Have the model ask its open questions in a panel",
+      busy: BUSY_QNA,
+      start: target.qna.start,
+    }),
     "/references": {
       description: "Attach reference repositories, and manage the library",
       run: () => pick(agent.references.list, referencesPicker(referencesTarget(target, setPicker))),

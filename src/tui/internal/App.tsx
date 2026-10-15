@@ -24,6 +24,7 @@ import { PRIORITY, tauKeymap } from "./keymap.ts";
 import { Picker } from "./Picker.tsx";
 import { CommitPanel } from "./CommitPanel.tsx";
 import { Place } from "./Place.tsx";
+import { QnaPanel } from "./QnaPanel.tsx";
 import { RunPanel } from "./RunPanel.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { SIDEBAR_COLUMNS, type SidebarState, sidebarState } from "./sidebar-state.ts";
@@ -64,7 +65,9 @@ function App(props: { readonly client: ChatClient; readonly syntax: SyntaxStyle 
 
   // A widget the user answers replaces the composer (the input editor; the status line under it stays) while open.
   const panelOpen = () =>
-    props.client.picker() !== undefined || props.client.commit.step() !== undefined;
+    props.client.picker() !== undefined ||
+    props.client.commit.step() !== undefined ||
+    props.client.qna.state() !== undefined;
 
   const terminal = useTerminalDimensions();
   const sidebar = sidebarState(() => terminal().width, props.client.sidebar);
@@ -91,6 +94,9 @@ function App(props: { readonly client: ChatClient; readonly syntax: SyntaxStyle 
               </Show>
               <Show when={props.client.commit.step()} keyed>
                 {(step) => <CommitPanel flow={props.client.commit} step={step} />}
+              </Show>
+              <Show when={props.client.qna.state()} keyed>
+                {(state) => <QnaPanel flow={props.client.qna} state={state} />}
               </Show>
               <CommandList suggestions={suggestions} />
             </Place>

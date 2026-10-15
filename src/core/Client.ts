@@ -3,6 +3,7 @@
 import type { ModelRef } from "../ai/Catalog.ts";
 import { type CallTokens, clampThinking, type ThinkingLevel } from "../ai/ModelProfile.ts";
 import type { ProcessSummary } from "../proc/ProcessSessions.ts";
+import type { Question } from "../session/Questions.ts";
 import type { Timeouts } from "./internal/run-tool/run-tool.ts";
 
 /** How one run behaves. Each prompt carries its own, so a client can change the model between prompts. */
@@ -12,6 +13,8 @@ export type RunOptions = {
   readonly thinking: ThinkingLevel;
   readonly maxTurns: number | undefined;
   readonly timeouts: Timeouts;
+  /** Whether the model has the `ask_question` tool on this run. Only `/qna` turns it on. */
+  readonly askQuestions: boolean;
 };
 
 /** A reply's model with the level its run chose; replies saved before thinking levels have none. */
@@ -92,15 +95,17 @@ export type AgentEvent =
  * answer is cut short. `repeated-call`: the model sent the same failing call again and again;
  * `call` shows what it was. `checks-failed`: the model ended its turn while the latest checks
  * of its changes failed, or they still failed after the model had its tries to fix them.
+ * `questions-asked`: the model put `questions` to the user, whose answers start the next run.
  */
 export type RunEnd =
   | { readonly reason: "answered" | "turn-limit" | "output-limit" }
   | { readonly reason: "repeated-call"; readonly call: string }
-  | { readonly reason: "checks-failed"; readonly checks: readonly string[] };
+  | { readonly reason: "checks-failed"; readonly checks: readonly string[] }
+  | { readonly reason: "questions-asked"; readonly questions: readonly Question[] };
 
 type RunEnded = Extract<AgentEvent, { type: "run-ended" }>;
 
-/** What to tell the user about how a run ended. An answer needs no message. */
+/** What to tell the user about how a run ended. An answer, or questions for the panel, need no message. */
 export const runEndMessage = (end: RunEnded): string | undefined => {
   switch (end.reason) {
     case "answered":
@@ -117,5 +122,7 @@ export const runEndMessage = (end: RunEnded): string | undefined => {
       return `The model sent the same failing call again and again, so Tau stopped the run: ${end.call}`;
     case "checks-failed":
       return `The run ended while the project's checks fail: ${end.checks.join(", ")}.`;
+    case "questions-asked":
+      return undefined;
   }
 };

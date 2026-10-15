@@ -34,7 +34,7 @@ import type { Entry, RunningProcess, SessionId } from "../../../session/Entry.ts
 import type { SessionStoreError } from "../../../session/SessionStoreError.ts";
 import type { Session, Sessions } from "../../../session/Sessions.ts";
 import type { SkillUses } from "../../../session/SkillUses.ts";
-import type { AgentEvent, Command, RunEnd, SavedModel } from "../../Client.ts";
+import type { AgentEvent, Command, RunEnd, RunOptions, SavedModel } from "../../Client.ts";
 import type { ContextMethod } from "../../ContextMethod.ts";
 import { historyFunction } from "../context/history.ts";
 import { historyEvents, replyProfiles } from "./history-events.ts";
@@ -50,6 +50,7 @@ import { makeOutputFiles, OutputFiles } from "../output/output-files.ts";
 import type { Commits, CommitSettings } from "../../Commits.ts";
 import { makeCommits } from "../commit/commits.ts";
 import { checksTool } from "../checks/checks-tool.ts";
+import { askQuestionTool } from "../questions/ask-question-tool.ts";
 import { type ProjectChecks, readProjectChecks } from "../checks/checks-file.ts";
 import type { RunContext } from "../loop/run-context.ts";
 import { projectFolders } from "../instructions/folders.ts";
@@ -200,6 +201,12 @@ type SessionRuns = {
   readonly steering: Ref.Ref<Steering>;
 };
 
+/** The tools a run has only sometimes: the checks, when the project has them, and the questions. */
+const optionalTools = (checks: Option.Option<ProjectChecks>, options: RunOptions) => [
+  ...Option.toArray(Option.flatMap(checks, checksTool)),
+  ...(options.askQuestions ? [askQuestionTool] : []),
+];
+
 /** Saves the prompt and runs the agent loop on it. */
 const runPrompt = (
   { services, session, processes, events, steering }: SessionRuns,
@@ -238,7 +245,7 @@ const runPrompt = (
       profile: yield* models.profile(model),
       languageModel: yield* models.languageModel(model, ConversationId.make(session.id), thinking),
       sessions,
-      tools: [run, ...Option.toArray(Option.flatMap(checks, checksTool)), ...method.tools],
+      tools: [run, ...optionalTools(checks, prompt.options), ...method.tools],
       view: method.view,
       nudge: method.nudge,
       contextOperations: method.operations,

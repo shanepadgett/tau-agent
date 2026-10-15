@@ -38,7 +38,7 @@ Built underneath but not reachable by the user yet: branching a session (storage
 | 1 | Daily driver: built; live checks, then the expired-login warning | [work/daily-driver.md](work/daily-driver.md) |
 | 2 | Thinking levels: built; live check (see live-checks.md) | [work/thinking.md](work/thinking.md) |
 | 3 | `/commit`, a built-in: built; live check (see live-checks.md) | [work/commit.md](work/commit.md) |
-| 4 | `/qna`, a built-in, soon: the model asks its open questions in a panel the user answers | [features.md](features.md) |
+| 4 | `/qna`, a built-in: built; live check (see live-checks.md) | [work/qna.md](work/qna.md) |
 | 4a | Web search and fetch as `run` functions, then `/references`: web built, live check pending; references built, live check pending | [work/web-and-references.md](work/web-and-references.md) |
 | 5 | Ctrl+C as cancel: it clears or cancels what is there, and quits only when there is nothing else | [work/tui.md](work/tui.md) |
 | 6 | The rest of 6b, sidebar: running processes, compaction state | [work/tui.md](work/tui.md) |

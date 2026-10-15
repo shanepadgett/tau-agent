@@ -31,6 +31,7 @@ export const runOptions = Effect.fn("runOptions")(function* (
     model: text === undefined ? undefined : yield* modelRef(text),
     thinking: DEFAULT_THINKING,
     maxTurns: settings.maxTurns,
+    askQuestions: false,
     timeouts: {
       run: secondsOr(settings.runTimeoutSeconds, DEFAULT_RUN_TIMEOUT),
       shell: secondsOr(settings.shellTimeoutSeconds, DEFAULT_SHELL_TIMEOUT),
