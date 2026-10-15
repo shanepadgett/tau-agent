@@ -42,6 +42,8 @@ export type RestartState = {
   readonly newCodeFailure: string | undefined;
   /** The chat runs the last good build because the newer one kept crashing. */
   readonly isOnLastGood: boolean;
+  /** Attention the chat asked for that waits until the reload settles. */
+  readonly attention: string | undefined;
 };
 
 export type RestartEvent =
@@ -64,6 +66,8 @@ export type RestartCommand =
       readonly build: Build;
       readonly session: string | undefined;
       readonly draft: string;
+      /** Held attention for the new chat to request once it is up. */
+      readonly attention: string | undefined;
     }
   | { readonly type: "prune"; readonly keep: readonly Build[] };
 
@@ -87,14 +91,17 @@ export const startingState = (first: Build, mode: RestartMode): RestartState => 
   hasCrashedEarly: false,
   newCodeFailure: undefined,
   isOnLastGood: false,
+  attention: undefined,
 });
 
 /**
  * Sends the chat the supervisor's conditions when they change, and to each new chat that has some
  * to show.
  */
-export const transition = (state: RestartState, event: RestartEvent): Step => {
-  const step = nextStep(state, event);
+export const transition = (state: RestartState, event: RestartEvent): Step =>
+  deliverAttention(withConditions(state, nextStep(state, event)));
+
+const withConditions = (state: RestartState, step: Step): Step => {
   const conditions = reloadConditions(step.state);
   const hasStarted = step.commands.some((command) => command.type === "start");
   const isNews = hasStarted && conditions.length > 0;
@@ -105,6 +112,38 @@ export const transition = (state: RestartState, event: RestartEvent): Step => {
     ...step,
     commands: [...step.commands, { type: "send", message: { type: "conditions", conditions } }],
   };
+};
+
+/**
+ * Held attention means that the user has something to see, so it waits while new code builds,
+ * checks or switches, and goes to the chat that has the result: the new chat when it starts, or the
+ * current one when no reload comes.
+ */
+const deliverAttention = (step: Step): Step => {
+  const { state } = step;
+  if (state.attention === undefined || isReloadComing(state)) return step;
+
+  return {
+    state: { ...state, attention: undefined },
+    commands: [
+      ...step.commands,
+      { type: "send", message: { type: "deliver-attention", message: state.attention } },
+    ],
+  };
+};
+
+const isReloadComing = (state: RestartState): boolean => {
+  switch (state.phase.kind) {
+    case "building":
+    case "checking":
+    case "handing-over":
+      return true;
+    case "ready":
+      return state.isAutomatic;
+    case "running":
+    case "stopped":
+      return false;
+  }
 };
 
 /** What the chat shows about Tau's own code: a fallback, new code that fails, or code that waits. */
@@ -210,6 +249,8 @@ const messageArrived = (state: RestartState, message: ToSupervisor): Step => {
       return switchWhenIdle({ ...state, isIdle: message.idle });
     case "restart-request":
       return switchWhenIdle({ ...state, isRestartRequested: true });
+    case "attention":
+      return stay({ ...state, attention: message.message });
     case "check-failed":
       return stay(state);
     case "handoff":
@@ -247,6 +288,8 @@ const handedOver = (state: RestartState, phase: Extract<Phase, { kind: "handing-
   const isNewBuild = phase.next.id !== state.current.id;
   const lastGood = isNewBuild ? state.current : state.lastGood;
   const keep = lastGood === undefined ? [phase.next] : [phase.next, lastGood];
+  // Code that changed again builds next, so the attention keeps waiting for that build.
+  const heldAgain = phase.changedAgain;
 
   const started: Step = {
     state: {
@@ -258,9 +301,16 @@ const handedOver = (state: RestartState, phase: Extract<Phase, { kind: "handing-
       isRestartRequested: false,
       hasCrashedEarly: false,
       isOnLastGood: isNewBuild ? false : state.isOnLastGood,
+      attention: heldAgain ? state.attention : undefined,
     },
     commands: [
-      { type: "start", build: phase.next, session: state.session, draft: phase.draft },
+      {
+        type: "start",
+        build: phase.next,
+        session: state.session,
+        draft: phase.draft,
+        attention: heldAgain ? undefined : state.attention,
+      },
       { type: "prune", keep },
     ],
   };
@@ -303,9 +353,9 @@ const childEnded = (state: RestartState, exit: Extract<RestartEvent, { type: "ex
 };
 
 const restart = (state: RestartState, build: Build, reason: string): Step => ({
-  state: { ...state, current: build, isIdle: false },
+  state: { ...state, current: build, isIdle: false, attention: undefined },
   commands: [
     { type: "log", text: reason },
-    { type: "start", build, session: state.session, draft: "" },
+    { type: "start", build, session: state.session, draft: "", attention: undefined },
   ],
 });

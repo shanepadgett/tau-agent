@@ -6,6 +6,7 @@
 import { dirname, resolve } from "node:path";
 import { Cause, Effect, Layer, Option, Stream } from "effect";
 import { Agent } from "../../core/Agent.ts";
+import { Settings } from "../../host/Settings.ts";
 import { Status } from "../../core/Status.ts";
 import type { SessionId } from "../../session/Entry.ts";
 import { Builds } from "../../supervisor/Builds.ts";
@@ -71,8 +72,9 @@ export const runSupervisedChat = Effect.fn("runSupervisedChat")(function* (
 
   yield* chat(link, flags.session, {
     options,
+    notifications: (yield* Settings).notifications,
     prompt: Option.getOrUndefined(flags.prompt),
-    link: restartLink(link, start.draft),
+    link: restartLink(link, start),
   });
 });
 
@@ -172,8 +174,14 @@ const chatAgent = Effect.fn("chatAgent")(function* (link: SupervisedLink) {
   return chatAgent;
 });
 
-const restartLink = (link: SupervisedLink, draft: string): RestartLink => ({
-  draft,
+const restartLink = (
+  link: SupervisedLink,
+  start: Extract<Effect.Success<SupervisedLink["start"]>, { type: "start-chat" }>,
+): RestartLink => ({
+  draft: start.draft,
+  attention: start.attention,
+  holdAttention: (message) => link.send({ type: "attention", message }),
+  deliveries: link.deliveries,
   reportActivity: (activity) => link.send({ type: "idle", idle: activity === "idle" }),
   requestRestart: link.send({ type: "restart-request" }),
   exitRequested: link.exitRequested,

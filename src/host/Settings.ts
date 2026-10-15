@@ -43,6 +43,12 @@ const SettingsFile = Schema.Struct({
   agentsFiles: Schema.optional(Schema.Boolean),
   /** `false` makes `/restart` the only way to restart into Tau's changed code. */
   autoRestart: Schema.optional(Schema.Boolean),
+  notifications: Schema.optional(
+    Schema.Struct({
+      enabled: Schema.optional(Schema.Boolean),
+      sound: Schema.optional(Schema.Boolean),
+    }),
+  ),
   compaction: Schema.optional(CompactionSettings),
   /** How `/commit` ends: `push` is `"ask"` (the default), `true` or `false`. */
   commit: Schema.optional(
@@ -80,6 +86,7 @@ export class Settings extends Context.Service<
     readonly agentsFiles: boolean;
     /** Whether Tau restarts into its changed code by itself when it is idle. */
     readonly autoRestart: boolean;
+    readonly notifications: { readonly enabled: boolean; readonly sound: boolean };
     readonly logLevel: LogLevel;
   }
 >()("tau/host/Settings") {
@@ -103,6 +110,7 @@ type SettingsFileContent = {
   readonly run: RunSettings;
   readonly agentsFiles: boolean;
   readonly autoRestart: boolean;
+  readonly notifications: { readonly enabled: boolean; readonly sound: boolean };
   readonly logLevel: LogLevel;
   readonly compaction: CompactionSettings;
   readonly commit: CommitSettings;
@@ -115,20 +123,21 @@ const noRunSettings: RunSettings = {
   shellTimeoutSeconds: undefined,
 };
 
+const noSettings: SettingsFileContent = {
+  providers: builtInProviders,
+  providerSettings: new Map(),
+  run: noRunSettings,
+  agentsFiles: true,
+  autoRestart: true,
+  notifications: { enabled: true, sound: true },
+  logLevel: "Warn",
+  compaction: {},
+  commit: { push: "ask", avoidBreakingChanges: false },
+};
+
 /** If there is no file, Tau uses the built-in providers only. */
 const readSettingsFile = Effect.fn("readSettingsFile")(function* (path: string) {
   const fileSystem = yield* FileSystem.FileSystem;
-
-  const noSettings: SettingsFileContent = {
-    providers: builtInProviders,
-    providerSettings: new Map(),
-    run: noRunSettings,
-    agentsFiles: true,
-    autoRestart: true,
-    logLevel: "Warn",
-    compaction: {},
-    commit: { push: "ask", avoidBreakingChanges: false },
-  };
 
   if (!(yield* fileSystem.exists(path))) return noSettings;
 
@@ -170,6 +179,10 @@ const readSettingsFile = Effect.fn("readSettingsFile")(function* (path: string) 
     run,
     agentsFiles: file.agentsFiles ?? true,
     autoRestart: file.autoRestart ?? true,
+    notifications: {
+      enabled: file.notifications?.enabled ?? true,
+      sound: file.notifications?.sound ?? true,
+    },
     logLevel: file.logLevel ?? "Warn",
     compaction: file.compaction ?? {},
     commit: {

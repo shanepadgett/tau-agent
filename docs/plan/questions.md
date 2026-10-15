@@ -10,3 +10,8 @@ References, round 2 ([work/web-and-references.md](work/web-and-references.md#ref
 4. Rows show the name and branch only; no owner and no dirty mark, so opening runs no git. Agree?
 5. The text the model reads, and the attached list kept as a session entry: agree?
 6. The mockup: approve, or what changes?
+
+Notifications ([work/notifications.md](work/notifications.md)):
+
+1. Must custom audio also work when Tau runs remotely over SSH? Terminal banners and host-local audio have different remote behavior.
+

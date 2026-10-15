@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { createTestRenderer, type TestRendererSetup } from "@opentui/core/testing";
 import {
   Context,
@@ -8,6 +8,7 @@ import {
   FileSystem,
   Layer,
   Option,
+  Queue,
   Schema,
   Stream,
 } from "effect";
@@ -51,6 +52,9 @@ const noRestarts: RestartLink = {
   reportActivity: () => Effect.void,
   requestRestart: Effect.void,
   exitRequested: Effect.never,
+  attention: undefined,
+  holdAttention: () => Effect.void,
+  deliveries: Stream.empty,
 };
 
 /** What the chat gets: everything but the agent, which `startChat` adds. */
@@ -58,6 +62,7 @@ type TestSetup = Omit<ChatSetup, "agent">;
 
 const withoutRestarts = (chatOptions: ChatOptions): TestSetup => ({
   options: chatOptions,
+  notifications: { enabled: false, sound: false },
   prompt: undefined,
   link: noRestarts,
 });
@@ -75,9 +80,25 @@ const fakeSupervisor = Effect.fn("fakeSupervisor")(function* (draft: string) {
     reportActivity: (activity) => Effect.sync(() => reports.push(activity)),
     requestRestart: Effect.sync(() => reports.push("restart-request")),
     exitRequested: Deferred.await(exitRequested),
+    attention: undefined,
+    holdAttention: () => Effect.void,
+    deliveries: Stream.empty,
   };
 
   return { link, exitRequested, reports };
+});
+
+/** A supervisor that has no new code, so it sends every held attention straight back. */
+const echoingSupervisor = Effect.fn("echoingSupervisor")(function* () {
+  const held = yield* Queue.unbounded<string>();
+
+  const link: RestartLink = {
+    ...noRestarts,
+    holdAttention: (message) => Queue.offer(held, message).pipe(Effect.asVoid),
+    deliveries: Stream.fromQueue(held),
+  };
+
+  return link;
 });
 
 /**
@@ -193,6 +214,34 @@ const frameWhere = (terminal: TestRendererSetup, isWanted: (frame: string) => bo
   });
 
 describe("the chat in the terminal", () => {
+  test("a completed live turn requests a notification through the renderer", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([textReply("Notification answer.")]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+
+        const { terminal } = yield* startChat(agent, opened, {
+          ...withoutRestarts(options),
+          link: yield* echoingSupervisor(),
+          notifications: { enabled: true, sound: false },
+        });
+
+        const delivered = yield* Deferred.make<void>();
+
+        const banner = spyOn(terminal.renderer, "triggerNotification").mockImplementation(() => {
+          Deferred.doneUnsafe(delivered, Effect.void);
+          return true;
+        });
+
+        terminal.renderer.emit("blur");
+        yield* Effect.promise(() => terminal.mockInput.typeText("Answer this."));
+        terminal.mockInput.pressEnter();
+        yield* Deferred.await(delivered);
+        expect(banner.mock.calls).toEqual([["Response ready", "Tau"]]);
+        expect(yield* frameWith(terminal, "Notification answer.")).toContain("Answer this.");
+      }).pipe(Effect.scoped),
+    ));
+
   test("a sent prompt shows with its tool calls and answer", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
@@ -416,7 +465,7 @@ describe("the chat in the terminal", () => {
         const agent = yield* harness.startAgent([]);
         const opened = yield* agent.open(Option.none(), harness.directory);
         const supervisor = yield* fakeSupervisor("carried over");
-        const setup = { options, prompt: undefined, link: supervisor.link };
+        const setup = { ...withoutRestarts(options), link: supervisor.link };
         const { terminal, chat } = yield* startChat(agent, opened, setup);
 
         yield* Effect.promise(() => terminal.mockInput.typeText(" and more"));
@@ -437,7 +486,7 @@ describe("the chat in the terminal", () => {
         const agent = yield* harness.startAgent([textReply("Hello.")]);
         const opened = yield* agent.open(Option.none(), harness.directory);
         const supervisor = yield* fakeSupervisor("");
-        const setup = { options, prompt: undefined, link: supervisor.link };
+        const setup = { ...withoutRestarts(options), link: supervisor.link };
         const { terminal } = yield* startChat(agent, opened, setup);
 
         yield* Effect.promise(() => terminal.mockInput.typeText("Hi."));
@@ -459,7 +508,7 @@ describe("the chat in the terminal", () => {
         const agent = yield* harness.startAgent([Stream.never]);
         const opened = yield* agent.open(Option.none(), harness.directory);
         const supervisor = yield* fakeSupervisor("");
-        const setup = { options, prompt: undefined, link: supervisor.link };
+        const setup = { ...withoutRestarts(options), link: supervisor.link };
         const { terminal } = yield* startChat(agent, opened, setup);
 
         yield* Effect.promise(() => terminal.mockInput.typeText("Hi."));

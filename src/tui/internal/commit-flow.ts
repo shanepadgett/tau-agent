@@ -7,6 +7,7 @@ import { Effect, Option } from "effect";
 import { createSignal } from "solid-js";
 import type { OpenSession } from "../../core/Agent.ts";
 import type { CommitStart, PlannedCommit, PushTarget } from "../../core/Commits.ts";
+import type { Attention } from "../Notifications.ts";
 import type { ChatAction } from "./chat-state.ts";
 import { type ModelRef, refText } from "./model-picker.ts";
 
@@ -23,6 +24,7 @@ export type CommitStep =
 export type CommitAnswer = "yes" | "no";
 
 export type CommitFlowTarget = {
+  readonly attention: Attention;
   readonly opened: OpenSession;
   readonly apply: (action: ChatAction) => void;
   readonly model: () => ModelRef | undefined;
@@ -56,12 +58,14 @@ export const commitFlow = (target: CommitFlowTarget) => {
   const steps: Steps = {
     commits: target.opened.commits,
     show: setStep,
-    ask: Effect.callback<CommitAnswer>((resume) => {
-      setAnswer(() => (given: CommitAnswer) => {
-        setAnswer(undefined);
-        resume(Effect.succeed(given));
-      });
-    }),
+    ask: target.attention.waitForUser(
+      Effect.callback<CommitAnswer>((resume) => {
+        setAnswer(() => (given: CommitAnswer) => {
+          setAnswer(undefined);
+          resume(Effect.succeed(given));
+        });
+      }),
+    ),
     target,
   };
 

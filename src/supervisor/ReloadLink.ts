@@ -16,6 +16,8 @@ export type SupervisedLink = {
   readonly exitRequested: Effect.Effect<void>;
   /** Each new list of the supervisor's conditions. Each list goes to one reader only. */
   readonly conditions: Stream.Stream<readonly ReloadCondition[]>;
+  /** Each message the supervisor says to request attention for now. */
+  readonly deliveries: Stream.Stream<string>;
   readonly send: (message: ToSupervisor) => Effect.Effect<void>;
 };
 
@@ -35,6 +37,7 @@ export class ReloadLink extends Context.Service<
       const starts = yield* Queue.unbounded<StartMessage>();
       const exitRequested = yield* Deferred.make<void>();
       const conditions = yield* Queue.unbounded<readonly ReloadCondition[]>();
+      const deliveries = yield* Queue.unbounded<string>();
 
       const receive: NodeJS.MessageListener = (message) => {
         if (!Schema.is(ToChild)(message)) return;
@@ -49,6 +52,9 @@ export class ReloadLink extends Context.Service<
             return;
           case "conditions":
             Queue.offerUnsafe(conditions, message.conditions);
+            return;
+          case "deliver-attention":
+            Queue.offerUnsafe(deliveries, message.message);
         }
       };
 
@@ -66,6 +72,7 @@ export class ReloadLink extends Context.Service<
         start: Queue.take(starts),
         exitRequested: Deferred.await(exitRequested),
         conditions: Stream.fromQueue(conditions),
+        deliveries: Stream.fromQueue(deliveries),
         // The callback runs once the message is on its way, so a handoff sent just before the
         // process disconnects still arrives.
         send: (message) =>

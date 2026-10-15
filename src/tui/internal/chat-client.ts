@@ -7,7 +7,8 @@ import { Deferred, Effect, Fiber, type Scope, Stream } from "effect";
 import { type Accessor, createSignal } from "solid-js";
 import { createStore, reconcile, unwrap } from "solid-js/store";
 import type { Agent, OpenSession } from "../../core/Agent.ts";
-import type { RunOptions } from "../../core/Client.ts";
+import type { AgentEvent, RunOptions } from "../../core/Client.ts";
+import type { Attention, NotificationOptions } from "../Notifications.ts";
 import type { SidebarChoice } from "../../core/TuiMemory.ts";
 import { type Condition, Status } from "../../core/Status.ts";
 import { chatCommands, type CommandTarget } from "./chat-commands.ts";
@@ -16,6 +17,7 @@ import { type ChatAction, type ChatState, isIdle, reduce, replay } from "./chat-
 import type { CommandInfo } from "./command-suggestions.ts";
 import { type ListedModel, type ModelRef, refText } from "./model-picker.ts";
 import type { SidebarMemory } from "./sidebar-state.ts";
+import { turnAttention } from "./turn-attention.ts";
 import { thinkingChoice } from "./thinking-choice.ts";
 import type { PickerList } from "./Picker.tsx";
 
@@ -41,6 +43,15 @@ export type RestartLink = {
   readonly requestRestart: Effect.Effect<void>;
   /** Completes when the supervisor wants the chat to end, so that the new code can start. */
   readonly exitRequested: Effect.Effect<void>;
+  /** Attention that the chat before held for the reload, to request once this chat is up. */
+  readonly attention: string | undefined;
+  /**
+   * Gives the supervisor the attention that a run's end asks for. The supervisor holds it while new
+   * code loads, then has the chat that the user should see request it.
+   */
+  readonly holdAttention: (message: string) => Effect.Effect<void>;
+  /** The messages that the supervisor has the chat request attention for now. */
+  readonly deliveries: Stream.Stream<string>;
 };
 
 /**
@@ -61,6 +72,7 @@ export type ChatAgent = Pick<
 
 export type ChatSetup = {
   readonly options: ChatOptions;
+  readonly notifications: NotificationOptions;
   /** The prompt to send first, if any. */
   readonly prompt: string | undefined;
   readonly link: RestartLink;
@@ -119,6 +131,7 @@ export type ChatClient = {
 export const chatClient = Effect.fn("chatClient")(function* (
   opened: OpenSession,
   setup: ChatSetup,
+  attention: Attention,
 ) {
   const { link, agent } = setup;
   const events = yield* opened.subscribe;
@@ -136,12 +149,12 @@ export const chatClient = Effect.fn("chatClient")(function* (
 
   reportActivity();
 
-  yield* Effect.forkScoped(followEvents(events, apply));
+  yield* followSession(events, apply, { link, attention });
 
   yield* Effect.forkScoped(Effect.andThen(link.exitRequested, restart(chat, editor, end)));
   const prompts = yield* promptSender({ opened, agent, chat, apply, options: setup.options });
 
-  const { commit, run, list, picker, closePicker } = commandsOf(prompts, {
+  const { commit, run, list, picker, closePicker } = commandsOf(prompts, attention, {
     chat,
     apply,
     agent,
@@ -183,16 +196,34 @@ export const chatClient = Effect.fn("chatClient")(function* (
   return { client, ended: Deferred.await(ended) };
 });
 
+/**
+ * Applies the session's events to the chat, as they come. A run's end goes to the supervisor, which
+ * has the chat request attention once the reload settles; the chat also requests what the chat
+ * before held, and each message the supervisor sends back later.
+ */
+const followSession = Effect.fn("followSession")(function* (
+  events: Effect.Success<OpenSession["subscribe"]>,
+  apply: (action: ChatAction) => void,
+  attending: { readonly link: RestartLink; readonly attention: Attention },
+) {
+  const { link, attention } = attending;
+  const notify = turnAttention({ request: link.holdAttention });
+  yield* Effect.forkScoped(followEvents(events, apply, notify));
+  yield* Effect.forkScoped(link.deliveries.pipe(Stream.runForEach(attention.request)));
+  if (link.attention !== undefined) yield* Effect.forkScoped(attention.request(link.attention));
+});
+
 /** Applies the session's events to the chat, as they come. */
 const followEvents = (
   events: Effect.Success<OpenSession["subscribe"]>,
   apply: (action: ChatAction) => void,
+  notify: (event: AgentEvent) => Effect.Effect<void>,
 ) =>
   Stream.fromSubscription(events).pipe(
     Stream.runForEach((action) =>
       Effect.sync(() => {
         apply(action);
-      }),
+      }).pipe(Effect.andThen(notify(action))),
     ),
   );
 
@@ -328,9 +359,11 @@ const runInBackground = (effect: Effect.Effect<void>) => {
 /** The chat's commands, `/commit` among them. */
 const commandsOf = (
   prompts: Pick<Effect.Success<ReturnType<typeof promptSender>>, "model" | "send">,
+  attention: Attention,
   target: Omit<CommandTarget, "commit" | "fork">,
 ) => {
   const commit = commitFlow({
+    attention,
     opened: target.opened,
     apply: target.apply,
     model: prompts.model,

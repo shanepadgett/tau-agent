@@ -29,9 +29,15 @@ const startChat = Effect.fn("startChat")(function* (
   build: Build,
   args: readonly string[],
   draft: string,
+  attention: string | undefined,
 ) {
   const child = yield* spawnIpcChild<ToChild>([...build.command, ...args], "terminal");
-  yield* child.send({ type: "start-chat", draft });
+
+  yield* child.send(
+    attention === undefined
+      ? { type: "start-chat", draft }
+      : { type: "start-chat", draft, attention },
+  );
 
   const chat: RunningChat = {
     messages: child.messages.pipe(Stream.filter(Schema.is(ToSupervisor))),
@@ -67,11 +73,15 @@ const check = Effect.fn("check")(function* (build: Build) {
 export class Children extends Context.Service<
   Children,
   {
-    /** Starts the chat of `build` with Tau's `args`, and `draft` in its input editor. */
+    /**
+     * Starts the chat of `build` with Tau's `args`, and `draft` in its input editor. The chat
+     * requests `attention` once it is up.
+     */
     readonly startChat: (
       build: Build,
       args: readonly string[],
       draft: string,
+      attention: string | undefined,
     ) => Effect.Effect<RunningChat, never, Scope.Scope>;
     /** Loads `build` without the terminal or the database, and fails when it does not start. */
     readonly check: (build: Build) => Effect.Effect<void, CheckFailed>;

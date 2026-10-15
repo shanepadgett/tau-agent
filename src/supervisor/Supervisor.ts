@@ -62,7 +62,15 @@ export const superviseChat = Effect.fn("superviseChat")(function* (start: Superv
 
   const first = yield* builds.first;
   let state: RestartState = startingState(first, start.mode);
-  const firstStart: StartCommand = { type: "start", build: first, session: undefined, draft: "" };
+
+  const firstStart: StartCommand = {
+    type: "start",
+    build: first,
+    session: undefined,
+    draft: "",
+    attention: undefined,
+  };
+
   let chat = yield* startChat(firstStart, start, offer);
 
   while (state.phase.kind !== "stopped") {
@@ -136,7 +144,7 @@ const startChat = Effect.fn("startChat")(function* (
   const scope = yield* Scope.make();
 
   const chat = yield* children
-    .startChat(command.build, start.argsFor(command.session), command.draft)
+    .startChat(command.build, start.argsFor(command.session), command.draft, command.attention)
     .pipe(Scope.provide(scope));
 
   const startedAt = yield* Clock.currentTimeMillis;

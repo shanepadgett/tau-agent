@@ -35,6 +35,16 @@ const HANDOFF: RestartEvent = {
   message: { type: "handoff", session: "s1", draft: "unsent" },
 };
 
+const ATTENTION: RestartEvent = {
+  type: "message",
+  message: { type: "attention", message: "Response ready" },
+};
+
+const DELIVER: RestartCommand = {
+  type: "send",
+  message: { type: "deliver-attention", message: "Response ready" },
+};
+
 const crashed = (ranMillis: number): RestartEvent => ({ type: "exited", code: 1, ranMillis });
 const QUIT: RestartEvent = { type: "exited", code: 0, ranMillis: LATE };
 const CHANGED: RestartEvent = { type: "source-changed" };
@@ -202,6 +212,76 @@ const cases: Case[] = [
     events: [...BUSY, CHANGED, FAILED, ...NEW_CODE],
     state: { phase: { kind: "ready", candidate: SECOND } },
     commands: [{ type: "build" }, FAILURE, { type: "build" }, { type: "check" }, NONE],
+  },
+  {
+    name: "attention with no new code goes back to the chat at once",
+    mode: "automatic",
+    events: [...OPEN, ATTENTION],
+    state: { attention: undefined },
+    commands: [DELIVER],
+  },
+  {
+    name: "attention waits while new code builds",
+    mode: "automatic",
+    events: [...OPEN, CHANGED, ATTENTION],
+    state: { attention: "Response ready", phase: { kind: "building" } },
+    commands: [{ type: "build" }],
+  },
+  {
+    name: "attention held through a build goes to the new chat when it starts",
+    mode: "automatic",
+    events: [
+      ...BUSY,
+      CHANGED,
+      ATTENTION,
+      IDLE,
+      { type: "built", build: SECOND },
+      { type: "checked", build: SECOND },
+      HANDOFF,
+      QUIT,
+    ],
+    state: { attention: undefined, phase: { kind: "running" }, current: SECOND },
+    commands: [
+      { type: "build" },
+      { type: "check" },
+      EXIT,
+      { type: "start", build: SECOND, attention: "Response ready" },
+      { type: "prune" },
+    ],
+  },
+  {
+    name: "attention sent just after the chat is told to exit goes to the new chat",
+    mode: "automatic",
+    events: [...BUSY, ...NEW_CODE, IDLE, ATTENTION, HANDOFF, QUIT],
+    state: { attention: undefined, current: SECOND },
+    commands: [
+      { type: "build" },
+      { type: "check" },
+      EXIT,
+      { type: "start", build: SECOND, attention: "Response ready" },
+      { type: "prune" },
+    ],
+  },
+  {
+    name: "attention held while the code changes again waits for the latest build",
+    mode: "automatic",
+    events: [...BUSY, CHANGED, ATTENTION, CHANGED, { type: "built", build: SECOND }],
+    state: { attention: "Response ready", phase: { kind: "building" } },
+    commands: [{ type: "build" }, { type: "build" }],
+  },
+  {
+    name: "attention goes to the current chat when the new code fails",
+    mode: "automatic",
+    events: [...OPEN, CHANGED, ATTENTION, FAILED],
+    state: { attention: undefined, phase: { kind: "running" } },
+    commands: [{ type: "build" }, FAILURE, DELIVER],
+  },
+  {
+    name: "without autoRestart, attention goes to the chat while the code waits for /restart",
+    mode: "manual",
+    events: [...OPEN, ...NEW_CODE, ATTENTION],
+    state: { attention: undefined, phase: { kind: "ready" } },
+    commands: [{ type: "build" }, { type: "check" }, conditions(["reload.code", "info"]), DELIVER],
   },
   {
     name: "a quit stops",

@@ -5,6 +5,7 @@
 
 import { type CliRenderer, createCliRenderer } from "@opentui/core";
 import { Effect } from "effect";
+import { type Attention, openAttention } from "./Notifications.ts";
 import { createSignal } from "solid-js";
 import type { OpenSession } from "../core/Agent.ts";
 import { showChat } from "./internal/App.tsx";
@@ -60,6 +61,7 @@ export const runTui = Effect.fn("runTui")(function* (
   opened: OpenSession,
   setup: ChatSetup,
 ) {
+  const attention = yield* openAttention(renderer, setup.notifications);
   const [client, setClient] = createSignal<ChatClient>();
   let isShown = false;
 
@@ -71,15 +73,20 @@ export const runTui = Effect.fn("runTui")(function* (
       return Effect.promise(() => showChat(renderer, client));
     });
 
-  let end = yield* chatSession(opened, setup, show);
+  let end = yield* chatSession(opened, setup, show, attention);
+
   // A later session starts with an empty input and no first prompt.
-  const later: ChatSetup = { ...setup, prompt: undefined, link: { ...setup.link, draft: "" } };
+  const later: ChatSetup = {
+    ...setup,
+    prompt: undefined,
+    link: { ...setup.link, draft: "", attention: undefined },
+  };
 
   while (end.reason === "open") {
     const session = end.session;
 
     end = yield* setup.agent.open(session).pipe(
-      Effect.flatMap((next) => chatSession(next, later, show)),
+      Effect.flatMap((next) => chatSession(next, later, show, attention)),
       Effect.scoped,
     );
   }
@@ -92,8 +99,9 @@ const chatSession = Effect.fn("chatSession")(function* (
   opened: OpenSession,
   setup: ChatSetup,
   show: (client: ChatClient) => Effect.Effect<void>,
+  attention: Attention,
 ) {
-  const { client, ended } = yield* chatClient(opened, setup);
+  const { client, ended } = yield* chatClient(opened, setup, attention);
   if (setup.prompt !== undefined) client.send(setup.prompt);
   yield* show(client);
   const end: ChatEnd = yield* ended;
