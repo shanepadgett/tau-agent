@@ -1,6 +1,6 @@
 # Change Tau's settings
 
-`~/.tau/settings.json` sets the model, run limits, extra model providers and whether Tau reads `AGENTS.md` files. Without the file, Tau uses its defaults.
+Set global defaults in `~/.tau/settings.json` and override them for one project in `.tau/settings.json`.
 
 1. Create or open `~/.tau/settings.json`. Comments are allowed.
 2. Add the settings you need:
@@ -44,6 +44,21 @@
 
 3. Run Tau again. Tau reads the file when it starts.
 
+## Override settings for one project
+
+1. Create `.tau/settings.json` at the Git repository root. Outside Git, create it in the directory where you launch Tau.
+2. Add the fields to override. To suppress breaking-change labels in this repository’s commit messages:
+
+   ```json
+   { "commit": { "avoidBreakingChanges": true } }
+   ```
+
+3. Restart Tau to read the settings.
+
+The project file supports the same settings and comments as the global file. Project values override global values field by field; nested objects merge. This example inherits your global `commit.push` preference. Missing fields use global values, then built-in defaults.
+
+Tau finds the repository-root file even when launched from a subdirectory. Each worktree uses its own file. You can check the file into Git to share it with your team or ignore it for personal use. There is no separate personal-project settings file.
+
 ## What happens
 
 - `timeouts.run` limits one `run` call (default 600 seconds). `timeouts.shell` limits one shell command (default 120 seconds). The run limit always wins.
@@ -61,5 +76,7 @@
 
 ## Limits
 
-- A wrong value stops Tau with a message that names the file and the setting.
+- A wrong value in either file stops Tau with a message that names the file and the setting.
+- Project settings can change provider connections. Review `.tau/settings.json` before running Tau in an unfamiliar repository.
+- An explicit `--model` choice overrides the model in settings.
 - Tau reads the file only when it starts.

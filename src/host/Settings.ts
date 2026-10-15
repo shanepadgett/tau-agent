@@ -1,7 +1,7 @@
-/** Reads the user's settings from `~/.tau/settings.json`. The file can contain comments. */
+/** Reads global and project settings, merging project values over global values before applying defaults. Both files can contain comments. */
 
 import { join } from "node:path";
-import { Context, Effect, FileSystem, Layer, Schema } from "effect";
+import { Context, Effect, FileSystem, Layer, Predicate, Schema } from "effect";
 import { DecisionSettings, ModelSettings, Protocol } from "../ai/ModelProfile.ts";
 import {
   builtInProviders,
@@ -13,6 +13,7 @@ import {
 import { TauHome } from "../database/TauHome.ts";
 import { CompactionSettings, ContextSettings } from "../core/ContextSettings.ts";
 import { CommitSettings } from "../core/Commits.ts";
+import { ProjectDirectory } from "./ProjectDirectory.ts";
 
 const ProviderEntry = Schema.Struct({
   protocol: Schema.optional(Protocol),
@@ -77,6 +78,25 @@ class SettingsInvalid extends Schema.TaggedError<SettingsInvalid>()("SettingsInv
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
+const readSettings = Effect.gen(function* () {
+  const home = yield* TauHome;
+  const project = yield* ProjectDirectory;
+
+  const globalPath = join(home.directory, "settings.json");
+  const projectPath = join(project.directory, ".tau", "settings.json");
+
+  const globalFile = yield* readSettingsFile(globalPath);
+  const projectFile = yield* readSettingsFile(projectPath);
+
+  const file = yield* Schema.decodeUnknownEffect(SettingsFile)(
+    mergeSettings(globalFile, projectFile),
+  );
+
+  return yield* resolveSettings(file, (id) =>
+    Object.hasOwn(projectFile.providers ?? {}, id) ? projectPath : globalPath,
+  );
+});
+
 /** The settings that change how a run behaves. The provider table is a separate service of the AI layer. */
 export class Settings extends Context.Service<
   Settings,
@@ -90,9 +110,9 @@ export class Settings extends Context.Service<
     readonly logLevel: LogLevel;
   }
 >()("tau/host/Settings") {
-  /** Reads `settings.json` in Tau's home folder once, and gives the run settings and the provider table. */
+  /** Reads both settings files once and provides the resolved settings services. */
   static readonly layer = Layer.effectContext(
-    TauHome.use(({ directory }) => readSettingsFile(join(directory, "settings.json"))).pipe(
+    readSettings.pipe(
       Effect.map(({ providers, providerSettings, compaction, commit, ...settings }) =>
         Context.make(Settings, settings).pipe(
           Context.add(ProviderTable, { providers, settings: providerSettings }),
@@ -116,30 +136,27 @@ type SettingsFileContent = {
   readonly commit: CommitSettings;
 };
 
-const noRunSettings: RunSettings = {
-  model: undefined,
-  maxTurns: undefined,
-  runTimeoutSeconds: undefined,
-  shellTimeoutSeconds: undefined,
-};
+type SettingValue = string | number | boolean | undefined | SettingsObject;
+type SettingsObject = { readonly [key: string]: SettingValue };
 
-const noSettings: SettingsFileContent = {
-  providers: builtInProviders,
-  providerSettings: new Map(),
-  run: noRunSettings,
-  agentsFiles: true,
-  autoRestart: true,
-  notifications: { enabled: true, sound: true },
-  logLevel: "Warn",
-  compaction: {},
-  commit: { push: "ask", avoidBreakingChanges: false },
-};
+const mergeSettings = (base: SettingsObject, overrides: SettingsObject): SettingsObject =>
+  Object.fromEntries(
+    Object.entries({ ...base, ...overrides }).map(([key, value]) => {
+      const previous = base[key];
 
-/** If there is no file, Tau uses the built-in providers only. */
+      return [
+        key,
+        Predicate.isObject(previous) && Predicate.isObject(value)
+          ? mergeSettings(previous, value)
+          : value,
+      ];
+    }),
+  );
+
 const readSettingsFile = Effect.fn("readSettingsFile")(function* (path: string) {
   const fileSystem = yield* FileSystem.FileSystem;
 
-  if (!(yield* fileSystem.exists(path))) return noSettings;
+  if (!(yield* fileSystem.exists(path))) return {};
 
   const text = yield* fileSystem
     .readFileString(path)
@@ -150,12 +167,20 @@ const readSettingsFile = Effect.fn("readSettingsFile")(function* (path: string) 
     catch: (cause) => unreadable(path, "is not valid JSON", cause),
   });
 
-  const file = yield* Schema.decodeUnknownEffect(SettingsFile)(parsed).pipe(
+  return yield* Schema.decodeUnknownEffect(SettingsFile)(parsed).pipe(
     Effect.mapError((cause) => unreadable(path, `has a wrong value: ${cause.message}`, cause)),
   );
+});
 
+const resolveSettings = Effect.fn("resolveSettings")(function* (
+  file: typeof SettingsFile.Type,
+  providerPath: (id: string) => string,
+) {
   const entries = Object.entries(file.providers ?? {});
-  const added = yield* Effect.forEach(entries, ([id, entry]) => addedProviders(path, id, entry));
+
+  const added = yield* Effect.forEach(entries, ([id, entry]) =>
+    addedProviders(providerPath(id), id, entry),
+  );
 
   const providerSettings = new Map(
     entries.map(([id, entry]): [ProviderId, ProviderSettings] => [
@@ -214,6 +239,7 @@ const addedProviders = (path: string, id: string, entry: ProviderEntry) => {
   }
 
   if (isBuiltIn) return Effect.succeed([]);
+
   const { protocol, apiUrl, apiKeyEnv } = entry;
 
   if (protocol === undefined || apiUrl === undefined)

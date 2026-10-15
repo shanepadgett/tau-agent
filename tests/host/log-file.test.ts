@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { logFileLayer } from "../../src/host/LogFile.ts";
 import { Settings } from "../../src/host/Settings.ts";
+import { ProjectDirectory } from "../../src/host/ProjectDirectory.ts";
 
 const DAY_MILLIS = 24 * 60 * 60 * 1000;
 
@@ -16,10 +17,17 @@ const withLogFile = <A>(
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const home = yield* fileSystem.makeTempDirectoryScoped();
+
     const logs = join(home, "logs");
     yield* prepare(logs);
 
-    const layer = logFileLayer.pipe(Layer.provide(Settings.layer), Layer.provide(TauHome.at(home)));
+    const layer = logFileLayer.pipe(
+      Layer.provide(
+        Settings.layer.pipe(Layer.provide(Layer.succeed(ProjectDirectory, { directory: home }))),
+      ),
+      Layer.provide(TauHome.at(home)),
+    );
+
     yield* Effect.scoped(Effect.provide(effect, layer));
     return logs;
   });
@@ -39,6 +47,7 @@ describe("the log file", () => {
         );
 
         const logs = yield* withLogFile(logged, () => Effect.void);
+
         const [name] = yield* fileSystem.readDirectory(logs);
         expect(name).toMatch(/^\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d-\d+\.jsonl$/);
 
@@ -64,13 +73,16 @@ describe("the log file", () => {
           Effect.gen(function* () {
             yield* fileSystem.makeDirectory(folder, { recursive: true });
             yield* fileSystem.writeFileString(join(folder, "old.jsonl"), "");
+
             yield* fileSystem.writeFileString(join(folder, "recent.jsonl"), "");
             const old = new Date(Date.now() - 15 * DAY_MILLIS);
+
             yield* fileSystem.utimes(join(folder, "old.jsonl"), old, old);
           }),
         );
 
         const names = yield* fileSystem.readDirectory(logs);
+
         expect(names).toContain("recent.jsonl");
         expect(names).not.toContain("old.jsonl");
       }),

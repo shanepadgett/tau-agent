@@ -21,7 +21,7 @@
 
 ## Settings
 
-Set these in `~/.tau/settings.json`:
+Set these in `~/.tau/settings.json`, or override them for one repository in its root `.tau/settings.json` (see [Settings](settings.md)):
 
 ```json
 { "commit": { "push": "ask", "avoidBreakingChanges": false } }

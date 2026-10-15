@@ -3,7 +3,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { Command } from "effect/cli";
 import { FetchHttpClient } from "effect/http";
 import packageJson from "../../package.json" with { type: "json" };
@@ -16,6 +16,8 @@ import { stashesLayer } from "../host/Stashes.ts";
 import { hostIdLayer } from "../host/HostId.ts";
 import { logFileLayer } from "../host/LogFile.ts";
 import { referencesLayer } from "../host/References.ts";
+import { ProjectDirectory } from "../host/ProjectDirectory.ts";
+import { repositoryRoot } from "../workspace/Repository.ts";
 import { Settings } from "../host/Settings.ts";
 import { tuiMemoryLayer } from "../host/TuiMemory.ts";
 import { outputFolderLayer } from "../host/OutputFolder.ts";
@@ -44,6 +46,16 @@ const appLayer = Layer.mergeAll(
 ).pipe(
   Layer.provideMerge(FetchHttpClient.layer),
   Layer.provideMerge(Settings.layer),
+  Layer.provideMerge(
+    Layer.effect(
+      ProjectDirectory,
+      Effect.gen(function* () {
+        const directory = process.cwd();
+        const root = yield* repositoryRoot(directory);
+        return { directory: Option.getOrElse(root, () => directory) };
+      }),
+    ),
+  ),
   Layer.provideMerge(TauHome.at(TAU_DIRECTORY)),
   Layer.provideMerge(BunServices.layer),
 );

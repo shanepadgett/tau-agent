@@ -25,6 +25,7 @@ import { TauHome } from "../../src/database/TauHome.ts";
 import { catalogCacheLayer } from "../../src/host/CatalogCache.ts";
 import { credentialStoreLayer } from "../../src/host/CredentialStore.ts";
 import { Settings } from "../../src/host/Settings.ts";
+import { ProjectDirectory } from "../../src/host/ProjectDirectory.ts";
 
 const CODEX_CONTEXT_TOKENS = 272_000;
 const NEW_CONTEXT_TOKENS = 123_456;
@@ -297,7 +298,11 @@ describe("catalog", () => {
         yield* fileSystem.writeFileString(settingsPath, settingsText);
 
         const exit = yield* Effect.exit(
-          Layer.build(Settings.layer.pipe(Layer.provide(TauHome.at(tauDirectory)))),
+          Layer.build(
+            Settings.layer
+              .pipe(Layer.provide(Layer.succeed(ProjectDirectory, { directory: tauDirectory })))
+              .pipe(Layer.provide(TauHome.at(tauDirectory))),
+          ),
         );
 
         expect(Exit.isFailure(exit) && String(exit.cause)).toContain(settingsPath);

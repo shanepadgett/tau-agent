@@ -22,7 +22,7 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 | [work/agent-loop.md](work/agent-loop.md) | Build step 4, the agent loop: slices and agreed decisions. |
 | [work/compaction.md](work/compaction.md) | Build step 5: background tasks, compaction and process sessions. |
 | [work/process-sessions.md](work/process-sessions.md) | Slice 5b: process sessions and the agent's wait. |
-| [work/session-persistence.md](work/session-persistence.md) | Save new sessions only after the first user prompt (lifecycle agreed). |
+| [architecture.md](architecture.md#core-ideas) | Session persistence: drafts stay in memory until the first user prompt; restart carries unsaved choices. |
 | [work/tui.md](work/tui.md) | Build step 6: the TUI, in slices 6a to 6c. |
 | [work/reload.md](work/reload.md) | The reload slice: the supervisor, restart when idle, the start check. |
 | [work/notifications.md](work/notifications.md) | Terminal notification research and the draft bundled custom sound (proposed). |
@@ -34,6 +34,7 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 | [work/slash-commands.md](work/slash-commands.md) | A filtered list of slash commands above the input while you type one (built). |
 | [work/file-tags.md](work/file-tags.md) | `@` file and folder tags in the input, with icons (built 2026-10-15). |
 | [work/qna.md](work/qna.md) | `/qna`: the model asks its open questions in a panel (built, waiting for a live check). |
+| [settings.md](settings.md) | Global and project settings: discovery, precedence, merging and startup boundaries (built). |
 | [work/commit.md](work/commit.md) | `/commit`: commit checks, a model-made commit plan, review, push (built, waiting for a live check). |
 | [work/thinking.md](work/thinking.md) | Thinking levels: shown under the input, Shift+Tab to change (built, waiting for a live check). |
 | [work/model-favorites.md](work/model-favorites.md) | Favorite models in `/model` with Ctrl+F, listed first (built, waiting for a live check). |

@@ -35,6 +35,7 @@ import { TauHome } from "../../src/database/TauHome.ts";
 import { catalogCacheLayer } from "../../src/host/CatalogCache.ts";
 import { credentialStoreLayer } from "../../src/host/CredentialStore.ts";
 import { Settings } from "../../src/host/Settings.ts";
+import { ProjectDirectory } from "../../src/host/ProjectDirectory.ts";
 
 const HOUR_MILLIS = 3_600_000;
 
@@ -150,7 +151,11 @@ const runWithModels = <A, E>(
       yield* fileSystem.writeFileString(`${tauDirectory}/settings.json`, settingsText);
 
     const fromFile = Context.get(
-      yield* Layer.build(Settings.layer.pipe(Layer.provide(home))),
+      yield* Layer.build(
+        Settings.layer
+          .pipe(Layer.provide(Layer.succeed(ProjectDirectory, { directory: tauDirectory })))
+          .pipe(Layer.provide(home)),
+      ),
       ProviderTable,
     );
 
