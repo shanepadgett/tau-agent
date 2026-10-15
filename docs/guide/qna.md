@@ -4,11 +4,11 @@
 
 1. In the chat, between runs, type `/qna` and press Enter. To frame the questions, add text after it, for example `/qna about the storage choice`.
 2. The model asks its questions. A panel opens above the input with one tab per question and a last tab, Context.
-3. Answer each question. Enter on the Context tab sends the answers. Escape cancels and sends nothing.
+3. Answer each question. Enter or keypad Enter on the Context tab sends the answers. Escape cancels and sends nothing.
 
 ## The panel
 
-- **Select:** Up and Down move, Enter picks the option and goes to the next tab. The last row, `Other…`, is a text field: type your own answer, then press Enter.
+- **Select:** Up and Down move, Enter or keypad Enter picks the option and goes to the next tab. The last row, `Other…`, is a text field: type your own answer, then press Enter or keypad Enter.
 - **Confirm:** a Yes and No list that works the same way.
 - **Input:** type the answer and press Enter.
 - **Context:** optional text for anything else the model should know. Enter sends.

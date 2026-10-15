@@ -5,8 +5,8 @@
 1. In the chat, between runs, type `/commit` and press Enter. To guide the plan, add text after it, for example `/commit make this one commit`.
 2. Wait while Tau runs the checks. If one fails, Tau commits nothing and sends the failures to the model, which starts fixing them. Run `/commit` again when it is done.
 3. Read the plan: one line per commit, with its subject and how many files it holds.
-4. Press Enter to make the commits, or Escape to cancel.
-5. While Tau checks, plans, commits or pushes, the panel shows a spinner and replaces the input. When Tau asks to push, choose with Up and Down, then press Enter. Escape keeps the commits local.
+4. Press Enter or keypad Enter to make the commits, or Escape to cancel.
+5. While Tau checks, plans, commits or pushes, the panel shows a spinner and replaces the input. When Tau asks to push, choose with Up and Down, then press Enter or keypad Enter. Escape keeps the commits local.
 
 ## What happens
 

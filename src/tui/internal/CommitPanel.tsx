@@ -6,7 +6,7 @@
 import { useBindings } from "@opentui/keymap/solid";
 import { type Accessor, createSignal, For, Match, onCleanup, type Setter, Switch } from "solid-js";
 import type { CommitFlow, CommitStep } from "./commit-flow.ts";
-import { PRIORITY } from "./keymap.ts";
+import { enterBindings, PRIORITY } from "./keymap.ts";
 import { PickerRow } from "./Picker.tsx";
 import { COLORS } from "./theme.ts";
 
@@ -111,7 +111,7 @@ const panelKeys = (props: PanelProps, view: PanelView) => {
     bindings: [
       { key: "escape", cmd: "commit.cancel" },
       { key: "ctrl+c", cmd: "commit.cancel" },
-      { key: "return", cmd: "commit.answer" },
+      ...enterBindings("commit.answer"),
       { key: "up", cmd: "commit.up" },
       { key: "down", cmd: "commit.down" },
     ],

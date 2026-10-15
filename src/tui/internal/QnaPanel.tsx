@@ -5,7 +5,7 @@
 
 import { useBindings } from "@opentui/keymap/solid";
 import { For, Match, Show, Switch, untrack } from "solid-js";
-import { PRIORITY } from "./keymap.ts";
+import { enterBindings, PRIORITY } from "./keymap.ts";
 import type { QnaFlow } from "./qna-flow.ts";
 import {
   acceptText,
@@ -426,7 +426,7 @@ const navigateKeys = (props: PanelProps) => {
       },
     ],
     bindings: [
-      { key: "return", cmd: "qna.pick" },
+      ...enterBindings("qna.pick"),
       { key: "n", cmd: "qna.note" },
       { key: "left", cmd: "qna.left" },
       { key: "right", cmd: "qna.right" },

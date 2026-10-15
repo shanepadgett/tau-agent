@@ -22,9 +22,13 @@ export const PRIORITY = { panel: 30, drawer: 25, list: 20, input: 10, chat: 5 } 
 // Shift-Enter and Ctrl-Enter reach Tau only with the kitty keyboard protocol; Ctrl-J works in every
 // terminal, where it arrives as `linefeed`, which adds a line by default. The first newline key is
 // the one the footer shows.
+export const enterBindings = (command: string): readonly Binding<Renderable, KeyEvent>[] => [
+  { key: "return", cmd: command },
+  { key: "kpenter", cmd: command },
+];
+
 const EDITOR_BINDINGS: readonly Binding<Renderable, KeyEvent>[] = [
-  { key: "return", cmd: "input.submit" },
-  { key: "kpenter", cmd: "input.submit" },
+  ...enterBindings("input.submit"),
   { key: "shift+return", cmd: "input.newline" },
   { key: "ctrl+return", cmd: "input.newline" },
   { key: "meta+return", cmd: "input.newline" },

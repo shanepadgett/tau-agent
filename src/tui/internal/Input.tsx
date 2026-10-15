@@ -9,7 +9,7 @@ import type { SyntaxStyle, TextareaRenderable } from "@opentui/core";
 import { useBindings } from "@opentui/keymap/solid";
 import { createEffect, on } from "solid-js";
 import type { ChatClient } from "./chat-client.ts";
-import { PRIORITY } from "./keymap.ts";
+import { enterBindings, PRIORITY } from "./keymap.ts";
 import type { Completion, InputSuggestions } from "./suggestion-list.ts";
 import { tagRanges } from "../../core/TagText.ts";
 import { COLORS, TAG_STYLE } from "./theme.ts";
@@ -148,7 +148,7 @@ const listKeys = (
       { key: "escape", cmd: "list.close" },
       { key: "ctrl+c", cmd: "list.close" },
       { key: "tab", cmd: "list.complete" },
-      { key: "return", cmd: "list.choose" },
+      ...enterBindings("list.choose"),
     ],
   }));
 };
