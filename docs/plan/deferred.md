@@ -2,6 +2,7 @@
 
 Decisions to make later. Each line is the question and what brings it up. When that happens, move the item to [questions.md](questions.md).
 
+- Simulation mode, round 1: the eight decisions and first scenarios in [work/simulation.md](work/simulation.md). Comes up when the user resumes it, once Tau is the daily driver.
 - Whether the reload supervisor owns process sessions, so dev servers and watchers survive a restart of Tau. This moves the process registry and its output buffers across a process boundary. Comes up when restarts that end long-running processes get in the way ([reload.md](reload.md)).
 - OpenTelemetry tracing for enterprises. Comes up when enterprise tracing is requested, or with the live inspector ([features.md](features.md#interface)).
 - The live inspector's design: how processes find the server, what is kept, how bodies are captured. Comes up after the TUI (step 6), or sooner if debugging a provider needs it.
@@ -14,6 +15,7 @@ Decisions to make later. Each line is the question and what brings it up. When t
 - Custom type-aware lint rules. Comes up when TypeScript 7.1 ships its JS API.
 - A versioned source for TypeScript 7 compiler-option docs. Comes up when an agent misconfigures `tsconfig.json` from the README alone, or when the TypeScript website documents 7.x.
 - Whether a generated module map would improve helper discovery. Comes up when reuse-first planning misses an existing helper.
+- Whether to bundle ripgrep with Tau, and how: one binary per platform in the package, or a download on first use ([features.md](features.md#tools)). Comes up at build step 8.
 - Whether to carry FFF's native tie-break patch. Comes up if a ranking bug is opened after trying unpatched FFF; prefer an upstream fix over maintaining native binaries.
 - web-tree-sitter or `@ast-grep` for code-structure tools. Comes up when those tools are rebuilt.
 - OS keychain storage, encryption at rest, several accounts per provider, or per-project credentials. Comes up when a user or enterprise asks for one.

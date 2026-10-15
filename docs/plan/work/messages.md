@@ -1,6 +1,6 @@
 # Messages to the user
 
-Status: the strip with the reload conditions is built, 2026-10-14. Next: the other sources, one at a time. This plan decides where every Tau message goes before 6b adds more.
+Status: the strip with the reload conditions, no model set (as a prompt note), and skipped skills and instruction files are built, 2026-10-14. Next: the expired login. This plan decides where every Tau message goes before 6b adds more.
 
 ## Decisions
 

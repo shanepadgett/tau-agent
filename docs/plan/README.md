@@ -26,6 +26,13 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 | [work/reload.md](work/reload.md) | The reload slice: the supervisor, restart when idle, the start check. |
 | [work/diagnostics.md](work/diagnostics.md) | Session logs and copying text from the chat (proposed). |
 | [work/messages.md](work/messages.md) | How Tau shows events, problems and errors to the user (proposed). |
+| [work/daily-driver.md](work/daily-driver.md) | The work that makes Tau the user's daily driver: the set, how it meets the systems, the order (built, waiting for live checks). |
+| [work/markdown.md](work/markdown.md) | Markdown in the chat, after OpenCode's use of OpenTUI (built). |
+| [work/slash-commands.md](work/slash-commands.md) | A filtered list of slash commands above the input while you type one (built). |
+| [work/commit.md](work/commit.md) | `/commit`: commit checks, a model-made commit plan, review, push (built, waiting for a live check). |
+| [work/thinking.md](work/thinking.md) | Thinking levels: shown under the input, Shift+Tab to change (built, waiting for a live check). |
+| [work/model-favorites.md](work/model-favorites.md) | Favorite models in `/model` with Ctrl+F, listed first (built, waiting for a live check). |
+| [work/simulation.md](work/simulation.md) | Simulation mode: the real chat on scripted model replies (paused; round 1 proposed). |
 | [compaction-research.md](compaction-research.md) | How Tau main, Pi durable and Mastra compact, what compaction costs, and how that led to step 5's design. |
 | `archive/` | Finished plans, kept as a record of how decisions were reached. Not kept up to date. |
 

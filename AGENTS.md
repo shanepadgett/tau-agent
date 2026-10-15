@@ -19,6 +19,7 @@ Read a standard only when you are about to change something it covers. Reading o
 - When a change adds or changes something a user or extension author uses (a command, a setting, a file Tau reads, an SDK API), add or update its page in `docs/guide/` in the same change.
 - Never put temporary or throwaway code in `src/`. Experiments are spikes.
 - Before writing or planning code that uses a dependency, find its entry in `docs/reference/copies/index.md` and read the API there. Never guess an API; run `mise run docs` after a dependency version changes.
+- Source of other agents and libraries (OpenCode, OpenTUI, Pi, Codex, Mastra and others) is in `~/.local/share/tau-agent/references/`. Read it there and never change it.
 - Do not change check configuration or bypass a check without the user's permission. This covers lint, format, type, dead-code, boundary and test settings, our lint rules, and suppression comments (`oxlint-disable`, `@ts-expect-error`, fallow ignores). When a check blocks you, stop, tell the user what fails and what change you propose, and continue only if they agree.
 - Do not commit unless the user gives you permission; otherwise, the user commits.
 - Before you add or change anything the user sees on screen, show the user a mockup and wait for approval. The mockup draws the whole area the change sits in, before and after, and every state it can show.
