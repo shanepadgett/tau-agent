@@ -17,6 +17,7 @@ import { ApiKey, CredentialStore, ProviderId } from "../../src/ai/Credential.ts"
 import { builtInRoutes } from "../../src/ai/Routes.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { credentialStoreLayer } from "../../src/host/CredentialStore.ts";
+import { compileTau } from "../support/compile-tau.ts";
 
 // Builds the binary, so it takes seconds and runs before commit, not after each agent run.
 const BUILD_AND_RUN_MILLIS = 60_000;
@@ -29,25 +30,6 @@ const openai = ProviderId.make("openai");
 
 /** What to type once `prompt` shows. */
 type Answer = { readonly prompt: string; readonly keys: string };
-
-const buildTau = Effect.fn("buildTau")(function* (directory: string) {
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const binary = join(directory, "tau");
-
-  // Without the flag, the binary reads the `bunfig.toml` of the folder it runs in, and fails on
-  // this repository's preload, which only Bun running from source can resolve.
-  const build = ChildProcess.make("bun", [
-    "build",
-    "--compile",
-    "--no-compile-autoload-bunfig",
-    "src/cli/main.ts",
-    "--outfile",
-    binary,
-  ]);
-
-  expect(yield* spawner.exitCode(build)).toBe(ChildProcessSpawner.ExitCode(0));
-  return binary;
-});
 
 /** Runs the compiled `tau` with `home` as the user's home, typing each answer once its prompt shows. */
 const runTau = Effect.fn("runTau")(function* (
@@ -104,7 +86,7 @@ describe("compiled tau", () => {
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const binary = yield* buildTau(yield* fs.makeTempDirectoryScoped());
+        const binary = yield* compileTau(yield* fs.makeTempDirectoryScoped());
         const home = yield* fs.makeTempDirectoryScoped();
 
         const login = yield* runTau(binary, home, "login", [

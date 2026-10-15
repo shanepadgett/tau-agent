@@ -1,6 +1,6 @@
 # Reload slice: code plan
 
-Status: built through build order step 4 and the guide, 2026-10-14; the compiled-binary test (step 5) is open. See "As built" at the end for where the code differs from this plan. The architecture and its decisions are in [reload.md](../reload.md). Evidence: spike 15 (`spikes/reload/`).
+Status: built, with the compiled-binary test, 2026-10-14; the live check in [live-checks.md](../live-checks.md) is open. See "As built" at the end for where the code differs from this plan. The architecture and its decisions are in [reload.md](../reload.md). Evidence: spike 15 (`spikes/reload/`).
 
 ## Decisions (2026-10-14)
 
@@ -51,7 +51,7 @@ src/tui/internal/InputFooter.tsx     changed: shows the notice
 src/host/Settings.ts                 changed: `autoRestart: boolean`, default true
 tests/supervisor/supervise.test.ts   new: run-commands with fake services
 tests/binary/chat.test.ts            new: compiled binary in a PTY: chat opens, Ctrl-D quits, terminal restored
-tests/support/compile-tau.ts         new: Bun.build compile with bundleOptions; replaces the CLI build in login.test.ts
+tests/support/compile-tau.ts         new: Bun.build compile with Solid's plugin; replaces the CLI build in login.test.ts
 docs/guide/chat.md                   changed: restart, /restart, autoRestart
 ```
 
@@ -195,5 +195,7 @@ The code follows the plan with these changes. Each has a reason.
 | On a restart, prompts that wait for their run go into the draft with the editor text | They would be lost with the process |
 | No `checked` message: the check passes when the child exits 0 | The exit code says the same |
 | `ChatSetup` (`options`, `prompt`, `link`) is one parameter of `chatInTerminal` and `runTui` | The parameter limit is 4 |
+| `compile-tau.ts` shares no options with `Builds`: it passes only Solid's plugin and `autoloadBunfig: false` | A compiled binary embeds OpenTUI's native library, so it needs neither `external` nor `publicPath` |
+| The chat's release waits for `renderer.closed` after `destroy()` | `destroy` restores the terminal later; the binary test found `Session: <id>` printed into the alternate screen, where it disappeared on exit |
 
-Open: `tests/support/compile-tau.ts` and `tests/binary/chat.test.ts` (build order step 5). The source path was checked by hand in a PTY: a change restarts the chat in about 0.9 s with the draft kept; a build error and a start-check error showed under the input (since moved to the log file) and the chat kept running; the fix restarts it.
+`tests/binary/chat.test.ts` runs the compiled binary in a PTY from a shell: the chat opens, Ctrl-D quits with exit 0, every screen mode the chat turned on is off again, `Session: <id>` shows after the chat, and `stty` reports `icanon`, `echo` and `isig`. The source path was checked by hand in a PTY: a change restarts the chat in about 0.9 s with the draft kept; a build error and a start-check error showed under the input (since moved to the log file) and the chat kept running; the fix restarts it.

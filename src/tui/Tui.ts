@@ -12,13 +12,18 @@ import { type ChatEnd, type ChatSetup, chatClient } from "./internal/chat-client
 /**
  * Takes over the terminal for the chat. Closing the scope gives the terminal back as it was. The
  * kitty keyboard protocol lets Tau tell Shift-Enter and Ctrl-Enter from Enter.
+ *
+ * `destroy` restores the terminal later, so the release waits for `closed`. Otherwise text printed
+ * after the chat goes to the chat's alternate screen and disappears with it. `closed` fails only
+ * when the terminal's output broke, and then nothing more can reach it.
  */
 const openTerminal = Effect.acquireRelease(
   Effect.promise(() => createCliRenderer({ exitOnCtrlC: false, useKittyKeyboard: {} })),
   (renderer) =>
-    Effect.sync(() => {
+    Effect.tryPromise(() => {
       renderer.destroy();
-    }),
+      return renderer.closed;
+    }).pipe(Effect.ignore),
 );
 
 export type { ChatOptions, ChatSetup, RestartLink } from "./internal/chat-client.ts";
