@@ -5,7 +5,7 @@ import { ConversationId } from "../../../../ai/ConversationId.ts";
 import type { SessionId } from "../../../../session/Entry.ts";
 import type { Note } from "../../../../session/Notes.ts";
 import { estimatedPromptTokens } from "./budget.ts";
-import { summarize, summaryModel, type SummaryServices } from "./summarize.ts";
+import { summarize, type SummaryServices } from "./summarize.ts";
 import { memoryText, notesText, summaryPrefix } from "./view.ts";
 
 // Starting values, not measured.
@@ -18,7 +18,7 @@ export const dreamNext = Effect.fn("dreamNext")(function* (
   services: SummaryServices,
   session: SessionId,
 ) {
-  const { notes, catalog, models } = services;
+  const { notes, models } = services;
   const latest = (yield* notes.memories(session)).at(-1);
 
   const uncovered = (yield* notes.list(session)).filter(
@@ -31,7 +31,7 @@ export const dreamNext = Effect.fn("dreamNext")(function* (
   const last = fold.at(-1);
   if (last === undefined) return false;
 
-  const model = yield* summaryModel(catalog, last.model);
+  const model = yield* models.smallModel(last.model);
 
   const languageModel = yield* models.languageModel(
     model,

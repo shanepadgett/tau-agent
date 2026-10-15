@@ -11,6 +11,7 @@ import { Status } from "../core/Status.ts";
 import { TauHome } from "../database/TauHome.ts";
 import { catalogCacheLayer } from "../host/CatalogCache.ts";
 import { credentialStoreLayer } from "../host/CredentialStore.ts";
+import { favoriteModelsLayer } from "../host/FavoriteModels.ts";
 import { hostIdLayer } from "../host/HostId.ts";
 import { logFileLayer } from "../host/LogFile.ts";
 import { Settings } from "../host/Settings.ts";
@@ -23,6 +24,7 @@ import { rootCommand } from "./internal/root-command.ts";
 const appLayer = Layer.mergeAll(
   credentialStoreLayer,
   catalogCacheLayer,
+  favoriteModelsLayer,
   hostIdLayer,
   outputFolderLayer,
   FetchHttpClient.layer,

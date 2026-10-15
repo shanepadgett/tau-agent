@@ -5,7 +5,7 @@
 
 import { Context, DateTime, Effect, Schema } from "effect";
 import type { ModelRef } from "../ai/Catalog.ts";
-import { RouteId } from "../ai/Routes.ts";
+import { ProviderId } from "../ai/Providers.ts";
 import type { Database, Transaction } from "../database/Database.ts";
 import { SessionId } from "./Entry.ts";
 import { SessionStoreError } from "./SessionStoreError.ts";
@@ -57,7 +57,7 @@ const MemoryRow = Schema.Struct({
   through_note: Schema.Int,
   through_entry: Schema.Int,
   text: Schema.String,
-  route: RouteId,
+  provider: ProviderId,
   model: Schema.String,
   at: Schema.DateTimeUtcFromMillis,
 });
@@ -68,7 +68,7 @@ const NoteRow = Schema.Struct({
   from_entry: Schema.Int,
   through_entry: Schema.Int,
   text: Schema.String,
-  route: RouteId,
+  provider: ProviderId,
   model: Schema.String,
   at: Schema.DateTimeUtcFromMillis,
 });
@@ -113,7 +113,7 @@ export const makeNotes = (database: Database, path: string) => {
             note.from,
             note.through,
             note.text,
-            note.model.route,
+            note.model.provider,
             note.model.model,
             DateTime.toEpochMillis(at),
           ]);
@@ -176,7 +176,7 @@ const insertMemory = Effect.fn("Notes.insertMemory")(function* (
     memory.throughNote,
     note.through,
     memory.text,
-    memory.model.route,
+    memory.model.provider,
     memory.model.model,
     DateTime.toEpochMillis(at),
   ]);
@@ -196,7 +196,7 @@ const memoryFromRow = (row: typeof MemoryRow.Type): Memory => ({
   throughNote: row.through_note,
   throughEntry: row.through_entry,
   text: row.text,
-  model: { route: row.route, model: row.model },
+  model: { provider: row.provider, model: row.model },
   at: row.at,
 });
 
@@ -205,6 +205,6 @@ const noteFromRow = (row: typeof NoteRow.Type): Note => ({
   from: row.from_entry,
   through: row.through_entry,
   text: row.text,
-  model: { route: row.route, model: row.model },
+  model: { provider: row.provider, model: row.model },
   at: row.at,
 });

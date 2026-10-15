@@ -1,7 +1,6 @@
 /** Writes notes and memory beside the agent, waking on completed work. The session scope cancels unfinished work. */
 
 import { Effect, PubSub, type Scope } from "effect";
-import { Catalog } from "../../../../ai/Catalog.ts";
 import { Models } from "../../../../ai/Models.ts";
 import type { SessionId } from "../../../../session/Entry.ts";
 import { Notes } from "../../../../session/Notes.ts";
@@ -15,7 +14,6 @@ export const makeContextWorker = Effect.fn("makeContextWorker")(function* () {
   const services: NoteServices = {
     sessions: yield* Sessions,
     notes: yield* Notes,
-    catalog: yield* Catalog,
     models: yield* Models,
     settings: yield* ContextSettings,
   };

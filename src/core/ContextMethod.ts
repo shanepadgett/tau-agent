@@ -1,7 +1,7 @@
 /** Selects what the model sees and starts session-scoped background work. Replace this service to change compaction. */
 
 import { Context, Effect, Layer, Option, type PubSub, type Scope } from "effect";
-import type { ModelRef, UnknownModel, UnknownRoute } from "../ai/Catalog.ts";
+import type { ModelRef, UnknownModel, UnknownProvider } from "../ai/Catalog.ts";
 import { contextView } from "../session/ContextView.ts";
 import type { RunningProcess, SessionId } from "../session/Entry.ts";
 import type { AgentEvent } from "./Client.ts";
@@ -30,7 +30,7 @@ export class ContextMethod extends Context.Service<
       model: ModelRef,
       /** The commands the agent has running, which a checkpoint lists. */
       running: Effect.Effect<readonly RunningProcess[]>,
-    ) => Effect.Effect<RunMethod, UnknownModel | UnknownRoute>;
+    ) => Effect.Effect<RunMethod, UnknownModel | UnknownProvider>;
     readonly background: (
       session: SessionId,
       subscribe: Effect.Effect<PubSub.Subscription<AgentEvent>, never, Scope.Scope>,

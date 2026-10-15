@@ -5,7 +5,7 @@
 
 import { Console, Effect, Option, PubSub, Stdio, Stream } from "effect";
 import { type AgentEvent, type RunOptions, runEndMessage } from "../../core/Client.ts";
-import { openSession } from "./agent-session.ts";
+import { openSession, printSessionId } from "./agent-session.ts";
 import { showFailure } from "./failure.ts";
 
 /** Runs `prompt`, or the text on stdin when there is none. */
@@ -35,7 +35,7 @@ const printRun = Effect.fn("printRun")(function* (
     Effect.onInterrupt(() => opened.send({ type: "cancel" })),
   );
 
-  yield* Console.error(`\nSession: ${opened.session.id}`);
+  yield* printSessionId(opened.session.id);
   const message = runEndMessage(end);
   if (message !== undefined) return yield* showFailure({ message });
 }, Effect.scoped);
@@ -71,6 +71,8 @@ const printEvent = (stdio: Stdio.Stdio, event: AgentEvent) => {
     case "prompts-returned":
     case "checks-started":
     case "checks-ended":
+    case "steered":
+    case "model-call-ended":
       return Effect.succeed(Option.none<RunEnded>());
     case "run-ended":
       return Effect.succeed(Option.some(event));

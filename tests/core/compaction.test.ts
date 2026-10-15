@@ -10,6 +10,7 @@ import { Sessions } from "../../src/session/Sessions.ts";
 import { transcript } from "../../src/session/transcript.ts";
 import {
   options,
+  profile,
   prompt,
   isRunEnd,
   runEnd,
@@ -25,9 +26,8 @@ import {
   checkpointReply,
   contextLayer,
   counted,
-  profile,
   promptText,
-  route,
+  provider,
   waitForNotes,
 } from "../support/compaction.ts";
 
@@ -285,7 +285,7 @@ describe("compaction", () => {
         const notes = yield* waitForNotes(harness.notes, session.id, 1);
         expect(notes[0]?.from).toBe(1);
         expect(notes[0]?.through).toBe(5);
-        expect(notes[0]?.model.model).toBe(route.noteModel);
+        expect(notes[0]?.model.model).toBe(provider.smallModel);
         const received = userTexts(harness.notePrompts[0]).join("\n");
 
         for (const text of [

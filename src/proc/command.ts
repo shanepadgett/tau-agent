@@ -98,6 +98,17 @@ export const runProgram = (
   args: readonly string[],
   directory: string,
   timeout: Duration.Duration,
+) => runProgramWith(program, args, directory, { timeout, streams: "stdout" });
+
+/**
+ * `runProgram`, where `streams: "all"` gives stdout and stderr in one text, for a program whose
+ * errors the user should read.
+ */
+export const runProgramWith = (
+  program: string,
+  args: readonly string[],
+  directory: string,
+  { timeout, streams }: { readonly timeout: Duration.Duration; readonly streams: "stdout" | "all" },
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -105,7 +116,7 @@ export const runProgram = (
         ChildProcess.make(program, args, {
           cwd: directory,
           stdin: "ignore",
-          stderr: "ignore",
+          stderr: streams === "all" ? "pipe" : "ignore",
           killSignal: "SIGKILL",
         }),
       );
@@ -115,7 +126,8 @@ export const runProgram = (
           ? Effect.fail(new OutputTooLarge({ program, characters: MAX_PROGRAM_OUTPUT_CHARACTERS }))
           : Effect.succeed(text);
 
-      const ran = yield* collect(child.exitCode, child.stdout, withinLimit, timeout);
+      const output = streams === "all" ? child.all : child.stdout;
+      const ran = yield* collect(child.exitCode, output, withinLimit, timeout);
 
       if (Option.isNone(ran.exitCode)) {
         const seconds = Duration.toSeconds(timeout);

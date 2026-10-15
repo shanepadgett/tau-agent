@@ -25,7 +25,7 @@ const config = {
   ),
   model: Flag.String("model").pipe(
     Flag.optional,
-    Flag.withDescription("The model to use, as route/model."),
+    Flag.withDescription("The model to use, as provider/model."),
   ),
   prompt: Argument.String("prompt").pipe(
     Argument.optional,

@@ -4,27 +4,17 @@ import { Effect, Layer, Stream } from "effect";
 import type { Prompt, Response } from "effect/ai";
 import { Catalog, type ModelRef, UnknownModel } from "../../src/ai/Catalog.ts";
 import type { ModelProfile } from "../../src/ai/ModelProfile.ts";
-import { builtInRoutes } from "../../src/ai/Routes.ts";
+import { Models } from "../../src/ai/Models.ts";
+import { builtInProviders } from "../../src/ai/Providers.ts";
 import { ContextMethod } from "../../src/core/ContextMethod.ts";
 import { type CompactionSettings, ContextSettings } from "../../src/core/ContextSettings.ts";
 import type { EntryBody } from "../../src/session/Entry.ts";
 import type { Notes } from "../../src/session/Notes.ts";
-import { options, type Reply } from "./agent-harness.ts";
+import { options, profile, type Reply } from "./agent-harness.ts";
 
-const anthropic = builtInRoutes.find((candidate) => candidate.id === "anthropic");
-if (anthropic === undefined) throw new Error("Anthropic is a built-in route.");
-export const route = anthropic;
-
-export const profile: ModelProfile = {
-  id: "scripted",
-  name: "Scripted",
-  protocol: "openaiChat",
-  contextTokens: 128000,
-  outputTokens: 8000,
-  price: undefined,
-  longContextPrice: undefined,
-  supports: { tools: true, structuredOutput: false, reasoning: false, images: false },
-};
+const anthropic = builtInProviders.find((candidate) => candidate.id === "anthropic");
+if (anthropic === undefined) throw new Error("Anthropic is a built-in provider.");
+export const provider = anthropic;
 
 export const contextLayer = (
   settings: CompactionSettings,
@@ -38,16 +28,42 @@ export const contextLayer = (
         Catalog,
         Catalog.of({
           model: (ref: ModelRef) =>
-            ref.model === route.noteModel && quick === "missing"
+            ref.model === provider.smallModel && quick === "missing"
               ? Effect.fail(
-                  new UnknownModel({ route: ref.route, model: ref.model, message: "Not offered." }),
+                  new UnknownModel({
+                    provider: ref.provider,
+                    model: ref.model,
+                    message: "Not offered.",
+                  }),
                 )
-              : Effect.succeed({ route, profile: limits }),
+              : Effect.succeed({ provider, profile: limits }),
           decisionModel: () => Effect.die("Compaction uses chat models."),
+          providerModels: Effect.succeed([]),
           claudeCodeVersion: Effect.succeed("test"),
           refreshIfStale: Effect.void,
         }),
       ),
+    ),
+    Layer.provide(smallModelLayer(quick)),
+  );
+
+/**
+ * The agent's models, where the provider's small model is offered unless `quick` is `missing`.
+ * Then notes go to the session's model, as `Models.smallModel` does.
+ */
+const smallModelLayer = (quick: string) =>
+  Layer.effect(
+    Models,
+    Effect.map(Models, (models) =>
+      Models.of({
+        ...models,
+        smallModel: (ref) =>
+          Effect.succeed(
+            quick === "missing" || provider.smallModel === undefined
+              ? ref
+              : { provider: ref.provider, model: provider.smallModel },
+          ),
+      }),
     ),
   );
 

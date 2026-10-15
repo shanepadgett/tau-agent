@@ -7,7 +7,7 @@ import { transcript } from "../../../../session/transcript.ts";
 import type { Sessions } from "../../../../session/Sessions.ts";
 import type { ContextSettings } from "../../../ContextSettings.ts";
 import { contextSize, DEFAULT_NOTES_START_TOKENS, estimatedTokens } from "./budget.ts";
-import { summarize, summaryModel, type SummaryServices } from "./summarize.ts";
+import { summarize, type SummaryServices } from "./summarize.ts";
 import { memoryText, notesText } from "./view.ts";
 
 const NOTE_CHUNK_TOKENS = 16_000;
@@ -22,7 +22,7 @@ export const writeNextNote = Effect.fn("writeNextNote")(function* (
   services: NoteServices,
   session: SessionId,
 ) {
-  const { sessions, notes, catalog, models, settings } = services;
+  const { sessions, notes, models, settings } = services;
   const entries = yield* sessions.entries(session, 0);
 
   if (contextSize(entries) < (settings.notesStartTokens ?? DEFAULT_NOTES_START_TOKENS))
@@ -35,7 +35,7 @@ export const writeNextNote = Effect.fn("writeNextNote")(function* (
   const reply = entries.findLast(({ body }) => body.type === "assistant" && !body.interrupted);
   if (range.length === 0 || reply?.body.type !== "assistant") return false;
 
-  const model = yield* summaryModel(catalog, reply.body.model);
+  const model = yield* models.smallModel(reply.body.model);
 
   const languageModel = yield* models.languageModel(model, ConversationId.make(`${session}:notes`));
 
