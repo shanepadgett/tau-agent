@@ -79,8 +79,16 @@ type DecisionApi = {
   readonly models: ReadonlyArray<DecisionProfile>;
 };
 
+/** The company behind one or more providers, such as OpenAI behind `openai`, `chatgpt` and `codex`. */
+export type Vendor = {
+  readonly id: string;
+  readonly name: string;
+};
+
 export type Provider = {
   readonly id: ProviderId;
+  /** Groups providers in `/connect`. A provider without one is its own vendor, named by its id. */
+  readonly vendor?: Vendor;
   /** The protocol of a model when its catalog entry does not give one. */
   readonly protocol: Protocol;
   readonly apiUrl: string;
@@ -180,6 +188,7 @@ export class ProviderTable extends Context.Service<
 export const builtInProviders: ReadonlyArray<Provider> = [
   {
     id: ProviderId.make("anthropic"),
+    vendor: { id: "anthropic", name: "Anthropic" },
     protocol: "anthropic",
     apiUrl: "https://api.anthropic.com",
     auth: { kind: "claudeSubscription", oauth: claudeOAuth },
@@ -192,6 +201,7 @@ export const builtInProviders: ReadonlyArray<Provider> = [
   },
   {
     id: ProviderId.make("openai"),
+    vendor: { id: "openai", name: "OpenAI" },
     protocol: "openaiResponses",
     apiUrl: "https://api.openai.com/v1",
     auth: { kind: "apiKey", environmentVariable: "OPENAI_API_KEY" },
@@ -207,6 +217,7 @@ export const builtInProviders: ReadonlyArray<Provider> = [
   },
   {
     id: ProviderId.make("chatgpt"),
+    vendor: { id: "openai", name: "OpenAI" },
     protocol: "openaiResponses",
     apiUrl: "https://api.openai.com/v1",
     auth: { kind: "chatgptApp", app: chatgptApp },
@@ -219,6 +230,7 @@ export const builtInProviders: ReadonlyArray<Provider> = [
   },
   {
     id: ProviderId.make("codex"),
+    vendor: { id: "openai", name: "OpenAI" },
     protocol: "openaiResponses",
     apiUrl: "https://chatgpt.com/backend-api/codex",
     auth: { kind: "codexLogin", oauth: codexOAuth },
@@ -231,6 +243,7 @@ export const builtInProviders: ReadonlyArray<Provider> = [
   },
   {
     id: ProviderId.make("openrouter"),
+    vendor: { id: "openrouter", name: "OpenRouter" },
     protocol: "openrouter",
     apiUrl: "https://openrouter.ai/api/v1",
     auth: { kind: "apiKey", environmentVariable: "OPENROUTER_API_KEY" },
@@ -250,6 +263,7 @@ export const builtInProviders: ReadonlyArray<Provider> = [
   {
     // One subscription. Its models use three protocols at the same address.
     id: ProviderId.make("opencode-go"),
+    vendor: { id: "opencode-go", name: "OpenCode Go" },
     protocol: "openaiChat",
     apiUrl: "https://opencode.ai/inference/go/v1",
     auth: { kind: "apiKey", environmentVariable: "OPENCODE_API_KEY" },

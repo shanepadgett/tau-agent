@@ -15,6 +15,7 @@ import type { SidebarChoice } from "../../core/TuiMemory.ts";
 import { type Condition, Status } from "../../core/Status.ts";
 import { chatCommands, type CommandTarget } from "./chat-commands.ts";
 import { type CommitFlow, commitFlow } from "./commit-flow.ts";
+import { type ConnectFlow, connectFlow } from "./connect-flow.ts";
 import { type QnaFlow, qnaFlow } from "./qna-flow.ts";
 import { type ChatAction, type ChatState, isIdle, reduce, replay } from "./chat-state.ts";
 import type { CommandInfo } from "./command-suggestions.ts";
@@ -72,6 +73,7 @@ export type ChatAgent = Pick<
   | "toggleFavoriteModel"
   | "references"
   | "stashes"
+  | "connections"
   | "files"
   | "sidebarChoice"
   | "saveSidebarChoice"
@@ -115,6 +117,8 @@ export type ChatClient = {
   readonly commit: CommitFlow;
   /** `/qna`, whose panel shows when the model has questions. */
   readonly qna: QnaFlow;
+  /** `/connect`, whose dialog shows while open. */
+  readonly connect: ConnectFlow;
   /** The open picker, if a command opened one. */
   readonly picker: Accessor<PickerList | undefined>;
   readonly closePicker: () => void;
@@ -181,7 +185,7 @@ export const chatClient = Effect.fn("chatClient")(function* (
 
   const prompts = yield* promptSender({ opened, agent, chat, apply, options: setup.options });
 
-  const { commit, qna, run, list, picker, closePicker } = commandsOf(prompts, attention, {
+  const { commit, qna, connect, run, list, picker, closePicker } = commandsOf(prompts, attention, {
     chat,
     apply,
     agent,
@@ -205,6 +209,7 @@ export const chatClient = Effect.fn("chatClient")(function* (
     closePicker,
     commit,
     qna,
+    connect,
     ...(yield* tagFinder(agent, opened.session.directory, chat)),
     commands: list,
     draft: link.draft,
@@ -485,7 +490,7 @@ const runInBackground = (effect: Effect.Effect<void>) => {
 const commandsOf = (
   prompts: Pick<Effect.Success<ReturnType<typeof promptSender>>, "model" | "send">,
   attention: Attention,
-  target: Omit<CommandTarget, "commit" | "qna" | "fork">,
+  target: Omit<CommandTarget, "commit" | "qna" | "connect" | "fork">,
 ) => {
   const commit = commitFlow({
     attention,
@@ -505,7 +510,18 @@ const commandsOf = (
     },
   });
 
-  return { commit, qna, ...chatCommands({ ...target, fork: runInBackground, commit, qna }) };
+  const connect = connectFlow({
+    connections: target.agent.connections,
+    apply: target.apply,
+    start: runStoppable,
+  });
+
+  return {
+    commit,
+    qna,
+    connect,
+    ...chatCommands({ ...target, fork: runInBackground, commit, qna, connect }),
+  };
 };
 
 /** Runs `effect` in the background, and gives a way to stop it. */

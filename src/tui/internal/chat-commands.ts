@@ -6,6 +6,7 @@ import type { Agent, OpenSession } from "../../core/Agent.ts";
 import type { RunOptions } from "../../core/Client.ts";
 import { type ChatAction, type ChatState, isIdle } from "./chat-state.ts";
 import type { CommitFlow } from "./commit-flow.ts";
+import type { ConnectFlow } from "./connect-flow.ts";
 import type { QnaFlow } from "./qna-flow.ts";
 import type { CommandInfo } from "./command-suggestions.ts";
 import { type ModelRef, modelPicker } from "./model-picker.ts";
@@ -17,7 +18,13 @@ type SessionId = OpenSession["session"]["id"];
 
 type ChatAgent = Pick<
   Agent["Service"],
-  "sessions" | "models" | "favoriteModels" | "toggleFavoriteModel" | "references" | "stashes"
+  | "sessions"
+  | "models"
+  | "favoriteModels"
+  | "toggleFavoriteModel"
+  | "references"
+  | "stashes"
+  | "connections"
 >;
 
 type ListedSession = Effect.Success<ReturnType<ChatAgent["sessions"]>>[number];
@@ -50,12 +57,22 @@ export type CommandTarget = {
   readonly fork: (effect: Effect.Effect<void>) => void;
   readonly commit: CommitFlow;
   readonly qna: QnaFlow;
+  readonly connect: ConnectFlow;
 };
 
 const BUSY = "Wait for the run to end, or cancel it, before you switch sessions.";
 const BUSY_COMMIT = "Wait for the run to end, or cancel it, before you commit.";
 const BUSY_QNA = "Wait for the run to end, or cancel it, before you start /qna.";
 const ISO_MINUTE_LENGTH = 16;
+
+/** Opens the dialog that signs in to and out of the model providers. */
+const connectCommand = (connect: ConnectFlow): ChatCommand => ({
+  description: "Sign in to or out of a model provider",
+  run: () =>
+    Effect.sync(() => {
+      connect.open();
+    }),
+});
 
 /** Returns a way to open a picker on what a list finds, or to say why it found nothing. */
 const picking =
@@ -207,6 +224,7 @@ export const chatCommands = (target: CommandTarget) => {
       busy: BUSY_COMMIT,
       start: target.commit.run,
     }),
+    "/connect": connectCommand(target.connect),
     "/model": {
       description: "Change the model for this chat",
       run: () => pick(Effect.all([agent.models, agent.favoriteModels]), modelPickerFor(target)),

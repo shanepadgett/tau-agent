@@ -12,7 +12,7 @@ Use Tau daily and report what breaks. Not yet tried in a real terminal: emoji al
 2. Stash a draft with Ctrl+S. Decisions agreed; footer mockup awaits approval ([stash.md](stash.md)).
 3. New front end designed in a gallery, then swapped in ([gallery.md](gallery.md)).
 4. Notifications: remaining question and live terminal check ([notifications.md](notifications.md)).
-5. Commands: `/compact`, `/settings`, login.
+5. Commands: `/compact`, `/settings`.
 6. Extension SDK (`@shanepadgett/tau`), then rebuild the built-ins from `main` on it: md-lint, attention, auto-name, branch, cost-report, stash, tool-approval, web, image-gen, worktree, run-summary, handoff, reference, aside, manage-sessions ([sdk.md](sdk.md), [sdk-catalog.md](sdk-catalog.md)).
 7. Packages, install, updates ([sdk-packages.md](sdk-packages.md)).
 

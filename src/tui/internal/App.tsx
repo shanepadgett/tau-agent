@@ -26,6 +26,7 @@ import { PRIORITY, tauKeymap } from "./keymap.ts";
 import { Picker } from "./Picker.tsx";
 import { CommitPanel } from "./CommitPanel.tsx";
 import { Place } from "./Place.tsx";
+import { ConnectDialogHost } from "./ConnectDialog.tsx";
 import { QnaPanel } from "./QnaPanel.tsx";
 import { RunPanel } from "./RunPanel.tsx";
 import { Sidebar } from "./Sidebar.tsx";
@@ -74,9 +75,11 @@ function App(props: { readonly client: ChatClient; readonly syntax: SyntaxStyle 
     props.client.commit.step() !== undefined ||
     props.client.qna.state() !== undefined;
 
+  const dialogOpen = () => props.client.connect.state() !== undefined;
+
   const terminal = useTerminalDimensions();
   const sidebar = sidebarState(() => terminal().width, props.client.sidebar);
-  chatKeys(props.client, panelOpen, sidebar);
+  chatKeys(props.client, () => panelOpen() || dialogOpen(), sidebar);
 
   // The columns of the chat: the terminal less its padding and a docked open sidebar.
   const docked = () => sidebar.mode() === "docked" && sidebar.isOpen();
@@ -122,6 +125,7 @@ function App(props: { readonly client: ChatClient; readonly syntax: SyntaxStyle 
         </box>
         <Sidebar sidebar={sidebar} chat={props.client.chat} />
       </box>
+      <ConnectDialogHost flow={props.client.connect} />
     </Place>
   );
 }

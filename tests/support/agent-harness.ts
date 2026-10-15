@@ -23,6 +23,7 @@ import { FileTags } from "../../src/core/FileTags.ts";
 import { OutputFolder } from "../../src/core/OutputFolder.ts";
 import type { AgentEvent, RunOptions } from "../../src/core/Client.ts";
 import { Status } from "../../src/core/Status.ts";
+import { Connections } from "../../src/core/Connections.ts";
 import { Web } from "../../src/core/Web.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { favoriteModelsLayer } from "../../src/host/FavoriteModels.ts";
@@ -117,6 +118,16 @@ const scriptedModels = (
       });
     }),
   );
+
+/** Turn tests sign in to no provider; one that does is a bug in the test. */
+const noConnections = Layer.succeed(
+  Connections,
+  Connections.of({
+    vendors: Effect.succeed([]),
+    logIn: () => Effect.die("Turn tests log in to no provider."),
+    logOut: () => Effect.die("Turn tests log out of no provider."),
+  }),
+);
 
 /** Turn tests make no web calls; one that does is a bug in the test. */
 const noWeb = Layer.succeed(
@@ -241,6 +252,7 @@ export const withPreparedHarness = <A, E, P>(
             Layer.provide(Layer.succeed(OutputFolder, { directory: `${home}/output` })),
             Layer.provide(Layer.succeedContext(status)),
             Layer.provide(noWeb),
+            Layer.provide(noConnections),
           ),
         ).pipe(Effect.map((context) => Context.get(context, Agent)));
 

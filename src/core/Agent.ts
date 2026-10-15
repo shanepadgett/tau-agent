@@ -36,6 +36,7 @@ import { CommitSettings } from "./Commits.ts";
 import { Web } from "./Web.ts";
 import { References } from "./References.ts";
 import { FileTags } from "./FileTags.ts";
+import { Connections } from "./Connections.ts";
 import { Stashes } from "./Stashes.ts";
 import { type SidebarChoice, TuiMemory, type TuiMemoryError } from "./TuiMemory.ts";
 
@@ -70,6 +71,8 @@ export class Agent extends Context.Service<
     readonly sidebarChoice: Effect.Effect<SidebarChoice>;
     /** The library of reference repositories. */
     readonly references: References["Service"];
+    /** The providers to sign in to and out of. */
+    readonly connections: Connections["Service"];
     /** The prompts parked with Ctrl+S. */
     readonly stashes: Stashes["Service"];
     /** The files, folders and references that `@` tags. */
@@ -101,6 +104,7 @@ export class Agent extends Context.Service<
       const tuiMemory = yield* TuiMemory;
       const files = yield* FileTags;
       const stashes = yield* Stashes;
+      const connections = yield* Connections;
 
       const runners = yield* RcMap.make({ lookup: (key: RunnerKey) => openRunner(services, key) });
 
@@ -127,6 +131,7 @@ export class Agent extends Context.Service<
         toggleFavoriteModel: favorites.toggle,
         sidebarChoice: tuiMemory.sidebar,
         references: services.references,
+        connections,
         stashes,
         files,
         saveSidebarChoice: tuiMemory.saveSidebar,

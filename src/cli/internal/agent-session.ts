@@ -7,6 +7,7 @@ import type { SessionState } from "../../core/SessionState.ts";
 import { Agent } from "../../core/Agent.ts";
 import { ContextMethod } from "../../core/ContextMethod.ts";
 import { FileTags } from "../../core/FileTags.ts";
+import { connectionsLayer } from "../../host/Connections.ts";
 import { Web } from "../../core/Web.ts";
 import { userInstructionsLayer } from "../../host/UserInstructions.ts";
 import { SessionId } from "../../session/Entry.ts";
@@ -19,6 +20,7 @@ export const agentLayer = Agent.layer.pipe(
   Layer.provideMerge(FileTags.layer),
   Layer.provideMerge(Web.layer),
   Layer.provideMerge(Models.layer),
+  Layer.provideMerge(connectionsLayer),
   Layer.provideMerge(Catalog.layer),
   Layer.provide(Sessions.layer),
   Layer.provide(userInstructionsLayer),

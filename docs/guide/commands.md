@@ -3,6 +3,7 @@
 | Command | Does |
 | --- | --- |
 | `/commit [guidance]` | Runs the project's checks, plans conventional commits for every changed file, commits when you approve, then offers to push |
+| `/connect` | Opens a dialog of the model providers and whether you are signed in. Enter signs in, by the way you choose when a provider has several; Ctrl+D signs out |
 | `/model` | Chooses the model for this chat |
 | `/new` | Opens a new session in this folder |
 | `/pop` | Brings back a prompt stashed with Ctrl+S |

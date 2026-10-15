@@ -38,7 +38,8 @@ export function Input(props: {
           focused={
             props.client.picker() === undefined &&
             props.client.commit.step() === undefined &&
-            props.client.qna.state() === undefined
+            props.client.qna.state() === undefined &&
+            props.client.connect.state() === undefined
           }
           minHeight={1}
           maxHeight={MAX_INPUT_LINES}

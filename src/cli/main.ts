@@ -29,7 +29,7 @@ import { rootCommand } from "./internal/root-command.ts";
 
 const TAU_DIRECTORY = join(homedir(), ".tau");
 
-const appLayer = Layer.mergeAll(
+const servicesLayer = Layer.mergeAll(
   referencesLayer,
   FileIndex.at(join(TAU_DIRECTORY, "files")),
   credentialStoreLayer,
@@ -43,7 +43,9 @@ const appLayer = Layer.mergeAll(
   ReloadLink.layer,
   Status.layer,
   logFileLayer,
-).pipe(
+);
+
+const appLayer = servicesLayer.pipe(
   Layer.provideMerge(FetchHttpClient.layer),
   Layer.provideMerge(Settings.layer),
   Layer.provideMerge(
