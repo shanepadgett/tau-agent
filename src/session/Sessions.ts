@@ -9,32 +9,27 @@ import { type Database, openDatabase, type Transaction } from "../database/Datab
 import { TauHome } from "../database/TauHome.ts";
 import { type Entry, EntryBody, SessionId } from "./Entry.ts";
 import { makeSkillUses, SKILL_USE_TABLE, SkillUses } from "./SkillUses.ts";
-import { makeNotes, MEMORY_TABLE, NOTE_TABLE, Notes } from "./Notes.ts";
+import {
+  LONG_TERM_MEMORY_TABLE,
+  makeMemories,
+  Memories,
+  SHORT_TERM_MEMORY_TABLE,
+} from "./Memories.ts";
 import { SessionStoreError } from "./SessionStoreError.ts";
-import { CHECK_REPORT_TEXT_MIGRATION } from "./internal/check-report-migration.ts";
 
+// One migration creates the current schema. Until Tau's first release, a schema change edits this
+// migration and existing databases are fixed by hand; after release, each change appends one.
 const MIGRATIONS = [
-  "CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT NOT NULL, origin TEXT NOT NULL, " +
-    "created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL) STRICT",
-  "CREATE TABLE entry (session_id TEXT NOT NULL REFERENCES session (id), " +
-    "number INTEGER NOT NULL, at INTEGER NOT NULL, body TEXT NOT NULL, " +
-    "PRIMARY KEY (session_id, number)) STRICT",
-  SKILL_USE_TABLE,
-  // A tool result's `files` and `script` move into `details`, tagged by tool. json_patch drops a
-  // null `script`, which a result that ran nothing has.
-  "UPDATE entry SET body = json_remove(CASE WHEN body ->> '$.name' = 'run' AND " +
-    "(body -> '$.files' IS NOT NULL OR body -> '$.script' IS NOT NULL) THEN json_set(body, " +
-    "'$.details', json_patch('{}', json_object('tool', 'run', 'files', " +
-    "json(coalesce(body -> '$.files', '[]')), 'script', body ->> '$.script'))) ELSE body END, " +
-    "'$.files', '$.script') WHERE body ->> '$.type' = 'tool-result'",
-  CHECK_REPORT_TEXT_MIGRATION,
-  NOTE_TABLE,
-  MEMORY_TABLE,
-  // A model is named by its provider; the old name for a provider was a route.
-  "ALTER TABLE note RENAME COLUMN route TO provider",
-  "ALTER TABLE memory RENAME COLUMN route TO provider",
-  "UPDATE entry SET body = json_remove(json_set(body, '$.model.provider', " +
-    "body ->> '$.model.route'), '$.model.route') WHERE body ->> '$.type' = 'assistant'",
+  [
+    "CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT NOT NULL, origin TEXT NOT NULL, " +
+      "created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL) STRICT",
+    "CREATE TABLE entry (session_id TEXT NOT NULL REFERENCES session (id), " +
+      "number INTEGER NOT NULL, at INTEGER NOT NULL, body TEXT NOT NULL, " +
+      "PRIMARY KEY (session_id, number)) STRICT",
+    SKILL_USE_TABLE,
+    SHORT_TERM_MEMORY_TABLE,
+    LONG_TERM_MEMORY_TABLE,
+  ].join(";\n"),
 ];
 
 const Origin = Schema.Union([
@@ -122,7 +117,7 @@ export class Sessions extends Context.Service<
   }
 >()("tau/session/Sessions") {
   /**
-   * Gives sessions, notes and skill uses from one connection, which migrates their shared file.
+   * Gives sessions, memories and skill uses from one connection, which migrates their shared file.
    */
   static readonly layer = Layer.effectContext(
     TauHome.use((home) => openSessionStore(join(home.directory, "sessions.db"))),
@@ -140,7 +135,7 @@ const openSessionStore = Effect.fn("openSessionStore")(function* (path: string) 
 
   return Context.make(Sessions, sessions).pipe(
     Context.add(SkillUses, makeSkillUses(database)),
-    Context.add(Notes, makeNotes(database, path)),
+    Context.add(Memories, makeMemories(database, path)),
   );
 });
 
@@ -232,14 +227,14 @@ const forkWithin = (database: Database, newSession: NewSession, from: SessionId,
     );
 
     yield* transaction.run(
-      "INSERT INTO note SELECT ?, number, from_entry, through_entry, text, provider, model, at " +
-        "FROM note WHERE session_id = ? AND through_entry <= ?",
+      "INSERT INTO short_term_memory SELECT ?, number, from_entry, through_entry, text, provider, model, at " +
+        "FROM short_term_memory WHERE session_id = ? AND through_entry <= ?",
       [branch.id, from, through],
     );
 
     yield* transaction.run(
-      "INSERT INTO memory SELECT ?, number, through_note, through_entry, text, provider, model, at " +
-        "FROM memory WHERE session_id = ? AND through_entry <= ?",
+      "INSERT INTO long_term_memory SELECT ?, number, through_short_term, through_entry, text, provider, model, at " +
+        "FROM long_term_memory WHERE session_id = ? AND through_entry <= ?",
       [branch.id, from, through],
     );
 

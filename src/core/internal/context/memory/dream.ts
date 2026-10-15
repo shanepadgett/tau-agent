@@ -3,7 +3,7 @@
 import { Effect } from "effect";
 import { ConversationId } from "../../../../ai/ConversationId.ts";
 import type { SessionId } from "../../../../session/Entry.ts";
-import type { Note } from "../../../../session/Notes.ts";
+import type { ShortTermMemory } from "../../../../session/Memories.ts";
 import { estimatedPromptTokens } from "./budget.ts";
 import { summarize, type SummaryServices } from "./summarize.ts";
 import { memoryText, notesText, summaryPrefix } from "./view.ts";
@@ -19,10 +19,10 @@ export const dreamNext = Effect.fn("dreamNext")(function* (
   session: SessionId,
 ) {
   const { notes, models } = services;
-  const latest = (yield* notes.memories(session)).at(-1);
+  const latest = (yield* notes.longTerm(session)).at(-1);
 
-  const uncovered = (yield* notes.list(session)).filter(
-    (note) => note.number > (latest?.throughNote ?? 0),
+  const uncovered = (yield* notes.shortTerm(session)).filter(
+    (note) => note.number > (latest?.throughShortTerm ?? 0),
   );
 
   if (tokens(uncovered) < DREAM_TRIGGER_TOKENS) return false;
@@ -45,17 +45,18 @@ export const dreamNext = Effect.fn("dreamNext")(function* (
   );
 
   return yield* notes
-    .appendMemory(session, { parent: latest?.number, throughNote: last.number, text, model })
+    .appendLongTerm(session, { parent: latest?.number, throughShortTerm: last.number, text, model })
     .pipe(
       Effect.as(true),
-      Effect.catchTag("MemoryConflict", () => Effect.succeed(false)),
+      Effect.catchTag("LongTermMemoryConflict", () => Effect.succeed(false)),
     );
 });
 
-const tokens = (notes: readonly Note[]) => estimatedPromptTokens(summaryPrefix(undefined, notes));
+const tokens = (notes: readonly ShortTermMemory[]) =>
+  estimatedPromptTokens(summaryPrefix(undefined, notes));
 
 /** How many of the newest notes stay as notes: the fewest that reach the kept size. */
-const keptCount = (notes: readonly Note[]) => {
+const keptCount = (notes: readonly ShortTermMemory[]) => {
   let count = 0;
 
   while (count < notes.length && tokens(notes.slice(notes.length - count)) < KEPT_NOTE_TOKENS)

@@ -3,10 +3,10 @@
 import { Effect } from "effect";
 import { AiError, type LanguageModel, Prompt } from "effect/ai";
 import type { Models } from "../../../../ai/Models.ts";
-import type { Notes } from "../../../../session/Notes.ts";
+import type { Memories } from "../../../../session/Memories.ts";
 
 export type SummaryServices = {
-  readonly notes: Notes["Service"];
+  readonly notes: Memories["Service"];
   readonly models: Models["Service"];
 };
 

@@ -4,7 +4,7 @@ import { Context, Deferred, Effect, Layer, Option } from "effect";
 import { AiError, type Response } from "effect/ai";
 import { TauHome } from "../../src/database/TauHome.ts";
 import type { Entry, SessionId } from "../../src/session/Entry.ts";
-import { Notes } from "../../src/session/Notes.ts";
+import { Memories } from "../../src/session/Memories.ts";
 import { Sessions } from "../../src/session/Sessions.ts";
 import {
   options,
@@ -25,14 +25,14 @@ import {
 
 type Stores = {
   readonly sessions: Sessions["Service"];
-  readonly notes: Notes["Service"];
+  readonly notes: Memories["Service"];
   readonly directory: string;
 };
 
 const modelReply = (text: string) =>
   Effect.succeed<Response.PartEncoded[]>([{ type: "text", text }]);
 
-/** Notes never start in these tests, so the only model calls are the dreams under test. */
+/** Memories never start in these tests, so the only model calls are the dreams under test. */
 const quietNotes = contextLayer({ notesStartTokens: 1_000_000 });
 
 /** Sixteen notes of about 2000 tokens each, over entries 1–32: past the 30k trigger. */
@@ -48,7 +48,7 @@ const seedLongSession = Effect.fn("seedLongSession")(function* (stores: Stores) 
   );
 
   for (let number = 1; number <= 16; number += 1) {
-    yield* stores.notes.append(session.id, {
+    yield* stores.notes.appendShortTerm(session.id, {
       from: number * 2 - 1,
       through: number * 2,
       text: `[note ${number}] ${"x".repeat(8000)}`,
@@ -83,14 +83,14 @@ describe("dreaming", () => {
         yield* agent.open(Option.some(session.id), harness.directory);
         const [memory] = yield* waitForMemories(harness.notes, session.id, 1);
 
-        expect(memory).toMatchObject({ number: 1, throughNote: 12, throughEntry: 24 });
+        expect(memory).toMatchObject({ number: 1, throughShortTerm: 12, throughEntry: 24 });
         expect(memory?.text).toBe("Folded memory.");
         expect(harness.notePrompts).toHaveLength(1);
         expect(promptText(harness.notePrompts[0])).toContain("No memory yet.");
         expect(promptText(harness.notePrompts[0])).toContain("[note 1]");
         expect(promptText(harness.notePrompts[0])).toContain("[note 12]");
         expect(promptText(harness.notePrompts[0])).not.toContain("[note 13]");
-        expect(yield* harness.notes.list(session.id)).toHaveLength(16);
+        expect(yield* harness.notes.shortTerm(session.id)).toHaveLength(16);
       }),
     ));
 
@@ -113,22 +113,25 @@ describe("dreaming", () => {
         expect(promptText(harness.prompts[0])).toContain("Request 1");
 
         const texts = userTexts(harness.prompts[1]);
-        expect(texts[0]).toBe("Session memory of entries 1–24:\nFolded memory.");
 
-        expect(texts.slice(1, 5).map((text) => text.slice(0, 45))).toEqual([
-          "Notes on entries 25–26:\n[note 13] xxxxxxxxxxx",
-          "Notes on entries 27–28:\n[note 14] xxxxxxxxxxx",
-          "Notes on entries 29–30:\n[note 15] xxxxxxxxxxx",
-          "Notes on entries 31–32:\n[note 16] xxxxxxxxxxx",
+        expect(texts[0]).toBe(
+          `<reminder kind="long-term-memory">\nLong-term memory of entries 1–24:\nFolded memory.\n</reminder>`,
+        );
+
+        expect(texts.slice(1, 5).map((text) => text.slice(0, 72))).toEqual([
+          `<reminder kind="short-term-memory">\nEntries 25–26:\n[note 13] xxxxxxxxxxx`,
+          `<reminder kind="short-term-memory">\nEntries 27–28:\n[note 14] xxxxxxxxxxx`,
+          `<reminder kind="short-term-memory">\nEntries 29–30:\n[note 15] xxxxxxxxxxx`,
+          `<reminder kind="short-term-memory">\nEntries 31–32:\n[note 16] xxxxxxxxxxx`,
         ]);
 
         expect(texts.indexOf("Continue.")).toBe(5);
-        expect(texts.at(-1)).toStartWith("Your handoff at the checkpoint");
+        expect(texts.at(-1)).toContain("Your handoff at the checkpoint");
         expect(promptText(harness.prompts[1])).not.toContain("[note 12]");
         expect(promptText(harness.prompts[1])).not.toContain("Request 1");
 
         const details = checkpointDetails(yield* harness.sessions.entries(session.id, 0));
-        expect(details).toMatchObject({ memory: 1, notes: [13, 14, 15, 16], tailFrom: 33 });
+        expect(details).toMatchObject({ longTerm: 1, shortTerm: [13, 14, 15, 16], tailFrom: 33 });
       }),
     ));
 
@@ -146,7 +149,7 @@ describe("dreaming", () => {
         yield* waitForMemories(harness.notes, session.id, 1);
 
         for (let number = 17; number <= 28; number += 1) {
-          yield* harness.notes.append(session.id, {
+          yield* harness.notes.appendShortTerm(session.id, {
             from: number + 16,
             through: number + 16,
             text: `[note ${number}] ${"x".repeat(8000)}`,
@@ -157,7 +160,7 @@ describe("dreaming", () => {
         yield* prompt(opened, "Wake up.");
         const memories = yield* waitForMemories(harness.notes, session.id, 2);
 
-        expect(memories.map(({ number, throughNote }) => [number, throughNote])).toEqual([
+        expect(memories.map(({ number, throughShortTerm }) => [number, throughShortTerm])).toEqual([
           [1, 12],
           [2, 24],
         ]);
@@ -176,9 +179,9 @@ describe("dreaming", () => {
       Effect.gen(function* () {
         const session = yield* seedLongSession(harness);
 
-        yield* harness.notes.appendMemory(session.id, {
+        yield* harness.notes.appendLongTerm(session.id, {
           parent: undefined,
-          throughNote: 12,
+          throughShortTerm: 12,
           text: "Seeded memory.",
           model: options.model,
         });
@@ -213,11 +216,11 @@ describe("dreaming", () => {
         const agent = yield* harness.startAgentUsing([textReply("Ok.")], quietNotes, [empty]);
         const opened = yield* agent.open(Option.some(session.id), harness.directory);
         yield* Deferred.await(finished);
-        expect(yield* harness.notes.memories(session.id)).toHaveLength(0);
+        expect(yield* harness.notes.longTerm(session.id)).toHaveLength(0);
 
         expect(runEnd(yield* prompt(opened, "Continue."))?.reason).toBe("answered");
         const [memory] = yield* waitForMemories(harness.notes, session.id, 1);
-        expect(memory).toMatchObject({ throughNote: 12, text: "Saved background note." });
+        expect(memory).toMatchObject({ throughShortTerm: 12, text: "Saved background note." });
         expect(harness.notePrompts).toHaveLength(2);
       }),
     ));
@@ -239,7 +242,7 @@ describe("dreaming", () => {
         const agent = yield* harness.startAgentUsing([textReply("Ok.")], quietNotes, [failed]);
         const opened = yield* agent.open(Option.some(session.id), harness.directory);
         yield* Deferred.await(finished);
-        expect(yield* harness.notes.memories(session.id)).toHaveLength(0);
+        expect(yield* harness.notes.longTerm(session.id)).toHaveLength(0);
 
         yield* prompt(opened, "Continue.");
         expect(yield* waitForMemories(harness.notes, session.id, 1)).toHaveLength(1);
@@ -247,41 +250,48 @@ describe("dreaming", () => {
       }),
     ));
 
-  test("appendMemory refuses a stale parent, a missing note and a memory with no new notes", () =>
+  test("appendLongTerm refuses a stale parent, a missing note and a memory with no new notes", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
         const session = yield* harness.sessions.create(harness.directory);
 
         for (const number of [1, 2, 3]) {
-          yield* harness.notes.append(session.id, {
+          yield* harness.notes.appendShortTerm(session.id, {
             from: number,
             through: number,
-            text: `Note ${number}.`,
+            text: `ShortTermMemory ${number}.`,
             model: options.model,
           });
         }
 
-        const memory = (parent: number | undefined, throughNote: number) => ({
+        const memory = (parent: number | undefined, throughShortTerm: number) => ({
           parent,
-          throughNote,
-          text: "Memory.",
+          throughShortTerm,
+          text: "LongTermMemory.",
           model: options.model,
         });
 
-        const first = yield* harness.notes.appendMemory(session.id, memory(undefined, 2));
-        expect(first).toMatchObject({ number: 1, throughNote: 2, throughEntry: 2 });
+        const first = yield* harness.notes.appendLongTerm(session.id, memory(undefined, 2));
+        expect(first).toMatchObject({ number: 1, throughShortTerm: 2, throughEntry: 2 });
 
         const reasons = yield* Effect.forEach(
           [memory(undefined, 3), memory(1, 9), memory(1, 2)],
           (attempt) =>
-            harness.notes.appendMemory(session.id, attempt).pipe(
+            harness.notes.appendLongTerm(session.id, attempt).pipe(
               Effect.flip,
-              Effect.map((error) => (error._tag === "MemoryConflict" ? error.reason : error._tag)),
+              Effect.map((error) =>
+                error._tag === "LongTermMemoryConflict" ? error.reason : error._tag,
+              ),
             ),
         );
 
-        expect(reasons).toEqual(["newer memory exists", "note missing", "no new notes"]);
-        expect(yield* harness.notes.memories(session.id)).toHaveLength(1);
+        expect(reasons).toEqual([
+          "newer memory exists",
+          "short-term memory missing",
+          "no new short-term memory",
+        ]);
+
+        expect(yield* harness.notes.longTerm(session.id)).toHaveLength(1);
       }),
     ));
 
@@ -301,24 +311,24 @@ describe("dreaming", () => {
           [1, 2],
           [3, 4],
         ] as const) {
-          yield* harness.notes.append(session.id, {
+          yield* harness.notes.appendShortTerm(session.id, {
             from,
             through,
-            text: `Note ${from}–${through}.`,
+            text: `ShortTermMemory ${from}–${through}.`,
             model: options.model,
           });
         }
 
-        yield* harness.notes.appendMemory(session.id, {
+        yield* harness.notes.appendLongTerm(session.id, {
           parent: undefined,
-          throughNote: 1,
+          throughShortTerm: 1,
           text: "First memory.",
           model: options.model,
         });
 
-        yield* harness.notes.appendMemory(session.id, {
+        yield* harness.notes.appendLongTerm(session.id, {
           parent: 1,
-          throughNote: 2,
+          throughShortTerm: 2,
           text: "Second memory.",
           model: options.model,
         });
@@ -332,10 +342,10 @@ describe("dreaming", () => {
           ),
         );
 
-        const reopened = Context.get(store, Notes);
+        const reopened = Context.get(store, Memories);
 
         const texts = (id: SessionId) =>
-          reopened.memories(id).pipe(Effect.map((memories) => memories.map(({ text }) => text)));
+          reopened.longTerm(id).pipe(Effect.map((memories) => memories.map(({ text }) => text)));
 
         expect(yield* texts(branch.id)).toEqual(["First memory."]);
         expect(yield* texts(session.id)).toEqual(["First memory.", "Second memory."]);
@@ -358,17 +368,17 @@ describe("dreaming", () => {
           [1, 2],
           [3, 4],
         ] as const) {
-          yield* harness.notes.append(session.id, {
+          yield* harness.notes.appendShortTerm(session.id, {
             from,
             through,
-            text: `Note ${from}–${through}.`,
+            text: `ShortTermMemory ${from}–${through}.`,
             model: options.model,
           });
         }
 
-        yield* harness.notes.appendMemory(session.id, {
+        yield* harness.notes.appendLongTerm(session.id, {
           parent: undefined,
-          throughNote: 2,
+          throughShortTerm: 2,
           text: "Everything so far.",
           model: options.model,
         });
@@ -382,10 +392,14 @@ describe("dreaming", () => {
         expect(runEnd(yield* prompt(opened, "Continue."))?.reason).toBe("answered");
 
         const details = checkpointDetails(yield* harness.sessions.entries(session.id, 0));
-        expect(details).toMatchObject({ memory: 1, notes: [], tailFrom: 5 });
+        expect(details).toMatchObject({ longTerm: 1, shortTerm: [], tailFrom: 5 });
 
         const texts = userTexts(harness.prompts[1]);
-        expect(texts[0]).toBe("Session memory of entries 1–4:\nEverything so far.");
+
+        expect(texts[0]).toBe(
+          `<reminder kind="long-term-memory">\nLong-term memory of entries 1–4:\nEverything so far.\n</reminder>`,
+        );
+
         expect(texts[1]).toBe("Continue.");
         expect(promptText(harness.prompts[1])).not.toContain("Request 2");
       }),

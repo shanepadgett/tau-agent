@@ -5,7 +5,7 @@ import { AiError, type Response } from "effect/ai";
 import { CompactionSettings, ContextSettings } from "../../src/core/ContextSettings.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { Settings } from "../../src/host/Settings.ts";
-import { Notes } from "../../src/session/Notes.ts";
+import { Memories } from "../../src/session/Memories.ts";
 import { Sessions } from "../../src/session/Sessions.ts";
 import { transcript } from "../../src/session/Transcript.ts";
 import {
@@ -93,7 +93,7 @@ describe("compaction", () => {
           { type: "user", text: "Recent request." },
         ]);
 
-        yield* harness.notes.append(session.id, {
+        yield* harness.notes.appendShortTerm(session.id, {
           from: 1,
           through: 2,
           text: "The first saved note.",
@@ -118,7 +118,7 @@ describe("compaction", () => {
         expect(promptText(harness.prompts[1])).toContain("Recent request.");
         expect(promptText(harness.prompts[1])).toContain("Your handoff at the checkpoint");
 
-        yield* harness.notes.append(session.id, {
+        yield* harness.notes.appendShortTerm(session.id, {
           from: 3,
           through: 4,
           text: "The second saved note.",
@@ -157,7 +157,7 @@ describe("compaction", () => {
           assistant("Earlier answer."),
         ]);
 
-        yield* harness.notes.append(session.id, {
+        yield* harness.notes.appendShortTerm(session.id, {
           from: 1,
           through: 2,
           text: "Earlier work completed.",
@@ -268,7 +268,7 @@ describe("compaction", () => {
           },
           {
             type: "instructions",
-            placement: "note",
+            placement: "update",
             values: { rule: "RULE" },
             text: "Instruction message.",
           },
@@ -452,7 +452,7 @@ describe("compaction", () => {
 
           const opened = yield* agent.open(Option.some(session.id), harness.directory);
           yield* Deferred.await(finished);
-          expect(yield* harness.notes.list(session.id)).toHaveLength(0);
+          expect(yield* harness.notes.shortTerm(session.id)).toHaveLength(0);
           expect(yield* harness.sessions.entries(session.id, 0)).toEqual(entries);
           expect(runEnd(yield* prompt(opened, "Continue."))?.reason).toBe("answered");
           expect((yield* waitForNotes(harness.notes, session.id, 1))[0]?.from).toBe(1);
@@ -490,12 +490,12 @@ describe("compaction", () => {
             const opened = yield* agent.open(Option.some(session.id), harness.directory);
             yield* Deferred.await(started);
             expect(runEnd(yield* prompt(opened, "Continue."))?.reason).toBe("answered");
-            expect(yield* harness.notes.list(session.id)).toHaveLength(0);
+            expect(yield* harness.notes.shortTerm(session.id)).toHaveLength(0);
           }),
         );
 
         yield* Deferred.await(cancelled);
-        expect(yield* harness.notes.list(session.id)).toHaveLength(0);
+        expect(yield* harness.notes.shortTerm(session.id)).toHaveLength(0);
         const restarted = yield* harness.startAgentUsing([], contextLayer({ notesStartTokens: 1 }));
         yield* restarted.open(Option.some(session.id), harness.directory);
         expect((yield* waitForNotes(harness.notes, session.id, 1))[0]?.from).toBe(1);
@@ -512,7 +512,7 @@ describe("compaction", () => {
           assistant("Earlier answer."),
         ]);
 
-        yield* harness.notes.append(session.id, {
+        yield* harness.notes.appendShortTerm(session.id, {
           from: 1,
           through: 2,
           text: "n".repeat(18000),
@@ -531,9 +531,9 @@ describe("compaction", () => {
         const opened = yield* agent.open(Option.some(session.id), harness.directory);
         expect(runEnd(yield* prompt(opened, "Continue."))?.reason).toBe("answered");
 
-        expect(
-          userTexts(harness.prompts[2]).some((text) => text.startsWith("Context warning")),
-        ).toBe(true);
+        expect(userTexts(harness.prompts[2]).some((text) => text.includes("Context warning"))).toBe(
+          true,
+        );
 
         const entries = yield* harness.sessions.entries(session.id, 0);
 
@@ -547,7 +547,7 @@ describe("compaction", () => {
         )
           throw new Error("The checkpoint result is saved.");
 
-        expect(checkpoint.body.details.noteTokens).toBeGreaterThan(4500);
+        expect(checkpoint.body.details.shortTermTokens).toBeGreaterThan(4500);
 
         expect(
           harness.prompts[2]?.content.some(
@@ -618,14 +618,14 @@ describe("compaction", () => {
           assistant("Four."),
         ]);
 
-        yield* harness.notes.append(session.id, {
+        yield* harness.notes.appendShortTerm(session.id, {
           from: 1,
           through: 2,
           text: "One note.",
           model: options.model,
         });
 
-        yield* harness.notes.append(session.id, {
+        yield* harness.notes.appendShortTerm(session.id, {
           from: 3,
           through: 4,
           text: "Another note.",
@@ -641,12 +641,16 @@ describe("compaction", () => {
           ),
         );
 
-        const reopened = Context.get(store, Notes);
-        expect((yield* reopened.list(branch.id)).map((note) => note.text)).toEqual(["One note."]);
-        expect((yield* reopened.list(session.id)).map((note) => note.number)).toEqual([1, 2]);
+        const reopened = Context.get(store, Memories);
+
+        expect((yield* reopened.shortTerm(branch.id)).map((note) => note.text)).toEqual([
+          "One note.",
+        ]);
+
+        expect((yield* reopened.shortTerm(session.id)).map((note) => note.number)).toEqual([1, 2]);
 
         expect(
-          (yield* reopened.append(branch.id, {
+          (yield* reopened.appendShortTerm(branch.id, {
             from: 3,
             through: 3,
             text: "Branch note.",
@@ -666,7 +670,7 @@ describe("compaction", () => {
           assistant("Recall this exact reply."),
         ]);
 
-        yield* harness.notes.append(session.id, {
+        yield* harness.notes.appendShortTerm(session.id, {
           from: 1,
           through: 2,
           text: "A summary.",

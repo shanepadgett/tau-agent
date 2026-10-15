@@ -71,7 +71,7 @@ describe("check output limits", () => {
               ? toolResults(harness.prompts[2]).at(-1)
               : userTexts(harness.prompts[2]).at(-1);
 
-          expect(modelText).toEndWith(failed.text);
+          expect(modelText).toContain(failed.text);
           expect(reports.at(-1)?.failed).toEqual([]);
         }),
       ));

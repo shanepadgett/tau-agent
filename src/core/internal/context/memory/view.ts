@@ -4,11 +4,12 @@ import { Prompt } from "effect/ai";
 import {
   conversationMessages,
   contextView,
+  hiddenText,
   systemMessage,
   withCacheMark,
 } from "../../../../session/ContextView.ts";
 import type { CheckpointDetails, Entry, RunningProcess } from "../../../../session/Entry.ts";
-import type { Memory, Note } from "../../../../session/Notes.ts";
+import type { LongTermMemory, ShortTermMemory } from "../../../../session/Memories.ts";
 
 type SavedCheckpoint = { readonly entry: Entry; readonly details: CheckpointDetails };
 
@@ -27,14 +28,14 @@ export const latestCheckpoint = (entries: readonly Entry[]): SavedCheckpoint | u
 export const notesView = (
   soul: string,
   entries: readonly Entry[],
-  notes: readonly Note[],
-  memories: readonly Memory[],
+  notes: readonly ShortTermMemory[],
+  memories: readonly LongTermMemory[],
 ): Prompt.Prompt => {
   const checkpoint = latestCheckpoint(entries);
   if (checkpoint === undefined) return contextView(soul, entries);
 
-  const selected = notes.filter((note) => checkpoint.details.notes.includes(note.number));
-  const memory = memories.find(({ number }) => number === checkpoint.details.memory);
+  const selected = notes.filter((note) => checkpoint.details.shortTerm.includes(note.number));
+  const memory = memories.find(({ number }) => number === checkpoint.details.longTerm);
 
   const messages: Prompt.Message[] = [...summaryPrefix(memory, selected).content];
 
@@ -44,12 +45,12 @@ export const notesView = (
   const instructions = entries.flatMap(({ number, body }) =>
     number < checkpoint.details.tailFrom &&
     body.type === "instructions" &&
-    body.placement === "note"
+    body.placement !== "system"
       ? [body.text]
       : [],
   );
 
-  if (instructions.length > 0) messages.push(textMessage(instructions.join("\n\n")));
+  if (instructions.length > 0) messages.push(hiddenText("instructions", instructions.join("\n\n")));
 
   const call = entries.findLast(
     ({ body, number }) =>
@@ -74,7 +75,8 @@ export const notesView = (
   );
 
   messages.push(
-    textMessage(
+    hiddenText(
+      "handoff",
       `Your handoff at the checkpoint:\n${checkpoint.details.handoff}${runningText(checkpoint.details.processes ?? [])}\n\nCheckpoint completed. Earlier context-stage nudges no longer apply.`,
     ),
   );
@@ -97,19 +99,20 @@ const runningText = (processes: readonly RunningProcess[]) =>
         .map((running) => `- ${running.id}${running.pty ? " (terminal)" : ""}: ${running.command}`)
         .join("\n")}`;
 
-const textMessage = (text: string) => Prompt.userMessage({ content: [Prompt.textPart({ text })] });
+export const memoryText = (memory: LongTermMemory) =>
+  `Long-term memory of entries 1–${memory.throughEntry}:\n${memory.text}`;
 
-export const memoryText = (memory: Memory) =>
-  `Session memory of entries 1–${memory.throughEntry}:\n${memory.text}`;
-
-export const notesText = (notes: readonly Note[]) =>
+export const notesText = (notes: readonly ShortTermMemory[]) =>
   notes.map((note) => `Entries ${note.from}–${note.through}:\n${note.text}`).join("\n\n");
 
 /** The memory first, then the notes after it. */
-export const summaryPrefix = (memory: Memory | undefined, notes: readonly Note[]): Prompt.Prompt =>
+export const summaryPrefix = (
+  memory: LongTermMemory | undefined,
+  notes: readonly ShortTermMemory[],
+): Prompt.Prompt =>
   Prompt.fromMessages([
-    ...(memory === undefined ? [] : [textMessage(memoryText(memory))]),
+    ...(memory === undefined ? [] : [hiddenText("long-term-memory", memoryText(memory))]),
     ...notes.map((note) =>
-      textMessage(`Notes on entries ${note.from}–${note.through}:\n${note.text}`),
+      hiddenText("short-term-memory", `Entries ${note.from}–${note.through}:\n${note.text}`),
     ),
   ]);

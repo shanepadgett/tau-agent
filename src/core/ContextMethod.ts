@@ -7,7 +7,7 @@ import type { RunningProcess, SessionId } from "../session/Entry.ts";
 import type { SessionStoreError } from "../session/SessionStoreError.ts";
 import type { AgentEvent } from "./Client.ts";
 import { ContextSettings } from "./ContextSettings.ts";
-import { makeNotesMethod } from "./internal/context/notes/method.ts";
+import { makeNotesMethod } from "./internal/context/memory/method.ts";
 import type { RunMethod } from "./internal/context/run-method.ts";
 import { needsReply } from "./internal/loop/tool-history.ts";
 

@@ -128,9 +128,9 @@ export type RunningProcess = typeof RunningProcess.Type;
 const CheckpointDetails = Schema.Struct({
   tool: Schema.Literal("checkpoint"),
   handoff: Schema.String,
-  memory: Schema.optional(Schema.Int),
-  notes: Schema.Array(Schema.Int),
-  noteTokens: Schema.Int,
+  longTerm: Schema.optional(Schema.Int),
+  shortTerm: Schema.Array(Schema.Int),
+  shortTermTokens: Schema.Int,
   tailFrom: Schema.Int,
   /** The commands running at the checkpoint. Absent on checkpoints saved before process sessions. */
   processes: Schema.optional(Schema.Array(RunningProcess)),
@@ -164,11 +164,11 @@ const ChecksEntry = Schema.Struct({ type: Schema.Literal("checks"), report: Chec
  * What changed in the model's instructions, such as an instruction file or the date. `values` has
  * the new value of each changed source, or null for a source that has no value now. `text` is saved
  * as rendered, so a later change to the wording cannot change old requests. The first entry of a
- * session goes in the system prompt; the later ones are notes in the chat.
+ * session goes in the system prompt; the later ones are updates in the chat.
  */
 const InstructionsEntry = Schema.Struct({
   type: Schema.Literal("instructions"),
-  placement: Schema.Literals(["system", "note"]),
+  placement: Schema.Literals(["system", "update"]),
   values: Schema.Record(Schema.String, Schema.NullOr(Schema.String)),
   text: Schema.String,
 });
@@ -182,6 +182,15 @@ const NudgeEntry = Schema.Struct({
 
 export type NudgeEntry = typeof NudgeEntry.Type;
 
+/**
+ * The reference repositories the user attached to the session, saved on each change; the newest
+ * entry holds the current list.
+ */
+const ReferencesEntry = Schema.Struct({
+  type: Schema.Literal("references"),
+  names: Schema.Array(Schema.String),
+});
+
 /** A run that ended with an error, with the text the chat showed. Not saved for a cancelled run. */
 const RunFailedEntry = Schema.Struct({ type: Schema.Literal("run-failed"), error: Schema.String });
 
@@ -193,6 +202,7 @@ export const EntryBody = Schema.Union([
   InstructionsEntry,
   ChecksEntry,
   NudgeEntry,
+  ReferencesEntry,
   RunFailedEntry,
 ]);
 

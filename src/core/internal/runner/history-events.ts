@@ -57,6 +57,8 @@ const bodyEvents = (body: EntryBody, profiles: Profiles): readonly AgentEvent[] 
     case "instructions":
     case "nudge":
       return [];
+    case "references":
+      return [{ type: "references-changed", names: body.names }];
   }
 };
 

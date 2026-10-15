@@ -25,11 +25,13 @@ import { Status } from "../../src/core/Status.ts";
 import { Web } from "../../src/core/Web.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { favoriteModelsLayer } from "../../src/host/FavoriteModels.ts";
+import { FetchHttpClient } from "effect/http";
+import { referencesLayer } from "../../src/host/References.ts";
 import { tuiMemoryLayer } from "../../src/host/TuiMemory.ts";
 import { Settings } from "../../src/host/Settings.ts";
 import { userInstructionsLayer } from "../../src/host/UserInstructions.ts";
 import { Sessions } from "../../src/session/Sessions.ts";
-import { Notes } from "../../src/session/Notes.ts";
+import { Memories } from "../../src/session/Memories.ts";
 
 export type Reply = Stream.Stream<Response.StreamPartEncoded, AiError.AiError>;
 type NoteReply = Effect.Effect<Response.PartEncoded[], AiError.AiError>;
@@ -131,7 +133,7 @@ type Requests = {
   readonly notePrompts: Prompt.Prompt[];
 };
 
-type MethodLayer = Layer.Layer<ContextMethod, never, Models | Sessions | Notes>;
+type MethodLayer = Layer.Layer<ContextMethod, never, Models | Sessions | Memories>;
 
 /** How reading the user's settings and folders can fail when an agent starts. */
 type StartError = Layer.Error<typeof Settings.layer>;
@@ -155,7 +157,7 @@ type Harness = {
     noteReplies?: readonly NoteReply[],
   ) => Effect.Effect<Agent["Service"], StartError, Scope.Scope>;
   readonly sessions: Sessions["Service"];
-  readonly notes: Notes["Service"];
+  readonly notes: Memories["Service"];
   /** The conditions the agents of the harness set, such as a skipped skill. */
   readonly status: Status["Service"];
 };
@@ -214,6 +216,13 @@ export const withPreparedHarness = <A, E, P>(
               favoriteModelsLayer.pipe(Layer.provide(tauHome), Layer.provide(BunServices.layer)),
             ),
             Layer.provide(
+              referencesLayer.pipe(
+                Layer.provide(tauHome),
+                Layer.provide(FetchHttpClient.layer),
+                Layer.provide(BunServices.layer),
+              ),
+            ),
+            Layer.provide(
               tuiMemoryLayer.pipe(Layer.provide(tauHome), Layer.provide(BunServices.layer)),
             ),
             Layer.provide(Layer.succeed(OutputFolder, { directory: `${home}/output` })),
@@ -229,7 +238,7 @@ export const withPreparedHarness = <A, E, P>(
         startAgent: (replies) => startAgentUsing(replies, ContextMethod.wholeHistory),
         startAgentUsing,
         sessions: Context.get(store, Sessions),
-        notes: Context.get(store, Notes),
+        notes: Context.get(store, Memories),
         status: Context.get(status, Status),
       });
     }).pipe(Effect.scoped, Effect.provide(BunServices.layer)),

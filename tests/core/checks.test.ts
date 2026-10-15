@@ -142,7 +142,7 @@ describe("project checks", () => {
         expect(events).toContainEqual({ type: "checks-ended", failed: ["no-bad"] });
         expect(events).toContainEqual({ type: "checks-ended", failed: [] });
 
-        expect(userTexts(harness.prompts[2]).at(-1)).toEndWith(
+        expect(userTexts(harness.prompts[2]).at(-1)).toContain(
           yield* notesFailure(harness.directory),
         );
       }),

@@ -3,7 +3,7 @@
 import { Effect, Result, Schema } from "effect";
 import { Tool } from "effect/ai";
 import type { Entry, RunningProcess, SessionId } from "../../../../session/Entry.ts";
-import type { Notes } from "../../../../session/Notes.ts";
+import type { Memories } from "../../../../session/Memories.ts";
 import type { ToolCall } from "../../loop/tool-history.ts";
 import type { ModelTool, ToolOutcome } from "../../tools/model-tool.ts";
 import { estimatedPromptTokens } from "./budget.ts";
@@ -17,7 +17,7 @@ const Parameters = Schema.Struct({
 
 type CheckpointServices = {
   readonly session: SessionId;
-  readonly notes: Notes["Service"];
+  readonly notes: Memories["Service"];
   readonly running: Effect.Effect<readonly RunningProcess[]>;
 };
 
@@ -49,12 +49,12 @@ export const checkpointTool = ({
       if (calls.length !== 1)
         return failedCheckpoint("Call checkpoint alone, without any other tool call in the reply.");
 
-      const memory = (yield* notes.memories(session)).findLast(
+      const memory = (yield* notes.longTerm(session)).findLast(
         (saved) => saved.throughEntry < reply.number,
       );
 
-      const saved = (yield* notes.list(session)).filter(
-        (note) => note.number > (memory?.throughNote ?? 0) && note.through < reply.number,
+      const saved = (yield* notes.shortTerm(session)).filter(
+        (note) => note.number > (memory?.throughShortTerm ?? 0) && note.through < reply.number,
       );
 
       return {
@@ -63,9 +63,9 @@ export const checkpointTool = ({
         details: {
           tool: "checkpoint" as const,
           handoff: parsed.success.handoff,
-          memory: memory?.number,
-          notes: saved.map((note) => note.number),
-          noteTokens: estimatedPromptTokens(summaryPrefix(memory, saved)),
+          longTerm: memory?.number,
+          shortTerm: saved.map((note) => note.number),
+          shortTermTokens: estimatedPromptTokens(summaryPrefix(memory, saved)),
           tailFrom: (saved.at(-1)?.through ?? memory?.throughEntry ?? 0) + 1,
           processes: yield* running,
         },

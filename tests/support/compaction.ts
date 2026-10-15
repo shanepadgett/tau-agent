@@ -9,7 +9,7 @@ import { builtInProviders } from "../../src/ai/Providers.ts";
 import { ContextMethod } from "../../src/core/ContextMethod.ts";
 import { type CompactionSettings, ContextSettings } from "../../src/core/ContextSettings.ts";
 import type { EntryBody } from "../../src/session/Entry.ts";
-import type { Notes } from "../../src/session/Notes.ts";
+import type { Memories } from "../../src/session/Memories.ts";
 import { options, profile, type Reply } from "./agent-harness.ts";
 
 const anthropic = builtInProviders.find((candidate) => candidate.id === "anthropic");
@@ -96,21 +96,21 @@ export const counted = (reply: Reply, input: number, cacheRead = 0): Reply =>
   );
 
 export const waitForNotes = (
-  notes: Notes["Service"],
-  session: Parameters<Notes["Service"]["list"]>[0],
+  notes: Memories["Service"],
+  session: Parameters<Memories["Service"]["shortTerm"]>[0],
   count: number,
 ) =>
   notes
-    .list(session)
+    .shortTerm(session)
     .pipe(Effect.repeat({ until: (saved) => saved.length >= count }), Effect.timeout("5 seconds"));
 
 export const waitForMemories = (
-  notes: Notes["Service"],
-  session: Parameters<Notes["Service"]["list"]>[0],
+  notes: Memories["Service"],
+  session: Parameters<Memories["Service"]["shortTerm"]>[0],
   count: number,
 ) =>
   notes
-    .memories(session)
+    .longTerm(session)
     .pipe(Effect.repeat({ until: (saved) => saved.length >= count }), Effect.timeout("5 seconds"));
 
 export const promptText = (sent: Prompt.Prompt | undefined) => JSON.stringify(sent?.content);

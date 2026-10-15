@@ -3,17 +3,17 @@
 import { Effect, PubSub, Ref } from "effect";
 import { Models } from "../../../../ai/Models.ts";
 import type { SessionId } from "../../../../session/Entry.ts";
-import { type Note, Notes } from "../../../../session/Notes.ts";
+import { type ShortTermMemory, Memories } from "../../../../session/Memories.ts";
 import { Sessions } from "../../../../session/Sessions.ts";
 import type { AgentEvent } from "../../../Client.ts";
 import { ContextSettings } from "../../../ContextSettings.ts";
 import { dreamNext } from "./dream.ts";
-import { type NoteServices, writeNextNote } from "./note-writer.ts";
+import { type ShortTermServices, writeNextShortTerm } from "./short-term-writer.ts";
 
 export const makeContextWorker = Effect.fn("makeContextWorker")(function* () {
-  const services: NoteServices = {
+  const services: ShortTermServices = {
     sessions: yield* Sessions,
-    notes: yield* Notes,
+    notes: yield* Memories,
     models: yield* Models,
     settings: yield* ContextSettings,
   };
@@ -26,7 +26,7 @@ export const makeContextWorker = Effect.fn("makeContextWorker")(function* () {
     const covered = yield* Ref.make(0);
 
     // A client shows how far the notes reach, so each catch-up that moves them tells it.
-    const report = services.notes.list(session).pipe(
+    const report = services.notes.shortTerm(session).pipe(
       Effect.flatMap((notes) =>
         Effect.forEach(notesWritten(notes), (event) =>
           Ref.getAndSet(covered, event.through).pipe(
@@ -54,8 +54,8 @@ export const makeContextWorker = Effect.fn("makeContextWorker")(function* () {
 
 /** Writes every due note, then every due memory, until neither is due. */
 const catchUp = Effect.fn("catchUpContext")(
-  function* (services: NoteServices, session: SessionId) {
-    while ((yield* writeNextNote(services, session)) || (yield* dreamNext(services, session)))
+  function* (services: ShortTermServices, session: SessionId) {
+    while ((yield* writeNextShortTerm(services, session)) || (yield* dreamNext(services, session)))
       continue;
   },
   Effect.catch((error) =>
@@ -69,7 +69,7 @@ const catchUp = Effect.fn("catchUpContext")(
 type NotesWritten = Extract<AgentEvent, { type: "notes-written" }>;
 
 /** How far the notes reach, as an event, or none before the first note. */
-export const notesWritten = (notes: readonly Note[]): readonly NotesWritten[] => {
+export const notesWritten = (notes: readonly ShortTermMemory[]): readonly NotesWritten[] => {
   const last = notes.at(-1);
   return last === undefined ? [] : [{ type: "notes-written", through: last.through }];
 };

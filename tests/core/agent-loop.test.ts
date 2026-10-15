@@ -210,7 +210,7 @@ describe("agent loop", () => {
         const note = `<instructions path="${harness.directory}/sub/AGENTS.md">\nSub rules.\n</instructions>`;
 
         expect(systemText(first)[0]).not.toContain("Sub rules.");
-        expect(userTexts(third).filter((text) => text === note)).toHaveLength(1);
+        expect(userTexts(third).filter((text) => text.includes(note))).toHaveLength(1);
       }),
     ));
 
@@ -436,7 +436,10 @@ describe("agent loop", () => {
 
         yield* prompt(opened, "Try again.");
         const told = userTexts(harness.prompts[5]);
-        expect(told).toContainEqual(expect.stringMatching(/^The previous run failed: /));
+
+        expect(told).toContainEqual(
+          expect.stringMatching(/^<reminder kind="run-failed">\nThe previous run failed: /),
+        );
       }).pipe(Effect.provide(TestClock.layer())),
     ));
 

@@ -3,7 +3,7 @@
 import { Effect } from "effect";
 import { Catalog, type ModelRef } from "../../../../ai/Catalog.ts";
 import type { RunningProcess, SessionId } from "../../../../session/Entry.ts";
-import { Notes } from "../../../../session/Notes.ts";
+import { Memories } from "../../../../session/Memories.ts";
 import { Sessions } from "../../../../session/Sessions.ts";
 import { ContextSettings } from "../../../ContextSettings.ts";
 import { needsReply } from "../../loop/tool-history.ts";
@@ -16,7 +16,7 @@ import { makeContextWorker, notesWritten } from "./worker.ts";
 
 export const makeNotesMethod = Effect.fn("makeNotesMethod")(function* () {
   const sessions = yield* Sessions;
-  const notes = yield* Notes;
+  const notes = yield* Memories;
   const catalog = yield* Catalog;
   const settings = yield* ContextSettings;
   const background = yield* makeContextWorker();
@@ -31,7 +31,7 @@ export const makeNotesMethod = Effect.fn("makeNotesMethod")(function* () {
 
     const method: RunMethod = {
       view: (soul, entries) =>
-        Effect.all([notes.list(session), notes.memories(session)]).pipe(
+        Effect.all([notes.shortTerm(session), notes.longTerm(session)]).pipe(
           Effect.map(([saved, memories]) => notesView(soul, entries, saved, memories)),
         ),
       tools: [checkpointTool({ session, notes, running })],
@@ -44,7 +44,7 @@ export const makeNotesMethod = Effect.fn("makeNotesMethod")(function* () {
     return method;
   });
 
-  const history = (session: SessionId) => notes.list(session).pipe(Effect.map(notesWritten));
+  const history = (session: SessionId) => notes.shortTerm(session).pipe(Effect.map(notesWritten));
 
   return { forRun, background, history };
 });
