@@ -1,6 +1,6 @@
 /**
- * Sends non-streaming requests, such as structured output, to the ChatGPT plan routes as streams.
- * These routes reply only with a stream.
+ * Sends non-streaming requests, such as structured output, to the ChatGPT plan providers as streams.
+ * These providers reply only with a stream.
  */
 
 import { Array, Effect, Option, Predicate, Schema } from "effect";

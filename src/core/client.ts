@@ -1,23 +1,56 @@
 /** The commands a client sends the agent and the events it gets back. Print mode is the first client. */
 
 import type { ModelRef } from "../ai/Catalog.ts";
+import { type CallTokens, clampThinking, type ThinkingLevel } from "../ai/ModelProfile.ts";
 import type { Timeouts } from "./internal/run-tool/run-tool.ts";
 
 /** How one run behaves. Each prompt carries its own, so a client can change the model between prompts. */
 export type RunOptions = {
   readonly model: ModelRef;
+  /** The level the user chose. Each call moves it to the nearest level its model offers. */
+  readonly thinking: ThinkingLevel;
   readonly maxTurns: number | undefined;
   readonly timeouts: Timeouts;
 };
 
+/** A reply's model with the level its run chose; replies saved before thinking levels have none. */
+export type SavedModel = ModelRef & { readonly thinking?: ThinkingLevel | undefined };
+
+/**
+ * The level a model that offers `offered` runs at when the user chose `wanted`, for clients that
+ * show it. Undefined when the model offers no levels.
+ */
+export const nearestThinking = (
+  offered: readonly ThinkingLevel[],
+  wanted: ThinkingLevel,
+): ThinkingLevel | undefined => clampThinking(offered, wanted);
+
+/**
+ * `prompt` waits for the running prompt to end. `steer` reaches the running prompt at its next
+ * model call; with no run going, it is a prompt.
+ */
 export type Command =
-  | { readonly type: "prompt"; readonly text: string; readonly options: RunOptions }
+  | { readonly type: "prompt" | "steer"; readonly text: string; readonly options: RunOptions }
   | { readonly type: "cancel" };
+
+/**
+ * One model call of a run. `contextTokens` is the model's context limit; `cost` is in US dollars,
+ * undefined when the model has no price.
+ */
+export type ModelCall = {
+  readonly model: SavedModel;
+  readonly tokens: CallTokens;
+  readonly contextTokens: number;
+  readonly cost: number | undefined;
+};
 
 export type AgentEvent =
   /** A prompt's run starts. Prompts sent during a run wait in order, so this tells a client which one started. */
   | { readonly type: "run-started"; readonly prompt: string }
+  /** A steering message reached the running prompt, as a user entry before the next model call. */
+  | { readonly type: "steered"; readonly text: string }
   | { readonly type: "text"; readonly delta: string }
+  | { readonly type: "model-call-ended"; readonly call: ModelCall }
   | {
       readonly type: "tool-started";
       readonly callId: string;
@@ -26,7 +59,7 @@ export type AgentEvent =
     }
   | { readonly type: "tool-ended"; readonly callId: string; readonly isFailure: boolean }
   /**
-   * The prompts that were waiting when the user cancelled. They did not run; a client gives them
+   * The prompts and steering messages that were waiting when the user cancelled. They did not run; a client gives them
    * back to the user, such as by putting them back in the editor.
    */
   | { readonly type: "prompts-returned"; readonly prompts: readonly string[] }

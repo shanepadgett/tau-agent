@@ -5,10 +5,10 @@
 
 import { Chunk, Effect, Option, Ref, Stream } from "effect";
 import { AiError, type Response } from "effect/ai";
-import type { Entry } from "../../../session/Entry.ts";
+import type { Entry, EntryBody } from "../../../session/Entry.ts";
 import { BASE_PROMPT } from "../run-tool/soul.ts";
 import { toolkit } from "../tools/model-tool.ts";
-import { interruptedEntry, replyEntry } from "./reply.ts";
+import { interruptedEntry, modelCall, replyEntry } from "./reply.ts";
 import { retrySchedule } from "./retry.ts";
 import { CONTINUE, endWith, type Operation, type RunContext } from "./run-context.ts";
 
@@ -34,16 +34,23 @@ export const callModel =
 const reply = Effect.fn("reply")(function* <R>(run: RunContext<R>, saved: readonly Entry[]) {
   const instructed = yield* withInstructions(run, saved);
   const noticed = yield* withNotices(run, instructed);
-  const nudge = run.nudge(noticed);
+  const steered = yield* withSteering(run, noticed);
+  const nudge = run.nudge(steered);
 
   const entries = Option.isSome(nudge)
-    ? [...noticed, ...(yield* run.sessions.append(run.session, [nudge.value]))]
-    : noticed;
+    ? [...steered, ...(yield* run.sessions.append(run.session, [nudge.value]))]
+    : steered;
 
   const parts = yield* streamReply(run, entries).pipe(Effect.retry(retrySchedule(run.emit)));
 
   const body = yield* replyEntry(run.model, parts);
   yield* run.sessions.append(run.session, [body]);
+
+  if (body.tokens !== undefined)
+    yield* run.emit({
+      type: "model-call-ended",
+      call: modelCall(run.model, run.profile, body.tokens),
+    });
 
   // A reply cut off at the output limit can end in the middle of a tool call.
   const finish = parts.find((part) => part.type === "finish");
@@ -107,6 +114,24 @@ const withNotices = Effect.fn("withNotices")(function* <R>(
   if (notices.length === 0) return entries;
 
   return [...entries, ...(yield* run.sessions.append(run.session, notices))];
+});
+
+/**
+ * Saves the steering messages that arrived since the last model call as user entries, tells clients
+ * they reached the run, and gives the entries with them.
+ */
+export const withSteering = Effect.fn("withSteering")(function* <R>(
+  run: RunContext<R>,
+  entries: readonly Entry[],
+) {
+  const texts = yield* run.takeSteering;
+  if (texts.length === 0) return entries;
+
+  const bodies = texts.map((text): EntryBody => ({ type: "user", text, steering: true }));
+  const saved = yield* run.sessions.append(run.session, bodies);
+  yield* Effect.forEach(texts, (text) => run.emit({ type: "steered", text }));
+
+  return [...entries, ...saved];
 });
 
 const saveInterruptedReply = <R>(run: RunContext<R>, parts: Chunk.Chunk<Response.AnyPart>) => {

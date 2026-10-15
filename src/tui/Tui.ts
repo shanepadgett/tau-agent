@@ -5,9 +5,15 @@
 
 import { type CliRenderer, createCliRenderer } from "@opentui/core";
 import { Effect } from "effect";
+import { createSignal } from "solid-js";
 import type { OpenSession } from "../core/Agent.ts";
 import { showChat } from "./internal/App.tsx";
-import { type ChatEnd, type ChatSetup, chatClient } from "./internal/chat-client.ts";
+import {
+  type ChatClient,
+  type ChatEnd,
+  type ChatSetup,
+  chatClient,
+} from "./internal/chat-client.ts";
 
 /**
  * Takes over the terminal for the chat. Closing the scope gives the terminal back as it was. The
@@ -26,7 +32,15 @@ const openTerminal = Effect.acquireRelease(
     }).pipe(Effect.ignore),
 );
 
-export type { ChatOptions, ChatSetup, RestartLink } from "./internal/chat-client.ts";
+export type { ChatAgent, ChatOptions, ChatSetup, RestartLink } from "./internal/chat-client.ts";
+
+/**
+ * Why the chat ended, and the session it showed last. A restart keeps the unsent input for the next
+ * chat.
+ */
+type TuiEnd = Exclude<ChatEnd, { reason: "open" }> & {
+  readonly session: OpenSession["session"]["id"];
+};
 
 /** Shows the chat of `opened` in the terminal until the user quits or Tau restarts. */
 export const chatInTerminal = Effect.fn("chatInTerminal")(function* (
@@ -37,15 +51,53 @@ export const chatInTerminal = Effect.fn("chatInTerminal")(function* (
   return yield* runTui(renderer, opened, setup);
 }, Effect.scoped);
 
-/** Shows the chat of `opened` on `renderer` until the user quits or Tau restarts. */
+/**
+ * Shows the chat of `opened` on `renderer` until the user quits or Tau restarts. When the user
+ * picks another session, or a new one, the chat shows it on the same screen.
+ */
 export const runTui = Effect.fn("runTui")(function* (
   renderer: CliRenderer,
   opened: OpenSession,
   setup: ChatSetup,
 ) {
+  const [client, setClient] = createSignal<ChatClient>();
+  let isShown = false;
+
+  const show = (next: ChatClient) =>
+    Effect.suspend(() => {
+      setClient(() => next);
+      if (isShown) return Effect.void;
+      isShown = true;
+      return Effect.promise(() => showChat(renderer, client));
+    });
+
+  let end = yield* chatSession(opened, setup, show);
+  // A later session starts with an empty input and no first prompt.
+  const later: ChatSetup = { ...setup, prompt: undefined, link: { ...setup.link, draft: "" } };
+
+  while (end.reason === "open") {
+    const session = end.session;
+
+    end = yield* setup.agent.open(session).pipe(
+      Effect.flatMap((next) => chatSession(next, later, show)),
+      Effect.scoped,
+    );
+  }
+
+  return end;
+});
+
+/** Shows one session until the chat ends. The session's client stops with it. */
+const chatSession = Effect.fn("chatSession")(function* (
+  opened: OpenSession,
+  setup: ChatSetup,
+  show: (client: ChatClient) => Effect.Effect<void>,
+) {
   const { client, ended } = yield* chatClient(opened, setup);
   if (setup.prompt !== undefined) client.send(setup.prompt);
-  yield* Effect.promise(() => showChat(renderer, client));
+  yield* show(client);
   const end: ChatEnd = yield* ended;
-  return end;
+  if (end.reason === "open") return end;
+  const finished: TuiEnd = { ...end, session: opened.session.id };
+  return finished;
 }, Effect.scoped);

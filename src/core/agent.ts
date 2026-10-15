@@ -5,16 +5,22 @@
 
 import { Context, Crypto, Effect, FileSystem, Layer, Option, RcMap, type Scope } from "effect";
 import { ChildProcessSpawner } from "effect/process";
+import type { ListedModel, ModelRef } from "../ai/Catalog.ts";
+import type { CredentialStoreError } from "../ai/Credential.ts";
 import { Models } from "../ai/Models.ts";
 import { makeWriteQueue } from "../sandbox/WriteQueue.ts";
 import type { SessionId } from "../session/Entry.ts";
-import { type SessionNotFound, Sessions } from "../session/Sessions.ts";
+import { type ListedSession, type SessionNotFound, Sessions } from "../session/Sessions.ts";
 import type { SessionStoreError } from "../session/SessionStoreError.ts";
 import { SkillUses } from "../session/SkillUses.ts";
+import { makeFileProblems } from "./internal/instructions/file-problems.ts";
 import { makeRunner, type OpenSession, type RunServices } from "./internal/runner/runner.ts";
+import { Status } from "./Status.ts";
 import { UserInstructions } from "./UserInstructions.ts";
 import { OutputFolder } from "./OutputFolder.ts";
 import { ContextMethod } from "./ContextMethod.ts";
+import { FavoriteModels, type FavoriteModelsError } from "./FavoriteModels.ts";
+import { CommitSettings } from "./Commits.ts";
 
 export type { OpenSession } from "./internal/runner/runner.ts";
 
@@ -29,6 +35,18 @@ export class Agent extends Context.Service<
       session: Option.Option<SessionId>,
       directory: string,
     ) => Effect.Effect<OpenSession, SessionNotFound | SessionStoreError, Scope.Scope>;
+    /** The sessions of `directory`, the latest first. */
+    readonly sessions: (
+      directory: string,
+    ) => Effect.Effect<readonly ListedSession[], SessionStoreError>;
+    /** The models Tau can call now. */
+    readonly models: Effect.Effect<readonly ListedModel[], CredentialStoreError>;
+    /** The models the user keeps at the top of `/model`. */
+    readonly favoriteModels: Effect.Effect<readonly ModelRef[]>;
+    /** Makes `ref` a favorite, or stops it being one, and gives the new list. */
+    readonly toggleFavoriteModel: (
+      ref: ModelRef,
+    ) => Effect.Effect<readonly ModelRef[], FavoriteModelsError>;
   }
 >()("tau/core/Agent") {
   static readonly layer = Layer.effect(
@@ -45,8 +63,11 @@ export class Agent extends Context.Service<
         outputFolder: yield* OutputFolder,
         crypto: yield* Crypto.Crypto,
         writeQueue: yield* makeWriteQueue,
+        fileProblems: yield* makeFileProblems(yield* Status),
+        commitSettings: yield* CommitSettings,
       };
 
+      const favorites = yield* FavoriteModels;
       const runners = yield* RcMap.make({ lookup: (id: SessionId) => makeRunner(services, id) });
 
       const open = Effect.fn("Agent.open")(function* (
@@ -60,7 +81,13 @@ export class Agent extends Context.Service<
         return yield* RcMap.get(runners, id);
       });
 
-      return Agent.of({ open });
+      return Agent.of({
+        open,
+        sessions: services.sessions.list,
+        models: services.models.available,
+        favoriteModels: favorites.read,
+        toggleFavoriteModel: favorites.toggle,
+      });
     }),
   );
 }

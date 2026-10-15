@@ -10,6 +10,8 @@ const DEFAULT_RUN_MINUTES = 10;
 const DEFAULT_SHELL_MINUTES = 2;
 const DEFAULT_RUN_TIMEOUT = Duration.minutes(DEFAULT_RUN_MINUTES);
 const DEFAULT_SHELL_TIMEOUT = Duration.minutes(DEFAULT_SHELL_MINUTES);
+/** A new chat and print mode think at this level until the user picks another. */
+const DEFAULT_THINKING = "medium";
 
 class NoModel extends Schema.TaggedError<NoModel>()("NoModel", { message: Schema.String }) {}
 
@@ -27,6 +29,7 @@ export const runOptions = Effect.fn("runOptions")(function* (
 
   return {
     model: text === undefined ? undefined : yield* modelRef(text),
+    thinking: DEFAULT_THINKING,
     maxTurns: settings.maxTurns,
     timeouts: {
       run: secondsOr(settings.runTimeoutSeconds, DEFAULT_RUN_TIMEOUT),
@@ -43,7 +46,7 @@ export const requireModel = (options: ChatOptions): Effect.Effect<RunOptions, No
     return Effect.fail(
       new NoModel({
         message:
-          'No model is set. Add "model": "route/model" to ~/.tau/settings.json, such as "anthropic/claude-sonnet-5-5", or pass --model.',
+          'No model is set. Add "model": "provider/model" to ~/.tau/settings.json, such as "anthropic/claude-sonnet-5-5", or pass --model.',
       }),
     );
   }
@@ -56,7 +59,7 @@ const modelRef = (text: string) =>
     onNone: () =>
       Effect.fail(
         new NoModel({
-          message: `"${text}" is not a model. Write it as route/model, such as anthropic/claude-sonnet-5-5.`,
+          message: `"${text}" is not a model. Write it as provider/model, such as anthropic/claude-sonnet-5-5.`,
         }),
       ),
     onSome: Effect.succeed,

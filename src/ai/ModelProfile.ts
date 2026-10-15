@@ -33,6 +33,62 @@ const Abilities = Schema.Struct({
 
 export type Abilities = typeof Abilities.Type;
 
+/** One ladder of thinking levels for every model, lowest first. Each model offers some of them. */
+const THINKING_LEVELS = ["off", "low", "medium", "high", "xhigh", "max"] as const;
+
+export const ThinkingLevel = Schema.Literals(THINKING_LEVELS);
+
+export type ThinkingLevel = typeof ThinkingLevel.Type;
+
+/**
+ * How a model takes a thinking level. `effort` sends the provider's own word for each level it
+ * offers; `budget` sends a number of thinking tokens; `toggle` only turns thinking on (as
+ * `medium`) or off. `canTurnOff` says the request can turn thinking off, which offers `off`.
+ */
+export type Thinking =
+  | {
+      readonly kind: "effort";
+      readonly values: Partial<Record<ThinkingLevel, string>>;
+      readonly canTurnOff: boolean;
+    }
+  | { readonly kind: "budget"; readonly minTokens: number; readonly maxTokens: number | undefined }
+  | { readonly kind: "toggle" };
+
+const BUDGET_LEVELS: readonly ThinkingLevel[] = ["off", "low", "medium", "high", "max"];
+const TOGGLE_LEVELS: readonly ThinkingLevel[] = ["off", "medium"];
+
+/** The levels a model offers, in ladder order. A model with no thinking, or no choice, offers none. */
+export const thinkingLevels = (thinking: Thinking | undefined): readonly ThinkingLevel[] => {
+  switch (thinking?.kind) {
+    case undefined:
+      return [];
+
+    case "budget":
+      return BUDGET_LEVELS;
+
+    case "toggle":
+      return TOGGLE_LEVELS;
+
+    case "effort":
+      return THINKING_LEVELS.filter(
+        (level) => thinking.values[level] !== undefined || (level === "off" && thinking.canTurnOff),
+      );
+  }
+};
+
+/**
+ * The offered level nearest to `wanted`: the next one up, or else the next one down. Undefined when
+ * the model offers no levels.
+ */
+export const clampThinking = (
+  offered: readonly ThinkingLevel[],
+  wanted: ThinkingLevel,
+): ThinkingLevel | undefined => {
+  const rank = THINKING_LEVELS.indexOf(wanted);
+  const above = offered.find((level) => THINKING_LEVELS.indexOf(level) >= rank);
+  return above ?? offered.at(-1);
+};
+
 export type ModelProfile = {
   readonly id: string;
   readonly name: string;
@@ -43,6 +99,7 @@ export type ModelProfile = {
   /** When the context is larger than `aboveTokens`, all tokens in the request cost `price`. */
   readonly longContextPrice: { readonly aboveTokens: number; readonly price: Price } | undefined;
   readonly supports: Abilities;
+  readonly thinking: Thinking | undefined;
 };
 
 export type DecisionProfile = {
@@ -112,7 +169,36 @@ export const applyModelSettings = (
     price: settings.price,
     longContextPrice: undefined,
     supports: { ...SETTINGS_ONLY_ABILITIES, ...settings.supports },
+    thinking: undefined,
   });
+};
+
+/** The token counts of one model call, as the provider reports them. Input includes cached tokens. */
+export type CallTokens = {
+  readonly input?: number | undefined;
+  readonly output?: number | undefined;
+  readonly cacheRead?: number | undefined;
+  readonly cacheWrite?: number | undefined;
+};
+
+const PER_MILLION = 1_000_000;
+
+/** What one call cost in US dollars, or undefined when the model has no price. */
+export const callCost = (profile: ModelProfile, tokens: CallTokens): number | undefined => {
+  const { input = 0, output = 0, cacheRead = 0, cacheWrite = 0 } = tokens;
+  const long = profile.longContextPrice;
+  const price = long !== undefined && input > long.aboveTokens ? long.price : profile.price;
+  if (price === undefined) return undefined;
+
+  const uncached = input - cacheRead - cacheWrite;
+
+  const dollars =
+    uncached * price.input +
+    cacheRead * price.cacheRead +
+    cacheWrite * price.cacheWrite +
+    output * price.output;
+
+  return dollars / PER_MILLION;
 };
 
 export const applyDecisionSettings = (
