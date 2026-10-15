@@ -13,7 +13,25 @@ const RUNNING: readonly ChatAction[] = [
   { type: "run-started", prompt: "Hi." },
 ];
 
+const SLEEP = { id: "p1", command: "sleep 30", pty: false, state: { type: "running" } } as const;
+
 const cases: ReadonlyArray<readonly [string, readonly ChatAction[], Partial<ChatState>]> = [
+  [
+    "the newest process list replaces the one before",
+    [
+      { type: "processes-changed", processes: [SLEEP] },
+      { type: "processes-changed", processes: [{ ...SLEEP, state: { type: "killed" } }] },
+    ],
+    { processes: [{ ...SLEEP, state: { type: "killed" } }], items: [] },
+  ],
+  [
+    "written notes move how far the notes reach",
+    [
+      { type: "notes-written", through: 40 },
+      { type: "notes-written", through: 86 },
+    ],
+    { notesThrough: 86, items: [] },
+  ],
   [
     "a sent prompt waits in the queue",
     [{ type: "prompt-sent", text: "Hi." }],

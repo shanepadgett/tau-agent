@@ -34,12 +34,16 @@ const finish = Stream.make<Response.StreamPartEncoded[]>({
   },
 });
 
-const SCREEN = { width: 80, height: 24, kittyKeyboard: true };
+const HEIGHT = 24;
 
-const testTerminal = Effect.acquireRelease(
-  Effect.promise(() => createTestRenderer(SCREEN)),
-  (setup) => Effect.sync(() => setup.renderer.destroy()),
-);
+/** Wide enough for a docked sidebar. */
+const WIDE = 140;
+
+const testTerminal = (width: number) =>
+  Effect.acquireRelease(
+    Effect.promise(() => createTestRenderer({ width, height: HEIGHT, kittyKeyboard: true })),
+    (setup) => Effect.sync(() => setup.renderer.destroy()),
+  );
 
 /** A supervisor that never restarts the chat. */
 const noRestarts: RestartLink = {
@@ -77,15 +81,16 @@ const fakeSupervisor = Effect.fn("fakeSupervisor")(function* (draft: string) {
 });
 
 /**
- * Starts the chat on a test terminal, with a status the test can set conditions in. The chat stops
- * when the test's scope closes.
+ * Starts the chat on a test terminal `width` columns wide, with a status the test can set
+ * conditions in. The chat stops when the test's scope closes.
  */
 const startChat = Effect.fn("startChat")(function* (
   agent: Agent["Service"],
   opened: OpenSession,
   setup: TestSetup,
+  width = 80,
 ) {
-  const terminal = yield* testTerminal;
+  const terminal = yield* testTerminal(width);
   const services = yield* Layer.build(Status.layer);
 
   const chatAgent: ChatAgent = {
@@ -95,6 +100,8 @@ const startChat = Effect.fn("startChat")(function* (
     models: agent.models,
     favoriteModels: agent.favoriteModels,
     toggleFavoriteModel: agent.toggleFavoriteModel,
+    sidebarChoice: agent.sidebarChoice,
+    saveSidebarChoice: agent.saveSidebarChoice,
   };
 
   const tui = runTui(terminal.renderer, opened, { ...setup, agent: chatAgent }).pipe(
@@ -143,6 +150,22 @@ const savedFavorites = Effect.fn("savedFavorites")(function* (home: string) {
       .pipe(Effect.orElseSucceed(() => ""));
 
     if (text !== "") return yield* Schema.decodeEffect(SavedJson)(text);
+    yield* Effect.sleep("10 millis");
+  }
+});
+
+const SavedTuiJson = Schema.fromJsonString(Schema.Struct({ sidebar: Schema.String }));
+
+/** What the chat remembers, once the background save has written it. */
+const savedTuiMemory = Effect.fn("savedTuiMemory")(function* (home: string) {
+  const fileSystem = yield* FileSystem.FileSystem;
+
+  for (;;) {
+    const text = yield* fileSystem
+      .readFileString(`${home}/.tau/tui.json`)
+      .pipe(Effect.orElseSucceed(() => ""));
+
+    if (text !== "") return yield* Schema.decodeEffect(SavedTuiJson)(text);
     yield* Effect.sleep("10 millis");
   }
 });
@@ -260,17 +283,75 @@ describe("the chat in the terminal", () => {
       }).pipe(Effect.scoped),
     ));
 
-  test("the footer shows the context of the latest model call and what the calls cost", () =>
+  test("on a wide terminal the docked sidebar shows context and cost; Ctrl-B hides it and Tau remembers", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
         const agent = yield* harness.startAgent([Stream.concat(textReply("Hello."), finish)]);
         const opened = yield* agent.open(Option.none(), harness.directory);
-        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options));
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options), WIDE);
+        expect(yield* frameWith(terminal, "Session")).toContain("No model call yet");
 
         yield* Effect.promise(() => terminal.mockInput.typeText("Hi."));
         terminal.mockInput.pressEnter();
+        const frame = yield* frameWith(terminal, "$0.04");
 
-        yield* frameWith(terminal, "scripted/scripted · 43k/128k · $0.04");
+        expect(frame).toContain("43k / 128k");
+        expect(frame).toContain("ctrl+b sidebar");
+        expect(frame).not.toContain("43k/128k");
+
+        terminal.mockInput.pressKey("b", { ctrl: true });
+        yield* frameWhere(terminal, (shown) => !shown.includes("Session"));
+        expect(yield* savedTuiMemory(harness.home)).toEqual({ sidebar: "closed" });
+      }).pipe(Effect.scoped),
+    ));
+
+  test("the sidebar lists the commands the agent started, and says when nothing is compacted", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([
+          runReply("call-1", 'await tools.process.start({ command: "sleep 30" });'),
+          finish,
+        ]);
+
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options), WIDE);
+        const empty = yield* frameWith(terminal, "None started");
+        expect(empty).toContain("No notes yet");
+        expect(empty).toContain("Not compacted yet");
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("Start it."));
+        terminal.mockInput.pressEnter();
+        expect(yield* frameWith(terminal, "● sleep 30")).toMatch(/● sleep 30 +running/);
+      }).pipe(Effect.scoped),
+    ));
+
+  test("on a narrow terminal Ctrl-B opens the sidebar as a drawer, and Escape closes it", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options));
+        expect(terminal.captureCharFrame()).not.toContain("Session");
+
+        terminal.mockInput.pressKey("b", { ctrl: true });
+        yield* frameWith(terminal, "No model call yet");
+        terminal.mockInput.pressEscape();
+        yield* frameWhere(terminal, (frame) => !frame.includes("Session"));
+      }).pipe(Effect.scoped),
+    ));
+
+  test("a narrower terminal closes the docked sidebar, and a wider one opens it again", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options), WIDE);
+        yield* frameWith(terminal, "Session");
+
+        terminal.resize(100, HEIGHT);
+        yield* frameWhere(terminal, (frame) => !frame.includes("Session"));
+        terminal.resize(WIDE, HEIGHT);
+        yield* frameWith(terminal, "Session");
       }).pipe(Effect.scoped),
     ));
 

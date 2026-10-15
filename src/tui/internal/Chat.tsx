@@ -1,6 +1,6 @@
 /** The transcript: the user's prompts, the answers as Markdown, one line per tool call, and notices. */
 
-import type { SyntaxStyle } from "@opentui/core";
+import type { ScrollBoxRenderable, SyntaxStyle } from "@opentui/core";
 import { For } from "solid-js";
 import type { ChatItem, ChatState } from "./chat-state.ts";
 import { COLORS } from "./theme.ts";
@@ -17,11 +17,20 @@ const TOOL_COLORS: Record<ToolCall["status"], string> = {
 
 export function Chat(props: { readonly chat: ChatState; readonly syntax: SyntaxStyle }) {
   return (
-    <scrollbox flexGrow={1} stickyScroll stickyStart="bottom">
+    <scrollbox flexGrow={1} stickyScroll stickyStart="bottom" ref={hideScrollBar}>
       <For each={props.chat.items}>{(item) => <ChatLine item={item} syntax={props.syntax} />}</For>
     </scrollbox>
   );
 }
+
+/**
+ * The transcript scrolls with the mouse wheel and keys but draws no scroll bar. The bar shows
+ * itself when the text overflows, unless it is hidden by hand; the `visible` option does not
+ * stop that.
+ */
+const hideScrollBar = (scrollbox: ScrollBoxRenderable) => {
+  scrollbox.verticalScrollBar.visible = false;
+};
 
 /** An item keeps its kind for its life, so the switch runs once; the fields it shows stay reactive. */
 function ChatLine(props: { readonly item: ChatItem; readonly syntax: SyntaxStyle }) {

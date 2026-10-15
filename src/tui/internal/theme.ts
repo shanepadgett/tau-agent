@@ -8,6 +8,7 @@ import { useRenderer } from "@opentui/solid";
 
 /** One Dark's colors, by what each means on the chat screen. */
 export const COLORS = {
+  background: "#282c34",
   text: "#dddddd",
   muted: "#888888",
   border: "#555555",

@@ -8,12 +8,14 @@ import { type Accessor, createSignal } from "solid-js";
 import { createStore, reconcile, unwrap } from "solid-js/store";
 import type { Agent, OpenSession } from "../../core/Agent.ts";
 import type { RunOptions } from "../../core/Client.ts";
+import type { SidebarChoice } from "../../core/TuiMemory.ts";
 import { type Condition, Status } from "../../core/Status.ts";
 import { chatCommands, type CommandTarget } from "./chat-commands.ts";
 import { type CommitFlow, commitFlow } from "./commit-flow.ts";
 import { type ChatAction, type ChatState, isIdle, reduce, replay } from "./chat-state.ts";
 import type { CommandInfo } from "./command-suggestions.ts";
 import { type ListedModel, type ModelRef, refText } from "./model-picker.ts";
+import type { SidebarMemory } from "./sidebar-state.ts";
 import { thinkingChoice } from "./thinking-choice.ts";
 import type { PickerList } from "./Picker.tsx";
 
@@ -43,11 +45,16 @@ export type RestartLink = {
 
 /**
  * What the chat asks of the agent besides its open session: the sessions of the folder and the
- * models for `/sessions` and `/model`, the favorite models, and opening the session the user picks, or a new one.
+ * models for `/sessions` and `/model`, the favorite models, the sidebar's remembered choice, and opening the session the user picks, or a new one.
  */
 export type ChatAgent = Pick<
   Agent["Service"],
-  "sessions" | "models" | "favoriteModels" | "toggleFavoriteModel"
+  | "sessions"
+  | "models"
+  | "favoriteModels"
+  | "toggleFavoriteModel"
+  | "sidebarChoice"
+  | "saveSidebarChoice"
 > & {
   readonly open: (session: SessionId | undefined) => Effect.Effect<OpenSession, never, Scope.Scope>;
 };
@@ -100,6 +107,8 @@ export type ChatClient = {
   readonly queue: (text: string) => void;
   readonly cancel: () => void;
   readonly quit: () => void;
+  /** Whether the user last left the docked sidebar open, and a way to save a new choice. */
+  readonly sidebar: SidebarMemory;
 };
 
 /**
@@ -127,12 +136,7 @@ export const chatClient = Effect.fn("chatClient")(function* (
 
   reportActivity();
 
-  const update = (action: ChatAction) =>
-    Effect.sync(() => {
-      apply(action);
-    });
-
-  yield* Effect.forkScoped(Stream.fromSubscription(events).pipe(Stream.runForEach(update)));
+  yield* Effect.forkScoped(followEvents(events, apply));
 
   yield* Effect.forkScoped(Effect.andThen(link.exitRequested, restart(chat, editor, end)));
   const prompts = yield* promptSender({ opened, agent, chat, apply, options: setup.options });
@@ -173,10 +177,24 @@ export const chatClient = Effect.fn("chatClient")(function* (
     },
     cancel: () => Effect.runFork(opened.send({ type: "cancel" })),
     quit: () => end({ reason: "quit" }),
+    sidebar: yield* sidebarMemory(agent, apply),
   };
 
   return { client, ended: Deferred.await(ended) };
 });
+
+/** Applies the session's events to the chat, as they come. */
+const followEvents = (
+  events: Effect.Success<OpenSession["subscribe"]>,
+  apply: (action: ChatAction) => void,
+) =>
+  Stream.fromSubscription(events).pipe(
+    Stream.runForEach((action) =>
+      Effect.sync(() => {
+        apply(action);
+      }),
+    ),
+  );
 
 /**
  * Ends the chat for a restart. Prompts and steering messages that wait for their run would be lost
@@ -279,6 +297,29 @@ const activityReporter = (link: RestartLink, chat: ChatState) => {
     Effect.runFork(link.reportActivity(activity));
   };
 };
+
+/** The sidebar's remembered choice. A save runs in the background and says when it fails. */
+const sidebarMemory = Effect.fn("sidebarMemory")(function* (
+  agent: ChatAgent,
+  apply: (action: ChatAction) => void,
+) {
+  const remembered = yield* agent.sidebarChoice;
+
+  const save = (choice: SidebarChoice) => {
+    runInBackground(
+      agent.saveSidebarChoice(choice).pipe(
+        Effect.catchTag("TuiMemoryError", (error) =>
+          Effect.sync(() => {
+            apply({ type: "notice", text: `Could not save the sidebar choice to ${error.path}.` });
+          }),
+        ),
+      ),
+    );
+  };
+
+  const memory: SidebarMemory = { remembered, save };
+  return memory;
+});
 
 const runInBackground = (effect: Effect.Effect<void>) => {
   Effect.runFork(effect);

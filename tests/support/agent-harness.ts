@@ -24,6 +24,7 @@ import type { AgentEvent, RunOptions } from "../../src/core/Client.ts";
 import { Status } from "../../src/core/Status.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { favoriteModelsLayer } from "../../src/host/FavoriteModels.ts";
+import { tuiMemoryLayer } from "../../src/host/TuiMemory.ts";
 import { Settings } from "../../src/host/Settings.ts";
 import { userInstructionsLayer } from "../../src/host/UserInstructions.ts";
 import { Sessions } from "../../src/session/Sessions.ts";
@@ -201,6 +202,9 @@ export const withPreparedHarness = <A, E, P>(
             Layer.provide(user),
             Layer.provide(
               favoriteModelsLayer.pipe(Layer.provide(tauHome), Layer.provide(BunServices.layer)),
+            ),
+            Layer.provide(
+              tuiMemoryLayer.pipe(Layer.provide(tauHome), Layer.provide(BunServices.layer)),
             ),
             Layer.provide(Layer.succeed(OutputFolder, { directory: `${home}/output` })),
             Layer.provide(Layer.succeedContext(status)),

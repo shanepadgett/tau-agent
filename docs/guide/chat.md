@@ -30,8 +30,9 @@ Run `tau` with no `-p` to chat with Tau in your terminal: send prompts, watch th
 | Tab | During a run, queues the prompt: it runs as a new prompt after the run ends. |
 | Shift+Tab | Between runs, steps the thinking level up, from the top back to the lowest. During a run it does nothing. |
 | Shift+Enter, Ctrl+Enter, Alt+Enter, Ctrl+J | Adds a line to the prompt |
-| Escape | Cancels the run |
+| Escape | Closes the sidebar when it covers the chat, or else cancels the run |
 | Ctrl+C | Each press does the first of these that applies: closes an open list or panel, clears the input, cancels the run, quits |
+| Ctrl+B | Shows or hides the sidebar (see below). In tmux, where Ctrl+B is the prefix key, press it twice. |
 | Ctrl+D | Quits |
 
 In a list that a command opens, type to filter it, use the arrow keys to move, press Enter to choose, and press Escape or Ctrl+C to close the list.
@@ -60,13 +61,27 @@ While a run is going or a prompt waits, Tau does not switch sessions: choosing a
 - When you cancel a run, the steering messages and prompts that were waiting go back into the input, so you can change them and send them again.
 - Directly above the input, the status strip lists problems that are true now, one line each: errors (✗, red) first, then warnings (!, yellow), then news with no mark (grey). Each line stays until its cause is gone, and long lines wrap. With no problems, the strip takes no space.
 - A skill, an instruction file or a folder of them that Tau could not read shows as a warning in the status strip, because the model works without it. The warning goes away at the first run after the file reads again.
-- Under the input, the footer shows the model, the context the last model call used out of the model's context window, the cost of the session so far, and the keys you can use now, such as `anthropic/claude-sonnet-5-5 (medium) · 42k/200k · $0.04`. The level in parentheses is how hard the model thinks (see [choose-a-model.md](choose-a-model.md)). Context and cost show after the first reply.
+- Under the input, the footer shows the model and the keys you can use now, such as `anthropic/claude-sonnet-5-5 (medium)`. The level in parentheses is how hard the model thinks (see [choose-a-model.md](choose-a-model.md)).
 - A resumed session goes on with the model of its latest reply, not the one from `--model` or your settings.
 - When a run fails, the transcript shows "The run failed:" and the reason. The session keeps it, so a resumed session shows it too, and the model reads "The previous run failed: …" in its next call.
 - A resumed session shows its earlier prompts, answers and scripts.
+- The transcript scrolls with the mouse wheel. It shows no scroll bar, and it follows new text while you are at the bottom.
 - To copy text, select it with the mouse. Tau copies it to the clipboard when you let go of the button. Over SSH, Tau copies through the terminal (OSC 52), which needs a terminal that allows it.
 - When you quit, Tau prints `Session: <id>` so that you can continue the session later.
 - Tau runs commands and changes files with your permissions. It does not ask first.
+
+## The sidebar
+
+The sidebar on the right shows the session. Ctrl+B shows or hides it. It has four sections:
+
+- **Context**: the context the last model call used out of the model's context window, with a bar. It shows after the first reply.
+- **Cost**: what the session cost so far.
+- **Processes**: the commands the agent started in process sessions, running ones first. `●` is running; `○` has exited or was killed, red when it was killed or its exit code is not 0. A command that ended leaves the list after a minute. The list updates within a quarter of a second.
+- **Compaction**: how far the background notes reach, such as `Notes cover entries 1–86`, and how many times the model compacted its context with a checkpoint.
+
+- When the terminal is 122 columns or wider, the sidebar sits beside the chat, and the chat gets narrower. It opens as you last left it, and it is open the first time. Tau keeps your choice in `~/.tau/tui.json`.
+- When the terminal is narrower, the sidebar opens over the right of the chat, which goes dim, and Escape or Ctrl+B closes it. It always starts closed.
+- When you make the terminal narrower than 122 columns, an open sidebar closes. When you make it wide again, it opens again if you left it open.
 
 ## Restart Tau into new code
 

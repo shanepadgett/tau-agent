@@ -43,6 +43,9 @@ export type Usage = {
   readonly cost: number | undefined;
 };
 
+/** The commands the agent started in process sessions, as core last reported them. */
+export type ChatProcesses = Extract<AgentEvent, { type: "processes-changed" }>["processes"];
+
 /** Prompts that a cancel took off the queue, for the input editor to take back. A new ID each time. */
 type ReturnedPrompts = { readonly id: number; readonly prompts: readonly string[] };
 
@@ -51,6 +54,9 @@ export type ChatState = {
   readonly queued: readonly QueuedPrompt[];
   readonly steering: readonly QueuedPrompt[];
   readonly usage: Usage | undefined;
+  readonly processes: ChatProcesses;
+  /** The last session entry the background notes cover, or none before the first note. */
+  readonly notesThrough: number | undefined;
   readonly returned: ReturnedPrompts | undefined;
   readonly run: RunState;
   readonly nextId: number;
@@ -74,6 +80,8 @@ const EMPTY_CHAT: ChatState = {
   queued: [],
   steering: [],
   usage: undefined,
+  processes: [],
+  notesThrough: undefined,
   returned: undefined,
   run: "idle",
   nextId: 1,
@@ -138,6 +146,10 @@ export const reduce = (state: ChatState, action: ChatAction): ChatState => {
       });
     case "checks-ended":
       return add(state, { kind: "notice", text: checksText(action.failed) });
+    case "processes-changed":
+      return { ...state, processes: action.processes };
+    case "notes-written":
+      return { ...state, notesThrough: action.through };
     case "run-ended":
       return endRun(state, action);
   }

@@ -12,11 +12,11 @@ import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 export type TauKeymap = Keymap<Renderable, KeyEvent>;
 
 /**
- * A panel the user answers comes first, then the command list, then the input's own keys, then the
- * chat's. The editing keys of OpenTUI's text areas have priority 0, so Ctrl-D quits instead of
+ * A panel the user answers comes first, then an open sidebar drawer, then the command list, then the
+ * input's own keys, then the chat's. The editing keys of OpenTUI's text areas have priority 0, so Ctrl-D quits instead of
  * deleting a character.
  */
-export const PRIORITY = { panel: 30, list: 20, input: 10, chat: 5 } as const;
+export const PRIORITY = { panel: 30, drawer: 25, list: 20, input: 10, chat: 5 } as const;
 
 // OpenTUI's defaults add a line on Enter and send on Alt-Enter. These come first, so they win.
 // Shift-Enter and Ctrl-Enter reach Tau only with the kitty keyboard protocol; Ctrl-J works in every

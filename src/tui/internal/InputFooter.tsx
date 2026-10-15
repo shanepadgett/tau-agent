@@ -1,11 +1,11 @@
 /**
- * The line under the input: the model of the runs and its thinking level, what its calls used and
- * cost, and the keys that work now. Nothing else goes here.
+ * The line under the input: the model of the runs and its thinking level, and the keys that work
+ * now. Nothing else goes here; what the calls used and cost shows in the sidebar.
  */
 
 import { useKeymapSelector } from "@opentui/keymap/solid";
+import type { Accessor } from "solid-js";
 import type { ChatClient } from "./chat-client.ts";
-import type { Usage } from "./chat-state.ts";
 import type { CommandSuggestions } from "./command-suggestions.ts";
 import { keyText, type TauKeymap } from "./keymap.ts";
 import { COLORS } from "./theme.ts";
@@ -40,30 +40,31 @@ const LIST_HINTS: readonly Hint[] = [
   [["list.close"], "close"],
 ];
 
-const TOKENS_PER_K = 1000;
+/** Shown before the quit key while the line has room for it. */
+const SIDEBAR_HINT: Hint = [["sidebar.toggle"], "sidebar"];
+
+/** The columns between the model and the keys. */
+const GAP = 2;
 
 export function InputFooter(props: {
   readonly client: ChatClient;
   readonly suggestions: CommandSuggestions;
+  /** The width of the line. */
+  readonly columns: Accessor<number>;
 }) {
   // The keys come from the key map, so a hint shows the key that works. Bindings register after
   // the first draw, so the hints follow the key map's changes.
   const hints = useKeymapSelector((keymap) => ({
-    idle: hintsText(keymap, IDLE_HINTS),
-    idleThinking: hintsText(keymap, IDLE_THINKING_HINTS),
-    running: hintsText(keymap, RUNNING_HINTS),
-    list: hintsText(keymap, LIST_HINTS),
+    idle: choicesText(keymap, IDLE_HINTS),
+    idleThinking: choicesText(keymap, IDLE_THINKING_HINTS),
+    running: choicesText(keymap, RUNNING_HINTS),
+    list: [hintsText(keymap, LIST_HINTS)],
   }));
 
-  const keys = () => {
+  const choices = () => {
     if (props.suggestions.completes()) return hints().list;
     if (props.client.chat.run !== "idle") return hints().running;
     return props.client.thinking() === undefined ? hints().idle : hints().idleThinking;
-  };
-
-  const usage = () => {
-    const known = props.client.chat.usage;
-    return known === undefined ? "" : ` · ${usageText(known)}`;
   };
 
   const level = () => {
@@ -71,12 +72,19 @@ export function InputFooter(props: {
     return thinking === undefined ? "" : ` (${thinking})`;
   };
 
+  const model = () => `${props.client.model() ?? "no model set"}${level()}`;
+
+  // The first choice that fits beside the model, or else the last.
+  const keys = () => {
+    const room = props.columns() - model().length - GAP;
+    const all = choices();
+    return all.find((text) => text.length <= room) ?? all.at(-1) ?? "";
+  };
+
   return (
-    <box flexDirection="row" justifyContent="space-between" gap={2}>
+    <box flexDirection="row" justifyContent="space-between" gap={GAP}>
       <text fg={COLORS.muted} flexShrink={0}>
-        {props.client.model() ?? "no model set"}
-        {level()}
-        {usage()}
+        {model()}
       </text>
       <text fg={COLORS.muted}>{keys()}</text>
     </box>
@@ -92,11 +100,8 @@ const hintsText = (keymap: TauKeymap, hints: readonly Hint[]) =>
     )
     .join(" · ");
 
-/** Such as `42k/200k · $0.84`: the context of the latest call, the limit, and the cost so far. */
-const usageText = (usage: Usage) => {
-  const context = `${tokenText(usage.contextUsed)}/${tokenText(usage.contextTokens)}`;
-  return usage.cost === undefined ? context : `${context} · $${usage.cost.toFixed(2)}`;
-};
-
-/** A token count in thousands, such as `200k`. */
-const tokenText = (tokens: number) => `${Math.round(tokens / TOKENS_PER_K)}k`;
+/** The hints with the sidebar's key, for a line with room for it, then without it. */
+const choicesText = (keymap: TauKeymap, hints: readonly Hint[]) => [
+  hintsText(keymap, [...hints.slice(0, -1), SIDEBAR_HINT, ...hints.slice(-1)]),
+  hintsText(keymap, hints),
+];

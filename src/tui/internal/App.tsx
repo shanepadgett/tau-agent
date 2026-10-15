@@ -1,6 +1,6 @@
 /**
  * The chat screen: the transcript, and under it the run panel, the status strip, the input editor
- * and its footer.
+ * and its footer. The sidebar is on the right.
  */
 
 import {
@@ -11,7 +11,7 @@ import {
   type SyntaxStyle,
 } from "@opentui/core";
 import { KeymapProvider, useBindings } from "@opentui/keymap/solid";
-import { render, useRenderer, useSelectionHandler } from "@opentui/solid";
+import { render, useRenderer, useSelectionHandler, useTerminalDimensions } from "@opentui/solid";
 import { type Accessor, onCleanup, Show } from "solid-js";
 import { Chat } from "./Chat.tsx";
 import type { ChatClient } from "./chat-client.ts";
@@ -25,6 +25,8 @@ import { Picker } from "./Picker.tsx";
 import { CommitPanel } from "./CommitPanel.tsx";
 import { Place } from "./Place.tsx";
 import { RunPanel } from "./RunPanel.tsx";
+import { Sidebar } from "./Sidebar.tsx";
+import { SIDEBAR_COLUMNS, type SidebarState, sidebarState } from "./sidebar-state.ts";
 import { StatusStrip } from "./StatusStrip.tsx";
 import { useSyntaxStyle } from "./theme.ts";
 
@@ -64,37 +66,46 @@ function App(props: { readonly client: ChatClient; readonly syntax: SyntaxStyle 
   const panelOpen = () =>
     props.client.picker() !== undefined || props.client.commit.step() !== undefined;
 
-  chatKeys(props.client, panelOpen);
+  const terminal = useTerminalDimensions();
+  const sidebar = sidebarState(() => terminal().width, props.client.sidebar);
+  chatKeys(props.client, panelOpen, sidebar);
+
+  // The columns of the chat: the terminal less its padding and a docked open sidebar.
+  const docked = () => sidebar.mode() === "docked" && sidebar.isOpen();
+  const chatColumns = () => terminal().width - 2 - (docked() ? SIDEBAR_COLUMNS : 0);
 
   return (
     <Place name="app">
-      <box flexDirection="column" width="100%" height="100%" paddingLeft={1} paddingRight={1}>
-        <Place name="chat">
-          <Chat chat={props.client.chat} syntax={props.syntax} />
-        </Place>
-        {/* The input keeps its height; the transcript shrinks and scrolls instead. */}
-        <box flexDirection="column" flexShrink={0}>
-          <Place name="input.above">
-            <RunPanel chat={props.client.chat} />
-            <StatusStrip client={props.client} />
-            <Show when={props.client.picker()} keyed>
-              {(picker) => <Picker picker={picker} close={props.client.closePicker} />}
-            </Show>
-            <Show when={props.client.commit.step()} keyed>
-              {(step) => <CommitPanel flow={props.client.commit} step={step} />}
-            </Show>
-            <CommandList suggestions={suggestions} />
+      <box flexDirection="row" width="100%" height="100%">
+        <box flexDirection="column" flexGrow={1} paddingLeft={1} paddingRight={1}>
+          <Place name="chat">
+            <Chat chat={props.client.chat} syntax={props.syntax} />
           </Place>
-          {/* Hidden, not removed, so the draft stays in the editor. */}
-          <box flexDirection="column" visible={!panelOpen()}>
-            <Place name="input.editor">
-              <Input client={props.client} suggestions={suggestions} />
+          {/* The input keeps its height; the transcript shrinks and scrolls instead. */}
+          <box flexDirection="column" flexShrink={0}>
+            <Place name="input.above">
+              <RunPanel chat={props.client.chat} />
+              <StatusStrip client={props.client} />
+              <Show when={props.client.picker()} keyed>
+                {(picker) => <Picker picker={picker} close={props.client.closePicker} />}
+              </Show>
+              <Show when={props.client.commit.step()} keyed>
+                {(step) => <CommitPanel flow={props.client.commit} step={step} />}
+              </Show>
+              <CommandList suggestions={suggestions} />
+            </Place>
+            {/* Hidden, not removed, so the draft stays in the editor. */}
+            <box flexDirection="column" visible={!panelOpen()}>
+              <Place name="input.editor">
+                <Input client={props.client} suggestions={suggestions} />
+              </Place>
+            </box>
+            <Place name="input.below">
+              <InputFooter client={props.client} suggestions={suggestions} columns={chatColumns} />
             </Place>
           </box>
-          <Place name="input.below">
-            <InputFooter client={props.client} suggestions={suggestions} />
-          </Place>
         </box>
+        <Sidebar sidebar={sidebar} chat={props.client.chat} />
       </box>
     </Place>
   );
@@ -117,10 +128,11 @@ const copySelections = () => {
 };
 
 /**
- * Escape cancels a run. Ctrl-C cancels a run, or quits when none is going. Ctrl-D quits. The keys of
- * an open picker or commit panel, the command list and the input come first.
+ * Escape cancels a run. Ctrl-C cancels a run, or quits when none is going. Ctrl-D quits. Ctrl-B
+ * shows or hides the sidebar. The keys of an open picker or commit panel, an open sidebar drawer,
+ * the command list and the input come first.
  */
-const chatKeys = (client: ChatClient, panelOpen: () => boolean) => {
+const chatKeys = (client: ChatClient, panelOpen: () => boolean, sidebar: SidebarState) => {
   const isRunning = () => client.chat.run !== "idle";
 
   useBindings(() => ({
@@ -143,11 +155,14 @@ const chatKeys = (client: ChatClient, panelOpen: () => boolean) => {
         },
       },
       { name: "chat.quit", run: client.quit },
+      { name: "sidebar.toggle", run: sidebar.toggle },
     ],
     bindings: [
       { key: "escape", cmd: "run.cancel" },
       { key: "ctrl+c", cmd: "chat.interrupt" },
       { key: "ctrl+d", cmd: "chat.quit" },
+      // Before the text area's own Ctrl-B, which moves the cursor left like the Left key.
+      { key: "ctrl+b", cmd: "sidebar.toggle" },
     ],
   }));
 };
