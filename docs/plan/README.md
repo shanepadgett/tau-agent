@@ -22,6 +22,7 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 | [work/agent-loop.md](work/agent-loop.md) | Build step 4, the agent loop: slices and agreed decisions. |
 | [work/compaction.md](work/compaction.md) | Build step 5: background tasks, compaction and process sessions. |
 | [work/process-sessions.md](work/process-sessions.md) | Slice 5b: process sessions and the agent's wait. |
+| [work/session-persistence.md](work/session-persistence.md) | Save new sessions only after the first user prompt (lifecycle agreed). |
 | [work/tui.md](work/tui.md) | Build step 6: the TUI, in slices 6a to 6c. |
 | [work/reload.md](work/reload.md) | The reload slice: the supervisor, restart when idle, the start check. |
 | [work/notifications.md](work/notifications.md) | Terminal notification research and the draft bundled custom sound (proposed). |
