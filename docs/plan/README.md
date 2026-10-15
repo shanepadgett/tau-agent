@@ -6,6 +6,7 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 
 | File | Holds |
 | --- | --- |
+| [roadmap.md](roadmap.md) | One page: what is built, what is next, what is only an idea. Start here. |
 | [features.md](features.md) | What Tau does for the user and the model. |
 | [architecture.md](architecture.md) | How it is built: runtime, layers, data model, build order. |
 | [sdk.md](sdk.md) | The SDK's shape: one public face for extensions, four kinds of extension point, the scoped context, public types. |
