@@ -4,15 +4,17 @@
  */
 
 import { dirname, resolve } from "node:path";
-import { Cause, Console, Effect, Layer, Option, Stream } from "effect";
+import { Cause, Effect, Layer, Option, Stream } from "effect";
+import { Agent } from "../../core/Agent.ts";
 import { Status } from "../../core/Status.ts";
+import type { SessionId } from "../../session/Entry.ts";
 import { Builds } from "../../supervisor/Builds.ts";
 import { Children } from "../../supervisor/Children.ts";
 import type { ReloadCondition } from "../../supervisor/messages.ts";
 import type { SupervisedLink } from "../../supervisor/ReloadLink.ts";
 import type { SupervisorStart } from "../../supervisor/Supervisor.ts";
-import type { ChatOptions, ChatSetup, RestartLink } from "../../tui/Tui.ts";
-import { agentLayer, openSession } from "./agent-session.ts";
+import type { ChatAgent, ChatOptions, ChatSetup, RestartLink } from "../../tui/Tui.ts";
+import { agentLayer, openSession, printSessionId } from "./agent-session.ts";
 
 /** The command line flags that the chat uses. */
 export type ChatFlags = {
@@ -83,21 +85,27 @@ const checkStart = (link: SupervisedLink) =>
     Effect.asVoid,
   );
 
-/** Prints the session ID after the user quits, so the user can continue it with `--session`. */
+/**
+ * Prints the ID of the session the chat showed last after the user quits, so the user can continue
+ * it with `--session`.
+ */
 const chat = Effect.fn("chat")(
-  function* (link: SupervisedLink, sessionFlag: Option.Option<string>, setup: ChatSetup) {
+  function* (
+    link: SupervisedLink,
+    sessionFlag: Option.Option<string>,
+    setup: Omit<ChatSetup, "agent">,
+  ) {
     const opened = yield* openSession(sessionFlag);
-    const session = opened.session.id;
-    yield* link.send({ type: "ready", session });
+    yield* link.send({ type: "ready", session: opened.session.id });
     yield* Effect.forkScoped(showConditions(link));
     const chatInTerminal = yield* loadChat;
-    const end = yield* chatInTerminal(opened, setup);
+    const end = yield* chatInTerminal(opened, { ...setup, agent: yield* chatAgent(link) });
 
     if (end.reason === "restart") {
-      return yield* link.send({ type: "handoff", session, draft: end.draft });
+      return yield* link.send({ type: "handoff", session: end.session, draft: end.draft });
     }
 
-    yield* Console.error(`Session: ${session}`);
+    yield* printSessionId(end.session);
   },
   Effect.scoped,
   Effect.provide(agentLayer),
@@ -136,6 +144,30 @@ const showConditions = Effect.fn("showConditions")(function* (link: SupervisedLi
   });
 
   yield* link.conditions.pipe(Stream.runForEach(show));
+});
+
+/**
+ * The agent as the chat uses it. Each session the chat opens is the one the supervisor restarts
+ * into. A session from the folder's list is there to open, so a failure to open it is a defect.
+ */
+const chatAgent = Effect.fn("chatAgent")(function* (link: SupervisedLink) {
+  const agent = yield* Agent;
+
+  const open = (session: SessionId | undefined) =>
+    agent.open(Option.fromUndefinedOr(session), process.cwd()).pipe(
+      Effect.tap((opened) => link.send({ type: "ready", session: opened.session.id })),
+      Effect.orDie,
+    );
+
+  const chatAgent: ChatAgent = {
+    open,
+    sessions: agent.sessions,
+    models: agent.models,
+    favoriteModels: agent.favoriteModels,
+    toggleFavoriteModel: agent.toggleFavoriteModel,
+  };
+
+  return chatAgent;
 });
 
 const restartLink = (link: SupervisedLink, draft: string): RestartLink => ({

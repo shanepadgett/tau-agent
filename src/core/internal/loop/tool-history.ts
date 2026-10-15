@@ -48,9 +48,11 @@ export const needsReply = (entries: readonly Entry[]) => {
   return last?.type === "user" || last?.type === "tool-result";
 };
 
-/** The entries after the latest prompt: the work of the current run. */
+/** The entries after the latest prompt: the work of the current run, with its steering messages. */
 export const sincePrompt = (entries: readonly Entry[]) =>
-  entries.slice(entries.findLastIndex(({ body }) => body.type === "user") + 1);
+  entries.slice(
+    entries.findLastIndex(({ body }) => body.type === "user" && body.steering !== true) + 1,
+  );
 
 export const failedResult = (call: ToolCall, text: string): EntryBody => ({
   type: "tool-result",

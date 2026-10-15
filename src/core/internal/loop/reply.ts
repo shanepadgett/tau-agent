@@ -3,7 +3,9 @@
 import { Effect, Schema } from "effect";
 import { Prompt, type Response } from "effect/ai";
 import type { ModelRef } from "../../../ai/Catalog.ts";
+import { type CallTokens, callCost, type ModelProfile } from "../../../ai/ModelProfile.ts";
 import type { EntryBody } from "../../../session/Entry.ts";
+import type { ModelCall } from "../../Client.ts";
 
 type AssistantEntry = Extract<EntryBody, { type: "assistant" }>;
 type Part = AssistantEntry["parts"][number];
@@ -51,6 +53,18 @@ export const interruptedEntry = (
     interrupted: true,
   };
 };
+
+/** What one model call used and cost, for clients that show it. */
+export const modelCall = (
+  model: ModelRef,
+  profile: ModelProfile,
+  tokens: CallTokens,
+): ModelCall => ({
+  model,
+  tokens,
+  contextTokens: profile.contextTokens,
+  cost: callCost(profile, tokens),
+});
 
 const tokensOf = ({ inputTokens, outputTokens }: Response.Usage) => ({
   input: inputTokens.total,

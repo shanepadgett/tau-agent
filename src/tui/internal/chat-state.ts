@@ -3,7 +3,7 @@
  * Pure, so the components only draw it and the tests feed it events.
  */
 
-import { type AgentEvent, runEndMessage } from "../../core/Client.ts";
+import { type AgentEvent, type ModelCall, runEndMessage } from "../../core/Client.ts";
 
 type RunState = "idle" | "running" | "retrying";
 
@@ -27,8 +27,21 @@ export type ChatItem =
   /** News that needs no action, such as when Tau restarts. */
   | { readonly id: number; readonly kind: "info"; readonly text: string };
 
-/** A prompt the user sent whose run has not started. Core runs prompts in the order sent. */
+/**
+ * A prompt the user sent whose run has not started, or a steering message the run has not taken.
+ * Core runs prompts in the order sent.
+ */
 export type QueuedPrompt = { readonly id: number; readonly text: string };
+
+/**
+ * What the session's model calls used: the context of the latest call, the model's context limit,
+ * and what the calls of this chat cost in US dollars, if the model has a price.
+ */
+export type Usage = {
+  readonly contextUsed: number;
+  readonly contextTokens: number;
+  readonly cost: number | undefined;
+};
 
 /** Prompts that a cancel took off the queue, for the input editor to take back. A new ID each time. */
 type ReturnedPrompts = { readonly id: number; readonly prompts: readonly string[] };
@@ -36,18 +49,21 @@ type ReturnedPrompts = { readonly id: number; readonly prompts: readonly string[
 export type ChatState = {
   readonly items: readonly ChatItem[];
   readonly queued: readonly QueuedPrompt[];
+  readonly steering: readonly QueuedPrompt[];
+  readonly usage: Usage | undefined;
   readonly returned: ReturnedPrompts | undefined;
   readonly run: RunState;
   readonly nextId: number;
 };
 
 /**
- * An agent event, a prompt the user just sent, a prompt the chat could not send and why, or a
- * `/restart` that waits for the run to end.
+ * An agent event, a prompt or steering message the user just sent, a prompt the chat could not
+ * send and why, a `/restart` that waits for the run to end, or a line a command shows.
  */
 export type ChatAction =
   | AgentEvent
-  | { readonly type: "prompt-sent"; readonly text: string }
+  | { readonly type: "prompt-sent" | "steer-sent"; readonly text: string }
+  | { readonly type: "notice" | "info"; readonly text: string }
   | { readonly type: "prompt-refused"; readonly text: string; readonly reason: string }
   | { readonly type: "restart-waiting" };
 
@@ -56,6 +72,8 @@ type RunEnded = Extract<AgentEvent, { type: "run-ended" }>;
 const EMPTY_CHAT: ChatState = {
   items: [],
   queued: [],
+  steering: [],
+  usage: undefined,
   returned: undefined,
   run: "idle",
   nextId: 1,
@@ -67,6 +85,10 @@ export const replay = (history: readonly AgentEvent[]): ChatState => {
   return { ...closeStreaming(state), run: "idle" };
 };
 
+/** Idle means that no run is going and no prompt or steering message waits. */
+export const isIdle = (chat: ChatState) =>
+  chat.run === "idle" && chat.queued.length === 0 && chat.steering.length === 0;
+
 /** The chat after `actions` happen in order, starting from `state`. */
 export const applyActions = (state: ChatState, actions: readonly ChatAction[]): ChatState => {
   let next = state;
@@ -77,39 +99,30 @@ export const applyActions = (state: ChatState, actions: readonly ChatAction[]): 
 export const reduce = (state: ChatState, action: ChatAction): ChatState => {
   switch (action.type) {
     case "prompt-sent":
-      return {
-        ...state,
-        queued: [...state.queued, { id: state.nextId, text: action.text }],
-        nextId: state.nextId + 1,
-      };
+      return wait(state, "queued", action.text);
+    case "steer-sent":
+      return wait(state, "steering", action.text);
+    case "notice":
+    case "info":
+      return add(state, { kind: action.type, text: action.text });
     case "prompt-refused":
       return refusePrompt(state, action.text, action.reason);
     case "restart-waiting":
       return add(state, { kind: "info", text: "Tau restarts when this run ends." });
     case "run-started":
       return startRun(state, action.prompt);
+    case "steered":
+      return steer(state, action.text);
+    case "model-call-ended":
+      return { ...state, usage: addCall(state.usage, action.call) };
     case "text":
       return appendText(state, action.delta);
     case "tool-started":
-      return add(
-        { ...closeStreaming(state), run: "running" },
-        {
-          kind: "tool",
-          callId: action.callId,
-          name: action.name,
-          summary: action.summary,
-          status: "running",
-        },
-      );
+      return startTool(state, action);
     case "tool-ended":
       return endTool(state, action.callId, action.isFailure ? "failed" : "ok");
     case "prompts-returned":
-      return {
-        ...state,
-        queued: [],
-        returned: { id: state.nextId, prompts: action.prompts },
-        nextId: state.nextId + 1,
-      };
+      return returnPrompts(state, action.prompts);
     case "retrying":
       return add(
         { ...dropStreaming(state), run: "retrying" },
@@ -138,6 +151,44 @@ const add = (state: ChatState, item: DistributiveOmit<ChatItem, "id">): ChatStat
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
+/** A prompt waits for the run to end, or a steering message waits for the next model call. */
+const wait = (state: ChatState, list: "queued" | "steering", text: string): ChatState => ({
+  ...state,
+  [list]: [...state[list], { id: state.nextId, text }],
+  nextId: state.nextId + 1,
+});
+
+/** The model read a steering message, so it moves from the waiting list into the transcript. */
+const steer = (state: ChatState, text: string): ChatState =>
+  add(
+    { ...closeStreaming(state), steering: withoutFirst(state.steering, text) },
+    { kind: "user", text },
+  );
+
+const startTool = (
+  state: ChatState,
+  { callId, name, summary }: Extract<AgentEvent, { type: "tool-started" }>,
+): ChatState =>
+  add(
+    { ...closeStreaming(state), run: "running" },
+    {
+      kind: "tool",
+      callId,
+      name,
+      summary,
+      status: "running",
+    },
+  );
+
+/** Every waiting prompt and steering message goes back to the editor. */
+const returnPrompts = (state: ChatState, prompts: readonly string[]): ChatState => ({
+  ...state,
+  queued: [],
+  steering: [],
+  returned: { id: state.nextId, prompts },
+  nextId: state.nextId + 1,
+});
+
 /** The prompt goes back to the editor, and the transcript says why. */
 const refusePrompt = (state: ChatState, text: string, reason: string): ChatState =>
   add(
@@ -145,12 +196,33 @@ const refusePrompt = (state: ChatState, text: string, reason: string): ChatState
     { kind: "notice", text: reason },
   );
 
-/** The first queued prompt with this text leaves the queue; a prompt from history was never queued. */
+/**
+ * The first queued prompt with this text leaves the queue. A steering message that reached no model
+ * call runs as a prompt, so it leaves the steering list. A prompt from history was never queued.
+ */
 const startRun = (state: ChatState, prompt: string): ChatState => {
-  const index = state.queued.findIndex((queued) => queued.text === prompt);
-  const queued = index === -1 ? state.queued : state.queued.toSpliced(index, 1);
-  return add({ ...closeStreaming(state), queued, run: "running" }, { kind: "user", text: prompt });
+  const queued = withoutFirst(state.queued, prompt);
+
+  const steering =
+    queued.length === state.queued.length ? withoutFirst(state.steering, prompt) : state.steering;
+
+  return add(
+    { ...closeStreaming(state), queued, steering, run: "running" },
+    { kind: "user", text: prompt },
+  );
 };
+
+const withoutFirst = (waiting: readonly QueuedPrompt[], text: string) => {
+  const index = waiting.findIndex((queued) => queued.text === text);
+  return index === -1 ? waiting : waiting.toSpliced(index, 1);
+};
+
+/** The context is what the latest call sent and got back; the cost adds up over the calls. */
+const addCall = (usage: Usage | undefined, call: ModelCall): Usage => ({
+  contextUsed: (call.tokens.input ?? 0) + (call.tokens.output ?? 0),
+  contextTokens: call.contextTokens,
+  cost: call.cost === undefined ? usage?.cost : (usage?.cost ?? 0) + call.cost,
+});
 
 const appendText = (state: ChatState, delta: string): ChatState => {
   const last = state.items.at(-1);

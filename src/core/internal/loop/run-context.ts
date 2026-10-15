@@ -3,6 +3,7 @@
 import type { Effect, Option } from "effect";
 import type { AiError, LanguageModel, Prompt } from "effect/ai";
 import type { ModelRef } from "../../../ai/Catalog.ts";
+import type { ModelProfile } from "../../../ai/ModelProfile.ts";
 import type { Entry, EntryBody, NudgeEntry, SessionId } from "../../../session/Entry.ts";
 import type { SessionNotFound, Sessions } from "../../../session/Sessions.ts";
 import type { SessionStoreError } from "../../../session/SessionStoreError.ts";
@@ -21,6 +22,8 @@ export const endWith = (end: RunEnd): Outcome => ({ type: "end", end });
 export type RunContext<R> = {
   readonly session: SessionId;
   readonly model: ModelRef;
+  /** The model's context limit and prices, to report what each model call used and cost. */
+  readonly profile: ModelProfile;
   readonly languageModel: LanguageModel.LanguageModel;
   readonly sessions: Sessions["Service"];
   /** The tools the model can call. */
@@ -40,6 +43,8 @@ export type RunContext<R> = {
   ) => Effect.Effect<Option.Option<EntryBody>, never, R>;
   /** Notices to save before the next model call, such as a command that exited. */
   readonly processNotices: Effect.Effect<readonly NudgeEntry[]>;
+  /** The steering messages the user sent since the last model call. Taking them empties the list. */
+  readonly takeSteering: Effect.Effect<readonly string[]>;
   readonly maxTurns: number | undefined;
   readonly emit: (event: AgentEvent) => Effect.Effect<void>;
 };

@@ -1,6 +1,6 @@
 /** Builds the agent with the services it needs, and opens a session on it for print mode or the TUI. */
 
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer, Option, Stdio, Stream } from "effect";
 import { Catalog } from "../../ai/Catalog.ts";
 import { Models } from "../../ai/Models.ts";
 import { Agent } from "../../core/Agent.ts";
@@ -18,6 +18,15 @@ export const agentLayer = Agent.layer.pipe(
   Layer.provide(Sessions.layer),
   Layer.provide(userInstructionsLayer),
 );
+
+/**
+ * Prints the session's ID after the chat or the run, so the user can continue it with `--session`.
+ * It writes to stderr itself, because `console.error` colors its text red in a terminal.
+ */
+export const printSessionId = (id: SessionId) =>
+  Stdio.Stdio.use((stdio) =>
+    Stream.make(`\nSession: ${id}\n`).pipe(Stream.run(stdio.stderr({ endOnDone: false }))),
+  );
 
 /**
  * Opens the session with the ID of `--session`, or a new one in the current folder. Also refreshes

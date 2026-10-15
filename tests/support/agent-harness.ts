@@ -14,13 +14,16 @@ import {
 } from "effect";
 import { type AiError, LanguageModel, type Prompt, type Response, Tool } from "effect/ai";
 import type { ChildProcessSpawner } from "effect/process";
+import type { ModelProfile } from "../../src/ai/ModelProfile.ts";
 import { Models } from "../../src/ai/Models.ts";
-import { RouteId } from "../../src/ai/Routes.ts";
+import { ProviderId } from "../../src/ai/Providers.ts";
 import { Agent, type OpenSession } from "../../src/core/Agent.ts";
 import { ContextMethod } from "../../src/core/ContextMethod.ts";
 import { OutputFolder } from "../../src/core/OutputFolder.ts";
 import type { AgentEvent, RunOptions } from "../../src/core/Client.ts";
+import { Status } from "../../src/core/Status.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
+import { favoriteModelsLayer } from "../../src/host/FavoriteModels.ts";
 import { Settings } from "../../src/host/Settings.ts";
 import { userInstructionsLayer } from "../../src/host/UserInstructions.ts";
 import { Sessions } from "../../src/session/Sessions.ts";
@@ -30,9 +33,23 @@ export type Reply = Stream.Stream<Response.StreamPartEncoded, AiError.AiError>;
 type NoteReply = Effect.Effect<Response.PartEncoded[], AiError.AiError>;
 
 export const options: RunOptions = {
-  model: { route: RouteId.make("scripted"), model: "scripted" },
+  model: { provider: ProviderId.make("scripted"), model: "scripted" },
+  thinking: "medium",
   maxTurns: undefined,
   timeouts: { run: Duration.seconds(5), shell: Duration.seconds(5) },
+};
+
+/** The scripted model: $1 per million input tokens and $2 per million output tokens. */
+export const profile: ModelProfile = {
+  id: "scripted",
+  name: "Scripted",
+  protocol: "openaiChat",
+  contextTokens: 128000,
+  outputTokens: 8000,
+  price: { input: 1, output: 2, cacheRead: 0.1, cacheWrite: 1.25 },
+  longContextPrice: undefined,
+  supports: { tools: true, structuredOutput: false, reasoning: false, images: false },
+  thinking: undefined,
 };
 
 export const textReply = (text: string): Reply =>
@@ -83,8 +100,11 @@ const scriptedModels = (
       });
 
       return Models.of({
+        available: Effect.succeed([]),
+        profile: () => Effect.succeed(profile),
         languageModel: () => Effect.succeed(model),
         decisionModel: () => Effect.die("Turn tests use no decision model."),
+        smallModel: (ref) => Effect.succeed(ref),
       });
     }),
   );
@@ -125,6 +145,8 @@ type Harness = {
   ) => Effect.Effect<Agent["Service"], StartError, Scope.Scope>;
   readonly sessions: Sessions["Service"];
   readonly notes: Notes["Service"];
+  /** The conditions the agents of the harness set, such as a skipped skill. */
+  readonly status: Status["Service"];
 };
 
 type HarnessServices =
@@ -156,6 +178,7 @@ export const withPreparedHarness = <A, E, P>(
       const tauHome = TauHome.at(`${home}/.tau`);
       const store = yield* Layer.build(Sessions.layer.pipe(Layer.provide(tauHome)));
       const requests: Requests = { prompts: [], tools: [], toolInputs: [], notePrompts: [] };
+      const status = yield* Layer.build(Status.layer);
 
       // Settings are read when an agent starts, so a test can write settings.json first.
       const user = userInstructionsLayer.pipe(
@@ -176,7 +199,11 @@ export const withPreparedHarness = <A, E, P>(
             Layer.provide(Layer.succeedContext(store)),
             Layer.provide(BunServices.layer),
             Layer.provide(user),
+            Layer.provide(
+              favoriteModelsLayer.pipe(Layer.provide(tauHome), Layer.provide(BunServices.layer)),
+            ),
             Layer.provide(Layer.succeed(OutputFolder, { directory: `${home}/output` })),
+            Layer.provide(Layer.succeedContext(status)),
           ),
         ).pipe(Effect.map((context) => Context.get(context, Agent)));
 
@@ -188,6 +215,7 @@ export const withPreparedHarness = <A, E, P>(
         startAgentUsing,
         sessions: Context.get(store, Sessions),
         notes: Context.get(store, Notes),
+        status: Context.get(status, Status),
       });
     }).pipe(Effect.scoped, Effect.provide(BunServices.layer)),
   );

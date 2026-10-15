@@ -107,6 +107,34 @@ const cases: ReadonlyArray<readonly [string, readonly ChatAction[], Partial<Chat
       ],
     },
   ],
+  [
+    "a steering message waits until the run takes it, then shows as the user's",
+    [
+      ...RUNNING,
+      { type: "text", delta: "Working." },
+      { type: "steer-sent", text: "Use Python." },
+      { type: "steered", text: "Use Python." },
+    ],
+    {
+      steering: [],
+      run: "running",
+      items: [
+        { id: 2, kind: "user", text: "Hi." },
+        { id: 3, kind: "assistant", text: "Working.", streaming: false },
+        { id: 5, kind: "user", text: "Use Python." },
+      ],
+    },
+  ],
+  [
+    "a steering message that reached no model call runs as the next prompt",
+    [
+      ...RUNNING,
+      { type: "steer-sent", text: "And test it." },
+      { type: "run-ended", reason: "answered" },
+      { type: "run-started", prompt: "And test it." },
+    ],
+    { steering: [], run: "running" },
+  ],
 ];
 
 test.each(cases)("%s", (_name, actions, expected) => {

@@ -83,7 +83,8 @@ describe("compiled tau", () => {
 
         expect(chat).toContain(CHAT_OPENED);
         expect(modesLeftOn(output)).toEqual([]);
-        expect(afterChat).toMatch(/Session: [\w-]+/);
+        // A whole line with no color around it.
+        expect(afterChat).toMatch(/\nSession: [\w-]+\r\n/);
         expect(afterChat).toContain("tau exited 0");
 
         const stty = afterChat.slice(afterChat.indexOf("tau exited"));

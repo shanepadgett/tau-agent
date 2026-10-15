@@ -4,11 +4,11 @@
  */
 
 import { Effect, Option } from "effect";
-import { callModel } from "./call-model.ts";
+import { callModel, withSteering } from "./call-model.ts";
 import { interruptStartedCalls } from "./interrupt-started-calls.ts";
 import type { Platform } from "../tools/model-tool.ts";
 import { stopRepeatedCalls } from "./repeat-limit.ts";
-import { endWith, type Operation, type RunContext } from "./run-context.ts";
+import { CONTINUE, endWith, type Operation, type RunContext } from "./run-context.ts";
 import { runToolCalls } from "./run-tool-calls.ts";
 import { settleChecks } from "./settle-checks.ts";
 import { stopAtTurnLimit } from "./turn-limit.ts";
@@ -26,7 +26,10 @@ const operations = <R>(run: RunContext<R>): ReadonlyArray<Operation<R | Platform
   callModel(run),
 ];
 
-/** One step: the first operation that applies acts; with none, the run has its answer. */
+/**
+ * One step: the first operation that applies acts. With none, a steering message that arrived during
+ * the last model call goes on with the run; without one, the run has its answer.
+ */
 const step = Effect.fn("step")(function* <R>(run: RunContext<R>) {
   const entries = yield* run.sessions.entries(run.session, 0);
 
@@ -35,7 +38,8 @@ const step = Effect.fn("step")(function* <R>(run: RunContext<R>) {
     if (Option.isSome(action)) return yield* action.value;
   }
 
-  return ANSWERED;
+  const steered = yield* withSteering(run, entries);
+  return steered.length > entries.length ? CONTINUE : ANSWERED;
 });
 
 /** Runs steps until one ends the run, and gives the reason it ended. */

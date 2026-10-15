@@ -15,6 +15,7 @@ import {
   Option,
   PubSub,
   Queue,
+  Ref,
   type Scope,
 } from "effect";
 import { ChildProcessSpawner } from "effect/process";
@@ -27,27 +28,30 @@ import {
 import { ConversationId } from "../../../ai/ConversationId.ts";
 import type { Models } from "../../../ai/Models.ts";
 import type { WriteQueue } from "../../../sandbox/WriteQueue.ts";
-import type { RunningProcess, SessionId } from "../../../session/Entry.ts";
+import type { Entry, RunningProcess, SessionId } from "../../../session/Entry.ts";
 import type { SessionStoreError } from "../../../session/SessionStoreError.ts";
 import type { Session, Sessions } from "../../../session/Sessions.ts";
 import type { SkillUses } from "../../../session/SkillUses.ts";
-import type { AgentEvent, Command, RunEnd } from "../../Client.ts";
+import type { AgentEvent, Command, RunEnd, SavedModel } from "../../Client.ts";
 import type { ContextMethod } from "../../ContextMethod.ts";
 import { historyFunction } from "../context/history.ts";
-import { historyEvents } from "./history-events.ts";
+import { historyEvents, replyProfiles } from "./history-events.ts";
 import { PROCESS_GROUP, processFunctions } from "../process/process-functions.ts";
 import { processNotices } from "../process/process-notices.ts";
 import type { UserInstructions } from "../../UserInstructions.ts";
 import type { OutputFolder } from "../../OutputFolder.ts";
 import { makeOutputFiles, OutputFiles } from "../output/output-files.ts";
+import type { Commits, CommitSettings } from "../../Commits.ts";
+import { makeCommits } from "../commit/commits.ts";
 import { checksTool } from "../checks/checks-tool.ts";
-import { readProjectChecks } from "../checks/checks-file.ts";
+import { type ProjectChecks, readProjectChecks } from "../checks/checks-file.ts";
 import type { RunContext } from "../loop/run-context.ts";
 import { projectFolders } from "../instructions/folders.ts";
 import { instructionsUpdate } from "../instructions/instructions.ts";
+import { FileProblems, type RunFileProblems } from "../instructions/file-problems.ts";
 import { instructionSources } from "../instructions/sources.ts";
 import { runSteps } from "../loop/step.ts";
-import { runTool, scriptFunctions } from "../run-tool/run-tool.ts";
+import { runTool, scriptFunctions, type Timeouts } from "../run-tool/run-tool.ts";
 import { findSkills, type Skill, SKILLS_GROUP, skillFunctions } from "../skills/skills.ts";
 import type { Platform } from "../tools/model-tool.ts";
 import { failureText } from "./failure-text.ts";
@@ -64,6 +68,9 @@ export type RunServices = {
   readonly crypto: Crypto.Crypto;
   /** Shared by every session of the process, so their writes to one file wait for each other. */
   readonly writeQueue: WriteQueue;
+  /** Starts the record of the skill and instruction files a run could not use. */
+  readonly fileProblems: Effect.Effect<RunFileProblems>;
+  readonly commitSettings: CommitSettings;
 };
 
 /** A session opened for runs. */
@@ -74,9 +81,19 @@ export type OpenSession = {
   readonly send: (command: Command) => Effect.Effect<void>;
   /** The saved runs of the session as events, oldest first, for a client that shows a resumed chat. */
   readonly history: Effect.Effect<readonly AgentEvent[], SessionStoreError>;
+  /** The model and thinking level of the session's latest reply, for a resumed chat to go on with. */
+  readonly lastModel: Effect.Effect<SavedModel | undefined, SessionStoreError>;
+  /** The steps of `/commit` in the session's repository. */
+  readonly commits: Commits;
 };
 
-type QueuedPrompt = Extract<Command, { type: "prompt" }>;
+type QueuedPrompt = Extract<Command, { type: "prompt" | "steer" }>;
+
+/**
+ * The steering messages waiting for the next model call of the running prompt, or none when no
+ * prompt is running.
+ */
+type Steering = Option.Option<readonly QueuedPrompt[]>;
 
 /** Starts the runner of session `id`. It stops, with its running prompt, when its scope closes. */
 export const makeRunner = Effect.fn("makeRunner")(function* (services: RunServices, id: SessionId) {
@@ -85,6 +102,7 @@ export const makeRunner = Effect.fn("makeRunner")(function* (services: RunServic
   const annotated = Effect.annotateLogs({ session: id });
   yield* services.contextMethod.background(id, PubSub.subscribe(events)).pipe(annotated);
   const prompts = yield* Queue.unbounded<QueuedPrompt>();
+  const steering = yield* Ref.make<Steering>(Option.none());
   const current = yield* FiberHandle.make<RunEnd, unknown>();
 
   const processes = yield* makeProcessSessions(PROCESS_LIMITS).pipe(
@@ -93,7 +111,8 @@ export const makeRunner = Effect.fn("makeRunner")(function* (services: RunServic
 
   const runNext = Effect.gen(function* () {
     const prompt = yield* Queue.take(prompts);
-    const runs: SessionRuns = { services, session, processes, events };
+    yield* Ref.set(steering, Option.some([]));
+    const runs: SessionRuns = { services, session, processes, events, steering };
 
     // The handle must hold the fiber before it starts: a run can publish an event, and a client
     // can cancel in answer, before a fiber that starts at once is handed back.
@@ -102,12 +121,20 @@ export const makeRunner = Effect.fn("makeRunner")(function* (services: RunServic
     });
 
     yield* endRun(runs, yield* Fiber.await(run));
+
+    // A steering message sent after the run's last model call runs as the next prompt.
+    const left = yield* Ref.getAndSet(steering, Option.none());
+
+    yield* Queue.offerAll(
+      prompts,
+      Option.getOrElse(left, () => []),
+    );
   });
 
   yield* Effect.forkScoped(Effect.forever(runNext).pipe(annotated));
 
   const cancel = Effect.gen(function* () {
-    const waiting = yield* Queue.clear(prompts);
+    const waiting = [...(yield* takeSteering(steering)), ...(yield* Queue.clear(prompts))];
 
     if (waiting.length > 0) {
       const returned = waiting.map((prompt) => prompt.text);
@@ -117,18 +144,43 @@ export const makeRunner = Effect.fn("makeRunner")(function* (services: RunServic
     yield* FiberHandle.clear(current);
   });
 
-  const send = (command: Command) =>
-    command.type === "cancel" ? cancel : Queue.offer(prompts, command).pipe(Effect.asVoid);
+  /** A steering message waits for the running prompt's next model call; with no run, it is a prompt. */
+  const steer = (command: QueuedPrompt) =>
+    Ref.modify(steering, (state): [boolean, Steering] =>
+      Option.isSome(state) ? [true, Option.some([...state.value, command])] : [false, state],
+    ).pipe(
+      Effect.flatMap((steered) => (steered ? Effect.void : Queue.offer(prompts, command))),
+      Effect.asVoid,
+    );
+
+  const send = (command: Command) => {
+    switch (command.type) {
+      case "cancel":
+        return cancel;
+      case "steer":
+        return steer(command);
+      case "prompt":
+        return Queue.offer(prompts, command).pipe(Effect.asVoid);
+    }
+  };
 
   const opened: OpenSession = {
     session,
     subscribe: PubSub.subscribe(events),
     send,
-    history: services.sessions.entries(id, 0).pipe(Effect.map(historyEvents)),
+    ...savedRuns(services, id),
+    commits: commitsOf(services, session),
   };
 
   return opened;
 });
+
+/** Takes the waiting steering messages, and leaves the running prompt with none. */
+const takeSteering = (steering: Ref.Ref<Steering>) =>
+  Ref.modify(steering, (state): [readonly QueuedPrompt[], Steering] => [
+    Option.getOrElse(state, () => []),
+    Option.map(state, () => []),
+  ]);
 
 /** What the runs of one session share: its services, its commands and its event stream. */
 type SessionRuns = {
@@ -136,19 +188,26 @@ type SessionRuns = {
   readonly session: Session;
   readonly processes: ProcessSessions;
   readonly events: PubSub.PubSub<AgentEvent>;
+  readonly steering: Ref.Ref<Steering>;
 };
 
 /** Saves the prompt and runs the agent loop on it. */
-const runPrompt = ({ services, session, processes, events }: SessionRuns, prompt: QueuedPrompt) =>
+const runPrompt = (
+  { services, session, processes, events, steering }: SessionRuns,
+  prompt: QueuedPrompt,
+) =>
   Effect.gen(function* () {
     const { sessions, models } = services;
-    const { model, timeouts, maxTurns } = prompt.options;
+    const { timeouts, maxTurns, thinking } = prompt.options;
+    // The reply saves the level with its model, so a resumed chat goes on at the same level.
+    const model = { ...prompt.options.model, thinking };
     yield* sessions.append(session.id, [{ type: "user", text: prompt.text }]);
     yield* PubSub.publish(events, { type: "run-started", prompt: prompt.text });
     const { root, folders } = yield* projectFolders(session.directory);
-    const skills = yield* runSkills(services, session.directory, folders);
+    const files = yield* services.fileProblems;
+    const withProblems = Effect.provideService(FileProblems, files.problems);
+    const skills = yield* runSkills(services, session.directory, folders).pipe(withProblems);
     const checks = yield* readProjectChecks(session.directory, root);
-    const used = (skill: Skill) => services.skillUses.record(skill.name, session.directory);
     const user = services.userInstructions;
 
     const method = yield* services.contextMethod.forRun(
@@ -157,21 +216,13 @@ const runPrompt = ({ services, session, processes, events }: SessionRuns, prompt
       processes.list.pipe(Effect.map(runningProcesses)),
     );
 
-    const run = runTool<Platform>(
-      (touched) => ({
-        ...scriptFunctions(session.directory, timeouts, touched, services.writeQueue),
-        history: historyFunction(session.id, sessions),
-        [PROCESS_GROUP]: processFunctions(processes, session.directory),
-        [SKILLS_GROUP]: skillFunctions(skills.skills, touched, used),
-      }),
-      timeouts,
-      checks,
-    );
+    const run = runToolOf({ services, session, processes }, skills.skills, timeouts, checks);
 
     const context: RunContext<Platform> = {
       session: session.id,
       model,
-      languageModel: yield* models.languageModel(model, ConversationId.make(session.id)),
+      profile: yield* models.profile(model),
+      languageModel: yield* models.languageModel(model, ConversationId.make(session.id), thinking),
       sessions,
       tools: [run, ...Option.toArray(Option.flatMap(checks, checksTool)), ...method.tools],
       view: method.view,
@@ -182,21 +233,40 @@ const runPrompt = ({ services, session, processes, events }: SessionRuns, prompt
       updateInstructions: (entries) =>
         instructionSources({ directory: session.directory, user, skills }, entries).pipe(
           Effect.flatMap((sources) => instructionsUpdate(sources, entries)),
+          withProblems,
+          Effect.tap(files.show),
         ),
       processNotices: processNotices(processes),
+      takeSteering: takeSteering(steering).pipe(
+        Effect.map((steered) => steered.map(({ text }) => text)),
+      ),
       maxTurns,
       emit: (event) => PubSub.publish(events, event).pipe(Effect.asVoid),
     };
 
     return yield* runSteps(context);
-  }).pipe(
-    Effect.provideService(FileSystem.FileSystem, services.fileSystem),
-    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, services.spawner),
-    Effect.provideService(
-      OutputFiles,
-      makeOutputFiles(services.outputFolder, session.id, services.fileSystem, services.crypto),
-    ),
+  }).pipe(withPlatform(services, session.id));
+
+/** The `run` tool of one run, with the functions its scripts can call. */
+const runToolOf = (
+  { services, session, processes }: Pick<SessionRuns, "services" | "session" | "processes">,
+  skills: readonly Skill[],
+  timeouts: Timeouts,
+  checks: Option.Option<ProjectChecks>,
+) => {
+  const used = (skill: Skill) => services.skillUses.record(skill.name, session.directory);
+
+  return runTool<Platform>(
+    (touched) => ({
+      ...scriptFunctions(session.directory, timeouts, touched, services.writeQueue),
+      history: historyFunction(session.id, services.sessions),
+      [PROCESS_GROUP]: processFunctions(processes, session.directory),
+      [SKILLS_GROUP]: skillFunctions(skills, touched, used),
+    }),
+    timeouts,
+    checks,
   );
+};
 
 /** The skills are found once per run; a skill added during a run is seen by the next one. */
 const runSkills = Effect.fn("runSkills")(function* (
@@ -214,6 +284,20 @@ const runSkills = Effect.fn("runSkills")(function* (
 
   return { skills, ranking: yield* services.skillUses.ranking(directory) };
 });
+
+/** What a client reads of the session's saved runs when it opens the session. */
+const savedRuns = (services: RunServices, id: SessionId) => ({
+  history: Effect.gen(function* () {
+    const entries = yield* services.sessions.entries(id, 0);
+    return historyEvents(entries, yield* replyProfiles(services.models, entries));
+  }),
+  lastModel: services.sessions.entries(id, 0).pipe(Effect.map(lastReplyModel)),
+});
+
+const lastReplyModel = (entries: readonly Entry[]) => {
+  const reply = entries.findLast(({ body }) => body.type === "assistant")?.body;
+  return reply?.type === "assistant" ? reply.model : undefined;
+};
 
 const runningProcesses = (summaries: readonly ProcessSummary[]): readonly RunningProcess[] =>
   summaries.flatMap(({ id, command, pty, state }) =>
@@ -245,3 +329,23 @@ const runEnded = (exit: Exit.Exit<RunEnd, unknown>): AgentEvent => {
 
   return { type: "run-ended", reason: "failed", error: failureText(exit.cause) };
 };
+
+const commitsOf = (services: RunServices, session: Session) =>
+  makeCommits(
+    { sessions: services.sessions, models: services.models, settings: services.commitSettings },
+    session,
+    (effect) => effect.pipe(withPlatform(services, session.id)),
+  );
+
+/** Provides what tools, checks and `/commit` run on. */
+const withPlatform =
+  (services: RunServices, session: SessionId) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    effect.pipe(
+      Effect.provideService(FileSystem.FileSystem, services.fileSystem),
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, services.spawner),
+      Effect.provideService(
+        OutputFiles,
+        makeOutputFiles(services.outputFolder, session, services.fileSystem, services.crypto),
+      ),
+    );

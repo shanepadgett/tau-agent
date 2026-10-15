@@ -470,3 +470,57 @@ describe("agent loop", () => {
       }),
     ));
 });
+
+describe("steering", () => {
+  test("a steering message reaches the run at its next model call, and its usage is reported", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([
+          Stream.concat(
+            runReply("call-1", 'await tools.sh({ command: "sleep 0.5" })'),
+            finish(0, 0),
+          ),
+          textReply("Done, in Python."),
+        ]);
+
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const events = yield* opened.subscribe;
+        yield* opened.send({ type: "prompt", text: "Write it.", options });
+        const started = yield* takeUntil(events, (event) => event.type === "tool-started");
+        yield* opened.send({ type: "steer", text: "Use Python.", options });
+        const run = [...started, ...(yield* takeUntil(events, isRunEnd))];
+
+        expect(runEnd(run)?.reason).toBe("answered");
+        expect(run).toContainEqual({ type: "steered", text: "Use Python." });
+        expect(userTexts(harness.prompts[1]).at(-1)).toBe("Use Python.");
+
+        expect(run).toContainEqual({
+          type: "model-call-ended",
+          call: {
+            model: { ...options.model, thinking: options.thinking },
+            tokens: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 },
+            contextTokens: 128000,
+            cost: 0.00002,
+          },
+        });
+
+        const history = yield* opened.history;
+        expect(history).toContainEqual({ type: "steered", text: "Use Python." });
+        expect(history.filter((event) => event.type === "run-started")).toHaveLength(1);
+      }),
+    ));
+
+  test("with no run going, a steering message runs as a prompt", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([textReply("Hello.")]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const events = yield* opened.subscribe;
+        yield* opened.send({ type: "steer", text: "Hi.", options });
+        const run = yield* takeUntil(events, isRunEnd);
+
+        expect(run[0]).toEqual({ type: "run-started", prompt: "Hi." });
+        expect(runEnd(run)?.reason).toBe("answered");
+      }),
+    ));
+});

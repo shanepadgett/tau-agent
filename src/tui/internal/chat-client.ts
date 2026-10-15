@@ -3,13 +3,19 @@
  * that core's events update, and turns the components' plain calls into Effects.
  */
 
-import { Deferred, Effect, Stream } from "effect";
+import { Deferred, Effect, Fiber, type Scope, Stream } from "effect";
 import { type Accessor, createSignal } from "solid-js";
 import { createStore, reconcile, unwrap } from "solid-js/store";
-import type { OpenSession } from "../../core/Agent.ts";
+import type { Agent, OpenSession } from "../../core/Agent.ts";
 import type { RunOptions } from "../../core/Client.ts";
 import { type Condition, Status } from "../../core/Status.ts";
-import { type ChatAction, type ChatState, reduce, replay } from "./chat-state.ts";
+import { chatCommands, type CommandTarget } from "./chat-commands.ts";
+import { type CommitFlow, commitFlow } from "./commit-flow.ts";
+import { type ChatAction, type ChatState, isIdle, reduce, replay } from "./chat-state.ts";
+import type { CommandInfo } from "./command-suggestions.ts";
+import { type ListedModel, type ModelRef, refText } from "./model-picker.ts";
+import { thinkingChoice } from "./thinking-choice.ts";
+import type { PickerList } from "./Picker.tsx";
 
 /**
  * How the chat's runs behave. The chat opens without a model; until the user sets one, it does not
@@ -18,6 +24,8 @@ import { type ChatAction, type ChatState, reduce, replay } from "./chat-state.ts
 export type ChatOptions = Omit<RunOptions, "model"> & {
   readonly model: RunOptions["model"] | undefined;
 };
+
+type SessionId = OpenSession["session"]["id"];
 
 /** Idle means that no run is going and no prompt waits. */
 type Activity = "idle" | "busy";
@@ -33,52 +41,82 @@ export type RestartLink = {
   readonly exitRequested: Effect.Effect<void>;
 };
 
+/**
+ * What the chat asks of the agent besides its open session: the sessions of the folder and the
+ * models for `/sessions` and `/model`, the favorite models, and opening the session the user picks, or a new one.
+ */
+export type ChatAgent = Pick<
+  Agent["Service"],
+  "sessions" | "models" | "favoriteModels" | "toggleFavoriteModel"
+> & {
+  readonly open: (session: SessionId | undefined) => Effect.Effect<OpenSession, never, Scope.Scope>;
+};
+
 export type ChatSetup = {
   readonly options: ChatOptions;
   /** The prompt to send first, if any. */
   readonly prompt: string | undefined;
   readonly link: RestartLink;
+  readonly agent: ChatAgent;
 };
 
-/** Why the chat ended. A restart keeps the unsent input for the next chat. */
+/**
+ * Why the chat ended. A restart keeps the unsent input for the next chat. Open asks for another
+ * session, or a new one when `session` is undefined.
+ */
 export type ChatEnd =
   | { readonly reason: "quit" }
-  | { readonly reason: "restart"; readonly draft: string };
+  | { readonly reason: "restart"; readonly draft: string }
+  | { readonly reason: "open"; readonly session: SessionId | undefined };
 
 const NO_MODEL =
-  'No model is set. Add "model": "route/model" to ~/.tau/settings.json, such as "anthropic/claude-sonnet-5-5", or pass --model, then open the chat again.';
-
-const RESTART_COMMAND = "/restart";
+  'No model is set. Pick one with /model, or add "model": "provider/model" to ~/.tau/settings.json.';
 
 export type ChatClient = {
   /** A Solid store: components that read it redraw when it changes. */
   readonly chat: ChatState;
   /** The problems that are true now, as a Solid signal. */
   readonly conditions: Accessor<readonly Condition[]>;
-  /** The model of each run, as `route/model`, or undefined when the user has not set one. */
-  readonly model: string | undefined;
+  /** The model of each run, as `provider/model`, or undefined when the user has not set one. */
+  readonly model: Accessor<string | undefined>;
+  /** The thinking level of the next run, or undefined when the model offers no levels. */
+  readonly thinking: Accessor<RunOptions["thinking"] | undefined>;
+  /** Steps the thinking level up, wrapping to the lowest. Only between runs. */
+  readonly stepThinking: () => void;
+  /** `/commit`, whose panel shows while it runs. */
+  readonly commit: CommitFlow;
+  /** The open picker, if a command opened one. */
+  readonly picker: Accessor<PickerList | undefined>;
+  readonly closePicker: () => void;
+  /** The commands that `send` runs, for the suggestion list. */
+  readonly commands: readonly CommandInfo[];
   /** The text the input editor starts with. */
   readonly draft: string;
   /** The input editor gives the chat a way to read its text, for a restart. */
   readonly readDraftWith: (read: () => string) => void;
+  /** Sends a prompt, or during a run a steering message, or runs a command. */
   readonly send: (text: string) => void;
+  /** Sends a prompt that waits for the running prompt to end. */
+  readonly queue: (text: string) => void;
   readonly cancel: () => void;
   readonly quit: () => void;
 };
 
 /**
  * Shows the session's history, then keeps the chat current with its events until the scope
- * closes. `ended` completes when the user quits or the supervisor restarts Tau.
+ * closes. `ended` completes when the user quits, picks another session, or the supervisor restarts
+ * Tau.
  */
 export const chatClient = Effect.fn("chatClient")(function* (
   opened: OpenSession,
   setup: ChatSetup,
 ) {
-  const { options, link } = setup;
+  const { link, agent } = setup;
   const events = yield* opened.subscribe;
   const [chat, setChat] = createStore(replay(yield* opened.history));
   const ended = yield* Deferred.make<ChatEnd>();
-  let readDraft = () => "";
+  const end = (reason: ChatEnd) => Effect.runFork(Deferred.succeed(ended, reason));
+  const editor = { read: () => "" };
   const reportActivity = activityReporter(link, chat);
 
   // `reconcile` keeps the objects whose `id` stays, so only the changed items redraw.
@@ -87,61 +125,138 @@ export const chatClient = Effect.fn("chatClient")(function* (
     reportActivity();
   };
 
-  const applyEach = <A extends ChatAction>(stream: Stream.Stream<A>) =>
-    Effect.forkScoped(
-      stream.pipe(
-        Stream.runForEach((action) =>
-          Effect.sync(() => {
-            apply(action);
-          }),
-        ),
-      ),
-    );
-
   reportActivity();
-  yield* applyEach(Stream.fromSubscription(events));
 
-  const conditions = yield* conditionsSignal();
+  const update = (action: ChatAction) =>
+    Effect.sync(() => {
+      apply(action);
+    });
 
-  // Prompts that wait for their run would be lost with this process, so they go back to the input.
-  const restart = Effect.suspend(() => {
-    const draft = [...chat.queued.map((queued) => queued.text), readDraft()];
-    const text = draft.filter((part) => part !== "").join("\n\n");
-    return Deferred.succeed(ended, { reason: "restart", draft: text });
+  yield* Effect.forkScoped(Stream.fromSubscription(events).pipe(Stream.runForEach(update)));
+
+  yield* Effect.forkScoped(Effect.andThen(link.exitRequested, restart(chat, editor, end)));
+  const prompts = yield* promptSender({ opened, agent, chat, apply, options: setup.options });
+
+  const { commit, run, list, picker, closePicker } = commandsOf(prompts, {
+    chat,
+    apply,
+    agent,
+    opened,
+    setModel: prompts.setModel,
+    requestRestart: link.requestRestart,
+    open: (session) => end({ reason: "open", session }),
+    openNew: () => end({ reason: "open", session: undefined }),
   });
-
-  yield* Effect.forkScoped(Effect.andThen(link.exitRequested, restart));
-
-  const { model } = options;
 
   const client: ChatClient = {
     chat,
-    conditions,
-    model: model === undefined ? undefined : `${model.route}/${model.model}`,
+    conditions: yield* conditionsSignal(),
+    model: prompts.modelText,
+    thinking: prompts.thinking,
+    stepThinking: prompts.stepThinking,
+    picker,
+    closePicker,
+    commit,
+    commands: list,
     draft: link.draft,
     readDraftWith: (read) => {
-      readDraft = read;
+      editor.read = read;
     },
     send: (text) => {
-      if (text === RESTART_COMMAND) {
-        if (!isIdle(chat)) apply({ type: "restart-waiting" });
-        Effect.runFork(link.requestRestart);
-        return;
-      }
+      const command = run(text);
 
-      if (model === undefined) {
-        apply({ type: "prompt-refused", text, reason: NO_MODEL });
-        return;
-      }
-
-      apply({ type: "prompt-sent", text });
-      Effect.runFork(opened.send({ type: "prompt", text, options: { ...options, model } }));
+      if (command === undefined) prompts.send(chat.run === "idle" ? "prompt" : "steer", text);
+      else Effect.runFork(command);
+    },
+    queue: (text) => {
+      prompts.send("prompt", text);
     },
     cancel: () => Effect.runFork(opened.send({ type: "cancel" })),
-    quit: () => Effect.runFork(Deferred.succeed(ended, { reason: "quit" })),
+    quit: () => end({ reason: "quit" }),
   };
 
   return { client, ended: Deferred.await(ended) };
+});
+
+/**
+ * Ends the chat for a restart. Prompts and steering messages that wait for their run would be lost
+ * with this process, so they go back to the input.
+ */
+const restart = (
+  chat: ChatState,
+  editor: { readonly read: () => string },
+  end: (reason: ChatEnd) => void,
+) =>
+  Effect.sync(() => {
+    const waiting = [...chat.steering, ...chat.queued].map((queued) => queued.text);
+    const draft = [...waiting, editor.read()].filter((part) => part !== "").join("\n\n");
+    end({ reason: "restart", draft });
+  });
+
+/**
+ * Sends prompts and steering messages with the chat's model and thinking level, or refuses them while
+ * it has no model. A resumed session goes on with the model and level of its latest reply.
+ */
+const promptSender = Effect.fn("promptSender")(function* (sender: {
+  readonly opened: OpenSession;
+  readonly agent: ChatAgent;
+  readonly chat: ChatState;
+  readonly options: ChatOptions;
+  readonly apply: (action: ChatAction) => void;
+}) {
+  const { opened, chat, options, apply } = sender;
+  const lastModel = yield* opened.lastModel;
+  const listed = yield* modelsSignal(sender.agent);
+  const [model, setModel] = createSignal<ModelRef | undefined>(lastModel ?? options.model);
+
+  const thinking = thinkingChoice(lastModel?.thinking ?? options.thinking, () => {
+    const ref = model();
+    const found = listed().find((candidate) => sameModel(candidate.ref, ref));
+    return found?.thinking ?? [];
+  });
+
+  const send = (type: "prompt" | "steer", text: string) => {
+    const ref = model();
+
+    if (ref === undefined) {
+      apply({ type: "prompt-refused", text, reason: NO_MODEL });
+      return;
+    }
+
+    apply({ type: type === "prompt" ? "prompt-sent" : "steer-sent", text });
+    const runOptions = { ...options, model: ref, thinking: thinking.chosen() };
+    Effect.runFork(opened.send({ type, text, options: runOptions }));
+  };
+
+  const modelText = () => {
+    const ref = model();
+    return ref === undefined ? undefined : refText(ref);
+  };
+
+  const stepThinking = () => {
+    if (chat.run === "idle") thinking.step();
+  };
+
+  return { send, model, setModel, modelText, thinking: thinking.shown, stepThinking };
+});
+
+const sameModel = (left: ModelRef, right: ModelRef | undefined) =>
+  left.provider === right?.provider && left.model === right.model;
+
+/**
+ * The models Tau can call, for the levels each offers. Empty until they load, or if they cannot.
+ */
+const modelsSignal = Effect.fn("modelsSignal")(function* (agent: ChatAgent) {
+  const [listed, setListed] = createSignal<readonly ListedModel[]>([]);
+
+  yield* Effect.forkScoped(
+    agent.models.pipe(
+      Effect.tap((models) => Effect.sync(() => setListed(models))),
+      Effect.ignore,
+    ),
+  );
+
+  return listed;
 });
 
 /** The conditions of `Status` as a Solid signal, kept current until the scope closes. */
@@ -165,4 +280,33 @@ const activityReporter = (link: RestartLink, chat: ChatState) => {
   };
 };
 
-const isIdle = (chat: ChatState) => chat.run === "idle" && chat.queued.length === 0;
+const runInBackground = (effect: Effect.Effect<void>) => {
+  Effect.runFork(effect);
+};
+
+/** The chat's commands, `/commit` among them. */
+const commandsOf = (
+  prompts: Pick<Effect.Success<ReturnType<typeof promptSender>>, "model" | "send">,
+  target: Omit<CommandTarget, "commit" | "fork">,
+) => {
+  const commit = commitFlow({
+    opened: target.opened,
+    apply: target.apply,
+    model: prompts.model,
+    prompt: (text) => {
+      prompts.send("prompt", text);
+    },
+    start: runStoppable,
+  });
+
+  return { commit, ...chatCommands({ ...target, fork: runInBackground, commit }) };
+};
+
+/** Runs `effect` in the background, and gives a way to stop it. */
+const runStoppable = (effect: Effect.Effect<void>) => {
+  const fiber = Effect.runFork(effect);
+
+  return () => {
+    Effect.runFork(Fiber.interrupt(fiber));
+  };
+};

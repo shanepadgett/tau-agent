@@ -1,10 +1,38 @@
 import { describe, expect, test } from "bun:test";
 import { createTestRenderer, type TestRendererSetup } from "@opentui/core/testing";
-import { Context, Deferred, Effect, Fiber, Layer, Option, Stream } from "effect";
-import type { OpenSession } from "../../src/core/Agent.ts";
+import {
+  Context,
+  Deferred,
+  Effect,
+  Fiber,
+  FileSystem,
+  Layer,
+  Option,
+  Schema,
+  Stream,
+} from "effect";
+import type { Response } from "effect/ai";
+import { ProviderId } from "../../src/ai/Providers.ts";
+import type { Agent, OpenSession } from "../../src/core/Agent.ts";
 import { Status } from "../../src/core/Status.ts";
-import { type ChatOptions, type ChatSetup, type RestartLink, runTui } from "../../src/tui/Tui.ts";
+import {
+  type ChatAgent,
+  type ChatOptions,
+  type ChatSetup,
+  type RestartLink,
+  runTui,
+} from "../../src/tui/Tui.ts";
 import { options, prompt, runReply, textReply, withHarness } from "../support/agent-harness.ts";
+
+/** The end of a reply that sent 42,000 tokens and got 500 back. */
+const finish = Stream.make<Response.StreamPartEncoded[]>({
+  type: "finish",
+  reason: "stop",
+  usage: {
+    inputTokens: { uncached: 42000, total: 42000, cacheRead: 0, cacheWrite: 0 },
+    outputTokens: { total: 500, text: 500, reasoning: undefined },
+  },
+});
 
 const SCREEN = { width: 80, height: 24, kittyKeyboard: true };
 
@@ -21,7 +49,10 @@ const noRestarts: RestartLink = {
   exitRequested: Effect.never,
 };
 
-const withoutRestarts = (chatOptions: ChatOptions): ChatSetup => ({
+/** What the chat gets: everything but the agent, which `startChat` adds. */
+type TestSetup = Omit<ChatSetup, "agent">;
+
+const withoutRestarts = (chatOptions: ChatOptions): TestSetup => ({
   options: chatOptions,
   prompt: undefined,
   link: noRestarts,
@@ -49,14 +80,71 @@ const fakeSupervisor = Effect.fn("fakeSupervisor")(function* (draft: string) {
  * Starts the chat on a test terminal, with a status the test can set conditions in. The chat stops
  * when the test's scope closes.
  */
-const startChat = Effect.fn("startChat")(function* (opened: OpenSession, setup: ChatSetup) {
+const startChat = Effect.fn("startChat")(function* (
+  agent: Agent["Service"],
+  opened: OpenSession,
+  setup: TestSetup,
+) {
   const terminal = yield* testTerminal;
   const services = yield* Layer.build(Status.layer);
-  const tui = runTui(terminal.renderer, opened, setup).pipe(Effect.provideContext(services));
+
+  const chatAgent: ChatAgent = {
+    open: (session) =>
+      agent.open(Option.fromUndefinedOr(session), opened.session.directory).pipe(Effect.orDie),
+    sessions: agent.sessions,
+    models: agent.models,
+    favoriteModels: agent.favoriteModels,
+    toggleFavoriteModel: agent.toggleFavoriteModel,
+  };
+
+  const tui = runTui(terminal.renderer, opened, { ...setup, agent: chatAgent }).pipe(
+    Effect.provideContext(services),
+  );
+
   const chat = yield* Effect.forkScoped(tui);
 
   yield* frameWith(terminal, "ctrl+d quit");
   return { terminal, chat, status: Context.get(services, Status) };
+});
+
+const MODELS = [
+  {
+    ref: { provider: ProviderId.make("openai"), model: "gpt-6" },
+    name: "GPT-6",
+    contextTokens: 400_000,
+    thinking: ["off", "low", "medium", "high", "xhigh", "max"] as const,
+  },
+  {
+    ref: { provider: ProviderId.make("anthropic"), model: "claude-sonnet-5-5" },
+    name: "Claude Sonnet 5.5",
+    contextTokens: 1_000_000,
+    thinking: ["off", "low", "medium", "high", "xhigh", "max"] as const,
+  },
+  {
+    ref: { provider: ProviderId.make("anthropic"), model: "claude-opus-5" },
+    name: "Claude Opus 5",
+    contextTokens: 200_000,
+    thinking: ["low", "high"] as const,
+  },
+];
+
+/** The line between the favorite models and the rest, inside the picker's border. */
+const DIVIDER = /│─{20,}│/;
+
+const SavedJson = Schema.fromJsonString(Schema.Array(Schema.String));
+
+/** The saved favorites, once the background save has written them. */
+const savedFavorites = Effect.fn("savedFavorites")(function* (home: string) {
+  const fileSystem = yield* FileSystem.FileSystem;
+
+  for (;;) {
+    const text = yield* fileSystem
+      .readFileString(`${home}/.tau/favorites.json`)
+      .pipe(Effect.orElseSucceed(() => ""));
+
+    if (text !== "") return yield* Schema.decodeEffect(SavedJson)(text);
+    yield* Effect.sleep("10 millis");
+  }
 });
 
 /** Waits for a frame that shows `text`. */
@@ -91,7 +179,7 @@ describe("the chat in the terminal", () => {
         ]);
 
         const opened = yield* agent.open(Option.none(), harness.directory);
-        const { terminal } = yield* startChat(opened, withoutRestarts(options));
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options));
 
         yield* Effect.promise(() => terminal.mockInput.typeText("Say hi."));
         terminal.mockInput.pressEnter();
@@ -109,10 +197,80 @@ describe("the chat in the terminal", () => {
         const opened = yield* agent.open(Option.none(), harness.directory);
         yield* prompt(opened, "Earlier prompt.");
 
-        const { terminal } = yield* startChat(opened, withoutRestarts(options));
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options));
         const frame = yield* frameWith(terminal, "Earlier answer.");
 
         expect(frame).toContain("Earlier prompt.");
+      }).pipe(Effect.scoped),
+    ));
+
+  test("an answer shows as Markdown, without its marks", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const answer = [
+          "# Plan",
+          "Run `bun test` first.",
+          "| name | size |\n| --- | --- |\n| one | 1 |",
+          "```ts",
+          "const done = true;",
+          "```",
+        ].join("\n\n");
+
+        const agent = yield* harness.startAgent([textReply(answer)]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options));
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("Plan it."));
+        terminal.mockInput.pressEnter();
+        // Each top-level block draws once its highlighter is done, so the blocks appear one by one.
+        const shown = ["Plan", "bun test", "name", "const done = true;"];
+
+        const frame = yield* frameWhere(terminal, (now) =>
+          shown.every((text) => now.includes(text)),
+        );
+
+        expect(frame).toContain("Plan");
+        expect(frame).not.toContain("# Plan");
+        expect(frame).toContain("Run bun test first.");
+        expect(frame).toMatch(/│ name +│ size +│/);
+        expect(frame).not.toContain("```");
+      }).pipe(Effect.scoped),
+    ));
+
+  test("Enter during a run steers it, and the run takes the message", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([
+          runReply("call-1", 'await tools.sh({ command: "sleep 0.5" })'),
+          textReply("Done, in Python."),
+        ]);
+
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options));
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("Write it."));
+        terminal.mockInput.pressEnter();
+        yield* frameWith(terminal, "enter steer · tab queue · esc cancel");
+        yield* Effect.promise(() => terminal.mockInput.typeText("Use Python."));
+        terminal.mockInput.pressEnter();
+        const frame = yield* frameWith(terminal, "Done, in Python.");
+
+        expect(frame).toMatch(/Use Python\.[\s\S]*Done, in Python\./);
+        expect(frame).not.toContain("Steering:");
+      }).pipe(Effect.scoped),
+    ));
+
+  test("the footer shows the context of the latest model call and what the calls cost", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([Stream.concat(textReply("Hello."), finish)]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options));
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("Hi."));
+        terminal.mockInput.pressEnter();
+
+        yield* frameWith(terminal, "scripted/scripted · 43k/128k · $0.04");
       }).pipe(Effect.scoped),
     ));
 
@@ -121,7 +279,7 @@ describe("the chat in the terminal", () => {
       Effect.gen(function* () {
         const agent = yield* harness.startAgent([]);
         const opened = yield* agent.open(Option.none(), harness.directory);
-        const { terminal, chat } = yield* startChat(opened, withoutRestarts(options));
+        const { terminal, chat } = yield* startChat(agent, opened, withoutRestarts(options));
 
         yield* Effect.promise(() => terminal.mockInput.typeText("one"));
         terminal.mockInput.pressEnter({ shift: true });
@@ -130,7 +288,22 @@ describe("the chat in the terminal", () => {
 
         expect(frame).toMatch(/one\s*│?\s*\n.*two/);
         terminal.mockInput.pressKey("d", { ctrl: true });
-        expect(yield* Fiber.join(chat)).toEqual({ reason: "quit" });
+        expect(yield* Fiber.join(chat)).toEqual({ reason: "quit", session: opened.session.id });
+      }).pipe(Effect.scoped),
+    ));
+
+  test("/commit takes the text after it, and outside a git repository it says so and sends nothing", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([textReply("Not called.")]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options));
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("/commit make it one commit"));
+        terminal.mockInput.pressEnter();
+        const frame = yield* frameWith(terminal, "Not in a git repository.");
+
+        expect(frame).not.toContain("Not called.");
       }).pipe(Effect.scoped),
     ));
 
@@ -141,6 +314,7 @@ describe("the chat in the terminal", () => {
         const opened = yield* agent.open(Option.none(), harness.directory);
 
         const { terminal } = yield* startChat(
+          agent,
           opened,
           withoutRestarts({ ...options, model: undefined }),
         );
@@ -162,7 +336,7 @@ describe("the chat in the terminal", () => {
         const opened = yield* agent.open(Option.none(), harness.directory);
         const supervisor = yield* fakeSupervisor("carried over");
         const setup = { options, prompt: undefined, link: supervisor.link };
-        const { terminal, chat } = yield* startChat(opened, setup);
+        const { terminal, chat } = yield* startChat(agent, opened, setup);
 
         yield* Effect.promise(() => terminal.mockInput.typeText(" and more"));
         yield* frameWith(terminal, "carried over and more");
@@ -171,6 +345,7 @@ describe("the chat in the terminal", () => {
         expect(yield* Fiber.join(chat)).toEqual({
           reason: "restart",
           draft: "carried over and more",
+          session: opened.session.id,
         });
       }).pipe(Effect.scoped),
     ));
@@ -182,7 +357,7 @@ describe("the chat in the terminal", () => {
         const opened = yield* agent.open(Option.none(), harness.directory);
         const supervisor = yield* fakeSupervisor("");
         const setup = { options, prompt: undefined, link: supervisor.link };
-        const { terminal } = yield* startChat(opened, setup);
+        const { terminal } = yield* startChat(agent, opened, setup);
 
         yield* Effect.promise(() => terminal.mockInput.typeText("Hi."));
         terminal.mockInput.pressEnter();
@@ -204,7 +379,7 @@ describe("the chat in the terminal", () => {
         const opened = yield* agent.open(Option.none(), harness.directory);
         const supervisor = yield* fakeSupervisor("");
         const setup = { options, prompt: undefined, link: supervisor.link };
-        const { terminal } = yield* startChat(opened, setup);
+        const { terminal } = yield* startChat(agent, opened, setup);
 
         yield* Effect.promise(() => terminal.mockInput.typeText("Hi."));
         terminal.mockInput.pressEnter();
@@ -217,12 +392,130 @@ describe("the chat in the terminal", () => {
       }).pipe(Effect.scoped),
     ));
 
+  test("typing a command lists the matching ones, Tab completes it, and Enter then sends it", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options));
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("/se"));
+        const listed = yield* frameWith(terminal, "▸ /sessions");
+
+        expect(listed).toContain("Open an earlier session of this folder");
+        expect(listed).not.toContain("/model");
+        expect(listed).toContain("tab/enter complete · esc close");
+        terminal.mockInput.pressTab();
+        const completed = yield* frameWith(terminal, "enter send");
+
+        expect(completed).toContain("/sessions");
+        expect(completed).not.toContain("Commands");
+        terminal.mockInput.pressEnter();
+        yield* frameWith(terminal, "Type to filter");
+      }).pipe(Effect.scoped),
+    ));
+
+  test("/model lists models by name and provider; Ctrl+F moves one above a divider and saves it", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const models = Effect.succeed(MODELS);
+
+        const { terminal } = yield* startChat(
+          { ...agent, models },
+          opened,
+          withoutRestarts(options),
+        );
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("/model"));
+        terminal.mockInput.pressEnter();
+        const listed = yield* frameWith(terminal, "ctrl+f pin");
+
+        expect(listed).toMatch(
+          /Claude Opus 5 \(anthropic\)[^\n]*\n[^\n]*Claude Sonnet 5\.5 \(anthropic\)/,
+        );
+
+        expect(listed).not.toMatch(DIVIDER);
+        terminal.mockInput.pressArrow("down");
+        terminal.mockInput.pressKey("f", { ctrl: true });
+
+        const pinned = yield* frameWhere(terminal, (frame) =>
+          /Claude Sonnet 5\.5 \(anthropic\)[^\n]*\n[^\n]*─{20,}[^\n]*\n[^\n]*Claude Opus 5/.test(
+            frame,
+          ),
+        );
+
+        expect(pinned).toContain("GPT-6 (openai)");
+        expect(yield* savedFavorites(harness.home)).toEqual(["anthropic/claude-sonnet-5-5"]);
+        yield* Effect.promise(() => terminal.mockInput.typeText("gpt"));
+        const filtered = yield* frameWhere(terminal, (frame) => !frame.includes("Claude"));
+
+        expect(filtered).toContain("GPT-6 (openai)");
+        expect(filtered).not.toMatch(DIVIDER);
+      }).pipe(Effect.scoped),
+    ));
+
+  test("Shift+Tab steps the thinking level the footer shows, and the next reply saves it", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([textReply("Thought.")]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+
+        const scripted = {
+          ref: options.model,
+          name: "Scripted",
+          contextTokens: 128_000,
+          thinking: ["low", "medium", "high"] as const,
+        };
+
+        const { terminal } = yield* startChat(
+          { ...agent, models: Effect.succeed([scripted]) },
+          opened,
+          withoutRestarts(options),
+        );
+
+        const first = yield* frameWith(terminal, "scripted/scripted (medium)");
+        expect(first).toContain("shift+tab");
+        terminal.mockInput.pressKey("\t", { shift: true });
+        yield* frameWith(terminal, "scripted/scripted (high)");
+        terminal.mockInput.pressKey("\t", { shift: true });
+        yield* frameWith(terminal, "scripted/scripted (low)");
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("Think."));
+        terminal.mockInput.pressEnter();
+        yield* frameWith(terminal, "Thought.");
+
+        expect((yield* opened.lastModel)?.thinking).toBe("low");
+      }).pipe(Effect.scoped),
+    ));
+
+  test("Escape closes the command list during a run without cancelling the run", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([Stream.never]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options));
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("Hi."));
+        terminal.mockInput.pressEnter();
+        yield* frameWith(terminal, "esc cancel");
+        yield* Effect.promise(() => terminal.mockInput.typeText("/re"));
+        yield* frameWith(terminal, "▸ /restart");
+        terminal.mockInput.pressEscape();
+        const frame = yield* frameWith(terminal, "esc cancel");
+
+        expect(frame).toContain("Running");
+        expect(frame).not.toContain("Commands");
+      }).pipe(Effect.scoped),
+    ));
+
   test("conditions show above the input, errors first, and go when cleared", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
         const agent = yield* harness.startAgent([]);
         const opened = yield* agent.open(Option.none(), harness.directory);
-        const { terminal, status } = yield* startChat(opened, withoutRestarts(options));
+        const { terminal, status } = yield* startChat(agent, opened, withoutRestarts(options));
 
         const warning = {
           key: "build",
