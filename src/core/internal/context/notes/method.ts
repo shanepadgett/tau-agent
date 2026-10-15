@@ -12,7 +12,7 @@ import { contextBudget, contextStage } from "./budget.ts";
 import { checkpointTool } from "./checkpoint.ts";
 import { stageNudge, refuseCallsWhenForced } from "./stage.ts";
 import { notesView } from "./view.ts";
-import { makeContextWorker } from "./worker.ts";
+import { makeContextWorker, notesWritten } from "./worker.ts";
 
 export const makeNotesMethod = Effect.fn("makeNotesMethod")(function* () {
   const sessions = yield* Sessions;
@@ -44,5 +44,7 @@ export const makeNotesMethod = Effect.fn("makeNotesMethod")(function* () {
     return method;
   });
 
-  return { forRun, background };
+  const history = (session: SessionId) => notes.list(session).pipe(Effect.map(notesWritten));
+
+  return { forRun, background, history };
 });

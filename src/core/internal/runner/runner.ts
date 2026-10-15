@@ -16,6 +16,7 @@ import {
   PubSub,
   Queue,
   Ref,
+  Schedule,
   type Scope,
 } from "effect";
 import { ChildProcessSpawner } from "effect/process";
@@ -100,14 +101,12 @@ export const makeRunner = Effect.fn("makeRunner")(function* (services: RunServic
   const session = yield* services.sessions.get(id);
   const events = yield* PubSub.unbounded<AgentEvent>();
   const annotated = Effect.annotateLogs({ session: id });
-  yield* services.contextMethod.background(id, PubSub.subscribe(events)).pipe(annotated);
+  yield* services.contextMethod.background(id, events).pipe(annotated);
   const prompts = yield* Queue.unbounded<QueuedPrompt>();
   const steering = yield* Ref.make<Steering>(Option.none());
   const current = yield* FiberHandle.make<RunEnd, unknown>();
 
-  const processes = yield* makeProcessSessions(PROCESS_LIMITS).pipe(
-    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, services.spawner),
-  );
+  const processes = yield* sessionProcesses(services, events);
 
   const runNext = Effect.gen(function* () {
     const prompt = yield* Queue.take(prompts);
@@ -289,7 +288,12 @@ const runSkills = Effect.fn("runSkills")(function* (
 const savedRuns = (services: RunServices, id: SessionId) => ({
   history: Effect.gen(function* () {
     const entries = yield* services.sessions.entries(id, 0);
-    return historyEvents(entries, yield* replyProfiles(services.models, entries));
+    const background = yield* services.contextMethod.history(id);
+
+    return [
+      ...historyEvents(entries, yield* replyProfiles(services.models, entries)),
+      ...background,
+    ];
   }),
   lastModel: services.sessions.entries(id, 0).pipe(Effect.map(lastReplyModel)),
 });
@@ -298,6 +302,36 @@ const lastReplyModel = (entries: readonly Entry[]) => {
   const reply = entries.findLast(({ body }) => body.type === "assistant")?.body;
   return reply?.type === "assistant" ? reply.model : undefined;
 };
+
+/**
+ * The session's process sessions. A command can exit at any time, and process sessions tell no
+ * one, so the runner looks four times a second and publishes the list when it changed.
+ */
+const sessionProcesses = Effect.fn("sessionProcesses")(function* (
+  services: RunServices,
+  events: PubSub.PubSub<AgentEvent>,
+) {
+  const processes = yield* makeProcessSessions(PROCESS_LIMITS).pipe(
+    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, services.spawner),
+  );
+
+  const shown = yield* Ref.make("[]");
+
+  const publishChange = (list: readonly ProcessSummary[]) =>
+    Ref.getAndSet(shown, JSON.stringify(list)).pipe(
+      Effect.flatMap((before) =>
+        before === JSON.stringify(list)
+          ? Effect.void
+          : PubSub.publish(events, { type: "processes-changed", processes: list }),
+      ),
+    );
+
+  const look = processes.list.pipe(Effect.flatMap(publishChange));
+  yield* Effect.forkScoped(look.pipe(Effect.repeat(Schedule.spaced(PROCESS_LOOK_INTERVAL))));
+  return processes;
+});
+
+const PROCESS_LOOK_INTERVAL = "250 millis";
 
 const runningProcesses = (summaries: readonly ProcessSummary[]): readonly RunningProcess[] =>
   summaries.flatMap(({ id, command, pty, state }) =>

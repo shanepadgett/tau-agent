@@ -4,6 +4,7 @@ import { Context, Effect, Layer, Option, type PubSub, type Scope } from "effect"
 import type { ModelRef, UnknownModel, UnknownProvider } from "../ai/Catalog.ts";
 import { contextView } from "../session/ContextView.ts";
 import type { RunningProcess, SessionId } from "../session/Entry.ts";
+import type { SessionStoreError } from "../session/SessionStoreError.ts";
 import type { AgentEvent } from "./Client.ts";
 import { ContextSettings } from "./ContextSettings.ts";
 import { makeNotesMethod } from "./internal/context/notes/method.ts";
@@ -20,6 +21,7 @@ const wholeHistory = {
       shouldReply: needsReply,
     }),
   background: () => Effect.void,
+  history: () => Effect.succeed([]),
 };
 
 export class ContextMethod extends Context.Service<
@@ -31,10 +33,15 @@ export class ContextMethod extends Context.Service<
       /** The commands the agent has running, which a checkpoint lists. */
       running: Effect.Effect<readonly RunningProcess[]>,
     ) => Effect.Effect<RunMethod, UnknownModel | UnknownProvider>;
+    /** Reads the session's events and publishes what the background work did, such as notes it wrote. */
     readonly background: (
       session: SessionId,
-      subscribe: Effect.Effect<PubSub.Subscription<AgentEvent>, never, Scope.Scope>,
+      events: PubSub.PubSub<AgentEvent>,
     ) => Effect.Effect<void, never, Scope.Scope>;
+    /** What the background work did before, as events, for a client that shows a resumed chat. */
+    readonly history: (
+      session: SessionId,
+    ) => Effect.Effect<readonly AgentEvent[], SessionStoreError>;
   }
 >()("tau/core/ContextMethod") {
   static readonly wholeHistory = Layer.succeed(ContextMethod, wholeHistory);

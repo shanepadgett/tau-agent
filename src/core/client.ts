@@ -2,6 +2,7 @@
 
 import type { ModelRef } from "../ai/Catalog.ts";
 import { type CallTokens, clampThinking, type ThinkingLevel } from "../ai/ModelProfile.ts";
+import type { ProcessSummary } from "../proc/ProcessSessions.ts";
 import type { Timeouts } from "./internal/run-tool/run-tool.ts";
 
 /** How one run behaves. Each prompt carries its own, so a client can change the model between prompts. */
@@ -76,6 +77,10 @@ export type AgentEvent =
   /** Tau runs the project's checks itself, because the model ended its turn without them. */
   | { readonly type: "checks-started"; readonly checks: readonly string[] }
   | { readonly type: "checks-ended"; readonly failed: readonly string[] }
+  /** The commands the agent started in process sessions changed: one started, exited or was killed. */
+  | { readonly type: "processes-changed"; readonly processes: readonly ProcessSummary[] }
+  /** Background notes now cover the session's entries 1 through `through`. */
+  | { readonly type: "notes-written"; readonly through: number }
   | ({ readonly type: "run-ended" } & RunEnd)
   | { readonly type: "run-ended"; readonly reason: "cancelled" }
   | { readonly type: "run-ended"; readonly reason: "failed"; readonly error: string };
