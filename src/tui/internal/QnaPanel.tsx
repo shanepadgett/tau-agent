@@ -54,8 +54,8 @@ export function QnaPanel(props: PanelProps) {
       <For each={[props.state.tab]}>
         {() => (
           <Switch>
-            <Match when={choiceOf(props.state)} keyed>
-              {(tab) => <ChoiceBody flow={props.flow} state={props.state} tab={tab} />}
+            <Match when={choiceOf(props.state)}>
+              {(tab) => <ChoiceBody flow={props.flow} state={props.state} tab={tab()} />}
             </Match>
             <Match when={currentTab(props.state).type === "input"}>
               <TextBody flow={props.flow} state={props.state} />

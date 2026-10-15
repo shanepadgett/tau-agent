@@ -100,8 +100,9 @@ function App(props: { readonly client: ChatClient; readonly syntax: SyntaxStyle 
               <Show when={props.client.commit.step()} keyed>
                 {(step) => <CommitPanel flow={props.client.commit} step={step} />}
               </Show>
-              <Show when={props.client.qna.state()} keyed>
-                {(state) => <QnaPanel flow={props.client.qna} state={state} />}
+              {/* Not keyed: a keystroke changes the state, and the panel must keep its text field. */}
+              <Show when={props.client.qna.state()}>
+                {(state) => <QnaPanel flow={props.client.qna} state={state()} />}
               </Show>
               <Show when={!files.isOpen()}>
                 <CommandList suggestions={commands} />
