@@ -28,6 +28,7 @@ describe("skills", () => {
       Effect.gen(function* () {
         const skills = `${harness.directory}/.agents/skills`;
         yield* writeSkill(`${skills}/pdf-forms`, skillFile("pdf-forms", "Fills in PDF forms."));
+        yield* (yield* FileSystem.FileSystem).writeFileString(`${skills}/.DS_Store`, "junk");
         yield* writeSkill(`${skills}/no-description`, "---\nname: no-description\n---\nSteps.");
 
         yield* writeSkill(

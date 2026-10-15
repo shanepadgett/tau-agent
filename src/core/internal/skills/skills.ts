@@ -82,7 +82,9 @@ const skillsIn = (folder: string, scope: Scope) =>
     const found = yield* Effect.forEach(names, (name) =>
       fileSystem
         .exists(join(folder, name, SKILL_FILE))
+        // An entry that is a file, such as .DS_Store, has no SKILL.md under it and is not a skill.
         .pipe(
+          Effect.orElseSucceed(() => false),
           Effect.flatMap((exists) =>
             exists ? readSkill(join(folder, name), scope) : Effect.succeed(Option.none()),
           ),
