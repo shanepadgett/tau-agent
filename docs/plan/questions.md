@@ -13,4 +13,3 @@ Approve the code plan and exit-output mockup in chat: quitting an unused draft p
 ## Multi-select picker
 
 What is the first use, and should Escape cancel or apply the marks so far? (Recommended: cancel.)
-
