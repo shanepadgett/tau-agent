@@ -9,5 +9,10 @@ export const TOKENS = {
     text: "#dddddd",
     muted: "#888888",
     accent: "#61afef",
+    success: "#98c379",
+    /** The row under the cursor in a list. */
+    selected: "#555555",
   },
+  /** How opaque the black backdrop behind a dialog is, from 0 to 255. */
+  dimAlpha: 150,
 } as const;
