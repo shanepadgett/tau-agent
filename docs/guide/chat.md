@@ -33,6 +33,7 @@ Run `tau` with no `-p` to chat with Tau in your terminal: send prompts, watch th
 | Escape | Closes the sidebar when it covers the chat, or else cancels the run |
 | Ctrl+C | Each press does the first of these that applies: closes an open list or panel, clears the input, cancels the run, quits |
 | Ctrl+B | Shows or hides the sidebar (see below). In tmux, where Ctrl+B is the prefix key, press it twice. |
+| Ctrl+S | Stashes the input: saves its text and clears it (see [stash.md](stash.md)) |
 | Ctrl+D | Quits |
 
 In a list that a command opens, type to filter it, use the arrow keys to move, press Enter to choose, and press Escape or Ctrl+C to close the list.
@@ -48,6 +49,7 @@ While you type a command, a list of the commands that start with what you typed 
 | `/commit` | Runs the project's checks, plans commits of every changed file, and commits them once you press Enter. Text after it guides the plan. See [commit.md](commit.md). |
 | `/model` | Lists the models of the providers you have logged in to. The one you choose runs this chat's next prompts; your settings stay as they are. |
 | `/new` | Opens a new session in this folder. |
+| `/pop` | Lists the stashed prompts of this folder. Enter puts the chosen one in the input. See [stash.md](stash.md). |
 | `/qna` | Has the model ask its open questions in a panel. Text after it frames them. See [qna.md](qna.md). |
 | `/restart` | Restarts Tau into new code (see below). |
 | `/sessions` | Lists the sessions of this folder, latest first, by their first prompt. Each entry takes one line: line breaks become spaces, and long prompts are shortened with an ellipsis in the middle. Choosing one opens it in place of this one. |
@@ -62,7 +64,7 @@ While a run is going or a prompt waits, Tau does not switch sessions: choosing a
 - When you cancel a run, the steering messages and prompts that were waiting go back into the input, so you can change them and send them again.
 - Directly above the input, the status strip lists problems that are true now, one line each: errors (✗, red) first, then warnings (!, yellow), then news with no mark (grey). Each line stays until its cause is gone, and long lines wrap. With no problems, the strip takes no space.
 - A skill, an instruction file or a folder of them that Tau could not read shows as a warning in the status strip, because the model works without it. The warning goes away at the first run after the file reads again.
-- Under the input, the footer shows the model and the keys you can use now, such as `anthropic/claude-sonnet-5-5 (medium)`. The level in parentheses is how hard the model thinks (see [choose-a-model.md](choose-a-model.md)).
+- Under the input, the footer shows the model and the keys you can use now (while the input holds text, `ctrl+s stash` takes the place of `ctrl+d quit`), such as `anthropic/claude-sonnet-5-5 (medium)`. The level in parentheses is how hard the model thinks (see [choose-a-model.md](choose-a-model.md)).
 - A resumed session goes on with the model of its latest reply, not the one from `--model` or your settings.
 - When a run fails, the transcript shows "The run failed:" and the reason. The session keeps it, so a resumed session shows it too, and the model reads "The previous run failed: …" in its next call.
 - A resumed session shows its earlier prompts, answers and scripts.

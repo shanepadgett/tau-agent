@@ -122,6 +122,7 @@ const startChat = Effect.fn("startChat")(function* (
     favoriteModels: agent.favoriteModels,
     toggleFavoriteModel: agent.toggleFavoriteModel,
     references: agent.references,
+    stashes: agent.stashes,
     files: agent.files,
     sidebarChoice: agent.sidebarChoice,
     saveSidebarChoice: agent.saveSidebarChoice,
@@ -133,7 +134,7 @@ const startChat = Effect.fn("startChat")(function* (
 
   const chat = yield* Effect.forkScoped(tui);
 
-  yield* frameWith(terminal, "ctrl+d quit");
+  yield* frameWith(terminal, "enter send");
   return { terminal, chat, status: Context.get(services, Status) };
 });
 
@@ -747,7 +748,7 @@ describe("the chat in the terminal", () => {
 
         const closed = yield* frameWith(
           terminal,
-          "enter steer · tab queue · esc cancel · ctrl+d quit",
+          "enter steer · tab queue · esc cancel · ctrl+s stash",
         );
 
         expect(closed).not.toContain("▸ /restart");
@@ -864,6 +865,56 @@ describe("the chat in the terminal", () => {
         const cleared = yield* frameWhere(terminal, (now) => !now.includes("Tau crashed."));
 
         expect(cleared).not.toContain("does not build");
+      }).pipe(Effect.scoped),
+    ));
+
+  test("Ctrl+S stashes the input and shows the stash key in the footer; /pop asks before discarding, and pops into the input", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options));
+
+        const empty = yield* frameWith(terminal, "ctrl+d quit");
+        expect(empty).not.toContain("ctrl+s stash");
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("first draft"));
+        const typed = yield* frameWith(terminal, "ctrl+s stash");
+        expect(typed).not.toContain("ctrl+d quit");
+        terminal.mockInput.pressKey("s", { ctrl: true });
+        yield* frameWith(terminal, "Stashed.");
+        yield* frameWith(terminal, "ctrl+d quit");
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("second draft"));
+        yield* frameWith(terminal, "ctrl+s stash");
+        terminal.mockInput.pressKey("s", { ctrl: true });
+        yield* frameWhere(terminal, (frame) => !frame.includes("second draft"));
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("/pop"));
+        terminal.mockInput.pressEnter();
+        const listed = yield* frameWith(terminal, "enter pop · ctrl+d discard");
+        expect(listed).toMatch(/second draft[^\n]*\n[^\n]*first draft/);
+
+        terminal.mockInput.pressKey("d", { ctrl: true });
+        const asked = yield* frameWith(terminal, "enter discard · esc keep");
+        expect(asked).not.toContain("first draft");
+        terminal.mockInput.pressEscape();
+        yield* frameWith(terminal, "enter pop · ctrl+d discard");
+
+        terminal.mockInput.pressKey("d", { ctrl: true });
+        yield* frameWith(terminal, "enter discard · esc keep");
+        terminal.mockInput.pressEnter();
+
+        const discarded = yield* frameWhere(
+          terminal,
+          (frame) => frame.includes("first draft") && !frame.includes("second draft"),
+        );
+
+        expect(discarded).toContain("enter pop · ctrl+d discard");
+        terminal.mockInput.pressEnter();
+        const popped = yield* frameWhere(terminal, (frame) => !frame.includes("enter pop"));
+        expect(popped).toContain("first draft");
+        expect(popped).toContain("ctrl+s stash");
       }).pipe(Effect.scoped),
     ));
 });

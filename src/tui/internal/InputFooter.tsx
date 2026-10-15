@@ -13,24 +13,28 @@ import { COLORS } from "./theme.ts";
 /** A hint: the commands whose first keys show side by side, and what they do. */
 type Hint = readonly [commands: readonly string[], text: string];
 
+/** The quit hint, which the stash hint takes the place of while the input holds text. */
+const QUIT_HINT: Hint = [["chat.quit"], "quit"];
+const STASH_HINT: Hint = [["prompt.stash"], "stash"];
+
 const IDLE_HINTS: readonly Hint[] = [
   [["input.submit"], "send"],
   [["input.newline"], "new line"],
-  [["chat.quit"], "quit"],
+  QUIT_HINT,
 ];
 
 const IDLE_THINKING_HINTS: readonly Hint[] = [
   [["input.submit"], "send"],
   [["input.newline"], "new line"],
   [["thinking.next"], "thinking"],
-  [["chat.quit"], "quit"],
+  QUIT_HINT,
 ];
 
 const RUNNING_HINTS: readonly Hint[] = [
   [["input.submit"], "steer"],
   [["prompt.queue"], "queue"],
   [["run.cancel"], "cancel"],
-  [["chat.quit"], "quit"],
+  QUIT_HINT,
 ];
 
 const COMMAND_LIST_HINTS: readonly Hint[] = [
@@ -65,6 +69,9 @@ export function InputFooter(props: {
     idle: choicesText(keymap, IDLE_HINTS),
     idleThinking: choicesText(keymap, IDLE_THINKING_HINTS),
     running: choicesText(keymap, RUNNING_HINTS),
+    idleDraft: choicesText(keymap, withStash(IDLE_HINTS)),
+    idleThinkingDraft: choicesText(keymap, withStash(IDLE_THINKING_HINTS)),
+    runningDraft: choicesText(keymap, withStash(RUNNING_HINTS)),
     commands: [hintsText(keymap, COMMAND_LIST_HINTS)],
     files: [hintsText(keymap, FILE_LIST_HINTS)],
   }));
@@ -72,8 +79,10 @@ export function InputFooter(props: {
   const choices = () => {
     const list = props.suggestions.open();
     if (list?.completes() === true) return hints()[list.kind];
-    if (props.client.chat.run !== "idle") return hints().running;
-    return props.client.thinking() === undefined ? hints().idle : hints().idleThinking;
+    const draft = props.client.hasDraft();
+    if (props.client.chat.run !== "idle") return draft ? hints().runningDraft : hints().running;
+    if (props.client.thinking() === undefined) return draft ? hints().idleDraft : hints().idle;
+    return draft ? hints().idleThinkingDraft : hints().idleThinking;
   };
 
   const level = () => {
@@ -99,6 +108,9 @@ export function InputFooter(props: {
     </box>
   );
 }
+
+const withStash = (hints: readonly Hint[]) =>
+  hints.map((hint) => (hint === QUIT_HINT ? STASH_HINT : hint));
 
 /** Such as `enter send · shift+enter new line`. */
 const hintsText = (keymap: TauKeymap, hints: readonly Hint[]) =>

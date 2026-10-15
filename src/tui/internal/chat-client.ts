@@ -22,6 +22,7 @@ import type { SidebarMemory } from "./sidebar-state.ts";
 import { turnAttention } from "./turn-attention.ts";
 import { thinkingChoice } from "./thinking-choice.ts";
 import type { PickerList } from "./Picker.tsx";
+import { type InputEditor, type StashTarget, stashInput } from "./stash.ts";
 
 /**
  * How the chat's runs behave. The chat opens without a model; until the user sets one, it does not
@@ -67,6 +68,7 @@ export type ChatAgent = Pick<
   | "favoriteModels"
   | "toggleFavoriteModel"
   | "references"
+  | "stashes"
   | "files"
   | "sidebarChoice"
   | "saveSidebarChoice"
@@ -121,8 +123,14 @@ export type ChatClient = {
   readonly commands: readonly CommandInfo[];
   /** The text the input editor starts with. */
   readonly draft: string;
-  /** The input editor gives the chat a way to read its text, for a restart. */
-  readonly readDraftWith: (read: () => string) => void;
+  /** The input editor gives the chat a way to read and replace its text. */
+  readonly attachEditor: (editor: InputEditor) => void;
+  /** Whether the input holds text, for the footer's keys. */
+  readonly hasDraft: Accessor<boolean>;
+  /** The input editor tells the chat its text whenever it changes. */
+  readonly trackDraft: (text: string) => void;
+  /** Parks the input's text as a stash, and clears the input. */
+  readonly stash: () => void;
   /** Sends a prompt, or during a run a steering message, or runs a command. */
   readonly send: (text: string) => void;
   /** Sends a prompt that waits for the running prompt to end. */
@@ -148,7 +156,6 @@ export const chatClient = Effect.fn("chatClient")(function* (
   const [chat, setChat] = createStore(replay(yield* opened.history));
   const ended = yield* Deferred.make<ChatEnd>();
   const end = (reason: ChatEnd) => Effect.runFork(Deferred.succeed(ended, reason));
-  const editor = { read: () => "" };
   const reportActivity = activityReporter(link, chat);
 
   // `reconcile` keeps the objects whose `id` stays, so only the changed items redraw.
@@ -159,7 +166,10 @@ export const chatClient = Effect.fn("chatClient")(function* (
 
   reportActivity();
 
-  yield* Effect.forkScoped(Effect.andThen(link.exitRequested, restart(chat, editor, end)));
+  const input = inputHandle(link.draft, { agent, opened, apply });
+
+  yield* Effect.forkScoped(Effect.andThen(link.exitRequested, restart(chat, input.editor, end)));
+
   const prompts = yield* promptSender({ opened, agent, chat, apply, options: setup.options });
 
   const { commit, qna, run, list, picker, closePicker } = commandsOf(prompts, attention, {
@@ -171,6 +181,7 @@ export const chatClient = Effect.fn("chatClient")(function* (
     requestRestart: link.requestRestart,
     open: (session) => end({ reason: "open", session }),
     openNew: () => end({ reason: "open", session: undefined }),
+    editor: input.editor,
   });
 
   yield* followSession(events, apply, { link, attention, qna });
@@ -188,9 +199,7 @@ export const chatClient = Effect.fn("chatClient")(function* (
     ...(yield* tagFinder(agent, opened.session.directory, chat)),
     commands: list,
     draft: link.draft,
-    readDraftWith: (read) => {
-      editor.read = read;
-    },
+    ...input.client,
     send: (text) => {
       const command = run(text);
 
@@ -207,6 +216,48 @@ export const chatClient = Effect.fn("chatClient")(function* (
 
   return { client, ended: Deferred.await(ended) };
 });
+
+/**
+ * The chat's hold on the input editor, which attaches after the first draw: the editor to read and
+ * replace its text, and the parts of the client about it. `draft` is the text it starts with.
+ */
+const inputHandle = (
+  draft: string,
+  chat: {
+    readonly agent: ChatAgent;
+    readonly opened: OpenSession;
+    readonly apply: StashTarget["apply"];
+  },
+) => {
+  const [hasDraft, setHasDraft] = createSignal(draft !== "");
+  let attached: InputEditor = { read: () => "", write: () => {} };
+
+  const editor: InputEditor = {
+    read: () => attached.read(),
+    write: (text) => {
+      attached.write(text);
+    },
+  };
+
+  const client: Pick<ChatClient, "attachEditor" | "hasDraft" | "trackDraft" | "stash"> = {
+    attachEditor: (input) => {
+      attached = input;
+    },
+    hasDraft,
+    trackDraft: (text) => {
+      setHasDraft(text !== "");
+    },
+    stash: stashInput({
+      stashes: chat.agent.stashes,
+      directory: chat.opened.session.directory,
+      editor,
+      apply: chat.apply,
+      fork: runInBackground,
+    }),
+  };
+
+  return { editor, client };
+};
 
 /**
  * Finds `@` tags in the session's folder and its attached references. It starts the folder's index

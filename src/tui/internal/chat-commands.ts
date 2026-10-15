@@ -11,12 +11,13 @@ import type { CommandInfo } from "./command-suggestions.ts";
 import { type ModelRef, modelPicker } from "./model-picker.ts";
 import type { PickerItem, PickerList } from "./Picker.tsx";
 import { type ReferencesTarget, referencesPicker } from "./references-picker.ts";
+import { type InputEditor, openPop, type StashTarget } from "./stash.ts";
 
 type SessionId = OpenSession["session"]["id"];
 
 type ChatAgent = Pick<
   Agent["Service"],
-  "sessions" | "models" | "favoriteModels" | "toggleFavoriteModel" | "references"
+  "sessions" | "models" | "favoriteModels" | "toggleFavoriteModel" | "references" | "stashes"
 >;
 
 type ListedSession = Effect.Success<ReturnType<ChatAgent["sessions"]>>[number];
@@ -38,6 +39,7 @@ export type CommandTarget = {
   readonly apply: (action: ChatAction) => void;
   readonly agent: ChatAgent;
   readonly opened: OpenSession;
+  readonly editor: InputEditor;
   readonly setModel: (ref: RunOptions["model"]) => void;
   readonly requestRestart: Effect.Effect<void>;
   /** Ends the chat to open `session`. */
@@ -176,6 +178,19 @@ const referencesTarget = (
   show,
 });
 
+/** What the stash picker acts on, from the chat. */
+const stashTarget = (
+  target: CommandTarget,
+  show: (picker: PickerList | undefined) => void,
+): StashTarget => ({
+  stashes: target.agent.stashes,
+  directory: target.opened.session.directory,
+  editor: target.editor,
+  apply: target.apply,
+  fork: target.fork,
+  show,
+});
+
 /**
  * The commands by their text, their names and descriptions for the suggestion list, and the picker
  * the last one opened.
@@ -202,6 +217,10 @@ export const chatCommands = (target: CommandTarget) => {
         Effect.sync(() => {
           whenIdle(target, target.openNew);
         }),
+    },
+    "/pop": {
+      description: "Bring a stashed prompt back into the input",
+      run: () => openPop(stashTarget(target, setPicker)),
     },
     "/qna": flowCommand(target, {
       description: "Have the model ask its open questions in a panel",

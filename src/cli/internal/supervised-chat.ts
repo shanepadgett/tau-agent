@@ -168,6 +168,7 @@ const chatAgent = Effect.fn("chatAgent")(function* (link: SupervisedLink) {
     favoriteModels: agent.favoriteModels,
     toggleFavoriteModel: agent.toggleFavoriteModel,
     references: agent.references,
+    stashes: agent.stashes,
     files: agent.files,
     sidebarChoice: agent.sidebarChoice,
     saveSidebarChoice: agent.saveSidebarChoice,

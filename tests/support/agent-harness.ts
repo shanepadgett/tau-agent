@@ -26,6 +26,7 @@ import { Status } from "../../src/core/Status.ts";
 import { Web } from "../../src/core/Web.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { favoriteModelsLayer } from "../../src/host/FavoriteModels.ts";
+import { stashesLayer } from "../../src/host/Stashes.ts";
 import { FetchHttpClient } from "effect/http";
 import { referencesLayer } from "../../src/host/References.ts";
 import { tuiMemoryLayer } from "../../src/host/TuiMemory.ts";
@@ -138,8 +139,8 @@ type Requests = {
 
 type MethodLayer = Layer.Layer<ContextMethod, never, Models | Sessions | Memories>;
 
-/** How reading the user's settings and folders can fail when an agent starts. */
-type StartError = Layer.Error<typeof Settings.layer>;
+/** How reading the user's settings, folders and stashes can fail when an agent starts. */
+type StartError = Layer.Error<typeof Settings.layer> | Layer.Error<typeof stashesLayer>;
 
 type Harness = {
   /** The user's home folder; Tau's home is `.tau` in it. */
@@ -217,6 +218,9 @@ export const withPreparedHarness = <A, E, P>(
             Layer.provide(user),
             Layer.provide(
               favoriteModelsLayer.pipe(Layer.provide(tauHome), Layer.provide(BunServices.layer)),
+            ),
+            Layer.provide(
+              stashesLayer.pipe(Layer.provide(tauHome), Layer.provide(BunServices.layer)),
             ),
             Layer.provide(FileTags.layer.pipe(Layer.provide(FileIndex.at(`${home}/.tau/files`)))),
             Layer.provide(

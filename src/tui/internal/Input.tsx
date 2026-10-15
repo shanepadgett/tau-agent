@@ -49,6 +49,7 @@ const connectEditor = (
 ) => {
   const follow = () => {
     suggestions.setInput(editor.plainText, editor.cursorOffset);
+    client.trackDraft(editor.plainText);
   };
 
   editor.onContentChange = () => {
@@ -60,7 +61,14 @@ const connectEditor = (
 
   editor.setText(client.draft);
   editor.gotoBufferEnd();
-  client.readDraftWith(() => editor.plainText);
+  client.trackDraft(editor.plainText);
+
+  client.attachEditor({
+    read: () => editor.plainText,
+    write: (text) => {
+      replaceText(editor, text);
+    },
+  });
 
   editor.onSubmit = () => {
     sendWith(editor, client.send);
@@ -146,7 +154,7 @@ const listKeys = (
 };
 
 /**
- * During a run, Tab queues a prompt for after it. Shift+Tab steps the thinking level, which the chat
+ * Ctrl-S stashes the text. During a run, Tab queues a prompt for after it. Shift+Tab steps the thinking level, which the chat
  * changes only between runs. Ctrl-C clears the input, and goes on to the chat when it is empty.
  */
 const inputKeys = (editor: TextareaRenderable, client: ChatClient) => {
@@ -164,6 +172,13 @@ const inputKeys = (editor: TextareaRenderable, client: ChatClient) => {
       },
       { name: "thinking.next", run: client.stepThinking },
       {
+        name: "prompt.stash",
+        run: () => {
+          if (editor.plainText.trim() === "") return false;
+          client.stash();
+        },
+      },
+      {
         name: "input.clear",
         run: () => {
           if (editor.plainText === "") return false;
@@ -175,6 +190,7 @@ const inputKeys = (editor: TextareaRenderable, client: ChatClient) => {
       { key: "tab", cmd: "prompt.queue" },
       { key: "shift+tab", cmd: "thinking.next" },
       { key: "ctrl+c", cmd: "input.clear" },
+      { key: "ctrl+s", cmd: "prompt.stash" },
     ],
   }));
 };

@@ -12,6 +12,7 @@ import { TauHome } from "../database/TauHome.ts";
 import { catalogCacheLayer } from "../host/CatalogCache.ts";
 import { credentialStoreLayer } from "../host/CredentialStore.ts";
 import { favoriteModelsLayer } from "../host/FavoriteModels.ts";
+import { stashesLayer } from "../host/Stashes.ts";
 import { hostIdLayer } from "../host/HostId.ts";
 import { logFileLayer } from "../host/LogFile.ts";
 import { referencesLayer } from "../host/References.ts";
@@ -32,6 +33,7 @@ const appLayer = Layer.mergeAll(
   credentialStoreLayer,
   catalogCacheLayer,
   favoriteModelsLayer,
+  stashesLayer,
   tuiMemoryLayer,
   hostIdLayer,
   outputFolderLayer,
