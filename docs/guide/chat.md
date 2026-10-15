@@ -70,7 +70,7 @@ A new chat stays in memory until its first prompt is submitted. Opening Tau or u
 - A resumed session goes on with the model of its latest reply, not the one from `--model` or your settings.
 - When a run fails, the transcript shows "The run failed:" and the reason. The session keeps it, so a resumed session shows it too, and the model reads "The previous run failed: …" in its next call.
 - A resumed session shows its earlier prompts, answers and scripts.
-- The transcript scrolls with the mouse wheel. It shows no scroll bar, and it follows new text while you are at the bottom.
+- The transcript scrolls with the mouse wheel. It shows no scroll bar, and it follows new text while you are at the bottom. When you scroll up, a "↓ Latest" button shows at the bottom right of the transcript, above the input. Click it to jump back to the bottom.
 - To copy text, select it with the mouse. Tau copies it to the clipboard when you let go of the button. Over SSH, Tau copies through the terminal (OSC 52), which needs a terminal that allows it.
 - When you quit, Tau prints `Session: <id>` so that you can continue the session later.
 - Tau runs commands and changes files with your permissions. It does not ask first.

@@ -5,6 +5,7 @@
 
 export const TOKENS = {
   color: {
+    background: "#282c34",
     text: "#dddddd",
     muted: "#888888",
     accent: "#61afef",

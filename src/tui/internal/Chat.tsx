@@ -4,10 +4,11 @@
  */
 
 import type { ScrollBoxRenderable, SyntaxStyle } from "@opentui/core";
-import { For } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import type { ChatItem, ChatState } from "./chat-state.ts";
 import { tagRanges } from "../../core/TagText.ts";
 import { COLORS } from "./theme.ts";
+import { Button } from "./ui/primitives/Button.tsx";
 
 type ToolCall = Extract<ChatItem, { kind: "tool" }>;
 
@@ -20,12 +21,37 @@ const TOOL_COLORS: Record<ToolCall["status"], string> = {
 };
 
 export function Chat(props: { readonly chat: ChatState; readonly syntax: SyntaxStyle }) {
+  const [isAtBottom, setIsAtBottom] = createSignal(true);
+  let transcript: ScrollBoxRenderable | undefined;
+
   return (
-    <scrollbox flexGrow={1} stickyScroll stickyStart="bottom" ref={hideScrollBar}>
-      <For each={props.chat.items}>{(item) => <ChatLine item={item} syntax={props.syntax} />}</For>
-    </scrollbox>
+    <box flexGrow={1}>
+      <scrollbox
+        flexGrow={1}
+        stickyScroll
+        stickyStart="bottom"
+        ref={(scrollbox: ScrollBoxRenderable) => {
+          transcript = scrollbox;
+          hideScrollBar(scrollbox);
+          // The scroll box has no scroll event, so each draw checks where the view is.
+          scrollbox.renderBefore = () => setIsAtBottom(isScrolledToBottom(scrollbox));
+        }}
+      >
+        <For each={props.chat.items}>
+          {(item) => <ChatLine item={item} syntax={props.syntax} />}
+        </For>
+      </scrollbox>
+      <Show when={!isAtBottom()}>
+        <box position="absolute" right={0} bottom={0}>
+          <Button label="↓ Latest" onPress={() => transcript?.scrollTo(transcript.scrollHeight)} />
+        </box>
+      </Show>
+    </box>
   );
 }
+
+const isScrolledToBottom = (scrollbox: ScrollBoxRenderable) =>
+  scrollbox.scrollHeight - scrollbox.viewport.height - scrollbox.scrollTop < 1;
 
 /**
  * The transcript scrolls with the mouse wheel and keys but draws no scroll bar. The bar shows
