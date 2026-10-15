@@ -44,6 +44,6 @@ Project checks let Tau format the files the model changes and make sure lint, ty
 - A check that matches only deleted files and takes `{files}` does not run.
 - A fixer that fails is ignored.
 - Check output and combined reports over 50 KB (51,200 bytes) or 2,000 lines keep half at the start and half at the end. Cut notes link to private output files in `$TMPDIR/tau/<session>/` (see [print-mode.md](print-mode.md)). Each command's file keeps its whole received output; a combined-report file keeps the report, including links to command logs. Saved sessions replay the same preview text.
-- Tau reads the `commit` list but does not run it yet.
+- The `commit` list runs only in `/commit`, together with the `check` list. See [commit.md](commit.md).
 - A checks file that is not valid JSON, or has a wrong field, fails the run and names the problem. Fix the file, or remove it.
 - Tau runs the commands in a cloned repository's checks file without asking.

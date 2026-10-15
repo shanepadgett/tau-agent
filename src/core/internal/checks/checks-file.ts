@@ -25,7 +25,7 @@ const CheckEntry = Schema.Struct({
 
 type CheckEntry = typeof CheckEntry.Type;
 
-/** `commit` is read so the file format is whole; nothing runs it yet. */
+/** `commit` runs only in `/commit`, after `check`. */
 const ChecksFile = Schema.Struct({
   fix: Schema.optional(Schema.Array(CheckEntry)),
   check: Schema.optional(Schema.Array(CheckEntry)),
@@ -57,6 +57,7 @@ export type ProjectChecks = {
   readonly detection: "git" | "none";
   readonly fix: readonly Check[];
   readonly check: readonly Check[];
+  readonly commit: readonly Check[];
 };
 
 class ChecksFileInvalid extends Schema.TaggedError<ChecksFileInvalid>()("ChecksFileInvalid", {
@@ -69,7 +70,7 @@ class ChecksFileInvalid extends Schema.TaggedError<ChecksFileInvalid>()("ChecksF
   }
 }
 
-/** None when the project has no checks file, or the file lists no `fix` or `check` commands. */
+/** None when the project has no checks file, or the file lists no commands. */
 export const readProjectChecks = Effect.fn("readProjectChecks")(function* (
   directory: string,
   repositoryRoot: Option.Option<string>,
@@ -104,9 +105,10 @@ export const readProjectChecks = Effect.fn("readProjectChecks")(function* (
     detection: Option.isSome(repositoryRoot) ? "git" : "none",
     fix: (file.fix ?? []).map((entry) => toCheck(root, entry)),
     check: (file.check ?? []).map((entry) => toCheck(root, entry)),
+    commit: (file.commit ?? []).map((entry) => toCheck(root, entry)),
   };
 
-  const isEmpty = checks.fix.length === 0 && checks.check.length === 0;
+  const isEmpty = [checks.fix, checks.check, checks.commit].every((list) => list.length === 0);
   return isEmpty ? Option.none<ProjectChecks>() : Option.some(checks);
 });
 
