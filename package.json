@@ -17,6 +17,7 @@
     "@effect/platform-bun": "4.0.3",
     "@opencode/codemode": "2.0.27",
     "@opentui/core": "0.6.1",
+    "@opentui/keymap": "0.6.1",
     "@opentui/solid": "0.6.1",
     "effect": "4.0.3",
     "solid-js": "1.9.12"

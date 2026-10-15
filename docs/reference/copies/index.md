@@ -134,6 +134,14 @@ Terminal UI renderer with a native Zig core: renderables (box, text, textarea, s
 - From: https://github.com/anomalyco/opentui.git, tag v0.6.1, commit 8213fe8b1dbc
 - API (types): `node_modules/@opentui/core/`, modules: `docs/reference/copies/@opentui/core/0.6.1/api-index/@opentui-core.md`
 
+## @opentui/keymap 0.6.1
+
+OpenTUI's layered key bindings: named commands, layers by priority or focus, key sequences and leader keys (`registerLeader`, `registerTimedLeader`), active-key queries for hints. Solid hooks `KeymapProvider`, `useBindings`, `useKeymapSelector` in `@opentui/keymap/solid`.
+
+- Docs: `docs/reference/copies/@opentui/keymap/0.6.1/` (8 files: README.md, packages/)
+- From: https://github.com/anomalyco/opentui.git, tag v0.6.1, commit 8213fe8b1dbc
+- API (types): `node_modules/@opentui/keymap/`, modules: `docs/reference/copies/@opentui/keymap/0.6.1/api-index/@opentui-keymap.md`
+
 ## @opentui/solid 0.6.1
 
 Solid renderer for OpenTUI: `render`, `testRender`, hooks such as `useKeyboard` and `useRenderer`, and the JSX elements. Needs the `@opentui/solid/preload` Bun preload to run `.tsx` from source.

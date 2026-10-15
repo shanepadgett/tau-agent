@@ -31,10 +31,10 @@ Run `tau` with no `-p` to chat with Tau in your terminal: send prompts, watch th
 | Shift+Tab | Between runs, steps the thinking level up, from the top back to the lowest. During a run it does nothing. |
 | Shift+Enter, Ctrl+Enter, Alt+Enter, Ctrl+J | Adds a line to the prompt |
 | Escape | Cancels the run |
-| Ctrl+C | Cancels the run, or quits when no run is going |
+| Ctrl+C | Each press does the first of these that applies: closes an open list or panel, clears the input, cancels the run, quits |
 | Ctrl+D | Quits |
 
-In a list that a command opens, type to filter it, use the arrow keys to move, press Enter to choose, and press Escape to close the list.
+In a list that a command opens, type to filter it, use the arrow keys to move, press Enter to choose, and press Escape or Ctrl+C to close the list.
 
 ## Commands
 

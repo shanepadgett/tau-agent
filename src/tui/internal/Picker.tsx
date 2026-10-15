@@ -3,8 +3,9 @@
  * Ctrl+F marks and Escape closes. Used by `/model` and `/sessions`.
  */
 
-import type { KeyEvent } from "@opentui/core";
+import { useBindings } from "@opentui/keymap/solid";
 import { type Accessor, createMemo, createSignal, For, Show } from "solid-js";
+import { PRIORITY } from "./keymap.ts";
 import { COLORS } from "./theme.ts";
 
 const SHOWN_ROWS = 10;
@@ -45,17 +46,7 @@ export function Picker(props: { readonly picker: PickerList; readonly close: () 
     item?.choose();
   };
 
-  const moveWith = (key: KeyEvent) => {
-    const mark = list.selectedItem()?.mark;
-
-    if (key.name === "escape") props.close();
-    else if (key.name === "up") list.move(-1);
-    else if (key.name === "down") list.move(1);
-    else if (key.ctrl && key.name === "f" && mark !== undefined) mark();
-    else return;
-
-    key.preventDefault();
-  };
+  pickerKeys(list, props.close);
 
   return (
     <box
@@ -65,13 +56,7 @@ export function Picker(props: { readonly picker: PickerList; readonly close: () 
       bottomTitle={props.picker.markHint ?? ""}
       flexDirection="column"
     >
-      <input
-        focused
-        placeholder="Type to filter"
-        onInput={list.filterWith}
-        onSubmit={choose}
-        onKeyDown={moveWith}
-      />
+      <input focused placeholder="Type to filter" onInput={list.filterWith} onSubmit={choose} />
       <Show when={list.visible().length > 0}>
         <box height={1} />
         <For each={list.visible()}>
@@ -87,6 +72,43 @@ export function Picker(props: { readonly picker: PickerList; readonly close: () 
     </box>
   );
 }
+
+/** Escape and Ctrl-C close the picker, Up and Down move, and Ctrl+F marks the chosen item. */
+const pickerKeys = (list: FilteredList, close: () => void) => {
+  useBindings(() => ({
+    priority: PRIORITY.panel,
+    commands: [
+      { name: "picker.close", run: close },
+      {
+        name: "picker.up",
+        run: () => {
+          list.move(-1);
+        },
+      },
+      {
+        name: "picker.down",
+        run: () => {
+          list.move(1);
+        },
+      },
+      {
+        name: "picker.mark",
+        run: () => {
+          const mark = list.selectedItem()?.mark;
+          if (mark === undefined) return false;
+          mark();
+        },
+      },
+    ],
+    bindings: [
+      { key: "escape", cmd: "picker.close" },
+      { key: "ctrl+c", cmd: "picker.close" },
+      { key: "up", cmd: "picker.up" },
+      { key: "down", cmd: "picker.down" },
+      { key: "ctrl+f", cmd: "picker.mark" },
+    ],
+  }));
+};
 
 /** The label, cut with an ellipsis when it is too long, and the note, which always shows. */
 export function PickerRow(props: { readonly item: PickerItem; readonly isSelected: boolean }) {
@@ -106,6 +128,8 @@ export function PickerRow(props: { readonly item: PickerItem; readonly isSelecte
     </box>
   );
 }
+
+type FilteredList = ReturnType<typeof filteredList>;
 
 /**
  * The rows that match the filter, the cursor, and the rows in view. The cursor keeps its place when

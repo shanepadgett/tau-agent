@@ -1,27 +1,19 @@
 /** The input editor, where the user writes prompts, steering messages and commands. */
 
 // Enter sends, Tab queues during a run, and Shift-Enter, Ctrl-Enter, Alt-Enter or Ctrl-J add a
-// line. While the command suggestion list is open, it takes Up, Down, Tab, Enter and Escape. Prompts that were cancelled or not sent come back into it, and its text survives a restart.
+// line (see `keymap.ts`). While the command suggestion list is open, it takes Up, Down, Tab, Enter,
+// Escape and Ctrl-C. Prompts that were cancelled or not sent come back into it, and its text survives
+// a restart.
 
-import type { KeyBinding, TextareaRenderable } from "@opentui/core";
+import type { TextareaRenderable } from "@opentui/core";
+import { useBindings } from "@opentui/keymap/solid";
 import { createEffect, on } from "solid-js";
 import type { ChatClient } from "./chat-client.ts";
-import type { CommandSuggestions } from "./command-suggestions.ts";
+import type { CommandSuggestions, Completion } from "./command-suggestions.ts";
+import { PRIORITY } from "./keymap.ts";
 import { COLORS } from "./theme.ts";
 
 const MAX_INPUT_LINES = 10;
-
-// OpenTUI's defaults add a line on Enter and send on Alt-Enter. These win over them. Shift-Enter
-// and Ctrl-Enter reach Tau only with the kitty keyboard protocol; Ctrl-J works in every terminal,
-// where it arrives as `linefeed`, which adds a line by default.
-const KEY_BINDINGS: KeyBinding[] = [
-  { name: "return", action: "submit" },
-  { name: "kpenter", action: "submit" },
-  { name: "return", shift: true, action: "newline" },
-  { name: "return", ctrl: true, action: "newline" },
-  { name: "return", meta: true, action: "newline" },
-  { name: "j", ctrl: true, action: "newline" },
-];
 
 export function Input(props: {
   readonly client: ChatClient;
@@ -35,7 +27,6 @@ export function Input(props: {
         }}
         // An open picker takes the keys; the text stays.
         focused={props.client.picker() === undefined && props.client.commit.step() === undefined}
-        keyBindings={KEY_BINDINGS}
         minHeight={1}
         maxHeight={MAX_INPUT_LINES}
         placeholder="Type a prompt"
@@ -57,41 +48,12 @@ const connectEditor = (
   editor.gotoBufferEnd();
   client.readDraftWith(() => editor.plainText);
 
-  // Clear first: a prompt the chat cannot send comes back into the editor during `send`.
-  const sendWith = (send: (text: string) => void) => {
-    const text = editor.plainText.trim();
-    if (text === "") return;
-    editor.clear();
-    send(text);
-  };
-
   editor.onSubmit = () => {
-    sendWith(client.send);
+    sendWith(editor, client.send);
   };
 
-  const complete = (name: string) => {
-    editor.setText(name);
-    editor.gotoBufferEnd();
-  };
-
-  // During a run, Enter steers it and Tab queues a prompt for after it. Shift+Tab steps the thinking
-  // level, which the chat changes only between runs.
-  editor.onKeyDown = (key) => {
-    suggestions.takeKey(key, complete, (name) => {
-      complete(name);
-      sendWith(client.send);
-    });
-
-    if (!key.defaultPrevented && key.name === "tab" && key.shift) {
-      key.preventDefault();
-      client.stepThinking();
-      return;
-    }
-
-    if (key.defaultPrevented || key.name !== "tab" || client.chat.run === "idle") return;
-    key.preventDefault();
-    sendWith(client.queue);
-  };
+  listKeys(editor, client, suggestions);
+  inputKeys(editor, client);
 
   createEffect(
     on(
@@ -100,10 +62,107 @@ const connectEditor = (
         const returned = client.chat.returned;
         if (returned === undefined) return;
         const draft = [...returned.prompts, editor.plainText].filter((text) => text !== "");
-        editor.setText(draft.join("\n\n"));
-        editor.gotoBufferEnd();
+        replaceText(editor, draft.join("\n\n"));
       },
       { defer: true },
     ),
   );
+};
+
+/** Up and Down move in the open command list, Escape and Ctrl-C close it, Tab and Enter complete. */
+const listKeys = (
+  editor: TextareaRenderable,
+  client: ChatClient,
+  suggestions: CommandSuggestions,
+) => {
+  const apply = (completion: Completion | undefined) => {
+    if (completion === undefined) return false;
+
+    if (completion.type === "complete") {
+      replaceText(editor, completion.text);
+      return;
+    }
+
+    replaceText(editor, completion.name);
+    sendWith(editor, client.send);
+  };
+
+  useBindings(() => ({
+    target: () => editor,
+    targetMode: "focus",
+    priority: PRIORITY.list,
+    enabled: suggestions.isOpen,
+    commands: [
+      {
+        name: "list.up",
+        run: () => {
+          suggestions.move(-1);
+        },
+      },
+      {
+        name: "list.down",
+        run: () => {
+          suggestions.move(1);
+        },
+      },
+      { name: "list.close", run: suggestions.dismiss },
+      { name: "list.complete", run: () => apply(suggestions.completionFor("tab")) },
+      { name: "list.choose", run: () => apply(suggestions.completionFor("return")) },
+    ],
+    bindings: [
+      { key: "up", cmd: "list.up" },
+      { key: "down", cmd: "list.down" },
+      { key: "escape", cmd: "list.close" },
+      { key: "ctrl+c", cmd: "list.close" },
+      { key: "tab", cmd: "list.complete" },
+      { key: "return", cmd: "list.choose" },
+    ],
+  }));
+};
+
+/**
+ * During a run, Tab queues a prompt for after it. Shift+Tab steps the thinking level, which the chat
+ * changes only between runs. Ctrl-C clears the input, and goes on to the chat when it is empty.
+ */
+const inputKeys = (editor: TextareaRenderable, client: ChatClient) => {
+  useBindings(() => ({
+    target: () => editor,
+    targetMode: "focus",
+    priority: PRIORITY.input,
+    commands: [
+      {
+        name: "prompt.queue",
+        run: () => {
+          if (client.chat.run === "idle") return false;
+          sendWith(editor, client.queue);
+        },
+      },
+      { name: "thinking.next", run: client.stepThinking },
+      {
+        name: "input.clear",
+        run: () => {
+          if (editor.plainText === "") return false;
+          editor.clear();
+        },
+      },
+    ],
+    bindings: [
+      { key: "tab", cmd: "prompt.queue" },
+      { key: "shift+tab", cmd: "thinking.next" },
+      { key: "ctrl+c", cmd: "input.clear" },
+    ],
+  }));
+};
+
+// Clear first: a prompt the chat cannot send comes back into the editor during `send`.
+const sendWith = (editor: TextareaRenderable, send: (text: string) => void) => {
+  const text = editor.plainText.trim();
+  if (text === "") return;
+  editor.clear();
+  send(text);
+};
+
+const replaceText = (editor: TextareaRenderable, text: string) => {
+  editor.setText(text);
+  editor.gotoBufferEnd();
 };

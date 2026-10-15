@@ -383,6 +383,23 @@
       ]
     },
     {
+      "package": "@opentui/keymap",
+      "versionSource": "lock",
+      "summary": "OpenTUI's layered key bindings: named commands, layers by priority or focus, key sequences and leader keys (`registerLeader`, `registerTimedLeader`), active-key queries for hints. Solid hooks `KeymapProvider`, `useBindings`, `useKeymapSelector` in `@opentui/keymap/solid`.",
+      "docs": [
+        { "origin": { "kind": "installed" }, "files": ["README.md"] },
+        {
+          "origin": {
+            "kind": "git",
+            "repository": "https://github.com/anomalyco/opentui.git",
+            "ref": { "tag": "v{version}" }
+          },
+          "files": ["packages/web/src/content/docs/keymap/*.mdx"]
+        }
+      ],
+      "api": [{ "kind": "types", "path": "@opentui/keymap" }]
+    },
+    {
       "package": "@opentui/solid",
       "versionSource": "lock",
       "summary": "Solid renderer for OpenTUI: `render`, `testRender`, hooks such as `useKeyboard` and `useRenderer`, and the JSX elements. Needs the `@opentui/solid/preload` Bun preload to run `.tsx` from source.",

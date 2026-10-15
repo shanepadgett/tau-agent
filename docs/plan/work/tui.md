@@ -102,7 +102,7 @@ reduce(state, event)
   run-ended         close streaming, add a notice unless "answered", run = idle
 ```
 
-Keys (agreed, OpenCode's defaults): Enter sends; Shift-Enter, Ctrl-Enter, Alt-Enter and Ctrl-J add a line. Ctrl-J works in every terminal; the others need the kitty keyboard protocol, which Tau turns on. Rebinding keys in settings comes later. Escape cancels the run; Ctrl-D exits. Ctrl-C is a cancel key (agreed 2026-10-14, not built): each press does the first that applies: close an open picker or command list, clear the input, cancel the run, quit. During a run with text in the input, the first press clears the text and the second cancels the run. Built today: Ctrl-C cancels a running run, otherwise exits. Prompts typed during a run queue in core and show as queued.
+Keys (agreed, OpenCode's defaults): Enter sends; Shift-Enter, Ctrl-Enter, Alt-Enter and Ctrl-J add a line. Ctrl-J works in every terminal; the others need the kitty keyboard protocol, which Tau turns on. Rebinding keys in settings comes later. Escape cancels the run; Ctrl-D exits. Ctrl-C is a cancel key (built 2026-10-14): each press does the first that applies: close an open picker, commit panel or command list, clear the input, cancel the run, quit. During a run with text in the input, the first press clears the text and the second cancels the run. Prompts typed during a run queue in core and show as queued.
 
 Input footer (agreed): one row under the input with the model name and hints for the keys that apply to what has focus, as OpenCode's composer does (`footerHints`). The run state and queued prompts get a plain placeholder in 6a; the user will try designs for them separately. The folder, context use and cost wait for the 6b sidebar.
 

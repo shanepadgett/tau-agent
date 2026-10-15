@@ -3,7 +3,6 @@
  * command.
  */
 
-import type { KeyEvent } from "@opentui/core";
 import { createMemo, createSignal } from "solid-js";
 
 /** A command as the suggestion list shows it. */
@@ -16,9 +15,6 @@ export type CommandInfo = {
 
 /** A slash and the command's letters, then the end or a space, after which come its arguments. */
 const COMMAND_START = /^\/[a-z-]*(\s|$)/i;
-
-/** The keys the list takes while it is open, before the input and the chat's own keys. */
-const LIST_KEYS = new Set(["up", "down", "tab", "return", "escape"]);
 
 /** The command word of `text`, lower case: the slash and letters before the first space. */
 const wordOf = (text: string) => (text.split(/\s/, 1)[0] ?? "").toLowerCase();
@@ -41,6 +37,11 @@ export const suggestions = (text: string, commands: readonly CommandInfo[]) => {
 
 export type CommandSuggestions = ReturnType<typeof commandSuggestions>;
 
+/** What Tab or Enter does with the chosen command: put text in the input, or run the command. */
+export type Completion =
+  | { readonly type: "complete"; readonly text: string }
+  | { readonly type: "run"; readonly name: string };
+
 /**
  * The list's state: the input's text, the chosen command, and whether Escape closed the list.
  * Escape closes it until the text changes.
@@ -61,30 +62,23 @@ export const commandSuggestions = (commands: readonly CommandInfo[]) => {
   };
 
   /**
-   * Up and Down move, and Escape closes. Tab puts the chosen command in the input, with a space
-   * after it when it takes an argument. Enter does the same for a command that requires an argument,
-   * and runs any other command.
+   * Tab puts the chosen command in the input, with a space after it when it takes an argument. Enter
+   * does the same for a command that requires an argument, and runs any other command. Nothing, so
+   * the key goes on to the input and the chat, when there is nothing to complete.
    */
-  const takeKey = (
-    key: KeyEvent,
-    complete: (text: string) => void,
-    run: (text: string) => void,
-  ) => {
+  const completionFor = (key: "tab" | "return"): Completion | undefined => {
     const chosen = shown()[selected()];
-    if (chosen === undefined || !LIST_KEYS.has(key.name)) return;
-    const isEnter = key.name === "return";
-    const isCompletion = isEnter || key.name === "tab";
+    if (chosen === undefined) return undefined;
     // A command typed whole, with a space after it, is complete: Enter sends it with its arguments.
-    if (isCompletion && isWhole() && hasSpace()) return;
+    if (isWhole() && hasSpace()) return undefined;
     // Tab leaves a whole command that takes no argument to the chat's own Tab.
-    if (key.name === "tab" && isWhole() && chosen.argument === "none") return;
-    key.preventDefault();
+    if (key === "tab" && isWhole() && chosen.argument === "none") return undefined;
 
-    if (key.name === "up") move(-1);
-    else if (key.name === "down") move(1);
-    else if (key.name === "escape") setDismissed(true);
-    else if (isEnter && chosen.argument !== "required") run(chosen.name);
-    else complete(chosen.argument === "none" ? chosen.name : `${chosen.name} `);
+    if (key === "return" && chosen.argument !== "required")
+      return { type: "run", name: chosen.name };
+
+    const text = chosen.argument === "none" ? chosen.name : `${chosen.name} `;
+    return { type: "complete", text };
   };
 
   return {
@@ -93,9 +87,10 @@ export const commandSuggestions = (commands: readonly CommandInfo[]) => {
     isOpen,
     /** Whether Tab and Enter would complete the chosen command. */
     completes: () => isOpen() && !(isWhole() && hasSpace()),
-    /** Whether the open list takes `key`, so that the chat's own keys leave it alone. */
-    takes: (key: KeyEvent) => isOpen() && LIST_KEYS.has(key.name),
-    takeKey,
+    move,
+    /** Closes the list until the text changes. */
+    dismiss: () => setDismissed(true),
+    completionFor,
     setText: (now: string) => {
       if (now === text()) return;
       setText(now);

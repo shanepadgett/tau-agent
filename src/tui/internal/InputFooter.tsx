@@ -3,25 +3,62 @@
  * cost, and the keys that work now. Nothing else goes here.
  */
 
+import { useKeymapSelector } from "@opentui/keymap/solid";
 import type { ChatClient } from "./chat-client.ts";
 import type { Usage } from "./chat-state.ts";
 import type { CommandSuggestions } from "./command-suggestions.ts";
+import { keyText, type TauKeymap } from "./keymap.ts";
 import { COLORS } from "./theme.ts";
 
-const IDLE_KEYS = "enter send · shift+enter new line · ctrl+d quit";
-const IDLE_THINKING_KEYS = "enter send · shift+enter new line · shift+tab thinking · ctrl+d quit";
-const RUNNING_KEYS = "enter steer · tab queue · esc cancel · ctrl+d quit";
-const LIST_KEYS = "↑↓ move · tab complete · enter select · esc close";
+/** A hint: the commands whose first keys show side by side, and what they do. */
+type Hint = readonly [commands: readonly string[], text: string];
+
+const IDLE_HINTS: readonly Hint[] = [
+  [["input.submit"], "send"],
+  [["input.newline"], "new line"],
+  [["chat.quit"], "quit"],
+];
+
+const IDLE_THINKING_HINTS: readonly Hint[] = [
+  [["input.submit"], "send"],
+  [["input.newline"], "new line"],
+  [["thinking.next"], "thinking"],
+  [["chat.quit"], "quit"],
+];
+
+const RUNNING_HINTS: readonly Hint[] = [
+  [["input.submit"], "steer"],
+  [["prompt.queue"], "queue"],
+  [["run.cancel"], "cancel"],
+  [["chat.quit"], "quit"],
+];
+
+const LIST_HINTS: readonly Hint[] = [
+  [["list.up", "list.down"], "move"],
+  [["list.complete"], "complete"],
+  [["list.choose"], "select"],
+  [["list.close"], "close"],
+];
+
 const TOKENS_PER_K = 1000;
 
 export function InputFooter(props: {
   readonly client: ChatClient;
   readonly suggestions: CommandSuggestions;
 }) {
+  // The keys come from the key map, so a hint shows the key that works. Bindings register after
+  // the first draw, so the hints follow the key map's changes.
+  const hints = useKeymapSelector((keymap) => ({
+    idle: hintsText(keymap, IDLE_HINTS),
+    idleThinking: hintsText(keymap, IDLE_THINKING_HINTS),
+    running: hintsText(keymap, RUNNING_HINTS),
+    list: hintsText(keymap, LIST_HINTS),
+  }));
+
   const keys = () => {
-    if (props.suggestions.completes()) return LIST_KEYS;
-    if (props.client.chat.run !== "idle") return RUNNING_KEYS;
-    return props.client.thinking() === undefined ? IDLE_KEYS : IDLE_THINKING_KEYS;
+    if (props.suggestions.completes()) return hints().list;
+    if (props.client.chat.run !== "idle") return hints().running;
+    return props.client.thinking() === undefined ? hints().idle : hints().idleThinking;
   };
 
   const usage = () => {
@@ -45,6 +82,15 @@ export function InputFooter(props: {
     </box>
   );
 }
+
+/** Such as `enter send · shift+enter new line`. */
+const hintsText = (keymap: TauKeymap, hints: readonly Hint[]) =>
+  hints
+    .map(
+      ([commands, text]) =>
+        `${commands.map((command) => keyText(keymap, command)).join("")} ${text}`,
+    )
+    .join(" · ");
 
 /** Such as `42k/200k · $0.84`: the context of the latest call, the limit, and the cost so far. */
 const usageText = (usage: Usage) => {

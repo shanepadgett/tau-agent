@@ -8,19 +8,19 @@ import {
   createClipboard,
   createHostClipboard,
   createRendererClipboardAdapter,
-  type KeyEvent,
   type SyntaxStyle,
 } from "@opentui/core";
-import { render, useKeyboard, useRenderer, useSelectionHandler } from "@opentui/solid";
+import { KeymapProvider, useBindings } from "@opentui/keymap/solid";
+import { render, useRenderer, useSelectionHandler } from "@opentui/solid";
 import { type Accessor, onCleanup, Show } from "solid-js";
 import { Chat } from "./Chat.tsx";
 import type { ChatClient } from "./chat-client.ts";
 import { addCodeLanguages } from "./code-languages.ts";
-import type { ChatState } from "./chat-state.ts";
 import { CommandList } from "./CommandList.tsx";
 import { commandSuggestions } from "./command-suggestions.ts";
 import { Input } from "./Input.tsx";
 import { InputFooter } from "./InputFooter.tsx";
+import { PRIORITY, tauKeymap } from "./keymap.ts";
 import { Picker } from "./Picker.tsx";
 import { CommitPanel } from "./CommitPanel.tsx";
 import { Place } from "./Place.tsx";
@@ -34,7 +34,16 @@ import { useSyntaxStyle } from "./theme.ts";
  */
 export const showChat = (renderer: CliRenderer, client: Accessor<ChatClient | undefined>) => {
   addCodeLanguages();
-  return render(() => <Screen client={client} />, renderer);
+  const keymap = tauKeymap(renderer);
+
+  return render(
+    () => (
+      <KeymapProvider keymap={keymap}>
+        <Screen client={client} />
+      </KeymapProvider>
+    ),
+    renderer,
+  );
 };
 
 function Screen(props: { readonly client: Accessor<ChatClient | undefined> }) {
@@ -55,14 +64,7 @@ function App(props: { readonly client: ChatClient; readonly syntax: SyntaxStyle 
   const panelOpen = () =>
     props.client.picker() !== undefined || props.client.commit.step() !== undefined;
 
-  useKeyboard((key) => {
-    // The open picker or commit panel takes the keys, and the open suggestion list its own keys, such as Escape.
-    if (panelOpen() || suggestions.takes(key)) return;
-    const action = keyAction(key, props.client.chat);
-    if (action === undefined) return;
-    key.preventDefault();
-    props.client[action]();
-  });
+  chatKeys(props.client, panelOpen);
 
   return (
     <Place name="app">
@@ -114,11 +116,38 @@ const copySelections = () => {
   });
 };
 
-/** Escape cancels a run. Ctrl-C cancels a run, or quits when none is going. Ctrl-D quits. */
-const keyAction = (key: KeyEvent, chat: ChatState): "cancel" | "quit" | undefined => {
-  const isRunning = chat.run !== "idle";
-  if (key.name === "escape" && isRunning) return "cancel";
-  if (key.ctrl && key.name === "c") return isRunning ? "cancel" : "quit";
-  if (key.ctrl && key.name === "d") return "quit";
-  return undefined;
+/**
+ * Escape cancels a run. Ctrl-C cancels a run, or quits when none is going. Ctrl-D quits. The keys of
+ * an open picker or commit panel, the command list and the input come first.
+ */
+const chatKeys = (client: ChatClient, panelOpen: () => boolean) => {
+  const isRunning = () => client.chat.run !== "idle";
+
+  useBindings(() => ({
+    priority: PRIORITY.chat,
+    // An open panel leaves only its own keys working, so Ctrl-D does not quit from it.
+    enabled: () => !panelOpen(),
+    commands: [
+      {
+        name: "run.cancel",
+        run: () => {
+          if (!isRunning()) return false;
+          client.cancel();
+        },
+      },
+      {
+        name: "chat.interrupt",
+        run: () => {
+          if (isRunning()) client.cancel();
+          else client.quit();
+        },
+      },
+      { name: "chat.quit", run: client.quit },
+    ],
+    bindings: [
+      { key: "escape", cmd: "run.cancel" },
+      { key: "ctrl+c", cmd: "chat.interrupt" },
+      { key: "ctrl+d", cmd: "chat.quit" },
+    ],
+  }));
 };

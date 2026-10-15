@@ -3,9 +3,10 @@
  * commits; the plan to approve, one line per commit; and the push question.
  */
 
-import { useKeyboard } from "@opentui/solid";
+import { useBindings } from "@opentui/keymap/solid";
 import { type Accessor, createSignal, For, Match, onCleanup, type Setter, Switch } from "solid-js";
 import type { CommitFlow, CommitStep } from "./commit-flow.ts";
+import { PRIORITY } from "./keymap.ts";
 import { PickerRow } from "./Picker.tsx";
 import { COLORS } from "./theme.ts";
 
@@ -80,19 +81,41 @@ const hintOf = (step: CommitStep) => {
 };
 
 /**
- * Escape cancels; Enter answers, and does nothing while the panel works, so no prompt is sent. Up and
- * Down scroll the plan or move between the push answers.
+ * Escape and Ctrl-C cancel; Enter answers, and does nothing while the panel works, so no prompt is
+ * sent. Up and Down scroll the plan or move between the push answers.
  */
 const panelKeys = (props: PanelProps, view: PanelView) => {
-  useKeyboard((key) => {
-    if (key.name === "escape") props.flow.cancel();
-    else if (key.name === "return") answer(props, view);
-    else if (key.name === "up" || key.name === "down")
-      move(props, view, key.name === "up" ? -1 : 1);
-    else return;
-
-    key.preventDefault();
-  });
+  useBindings(() => ({
+    priority: PRIORITY.panel,
+    commands: [
+      { name: "commit.cancel", run: props.flow.cancel },
+      {
+        name: "commit.answer",
+        run: () => {
+          answer(props, view);
+        },
+      },
+      {
+        name: "commit.up",
+        run: () => {
+          move(props, view, -1);
+        },
+      },
+      {
+        name: "commit.down",
+        run: () => {
+          move(props, view, 1);
+        },
+      },
+    ],
+    bindings: [
+      { key: "escape", cmd: "commit.cancel" },
+      { key: "ctrl+c", cmd: "commit.cancel" },
+      { key: "return", cmd: "commit.answer" },
+      { key: "up", cmd: "commit.up" },
+      { key: "down", cmd: "commit.down" },
+    ],
+  }));
 };
 
 const answer = (props: PanelProps, view: PanelView) => {

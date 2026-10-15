@@ -505,6 +505,62 @@ describe("the chat in the terminal", () => {
       }).pipe(Effect.scoped),
     ));
 
+  test("each Ctrl-C closes the command list, then clears the input, then cancels the run, then quits", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([Stream.never]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const { terminal, chat } = yield* startChat(agent, opened, withoutRestarts(options));
+        const pressCtrlC = () => terminal.mockInput.pressKey("c", { ctrl: true });
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("Hi."));
+        terminal.mockInput.pressEnter();
+        yield* frameWith(terminal, "esc cancel");
+        yield* Effect.promise(() => terminal.mockInput.typeText("/re"));
+        yield* frameWith(terminal, "▸ /restart");
+
+        pressCtrlC();
+
+        const closed = yield* frameWith(
+          terminal,
+          "enter steer · tab queue · esc cancel · ctrl+d quit",
+        );
+
+        expect(closed).not.toContain("▸ /restart");
+        expect(closed).toContain("/re");
+
+        pressCtrlC();
+        const cleared = yield* frameWhere(terminal, (frame) => !frame.includes("/re"));
+        expect(cleared).toContain("Running");
+
+        pressCtrlC();
+        yield* frameWith(terminal, "enter send · shift+enter new line · ctrl+d quit");
+
+        pressCtrlC();
+        expect(yield* Fiber.join(chat)).toEqual({ reason: "quit", session: opened.session.id });
+      }).pipe(Effect.scoped),
+    ));
+
+  test("Tab puts the chosen command in the input, and Escape closes the list it opens", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options));
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("/mo"));
+        yield* frameWith(terminal, "▸ /model");
+        terminal.mockInput.pressTab();
+        yield* frameWith(terminal, "│/model ");
+        terminal.mockInput.pressEnter();
+        yield* frameWith(terminal, "Type to filter");
+
+        terminal.mockInput.pressEscape();
+        const frame = yield* frameWhere(terminal, (shown) => !shown.includes("Type to filter"));
+        expect(frame).toContain("Type a prompt");
+      }).pipe(Effect.scoped),
+    ));
+
   test("conditions show above the input, errors first, and go when cleared", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
