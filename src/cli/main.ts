@@ -15,6 +15,7 @@ import { favoriteModelsLayer } from "../host/FavoriteModels.ts";
 import { hostIdLayer } from "../host/HostId.ts";
 import { logFileLayer } from "../host/LogFile.ts";
 import { Settings } from "../host/Settings.ts";
+import { tuiMemoryLayer } from "../host/TuiMemory.ts";
 import { outputFolderLayer } from "../host/OutputFolder.ts";
 import { ReloadLink } from "../supervisor/ReloadLink.ts";
 import { showFailure } from "./internal/failure.ts";
@@ -25,6 +26,7 @@ const appLayer = Layer.mergeAll(
   credentialStoreLayer,
   catalogCacheLayer,
   favoriteModelsLayer,
+  tuiMemoryLayer,
   hostIdLayer,
   outputFolderLayer,
   FetchHttpClient.layer,
