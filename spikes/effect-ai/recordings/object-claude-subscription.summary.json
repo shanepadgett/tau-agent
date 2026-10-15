@@ -1,8 +1,0 @@
-{
-  "risk": "medium",
-  "files": [
-    "src/ai/credential.ts",
-    "src/host/credential-store.ts"
-  ],
-  "summary": "Renaming `update` to `refresh` in credential code is low-complexity but can silently break callers, interface implementations, mocks, or dynamic references to `update` elsewhere; I haven't seen the diff or call sites, so verify all usages (including tests and any string-based lookups) are updated and that `refresh` doesn't collide with an existing method."
-}

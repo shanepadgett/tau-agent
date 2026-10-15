@@ -1,8 +1,0 @@
-{
-  "risk": "medium",
-  "files": [
-    "src/ai/credential.ts",
-    "src/host/credential-store.ts"
-  ],
-  "summary": "Renames update to refresh in credential.ts and credential-store.ts; low logic risk, but missed call sites or external consumers of the old name could break at runtime or compile time, so verify all references were updated."
-}

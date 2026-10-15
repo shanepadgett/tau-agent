@@ -89,10 +89,25 @@ description = "Lint rule unit tests under Node"
 run = "bun tools/report-failures.ts node-test -- node --test --test-reporter=dot \"tools/lint/**/*.test.ts\""
 
 [tasks.dev]
-description = "Open the chat from source; it restarts into each change in src/"
+description = "Open the chat from source; it restarts into each change in src/. Pass tau arguments after --, such as -p \"prompt\""
 # The chat reads the terminal's keys, so it gets the terminal directly.
 raw = true
 run = "bun src/cli/main.ts"
+
+[tasks.setup]
+description = "Install dependencies and patch the TypeScript compiler"
+run = "bun install"
+
+[tasks.login]
+description = "Save a provider login or API key"
+# The prompts read the terminal's keys, so it gets the terminal directly.
+raw = true
+run = "bun src/cli/main.ts login"
+
+[tasks.logout]
+description = "Remove a saved provider login or API key"
+raw = true
+run = "bun src/cli/main.ts logout"
 
 [tasks.gallery]
 description = "Open the design gallery, where new front-end designs are approved"
