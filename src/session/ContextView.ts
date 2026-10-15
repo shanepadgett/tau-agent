@@ -27,7 +27,7 @@ const CACHE_MARK = {
 
 /** Starts the message for checks Tau ran itself that failed. */
 const CHECKS_FAILED =
-  "Tau ran the project's checks on your latest changes, and some failed. Fix the failures and end your turn again; Tau then runs the checks again. Call the checks tool yourself before your final message.";
+  "Tau ran the project's checks on your latest changes, and some failed. Fix the failures and end your turn again; Tau then runs the checks again. Call the checks tool yourself as the last action before your final message. Ask the user only if fixing a failure needs a change to the checks themselves, such as their configuration, rules or suppressions.";
 
 /** The result a call gets when no result was saved for it. */
 const MISSING_RESULT = "The call ended before it returned a result.";

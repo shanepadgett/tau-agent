@@ -115,8 +115,10 @@ describe("project checks", () => {
         ]);
 
         const [, failed, , passed] = toolResults(harness.prompts[4]);
-        expect(failed).toBe(yield* notesFailure(harness.directory));
-        expect(passed).toBe("Passed: no-bad");
+        expect(failed).toStartWith(yield* notesFailure(harness.directory));
+        expect(failed).toContain("call checks again to verify");
+        expect(passed).toStartWith("Passed: no-bad");
+        expect(passed).toContain("call checks again");
       }),
     ));
 
