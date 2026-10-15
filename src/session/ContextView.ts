@@ -7,6 +7,7 @@ import { Predicate } from "effect";
 import { Prompt } from "effect/ai";
 import { checkReportText, hasFailures } from "./CheckReport.ts";
 import type { Entry, EntryBody } from "./Entry.ts";
+import { reminder, type ReminderKind } from "./Reminder.ts";
 
 type AssistantEntry = Extract<EntryBody, { type: "assistant" }>;
 type AssistantPart = AssistantEntry["parts"][number];
@@ -61,31 +62,33 @@ export const conversationMessages = (entries: readonly Entry[]): readonly Prompt
   const messages: Prompt.Message[] = [];
 
   for (const { body } of entries) {
-    if (body.type === "user" || body.type === "nudge") {
-      messages.push(Prompt.userMessage({ content: [Prompt.textPart({ text: body.text })] }));
-    }
+    if (body.type === "user") messages.push(userText(body.text));
+    if (body.type === "nudge") messages.push(hiddenText("nudge", body.text));
 
     if (body.type === "assistant" && !body.interrupted) {
       messages.push(...replyMessages(body, savedResults));
     }
 
-    if (body.type === "instructions" && body.placement === "note") {
-      messages.push(Prompt.userMessage({ content: [Prompt.textPart({ text: body.text })] }));
+    if (body.type === "instructions" && body.placement !== "system") {
+      messages.push(hiddenText("instructions", body.text));
     }
 
     if (body.type === "run-failed") {
-      const text = `The previous run failed: ${body.error}`;
-      messages.push(Prompt.userMessage({ content: [Prompt.textPart({ text })] }));
+      messages.push(hiddenText("run-failed", `The previous run failed: ${body.error}`));
     }
 
     if (body.type === "checks" && hasFailures(body.report)) {
-      const text = `${CHECKS_FAILED}\n\n${checkReportText(body.report)}`;
-      messages.push(Prompt.userMessage({ content: [Prompt.textPart({ text })] }));
+      messages.push(hiddenText("checks", `${CHECKS_FAILED}\n\n${checkReportText(body.report)}`));
     }
   }
 
   return messages;
 };
+
+const userText = (text: string) => Prompt.userMessage({ content: [Prompt.textPart({ text })] });
+
+/** A user-role message Tau wrote for the model, labeled as a reminder. */
+export const hiddenText = (kind: ReminderKind, text: string) => userText(reminder(kind, text));
 
 export const systemMessage = (soul: string, entries: readonly Entry[]) => {
   const instructions = entries.findLast(
