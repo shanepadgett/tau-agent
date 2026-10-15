@@ -8,6 +8,7 @@
 
 import { Effect, Option } from "effect";
 import type { Entry, EntryBody } from "../../../session/Entry.ts";
+import { FileProblems } from "./file-problems.ts";
 
 export type InstructionSource<E, R> = {
   readonly key: string;
@@ -32,10 +33,10 @@ export const savedValues = (entries: readonly Entry[]): Values =>
  * Reads every source, and gives the entry to save, or none if nothing changed. A source that fails
  * keeps its saved value, so a failed read never looks like a removed file.
  */
-export const instructionsUpdate = Effect.fn("instructionsUpdate")(function* <E, R>(
-  sources: readonly InstructionSource<E, R>[],
-  entries: readonly Entry[],
-) {
+export const instructionsUpdate = Effect.fn("instructionsUpdate")(function* <
+  E extends { readonly message: string },
+  R,
+>(sources: readonly InstructionSource<E, R>[], entries: readonly Entry[]) {
   const saved = savedValues(entries);
 
   const current: Values = Object.fromEntries(
@@ -43,9 +44,12 @@ export const instructionsUpdate = Effect.fn("instructionsUpdate")(function* <E, 
       source.read.pipe(
         Effect.map((value) => [source.key, Option.getOrNull(value)] as const),
         Effect.catch((error) =>
-          Effect.logWarning(`Could not read the instructions in ${source.key}`, error).pipe(
-            Effect.as([source.key, saved[source.key] ?? null] as const),
-          ),
+          FileProblems.use((problems) =>
+            problems.report(
+              source.key,
+              `Could not read ${source.key}, so the model keeps what it read before: ${error.message}`,
+            ),
+          ).pipe(Effect.as([source.key, saved[source.key] ?? null] as const)),
         ),
       ),
     ),

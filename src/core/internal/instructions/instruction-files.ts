@@ -6,7 +6,7 @@
 import { basename, join } from "node:path";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import type { Entry } from "../../../session/Entry.ts";
-import { readFrontMatter, skipped, skipUnreadable } from "./front-matter.ts";
+import { readFrontMatter, reportSkipped, skipped, skipUnreadable } from "./front-matter.ts";
 import { fileSource, type InstructionSource, savedPaths } from "./instructions.ts";
 
 const INSTRUCTIONS_KEY = "instructions:";
@@ -59,7 +59,7 @@ const filesIn = Effect.fn("filesIn")(
   (found, folder) =>
     found.pipe(
       Effect.catch((error) =>
-        Effect.logWarning(`Skipped the instruction files in ${folder}: ${error.message}`).pipe(
+        reportSkipped(`the instruction files in ${folder}`, error.message).pipe(
           Effect.as<readonly InstructionFile[]>([]),
         ),
       ),

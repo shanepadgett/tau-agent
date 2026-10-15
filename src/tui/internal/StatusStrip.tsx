@@ -3,9 +3,15 @@
 import { For } from "solid-js";
 import type { Condition, Severity } from "../../core/Status.ts";
 import type { ChatClient } from "./chat-client.ts";
+import { COLORS } from "./theme.ts";
 
 const MARKS: Record<Severity, string> = { error: "✗", warning: "!", info: "" };
-const COLORS: Record<Severity, string> = { error: "#e06c75", warning: "#e5c07b", info: "#888888" };
+
+const SEVERITY_COLORS: Record<Severity, string> = {
+  error: COLORS.error,
+  warning: COLORS.warning,
+  info: COLORS.muted,
+};
 
 export function StatusStrip(props: { readonly client: ChatClient }) {
   return (
@@ -19,7 +25,7 @@ export function StatusStrip(props: { readonly client: ChatClient }) {
 
 /** The mark has its own column, so a long text wraps under its own start. */
 function ConditionRow(props: { readonly condition: Condition }) {
-  const color = () => COLORS[props.condition.severity];
+  const color = () => SEVERITY_COLORS[props.condition.severity];
 
   return (
     <box flexDirection="row">

@@ -8,7 +8,12 @@ import { Namespace, Tool as ScriptFunction } from "@opencode/codemode";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import type { Touched } from "../../../sandbox/Sandbox.ts";
 import type { Entry } from "../../../session/Entry.ts";
-import { readFrontMatter, skipped, skipUnreadable } from "../instructions/front-matter.ts";
+import {
+  readFrontMatter,
+  reportSkipped,
+  skipped,
+  skipUnreadable,
+} from "../instructions/front-matter.ts";
 import { type InstructionSource, savedValues } from "../instructions/instructions.ts";
 
 /** The group of the skill functions, so a script calls `tools.skills["<name>"]()`. */
@@ -87,7 +92,7 @@ const skillsIn = (folder: string, scope: Scope) =>
     return found.flatMap(Option.toArray);
   }).pipe(
     Effect.catch((error) =>
-      Effect.logWarning(`Skipped the skills in ${folder}: ${error.message}`).pipe(
+      reportSkipped(`the skills in ${folder}`, error.message).pipe(
         Effect.as<readonly NamedSkill[]>([]),
       ),
     ),

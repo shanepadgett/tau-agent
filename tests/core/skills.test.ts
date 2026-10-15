@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, FileSystem, Option } from "effect";
+import { Effect, FileSystem, Option, Stream } from "effect";
 import {
   prompt,
   runReply,
@@ -67,6 +67,34 @@ describe("skills", () => {
 
         expect(harness.tools[0]).toContain("search(");
         expect(harness.tools[0]).not.toContain("pdf-forms");
+      }),
+    ));
+
+  test("a skipped skill shows a warning until a later run reads it", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const folder = `${harness.directory}/.agents/skills/pdf-forms`;
+        yield* writeSkill(folder, "---\nname: pdf-forms\n---\nSteps.");
+        const agent = yield* harness.startAgent([textReply("First."), textReply("Second.")]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+
+        const conditions = Stream.runHead(harness.status.current).pipe(
+          Effect.map(Option.getOrThrow),
+        );
+
+        yield* prompt(opened, "Hi.");
+
+        expect(yield* conditions).toEqual([
+          {
+            key: `files.the skill ${folder}/SKILL.md`,
+            severity: "warning",
+            text: `Skipped the skill ${folder}/SKILL.md: it has no description.`,
+          },
+        ]);
+
+        yield* writeSkill(folder, skillFile("pdf-forms", "Fills in PDF forms."));
+        yield* prompt(opened, "Again.");
+        expect(yield* conditions).toEqual([]);
       }),
     ));
 

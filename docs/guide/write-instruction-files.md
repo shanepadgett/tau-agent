@@ -37,6 +37,6 @@ An instruction file gives Tau instructions that are either always in the system 
 
 ## Limits
 
-- A file without front matter, with front matter that is not valid YAML, or with neither `always: true` nor `read-when` is skipped, and Tau logs a warning.
+- A file without front matter, with front matter that is not valid YAML, or with neither `always: true` nor `read-when` is skipped. The chat's status strip shows a warning for it until a run reads the file again.
 - Tau reads only files that end in `.md`, and does not look in subfolders of `.tau/instructions/`.
 - Tau does not read `.claude/` or `CLAUDE.md`.

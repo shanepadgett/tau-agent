@@ -29,7 +29,7 @@ A skill gives Tau the instructions, scripts and files for a particular task, suc
 
 ## Limits
 
-- A skill whose front matter is not valid YAML, or that has no `description`, is skipped, and Tau logs a warning. A skill whose `name` does not match its folder, or breaks the naming rules, loads with a warning.
+- A skill whose front matter is not valid YAML, or that has no `description`, is skipped. The chat's status strip shows a warning for it until a run reads the skill again. A skill whose `name` does not match its folder, or breaks the naming rules, loads with a warning in the log.
 - Tau uses `name`, `description` and `disable-model-invocation` from the front matter. It does not use `allowed-tools`, and you cannot start a skill yourself yet.
 - Tau does not read `.claude/skills/`.
 - A skill added while a run is going on is seen at the next run.

@@ -4,6 +4,7 @@
  */
 
 import { Effect, Option, type PlatformError, Schema } from "effect";
+import { FileProblems } from "./file-problems.ts";
 
 /** The front matter is the text between a first line of `---` and the next line of `---`. */
 const FRONT_MATTER = /^---\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/;
@@ -46,9 +47,13 @@ export const readFrontMatter = Effect.fn("readFrontMatter")(function* <A>(
   return { header, body: text.slice(match[0].length).trim() };
 });
 
-/** Logs why a file was skipped, such as "the skill /a/b" and "it has no description", and gives none. */
+/** Reports why a file or folder was skipped, such as "the skill /a/b" and "it has no description". */
+export const reportSkipped = (what: string, reason: string) =>
+  FileProblems.use((problems) => problems.report(what, `Skipped ${what}: ${reason}.`));
+
+/** Reports why a file was skipped, and gives none. */
 export const skipped = <A>(what: string, reason: string) =>
-  Effect.logWarning(`Skipped ${what}: ${reason}.`).pipe(Effect.as(Option.none<A>()));
+  reportSkipped(what, reason).pipe(Effect.as(Option.none<A>()));
 
 /**
  * Skips a file with bad front matter, or one that cannot be read, with a warning. `subject` starts
