@@ -24,6 +24,7 @@ import {
   runTui,
 } from "../../src/tui/Tui.ts";
 import { options, prompt, runReply, textReply, withHarness } from "../support/agent-harness.ts";
+import { counted } from "../support/compaction.ts";
 
 /** The end of a reply that sent 42,000 tokens and got 500 back. */
 const finish = Stream.make<Response.StreamPartEncoded[]>({
@@ -391,19 +392,56 @@ describe("the chat in the terminal", () => {
         const agent = yield* harness.startAgent([Stream.concat(textReply("Hello."), finish)]);
         const opened = yield* agent.open(Option.none(), harness.directory);
         const { terminal } = yield* startChat(agent, opened, withoutRestarts(options), WIDE);
-        expect(yield* frameWith(terminal, "Session")).toContain("No model call yet");
+        const empty = yield* frameWith(terminal, "Session");
+        expect(empty).toContain("No model call yet");
+        expect(empty).toContain("Cache hit: —");
 
         yield* Effect.promise(() => terminal.mockInput.typeText("Hi."));
         terminal.mockInput.pressEnter();
         const frame = yield* frameWith(terminal, "$0.04");
 
         expect(frame).toContain("43k / 128k");
+        expect(frame).toContain("Cache hit: 0.0%");
+        expect(frame).not.toContain("34%");
         expect(frame).toContain("ctrl+b sidebar");
         expect(frame).not.toContain("43k/128k");
 
         terminal.mockInput.pressKey("b", { ctrl: true });
         yield* frameWhere(terminal, (shown) => !shown.includes("Session"));
         expect(yield* savedTuiMemory(harness.home)).toEqual({ sidebar: "closed" });
+      }).pipe(Effect.scoped),
+    ));
+
+  test("the sidebar replays cache hits and replaces them when the next call omits usage", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([
+          counted(textReply("Cached answer."), 42000, 36000),
+          Stream.concat(
+            textReply("Uncounted answer."),
+            Stream.make<Response.StreamPartEncoded[]>({
+              type: "finish",
+              reason: "stop",
+              usage: { inputTokens: { total: 42000 }, outputTokens: { total: 0 } },
+            }),
+          ),
+        ]);
+
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        yield* prompt(opened, "First.");
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options), WIDE);
+        expect(yield* frameWith(terminal, "Cache hit: 85.7%")).toContain("42k / 128k");
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("Next."));
+        terminal.mockInput.pressEnter();
+
+        const updated = yield* frameWhere(
+          terminal,
+          (frame) =>
+            frame.includes("Cache hit: unavailable") && frame.includes("Uncounted answer."),
+        );
+
+        expect(updated).not.toContain("Cache hit: 85.7%");
       }).pipe(Effect.scoped),
     ));
 

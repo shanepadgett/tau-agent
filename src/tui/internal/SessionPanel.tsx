@@ -32,7 +32,10 @@ export function SessionPanel(props: {
       paddingRight={1}
       backgroundColor={props.background}
     >
-      <Section title="Context" lines={[contextText(props.chat.usage)]} />
+      <Section
+        title="Context"
+        lines={[contextText(props.chat.usage), cacheText(props.chat.usage)]}
+      />
       <Section title="Cost" lines={[costText(props.chat.usage)]} />
       <Processes processes={props.processes} />
       <Section title="References" lines={referenceLines(props.chat.references)} />
@@ -139,14 +142,20 @@ const compactionLines = (chat: ChatState) => {
 
 const NO_CALL = "No model call yet";
 
-/** Such as `43k / 128k  ███████░░░░░░░░░░░░░  34%`: the context of the latest call, of the limit. */
+/** The context of the latest call, out of the model’s limit. */
 const contextText = (usage: Usage | undefined) => {
   if (usage === undefined) return NO_CALL;
   const share = usage.contextTokens === 0 ? 0 : usage.contextUsed / usage.contextTokens;
   const filled = Math.min(BAR_CELLS, Math.round(share * BAR_CELLS));
   const usedCells = "█".repeat(filled) + "░".repeat(BAR_CELLS - filled);
   const tokens = `${tokenText(usage.contextUsed)} / ${tokenText(usage.contextTokens)}`;
-  return `${tokens}  ${usedCells}  ${Math.round(share * PERCENT)}%`;
+  return `${tokens}  ${usedCells}`;
+};
+
+const cacheText = (usage: Usage | undefined) => {
+  if (usage === undefined) return "Cache hit: —";
+  if (usage.cacheHitShare === undefined) return "Cache hit: unavailable";
+  return `Cache hit: ${(usage.cacheHitShare * PERCENT).toFixed(1)}%`;
 };
 
 /** Such as `$0.04`, the cost of the session's calls so far. */

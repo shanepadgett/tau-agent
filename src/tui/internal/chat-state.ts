@@ -40,6 +40,7 @@ export type QueuedPrompt = { readonly id: number; readonly text: string };
 export type Usage = {
   readonly contextUsed: number;
   readonly contextTokens: number;
+  readonly cacheHitShare: number | undefined;
   readonly cost: number | undefined;
 };
 
@@ -238,6 +239,10 @@ const withoutFirst = (waiting: readonly QueuedPrompt[], text: string) => {
 const addCall = (usage: Usage | undefined, call: ModelCall): Usage => ({
   contextUsed: (call.tokens.input ?? 0) + (call.tokens.output ?? 0),
   contextTokens: call.contextTokens,
+  cacheHitShare:
+    call.tokens.input === undefined || call.tokens.input <= 0 || call.tokens.cacheRead === undefined
+      ? undefined
+      : call.tokens.cacheRead / call.tokens.input,
   cost: call.cost === undefined ? usage?.cost : (usage?.cost ?? 0) + call.cost,
 });
 

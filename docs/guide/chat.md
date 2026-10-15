@@ -79,7 +79,7 @@ A new chat stays in memory until its first prompt is submitted. Opening Tau or u
 
 The sidebar on the right shows the session. Ctrl+B shows or hides it. It has four sections:
 
-- **Context**: the context the last model call used out of the model's context window, with a bar. It shows after the first reply.
+- **Context**: the context the last model call used out of the model's context window, with a bar. Below it, `Cache hit: 85.7%` shows the share of that call’s input tokens read from the prompt cache. Output tokens do not count. Both values update when a call finishes, including when Tau replays a saved session. Before the first call, the cache line shows `—`; missing cache-read counts or a missing or zero input total show `unavailable`. A reported zero cache read with positive input shows `0.0%`.
 - **Cost**: what the session cost so far.
 - **Processes**: the commands the agent started in process sessions, running ones first. `●` is running; `○` has exited or was killed, red when it was killed or its exit code is not 0. A command that ended leaves the list after a minute. The list updates within a quarter of a second.
 - **Compaction**: how far the background notes reach, such as `Notes cover entries 1–86`, and how many times the model compacted its context with a checkpoint.

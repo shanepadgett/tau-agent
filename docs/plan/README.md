@@ -39,6 +39,7 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 | [work/thinking.md](work/thinking.md) | Thinking levels: shown under the input, Shift+Tab to change (built, waiting for a live check). |
 | [work/model-favorites.md](work/model-favorites.md) | Favorite models in `/model` with Ctrl+F, listed first (built, waiting for a live check). |
 | [work/sidebar.md](work/sidebar.md) | The sidebar: toggle key, layout, animation (rounds 1 and 2 built). |
+| [cache-hit.md](cache-hit.md) | Cache hit percentage under Context: measurement and display states (built). |
 | [work/keys.md](work/keys.md) | Key handling in one place: `@opentui/keymap`, layers, leader keys later (built). |
 | [work/checks-stop.md](work/checks-stop.md) | Let the model stop after it has seen failing checks (built). |
 | [work/web-and-references.md](work/web-and-references.md) | Web search and fetch as `run` functions, and `/references` (web built, live check pending; references built, live check pending). |
