@@ -49,7 +49,7 @@ While you type a command, a list of the commands that start with what you typed 
 | `/model` | Lists the models of the providers you have logged in to. The one you choose runs this chat's next prompts; your settings stay as they are. |
 | `/new` | Opens a new session in this folder. |
 | `/restart` | Restarts Tau into new code (see below). |
-| `/sessions` | Lists the sessions of this folder, latest first, by their first prompt. Choosing one opens it in place of this one. |
+| `/sessions` | Lists the sessions of this folder, latest first, by their first prompt. Each entry takes one line: line breaks become spaces, and long prompts are shortened with an ellipsis in the middle. Choosing one opens it in place of this one. |
 
 While a run is going or a prompt waits, Tau does not switch sessions: choosing a session or sending `/new` shows "Wait for the run to end, or cancel it, before you switch sessions." in the transcript.
 

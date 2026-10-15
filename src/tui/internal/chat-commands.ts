@@ -84,7 +84,7 @@ const sessionPicker =
   });
 
 const sessionItem = (target: CommandTarget, listed: ListedSession): PickerItem => {
-  const label = listed.firstPrompt ?? "(no prompt)";
+  const label = (listed.firstPrompt ?? "(no prompt)").replace(/\s+/g, " ").trim();
   const isOpen = listed.id === target.opened.session.id;
   const note = isOpen ? "this session" : dateText(listed.updatedAt);
 

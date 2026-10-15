@@ -277,6 +277,43 @@ describe("the chat in the terminal", () => {
       }).pipe(Effect.scoped),
     ));
 
+  test("/sessions keeps multiline prompts on one row and truncates long labels", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const agent = yield* harness.startAgent([textReply("Saved."), textReply("Saved.")]);
+        const earlier = yield* agent.open(Option.none(), harness.directory);
+        yield* prompt(earlier, "Short\r\n\t   prompt.");
+        const opened = yield* agent.open(Option.none(), harness.directory);
+
+        yield* prompt(
+          opened,
+          "Long\n\n  prompt " +
+            "extra words ".repeat(15) +
+            "hidden-middle " +
+            "extra words ".repeat(15) +
+            "searchable-tail",
+        );
+
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options));
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("/sessions"));
+        terminal.mockInput.pressEnter();
+        const frame = yield* frameWith(terminal, "Type to filter");
+
+        expect(frame).toContain("Short prompt.");
+        const row = frame.split("\n").find((line) => line.includes("Long prompt"));
+        expect(row).toContain("...");
+        expect(row).toContain("(this session)");
+        expect(row).toContain("searchable-tail");
+        expect(row).not.toContain("hidden-middle");
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("hidden-middle"));
+        const filtered = yield* frameWhere(terminal, (now) => !now.includes("Short prompt."));
+        expect(filtered).toContain("Long prompt");
+        expect(filtered).toContain("(this session)");
+      }).pipe(Effect.scoped),
+    ));
+
   test("an answer shows as Markdown, without its marks", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
