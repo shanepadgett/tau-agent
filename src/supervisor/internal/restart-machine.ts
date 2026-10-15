@@ -4,7 +4,7 @@
  */
 
 import type { Build } from "../Builds.ts";
-import type { ReloadCondition, ToChild, ToSupervisor } from "../Messages.ts";
+import type { ReloadCondition, ResumeTarget, ToChild, ToSupervisor } from "../Messages.ts";
 
 /** A chat that crashes this soon after its start crashed early. Two early crashes end a build. */
 const EARLY_CRASH_MILLIS = 10_000;
@@ -33,7 +33,7 @@ export type RestartState = {
   readonly current: Build;
   /** The build that ran before `current`, for when `current` keeps crashing. */
   readonly lastGood: Build | undefined;
-  readonly session: string | undefined;
+  readonly session: ResumeTarget | undefined;
   readonly isIdle: boolean;
   readonly isAutomatic: boolean;
   readonly isRestartRequested: boolean;
@@ -64,7 +64,7 @@ export type RestartCommand =
   | {
       readonly type: "start";
       readonly build: Build;
-      readonly session: string | undefined;
+      readonly session: ResumeTarget | undefined;
       readonly draft: string;
       /** Held attention for the new chat to request once it is up. */
       readonly attention: string | undefined;

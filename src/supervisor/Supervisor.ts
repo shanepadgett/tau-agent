@@ -3,7 +3,7 @@
  * when it is idle, and restarts it after a crash. Run it in place of the chat when Tau starts.
  */
 
-import { Clock, Effect, Exit, Queue, Runtime, Schema, Scope, Stream } from "effect";
+import { Clock, Effect, Predicate, Exit, Queue, Runtime, Schema, Scope, Stream } from "effect";
 import { Builds } from "./Builds.ts";
 import { Children } from "./Children.ts";
 import {
@@ -14,23 +14,24 @@ import {
   startingState,
   transition,
 } from "./internal/restart-machine.ts";
-import type { ToChild } from "./Messages.ts";
+import { ResumeTarget, type ToChild } from "./Messages.ts";
 
 export type SupervisorStart = {
   /**
    * Tau's arguments for a chat child. The first child gets the user's arguments; a later one
    * continues `session` and does not send the first prompt again.
    */
-  readonly argsFor: (session: string | undefined) => readonly string[];
+  readonly argsFor: (session: ResumeTarget | undefined) => readonly string[];
   readonly mode: RestartMode;
 };
 
 class TauCrashed extends Schema.TaggedError<TauCrashed>()("TauCrashed", {
-  session: Schema.UndefinedOr(Schema.String),
+  session: Schema.UndefinedOr(ResumeTarget),
 }) {
   override get message() {
-    const resume =
-      this.session === undefined ? "" : ` Continue the session with: tau --session ${this.session}`;
+    const resume = Predicate.isString(this.session)
+      ? ` Continue the session with: tau --session ${this.session}`
+      : "";
 
     return `Tau crashed twice soon after it started, and no older build is left to use.${resume}`;
   }
@@ -144,7 +145,12 @@ const startChat = Effect.fn("startChat")(function* (
   const scope = yield* Scope.make();
 
   const chat = yield* children
-    .startChat(command.build, start.argsFor(command.session), command.draft, command.attention)
+    .startChat(command.build, start.argsFor(command.session), {
+      type: "start-chat",
+      draft: command.draft,
+      attention: command.attention,
+      session: command.session,
+    })
     .pipe(Scope.provide(scope));
 
   const startedAt = yield* Clock.currentTimeMillis;

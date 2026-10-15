@@ -4,14 +4,16 @@
  */
 
 import { dirname, resolve } from "node:path";
-import { Cause, Effect, Layer, Option, Stream } from "effect";
+import { Cause, DateTime, Effect, Predicate, Layer, Option, Stream } from "effect";
 import { Agent } from "../../core/Agent.ts";
 import { Settings } from "../../host/Settings.ts";
 import { Status } from "../../core/Status.ts";
-import type { SessionId } from "../../session/Entry.ts";
+import { SessionId } from "../../session/Entry.ts";
 import { Builds } from "../../supervisor/Builds.ts";
 import { Children } from "../../supervisor/Children.ts";
-import type { ReloadCondition } from "../../supervisor/Messages.ts";
+import type { OpenSession } from "../../core/Agent.ts";
+import type { SessionState } from "../../core/SessionState.ts";
+import type { ReloadCondition, ResumeTarget } from "../../supervisor/Messages.ts";
 import type { SupervisedLink } from "../../supervisor/ReloadLink.ts";
 import type { SupervisorStart } from "../../supervisor/Supervisor.ts";
 import type { ChatAgent, ChatOptions, ChatSetup, RestartLink } from "../../tui/Tui.ts";
@@ -47,7 +49,10 @@ export const chatArgs =
       onSome: (ref) => ["--model", ref],
     });
 
-    const resumed = Option.fromUndefinedOr(session).pipe(Option.orElse(() => flags.session));
+    const resumed =
+      session === undefined
+        ? flags.session
+        : Option.filter(Option.some(session), Predicate.isString);
 
     const sessionArgs = Option.match(resumed, {
       onNone: () => [],
@@ -70,12 +75,16 @@ export const runSupervisedChat = Effect.fn("runSupervisedChat")(function* (
   const start = yield* link.start;
   if (start.type === "start-check") return yield* checkStart(link);
 
-  yield* chat(link, flags.session, {
-    options,
-    notifications: (yield* Settings).notifications,
-    prompt: Option.getOrUndefined(flags.prompt),
-    link: restartLink(link, start),
-  });
+  yield* chat(
+    link,
+    start.session === undefined ? flags.session : Option.some(resumeSession(start.session)),
+    {
+      options,
+      notifications: (yield* Settings).notifications,
+      prompt: Option.getOrUndefined(flags.prompt),
+      link: restartLink(link, start),
+    },
+  );
 });
 
 /** Loads the TUI, and tells the supervisor why when it does not load. */
@@ -94,20 +103,24 @@ const checkStart = (link: SupervisedLink) =>
 const chat = Effect.fn("chat")(
   function* (
     link: SupervisedLink,
-    sessionFlag: Option.Option<string>,
+    sessionFlag: Option.Option<string | Extract<SessionState, { kind: "draft" }>>,
     setup: Omit<ChatSetup, "agent">,
   ) {
     const opened = yield* openSession(sessionFlag);
-    yield* link.send({ type: "ready", session: opened.session.id });
+    yield* reportSession(link, opened);
     yield* Effect.forkScoped(showConditions(link));
     const chatInTerminal = yield* loadChat;
     const end = yield* chatInTerminal(opened, { ...setup, agent: yield* chatAgent(link) });
 
     if (end.reason === "restart") {
-      return yield* link.send({ type: "handoff", session: end.session, draft: end.draft });
+      return yield* link.send({
+        type: "handoff",
+        session: resumeTarget(end.session),
+        draft: end.draft,
+      });
     }
 
-    yield* printSessionId(end.session);
+    if (end.session.kind === "saved") yield* printSessionId(end.session.session.id);
   },
   Effect.scoped,
   Effect.provide(agentLayer),
@@ -157,7 +170,7 @@ const chatAgent = Effect.fn("chatAgent")(function* (link: SupervisedLink) {
 
   const open = (session: SessionId | undefined) =>
     agent.open(Option.fromUndefinedOr(session), process.cwd()).pipe(
-      Effect.tap((opened) => link.send({ type: "ready", session: opened.session.id })),
+      Effect.tap((opened) => reportSession(link, opened)),
       Effect.orDie,
     );
 
@@ -188,4 +201,54 @@ const restartLink = (
   reportActivity: (activity) => link.send({ type: "idle", idle: activity === "idle" }),
   requestRestart: link.send({ type: "restart-request" }),
   exitRequested: link.exitRequested,
+});
+
+const resumeTarget = (state: SessionState): ResumeTarget =>
+  state.kind === "saved"
+    ? state.session.id
+    : {
+        kind: "draft",
+        id: state.session.id,
+        directory: state.session.directory,
+        createdAt: DateTime.toEpochMillis(state.session.createdAt),
+        references: state.references,
+      };
+
+const resumeSession = (target: ResumeTarget): string | Extract<SessionState, { kind: "draft" }> => {
+  if (Predicate.isString(target)) return target;
+  const at = DateTime.makeUnsafe(target.createdAt);
+
+  return {
+    kind: "draft",
+    session: {
+      id: SessionId.make(target.id),
+      directory: target.directory,
+      origin: { kind: "new" },
+      createdAt: at,
+      updatedAt: at,
+    },
+    references: target.references,
+  };
+};
+
+/** Refreshes the supervisor after persistence and pre-prompt reference choices change. */
+const reportSession = Effect.fn("reportSession")(function* (
+  link: SupervisedLink,
+  opened: OpenSession,
+) {
+  const events = yield* opened.subscribe;
+
+  const report = opened.snapshot.pipe(
+    Effect.flatMap((state) => link.send({ type: "ready", session: resumeTarget(state) })),
+  );
+
+  yield* report;
+
+  yield* Effect.forkScoped(
+    Stream.fromSubscription(events).pipe(
+      Stream.runForEach((event) =>
+        event.type === "run-started" || event.type === "references-changed" ? report : Effect.void,
+      ),
+    ),
+  );
 });

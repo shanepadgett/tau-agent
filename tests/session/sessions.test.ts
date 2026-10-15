@@ -1,3 +1,4 @@
+import { openDatabase } from "../../src/database/Database.ts";
 import { describe, expect, test } from "bun:test";
 import { BunCrypto, BunFileSystem } from "@effect/platform-bun";
 import { Context, type Crypto, Effect, FileSystem, Layer, type Scope } from "effect";
@@ -54,13 +55,84 @@ const numbers = (sessions: Sessions["Service"], session: SessionId) =>
   sessions.entries(session, 0).pipe(Effect.map((entries) => entries.map((entry) => entry.number)));
 
 describe("sessions", () => {
+  test("a fork cannot save pre-prompt reference entries alone", () =>
+    runInTempHome((tauDirectory) =>
+      Effect.gen(function* () {
+        const sessions = yield* openSessions(tauDirectory);
+        const session = yield* sessions.allocate(project);
+
+        yield* sessions.start(session, [
+          { type: "references", names: ["example"] },
+          user("First."),
+        ]);
+
+        expect((yield* Effect.flip(sessions.fork(session.id, 1)))._tag).toBe("EntryNotFound");
+        const branch = yield* sessions.fork(session.id, 2);
+
+        expect((yield* sessions.list(project)).map(({ firstPrompt }) => firstPrompt)).toEqual([
+          "First.",
+          "First.",
+        ]);
+
+        expect(yield* sessions.entries(branch.id, 0)).toHaveLength(2);
+      }),
+    ));
+
+  test("allocation leaves no row and a first save without a user prompt is rejected", () =>
+    runInTempHome((tauDirectory) =>
+      Effect.gen(function* () {
+        const sessions = yield* openSessions(tauDirectory);
+        const session = yield* sessions.allocate(project);
+        expect(yield* sessions.list(project)).toEqual([]);
+        expect((yield* Effect.flip(sessions.get(session.id)))._tag).toBe("SessionNotFound");
+
+        expect(
+          (yield* Effect.flip(sessions.start(session, [{ type: "references", names: [] }])))._tag,
+        ).toBe("SessionStoreError");
+
+        expect(yield* sessions.list(project)).toEqual([]);
+      }),
+    ));
+
+  test("a failed first entry rolls back the session row and can be retried", () =>
+    runInTempHome((tauDirectory) =>
+      Effect.gen(function* () {
+        const sessions = yield* openSessions(tauDirectory);
+        const session = yield* sessions.allocate(project);
+
+        const connection = yield* openDatabase(`${tauDirectory}/sessions.db`, []);
+
+        yield* connection.writeTransaction((transaction) =>
+          transaction.run(
+            "CREATE TRIGGER reject_entry BEFORE INSERT ON entry BEGIN SELECT RAISE(ABORT, 'scripted failure'); END",
+            [],
+          ),
+        );
+
+        expect((yield* Effect.flip(sessions.start(session, [user("First.")])))._tag).toBe(
+          "SessionStoreError",
+        );
+
+        expect(yield* sessions.list(project)).toEqual([]);
+        expect(yield* sessions.entries(session.id, 0)).toEqual([]);
+
+        yield* connection.writeTransaction((transaction) =>
+          transaction.run("DROP TRIGGER reject_entry", []),
+        );
+
+        yield* sessions.start(session, [user("First.")]);
+        expect(yield* numbers(sessions, session.id)).toEqual([1]);
+        expect(yield* sessions.list(project)).toHaveLength(1);
+      }),
+    ));
+
   test("a saved session gives the model the same messages and provider data", () =>
     runInTempHome((tauDirectory) =>
       Effect.gen(function* () {
         const writer = yield* openSessions(tauDirectory);
-        const session = yield* writer.create(project);
+        const session = yield* writer.allocate(project);
 
-        yield* writer.append(session.id, [
+        yield* writer.start(session, [
           user("Rename update to refresh."),
           {
             type: "assistant",
@@ -118,14 +190,9 @@ describe("sessions", () => {
     runInTempHome((tauDirectory) =>
       Effect.gen(function* () {
         const sessions = yield* openSessions(tauDirectory);
-        const parent = yield* sessions.create(project);
+        const parent = yield* sessions.allocate(project);
 
-        yield* sessions.append(parent.id, [
-          user("one"),
-          answer("two"),
-          user("three"),
-          answer("four"),
-        ]);
+        yield* sessions.start(parent, [user("one"), answer("two"), user("three"), answer("four")]);
 
         const branch = yield* sessions.fork(parent.id, 2);
         yield* sessions.append(branch.id, [user("other three")]);
@@ -152,9 +219,9 @@ describe("sessions", () => {
       Effect.gen(function* () {
         const first = yield* openSessions(tauDirectory);
         const second = yield* openSessions(tauDirectory);
-        const session = yield* first.create(project);
+        const session = yield* first.allocate(project);
 
-        yield* first.append(session.id, [user("from the first")]);
+        yield* first.start(session, [user("from the first")]);
         yield* second.append(session.id, [user("from the second")]);
 
         expect(yield* numbers(first, session.id)).toEqual([1, 2]);
@@ -165,8 +232,8 @@ describe("sessions", () => {
     runInTempHome((tauDirectory) =>
       Effect.gen(function* () {
         const sessions = yield* openSessions(tauDirectory);
-        const session = yield* sessions.create(project);
-        yield* sessions.append(session.id, [user("one"), answer("two"), user("three")]);
+        const session = yield* sessions.allocate(project);
+        yield* sessions.start(session, [user("one"), answer("two"), user("three")]);
 
         const unseen = yield* sessions.entries(session.id, 2);
         expect(unseen.map((entry) => entry.body)).toEqual([user("three")]);
@@ -181,10 +248,13 @@ describe("sessions", () => {
     runInTempHome((tauDirectory) =>
       Effect.gen(function* () {
         const sessions = yield* openSessions(tauDirectory);
-        const older = yield* sessions.create(project);
+        const older = yield* sessions.allocate(project);
+        yield* sessions.start(older, [user("first")]);
         yield* TestClock.adjust("1 second");
-        const newer = yield* sessions.create(project);
-        const elsewhere = yield* sessions.create("/work/other");
+        const newer = yield* sessions.allocate(project);
+        yield* sessions.start(newer, [user("newer")]);
+        const elsewhere = yield* sessions.allocate("/work/other");
+        yield* sessions.start(elsewhere, [user("elsewhere")]);
 
         const ids = sessions
           .list(project)
@@ -198,7 +268,7 @@ describe("sessions", () => {
 
         yield* sessions.append(older.id, [answer("done"), user("later")]);
         const prompts = (yield* sessions.list(project)).map((session) => session.firstPrompt);
-        expect(prompts).toEqual(["again", undefined]);
+        expect(prompts).toEqual(["first", "newer"]);
 
         const other = yield* sessions.list("/work/other");
         expect(other.map((session) => session.id)).toEqual([elsewhere.id]);
@@ -209,9 +279,9 @@ describe("sessions", () => {
     runInTempHome((tauDirectory) =>
       Effect.gen(function* () {
         const sessions = yield* openSessions(tauDirectory);
-        const parent = yield* sessions.create(project);
+        const parent = yield* sessions.allocate(project);
 
-        yield* sessions.append(parent.id, [
+        yield* sessions.start(parent, [
           user("List the files."),
           {
             type: "assistant",

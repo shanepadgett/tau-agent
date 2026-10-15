@@ -17,7 +17,7 @@ import {
   Queue,
   Ref,
   Schedule,
-  type Scope,
+  Scope,
 } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import {
@@ -30,9 +30,9 @@ import type { ModelRef } from "../../../ai/Catalog.ts";
 import { ConversationId } from "../../../ai/ConversationId.ts";
 import type { Models } from "../../../ai/Models.ts";
 import type { WriteQueue } from "../../../sandbox/WriteQueue.ts";
-import type { Entry, RunningProcess, SessionId } from "../../../session/Entry.ts";
+import type { Entry, EntryBody, RunningProcess, SessionId } from "../../../session/Entry.ts";
 import type { SessionStoreError } from "../../../session/SessionStoreError.ts";
-import type { Session, Sessions } from "../../../session/Sessions.ts";
+import type { Session, SessionNotFound, Sessions } from "../../../session/Sessions.ts";
 import type { SkillUses } from "../../../session/SkillUses.ts";
 import type { AgentEvent, Command, RunEnd, RunOptions, SavedModel } from "../../Client.ts";
 import type { ContextMethod } from "../../ContextMethod.ts";
@@ -42,7 +42,7 @@ import { PROCESS_GROUP, processFunctions } from "../process/process-functions.ts
 import { WEB_GROUP, webFunctions } from "../web/web-functions.ts";
 import type { Web } from "../../Web.ts";
 import type { References } from "../../References.ts";
-import { type SessionReferences, sessionReferences } from "../references/references-source.ts";
+import { type SessionReferences } from "../references/references-source.ts";
 import { processNotices } from "../process/process-notices.ts";
 import type { UserInstructions } from "../../UserInstructions.ts";
 import type { OutputFolder } from "../../OutputFolder.ts";
@@ -63,6 +63,8 @@ import { findSkills, type Skill, SKILLS_GROUP, skillFunctions } from "../skills/
 import type { Platform } from "../tools/model-tool.ts";
 import { withListings } from "../folder-listings/folder-listings.ts";
 import { failureText } from "./failure-text.ts";
+import type { SessionState } from "../../SessionState.ts";
+import { sessionPersistence } from "./persistence.ts";
 
 export type RunServices = {
   readonly sessions: Sessions["Service"];
@@ -86,6 +88,7 @@ export type RunServices = {
 /** A session opened for runs. */
 export type OpenSession = {
   readonly session: Session;
+  readonly snapshot: Effect.Effect<SessionState>;
   /** Events of the session from now on. Subscribe before sending, to miss nothing. */
   readonly subscribe: Effect.Effect<PubSub.Subscription<AgentEvent>, never, Scope.Scope>;
   readonly send: (command: Command) => Effect.Effect<void>;
@@ -108,79 +111,44 @@ type QueuedPrompt = Extract<Command, { type: "prompt" | "steer" }>;
 type Steering = Option.Option<readonly QueuedPrompt[]>;
 
 /** Starts the runner of session `id`. It stops, with its running prompt, when its scope closes. */
-export const makeRunner = Effect.fn("makeRunner")(function* (services: RunServices, id: SessionId) {
-  const session = yield* services.sessions.get(id);
+export const makeRunner = Effect.fn("makeRunner")(function* (
+  services: RunServices,
+  initial: SessionState,
+) {
+  const session = initial.session;
+  const id = session.id;
   const events = yield* PubSub.unbounded<AgentEvent>();
   const annotated = Effect.annotateLogs({ session: id });
-  yield* services.contextMethod.background(id, events).pipe(annotated);
-  const prompts = yield* Queue.unbounded<QueuedPrompt>();
-  const steering = yield* Ref.make<Steering>(Option.none());
-  const current = yield* FiberHandle.make<RunEnd, unknown>();
+  const persistence = yield* sessionPersistence(services.sessions, initial, events);
+  const scope = yield* Effect.scope;
+
+  const startBackground = services.contextMethod
+    .background(id, events)
+    .pipe(Scope.provide(scope), annotated);
+
+  if (initial.kind === "saved") yield* startBackground;
+
+  const savePrompt = (bodies: readonly EntryBody[]) =>
+    persistence.savePrompt(bodies).pipe(
+      Effect.flatMap((started) => (started ? startBackground : Effect.void)),
+      Effect.uninterruptible,
+    );
 
   const processes = yield* sessionProcesses(services, events);
-
-  const runNext = Effect.gen(function* () {
-    const prompt = yield* Queue.take(prompts);
-    yield* Ref.set(steering, Option.some([]));
-    const runs: SessionRuns = { services, session, processes, events, steering };
-
-    // The handle must hold the fiber before it starts: a run can publish an event, and a client
-    // can cancel in answer, before a fiber that starts at once is handed back.
-    const run = yield* FiberHandle.run(current, runPrompt(runs, prompt), {
-      startImmediately: false,
-    });
-
-    yield* endRun(runs, yield* Fiber.await(run));
-
-    // A steering message sent after the run's last model call runs as the next prompt.
-    const left = yield* Ref.getAndSet(steering, Option.none());
-
-    yield* Queue.offerAll(
-      prompts,
-      Option.getOrElse(left, () => []),
-    );
-  });
-
-  yield* Effect.forkScoped(Effect.forever(runNext).pipe(annotated));
-
-  const cancel = Effect.gen(function* () {
-    const waiting = [...(yield* takeSteering(steering)), ...(yield* Queue.clear(prompts))];
-
-    if (waiting.length > 0) {
-      const returned = waiting.map((prompt) => prompt.text);
-      yield* PubSub.publish(events, { type: "prompts-returned", prompts: returned });
-    }
-
-    yield* FiberHandle.clear(current);
-  });
-
-  /** A steering message waits for the running prompt's next model call; with no run, it is a prompt. */
-  const steer = (command: QueuedPrompt) =>
-    Ref.modify(steering, (state): [boolean, Steering] =>
-      Option.isSome(state) ? [true, Option.some([...state.value, command])] : [false, state],
-    ).pipe(
-      Effect.flatMap((steered) => (steered ? Effect.void : Queue.offer(prompts, command))),
-      Effect.asVoid,
-    );
-
-  const send = (command: Command) => {
-    switch (command.type) {
-      case "cancel":
-        return cancel;
-      case "steer":
-        return steer(command);
-      case "prompt":
-        return Queue.offer(prompts, command).pipe(Effect.asVoid);
-    }
-  };
+  const send = yield* runnerCommands({ services, session, processes, events, savePrompt });
 
   const opened: OpenSession = {
     session,
+    snapshot: persistence.snapshot,
     subscribe: PubSub.subscribe(events),
     send,
     ...savedRuns(services, id),
+    history: Effect.gen(function* () {
+      if ((yield* persistence.snapshot).kind === "draft") return yield* persistence.history;
+      return yield* savedRuns(services, id).history;
+    }),
     commits: commitsOf(services, session),
-    references: sessionReferences(services.sessions, id, events),
+    references: persistence.references,
   };
 
   return opened;
@@ -200,6 +168,9 @@ type SessionRuns = {
   readonly processes: ProcessSessions;
   readonly events: PubSub.PubSub<AgentEvent>;
   readonly steering: Ref.Ref<Steering>;
+  readonly savePrompt: (
+    bodies: readonly EntryBody[],
+  ) => Effect.Effect<void, SessionNotFound | SessionStoreError>;
 };
 
 /** The tools a run has only sometimes: the checks, when the project has them, and the questions. */
@@ -210,7 +181,7 @@ const optionalTools = (checks: Option.Option<ProjectChecks>, options: RunOptions
 
 /** Saves the prompt and runs the agent loop on it. */
 const runPrompt = (
-  { services, session, processes, events, steering }: SessionRuns,
+  { services, session, processes, events, steering, savePrompt }: SessionRuns,
   prompt: QueuedPrompt,
 ) =>
   Effect.gen(function* () {
@@ -219,7 +190,7 @@ const runPrompt = (
     // The reply saves the level with its model, so a resumed chat goes on at the same level.
     const model = { ...prompt.options.model, thinking };
     const entered = { type: "user", text: prompt.text } as const;
-    yield* sessions.append(session.id, yield* withListings(session.directory, entered));
+    yield* savePrompt(yield* withListings(session.directory, entered));
 
     yield* PubSub.publish(events, { type: "run-started", prompt: prompt.text });
     const { root, folders } = yield* projectFolders(session.directory);
@@ -418,3 +389,68 @@ const withPlatform =
         makeOutputFiles(services.outputFolder, session, services.fileSystem, services.crypto),
       ),
     );
+
+const runnerCommands = Effect.fn("runnerCommands")(function* (runs: Omit<SessionRuns, "steering">) {
+  const prompts = yield* Queue.unbounded<QueuedPrompt>();
+  const steering = yield* Ref.make<Steering>(Option.none());
+  const current = yield* FiberHandle.make<RunEnd, unknown>();
+
+  const runNext = Effect.gen(function* () {
+    const prompt = yield* Queue.take(prompts);
+    yield* Ref.set(steering, Option.some([]));
+    const running: SessionRuns = { ...runs, steering };
+
+    // The handle must hold the fiber before it starts: a run can publish an event, and a client
+    // can cancel in answer, before a fiber that starts at once is handed back.
+    const run = yield* FiberHandle.run(current, runPrompt(running, prompt), {
+      startImmediately: false,
+    });
+
+    yield* endRun(running, yield* Fiber.await(run));
+
+    // A steering message sent after the run's last model call runs as the next prompt.
+    const left = yield* Ref.getAndSet(steering, Option.none());
+
+    yield* Queue.offerAll(
+      prompts,
+      Option.getOrElse(left, () => []),
+    );
+  });
+
+  yield* Effect.forkScoped(
+    Effect.forever(runNext).pipe(Effect.annotateLogs({ session: runs.session.id })),
+  );
+
+  const cancel = Effect.gen(function* () {
+    const waiting = [...(yield* takeSteering(steering)), ...(yield* Queue.clear(prompts))];
+
+    if (waiting.length > 0) {
+      const returned = waiting.map((prompt) => prompt.text);
+      yield* PubSub.publish(runs.events, { type: "prompts-returned", prompts: returned });
+    }
+
+    yield* FiberHandle.clear(current);
+  });
+
+  /** A steering message waits for the running prompt's next model call; with no run, it is a prompt. */
+  const steer = (command: QueuedPrompt) =>
+    Ref.modify(steering, (state): [boolean, Steering] =>
+      Option.isSome(state) ? [true, Option.some([...state.value, command])] : [false, state],
+    ).pipe(
+      Effect.flatMap((steered) => (steered ? Effect.void : Queue.offer(prompts, command))),
+      Effect.asVoid,
+    );
+
+  const send = (command: Command) => {
+    switch (command.type) {
+      case "cancel":
+        return cancel;
+      case "steer":
+        return steer(command);
+      case "prompt":
+        return Queue.offer(prompts, command).pipe(Effect.asVoid);
+    }
+  };
+
+  return send;
+});

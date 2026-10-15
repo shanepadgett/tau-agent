@@ -7,6 +7,7 @@ import { type CliRenderer, createCliRenderer } from "@opentui/core";
 import { Effect } from "effect";
 import { type Attention, openAttention } from "./Notifications.ts";
 import { createSignal } from "solid-js";
+import type { SessionState } from "../core/SessionState.ts";
 import type { OpenSession } from "../core/Agent.ts";
 import { showChat } from "./internal/App.tsx";
 import {
@@ -40,7 +41,7 @@ export type { ChatAgent, ChatOptions, ChatSetup, RestartLink } from "./internal/
  * chat.
  */
 type TuiEnd = Exclude<ChatEnd, { reason: "open" }> & {
-  readonly session: OpenSession["session"]["id"];
+  readonly session: SessionState;
 };
 
 /** Shows the chat of `opened` in the terminal until the user quits or Tau restarts. */
@@ -106,6 +107,6 @@ const chatSession = Effect.fn("chatSession")(function* (
   yield* show(client);
   const end: ChatEnd = yield* ended;
   if (end.reason === "open") return end;
-  const finished: TuiEnd = { ...end, session: opened.session.id };
+  const finished: TuiEnd = { ...end, session: yield* opened.snapshot };
   return finished;
 }, Effect.scoped);

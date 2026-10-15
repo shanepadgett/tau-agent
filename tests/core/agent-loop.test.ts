@@ -237,10 +237,10 @@ describe("agent loop", () => {
   test("a call that started and has no result is never run again", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
-        const session = yield* harness.sessions.create(harness.directory);
+        const session = yield* harness.sessions.allocate(harness.directory);
 
         // What a crash leaves: the call was saved as started, and its result was never saved.
-        yield* harness.sessions.append(session.id, [
+        yield* harness.sessions.start(session, [
           { type: "user", text: "Make a file." },
           {
             type: "assistant",

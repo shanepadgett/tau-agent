@@ -27,6 +27,7 @@ import { TauHome } from "../../src/database/TauHome.ts";
 import { catalogCacheLayer } from "../../src/host/CatalogCache.ts";
 import { credentialStoreLayer } from "../../src/host/CredentialStore.ts";
 import { Settings } from "../../src/host/Settings.ts";
+import { ProjectDirectory } from "../../src/host/ProjectDirectory.ts";
 
 const Recording = Schema.Struct({
   status: Schema.Number,
@@ -106,7 +107,8 @@ const withWeb = <A, E>(
 ) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
-    const home = TauHome.at(`${yield* fileSystem.makeTempDirectoryScoped()}/.tau`);
+    const projectDirectory = yield* fileSystem.makeTempDirectoryScoped();
+    const home = TauHome.at(`${projectDirectory}/.tau`);
     const { client, paths } = yield* localWeb(replies);
 
     const storeLayer = credentialStoreLayer.pipe(Layer.provide(home));
@@ -116,7 +118,11 @@ const withWeb = <A, E>(
     yield* store.save(ProviderId.make("openai"), ApiKey.make({ key: Redacted.make("openai-key") }));
 
     const catalog = Catalog.layer.pipe(
-      Layer.provide(Settings.layer.pipe(Layer.provide(home))),
+      Layer.provide(
+        Settings.layer
+          .pipe(Layer.provide(Layer.succeed(ProjectDirectory, { directory: projectDirectory })))
+          .pipe(Layer.provide(home)),
+      ),
       Layer.provide(catalogCacheLayer.pipe(Layer.provide(home))),
       Layer.provide(BunCrypto.layer),
     );

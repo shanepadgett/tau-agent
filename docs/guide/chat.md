@@ -58,6 +58,8 @@ While a run is going or a prompt waits, Tau does not switch sessions: choosing a
 
 ## What happens
 
+A new chat stays in memory until its first prompt is submitted. Opening Tau or using `/new` leaves no saved session by itself. The first prompt saves the session and its user entry together. `/sessions` lists saved sessions only. Quitting an unused chat prints no session ID; quitting a saved chat prints its resumable ID.
+
 - The answer shows as Markdown while the model writes it. Each script shows on one line: ○ while it runs, ✓ when it passes, ✗ when it fails.
 - Above the input, a line shows when a run is going, then one "Steering:" line for each steering message the model has not read yet, and one "Queued:" line for each prompt that waits for the run to end. In the transcript, a steering message shows where the model read it.
 - A steering message that comes after the run's last model call runs as the next prompt.
@@ -88,7 +90,7 @@ The sidebar on the right shows the session. Ctrl+B shows or hides it. It has fou
 
 ## Restart Tau into new code
 
-Tau restarts the chat into new code with the same session and the same unsent input. A restart happens only when no run is going and no prompt waits.
+Tau restarts the chat into new code with the same session and the same unsent input. Before the first prompt, it carries the draft identity and attached reference choices in memory without saving a session. A restart happens only when no run is going and no prompt waits.
 
 - Type `/restart` and press Enter to restart now. During a run, the transcript shows "Tau restarts when this run ends." and the restart waits for it.
 - When you run Tau from its source with `bun src/cli/main.ts` (in the Tau repository, `mise run dev`), Tau watches `src/`. After each change it builds the new code and checks that it starts. When the check passes, Tau restarts by itself. Set `"autoRestart": false` in `~/.tau/settings.json` to restart only with `/restart`; see [Change Tau's settings](settings.md).

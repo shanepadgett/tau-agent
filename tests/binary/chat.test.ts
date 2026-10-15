@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { BunServices } from "@effect/platform-bun";
 import { Deferred, Effect, FileSystem } from "effect";
+import { TauHome } from "../../src/database/TauHome.ts";
+import { Sessions } from "../../src/session/Sessions.ts";
 import { compileTau } from "../support/compile-tau.ts";
 
 // Builds the binary, so it takes seconds and runs before commit, not after each agent run.
@@ -38,11 +40,12 @@ const PROJECT_FILE = "findme.txt";
  * chat opens, quits once the list shows the file, and then lets the shell print Tau's exit code and
  * the terminal's settings.
  */
-const chatAndQuit = Effect.fn("chatAndQuit")(function* (binary: string) {
+const chatAndQuit = Effect.fn("chatAndQuit")(function* (binary: string, kind: "draft" | "saved") {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped();
   const project = yield* fs.makeTempDirectoryScoped();
   yield* fs.writeFileString(`${project}/${PROJECT_FILE}`, "");
+  const session = kind === "saved" ? yield* seedSession(home, project) : undefined;
   const opened = yield* Deferred.make<void>();
   const found = yield* Deferred.make<void>();
   const decoder = new TextDecoder();
@@ -64,7 +67,8 @@ const chatAndQuit = Effect.fn("chatAndQuit")(function* (binary: string) {
     (closing) => Effect.sync(() => closing.close()),
   );
 
-  const script = `'${binary}'; echo "tau exited $?"; stty -a`;
+  const args = session === undefined ? "" : ` --session '${session}'`;
+  const script = `'${binary}'${args}; echo "tau exited $?"; stty -a`;
 
   const shell = Bun.spawn(["/bin/sh", "-c", script], {
     cwd: project,
@@ -77,23 +81,36 @@ const chatAndQuit = Effect.fn("chatAndQuit")(function* (binary: string) {
   yield* Deferred.await(found);
   terminal.write(CTRL_D);
   yield* Effect.promise(() => shell.exited);
-  return output;
+
+  const saved = yield* Sessions.use((sessions) => sessions.list(project)).pipe(
+    Effect.provide(Sessions.layer),
+    Effect.provideService(TauHome, { directory: `${home}/.tau` }),
+  );
+
+  return { output, session, saved: saved.map(({ id }) => id) };
 });
 
 describe("compiled tau", () => {
-  test(
-    "opens the chat, lists a file after @, quits, and gives the terminal back",
-    () =>
+  test.each(["draft", "saved"] as const)(
+    "opens a %s chat, lists a file after @, quits, and gives the terminal back",
+    (kind) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const binary = yield* compileTau(yield* fs.makeTempDirectoryScoped());
-        const output = yield* chatAndQuit(binary);
+        const { output, session, saved } = yield* chatAndQuit(binary, kind);
         const [chat = "", afterChat = ""] = output.split(ALTERNATE_SCREEN.off).slice(-2);
 
+        expect(saved).toEqual(session === undefined ? [] : [session]);
         expect(chat).toContain(CHAT_OPENED);
         expect(modesLeftOn(output)).toEqual([]);
-        // A whole line with no color around it.
-        expect(afterChat).toMatch(/\nSession: [\w-]+\r\n/);
+
+        if (session === undefined) {
+          expect(output).not.toContain("Session:");
+        } else {
+          // A whole line with no color around it.
+          expect(afterChat).toContain(`\nSession: ${session}\r\n`);
+        }
+
         expect(afterChat).toContain("tau exited 0");
 
         const stty = afterChat.slice(afterChat.indexOf("tau exited"));
@@ -101,5 +118,18 @@ describe("compiled tau", () => {
         expect(["icanon", "echo", "isig"].filter((mode) => !isOn(stty, mode))).toEqual([]);
       }).pipe(Effect.scoped, Effect.provide(BunServices.layer), Effect.runPromise),
     BUILD_AND_RUN_MILLIS,
+  );
+});
+
+const seedSession = Effect.fn("seedSession")(function* (home: string, project: string) {
+  return yield* Sessions.use((sessions) =>
+    Effect.gen(function* () {
+      const session = yield* sessions.allocate(project);
+      yield* sessions.start(session, [{ type: "user", text: "Saved prompt." }]);
+      return session.id;
+    }),
+  ).pipe(
+    Effect.provide(Sessions.layer),
+    Effect.provideService(TauHome, { directory: `${home}/.tau` }),
   );
 });

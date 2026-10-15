@@ -1,10 +1,9 @@
 /** The references a session has attached, kept as session entries and told to the model as an instruction source. */
 
-import { Effect, Option, PubSub } from "effect";
-import type { Entry, SessionId } from "../../../session/Entry.ts";
-import type { SessionNotFound, Sessions } from "../../../session/Sessions.ts";
+import { Effect, Option } from "effect";
+import type { Entry } from "../../../session/Entry.ts";
+import type { SessionNotFound } from "../../../session/Sessions.ts";
 import type { SessionStoreError } from "../../../session/SessionStoreError.ts";
-import type { AgentEvent } from "../../Client.ts";
 import type { InstructionSource } from "../instructions/instructions.ts";
 
 const REFERENCES_KEY = "tau/references";
@@ -52,17 +51,3 @@ export type SessionReferences = {
     names: readonly string[],
   ) => Effect.Effect<void, SessionNotFound | SessionStoreError>;
 };
-
-export const sessionReferences = (
-  sessions: Sessions["Service"],
-  id: SessionId,
-  events: PubSub.PubSub<AgentEvent>,
-): SessionReferences => ({
-  set: (names) =>
-    sessions
-      .append(id, [{ type: "references", names }])
-      .pipe(
-        Effect.andThen(PubSub.publish(events, { type: "references-changed", names })),
-        Effect.asVoid,
-      ),
-});

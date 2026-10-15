@@ -1,6 +1,6 @@
 # Save sessions after the first prompt
 
-Status: lifecycle agreed; code-level plan proposed. Exit-output mockup awaits approval before implementation.
+Status: implemented. Lasting decisions live in [architecture.md](../architecture.md#core-ideas).
 
 ## Requirement
 
@@ -117,3 +117,21 @@ Update the chat, references, print-mode and restart guide sections with persiste
 ## One-time cleanup
 
 Deleted 11 sessions with no entries from `~/.tau/sessions.db`; 56 sessions remained, all with user prompts. SQLite foreign-key verification passed. A database backup was saved to `~/.tau/sessions.db.backup-empty-cleanup-20261015-034545`.
+
+## Screen approval
+
+The user requested implementation and another database cleanup on 2026-10-15. The cleanup removed 3 sessions without user prompts after backing up SQLite; foreign-key verification passed and no promptless sessions remained.
+
+The chat layout stays the same. The session picker lists saved sessions only, including the current chat after its first prompt. With no saved sessions it uses the existing empty-picker state.
+
+Exit terminal area, before:
+
+```text
+Session: <id>
+$
+```
+
+Exit terminal area, after:
+
+- Close an unused draft: return directly to the shell prompt.
+- Close a saved session (new, resumed, forked, failed or cancelled after save): print its existing resumable session ID, then return to the shell prompt.

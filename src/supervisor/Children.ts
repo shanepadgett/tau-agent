@@ -28,16 +28,11 @@ class CheckFailed extends Schema.TaggedError<CheckFailed>()("CheckFailed", {
 const startChat = Effect.fn("startChat")(function* (
   build: Build,
   args: readonly string[],
-  draft: string,
-  attention: string | undefined,
+  start: Extract<ToChild, { type: "start-chat" }>,
 ) {
   const child = yield* spawnIpcChild<ToChild>([...build.command, ...args], "terminal");
 
-  yield* child.send(
-    attention === undefined
-      ? { type: "start-chat", draft }
-      : { type: "start-chat", draft, attention },
-  );
+  yield* child.send(start);
 
   const chat: RunningChat = {
     messages: child.messages.pipe(Stream.filter(Schema.is(ToSupervisor))),
@@ -80,8 +75,7 @@ export class Children extends Context.Service<
     readonly startChat: (
       build: Build,
       args: readonly string[],
-      draft: string,
-      attention: string | undefined,
+      start: Extract<ToChild, { type: "start-chat" }>,
     ) => Effect.Effect<RunningChat, never, Scope.Scope>;
     /** Loads `build` without the terminal or the database, and fails when it does not start. */
     readonly check: (build: Build) => Effect.Effect<void, CheckFailed>;

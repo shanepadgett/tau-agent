@@ -373,3 +373,50 @@ test("a failure shows its first line and keeps the whole reason as detail", () =
     },
   ]);
 });
+
+const DRAFT = {
+  kind: "draft",
+  id: "draft-1",
+  directory: "/work",
+  createdAt: 1000,
+  references: ["example"],
+} as const;
+
+test("a restart carries draft metadata, choices and unsent text without a saved ID", () => {
+  const { state, commands } = afterEvents(
+    [
+      { type: "message", message: { type: "ready", session: DRAFT } },
+      IDLE,
+      RESTART_REQUEST,
+      { type: "message", message: { type: "handoff", session: DRAFT, draft: "unsent" } },
+      QUIT,
+    ],
+    "manual",
+  );
+
+  expect(state.session).toEqual(DRAFT);
+
+  expect(commands).toContainEqual({
+    type: "start",
+    build: FIRST,
+    session: DRAFT,
+    draft: "unsent",
+    attention: undefined,
+  });
+});
+
+test("a crash retains a draft target and a saved update replaces it", () => {
+  const readyDraft: RestartEvent = { type: "message", message: { type: "ready", session: DRAFT } };
+  const draft = afterEvents([readyDraft, crashed(LATE)], "automatic");
+
+  expect(draft.commands).toContainEqual({
+    type: "start",
+    build: FIRST,
+    session: DRAFT,
+    draft: "",
+    attention: undefined,
+  });
+
+  const saved = afterEvents([readyDraft, ready("draft-1"), crashed(LATE)], "automatic");
+  expect(saved.state.session).toBe("draft-1");
+});

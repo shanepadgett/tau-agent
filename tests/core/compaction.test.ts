@@ -5,6 +5,7 @@ import { AiError, type Response } from "effect/ai";
 import { CompactionSettings, ContextSettings } from "../../src/core/ContextSettings.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { Settings } from "../../src/host/Settings.ts";
+import { ProjectDirectory } from "../../src/host/ProjectDirectory.ts";
 import { Memories } from "../../src/session/Memories.ts";
 import { Sessions } from "../../src/session/Sessions.ts";
 import { transcript } from "../../src/session/Transcript.ts";
@@ -35,9 +36,13 @@ describe("compaction", () => {
   test("settings supply compaction defaults and read the user's selected method and thresholds", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
-        const settings = Settings.layer.pipe(Layer.provide(TauHome.at(`${harness.home}/.tau`)));
+        const settings = Settings.layer
+          .pipe(Layer.provide(Layer.succeed(ProjectDirectory, { directory: harness.directory })))
+          .pipe(Layer.provide(TauHome.at(`${harness.home}/.tau`)));
+
         const defaults = yield* Layer.build(settings);
         expect(Context.get(defaults, ContextSettings)).toEqual({});
+
         const fileSystem = yield* FileSystem.FileSystem;
 
         const compaction: CompactionSettings = {
@@ -54,6 +59,7 @@ describe("compaction", () => {
         );
 
         const configured = yield* Layer.build(settings);
+
         expect(Context.get(configured, ContextSettings)).toEqual(compaction);
       }),
     ));
@@ -73,9 +79,13 @@ describe("compaction", () => {
           Schema.encodeSync(Schema.fromJsonString(Schema.Json))({ compaction: { [field]: value } }),
         );
 
-        const settings = Settings.layer.pipe(Layer.provide(TauHome.at(`${harness.home}/.tau`)));
+        const settings = Settings.layer
+          .pipe(Layer.provide(Layer.succeed(ProjectDirectory, { directory: harness.directory })))
+          .pipe(Layer.provide(TauHome.at(`${harness.home}/.tau`)));
+
         const error = yield* Layer.build(settings).pipe(Effect.flip);
         if (error._tag !== "SettingsInvalid") return yield* Effect.fail(error);
+
         expect(error.path).toBe(path);
         expect(error.message).toContain(field);
       }),
@@ -85,9 +95,9 @@ describe("compaction", () => {
   test("checkpoints pin notes, preserve the raw tail and keep the old note prefix on the next checkpoint", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
-        const session = yield* harness.sessions.create(harness.directory);
+        const session = yield* harness.sessions.allocate(harness.directory);
 
-        yield* harness.sessions.append(session.id, [
+        yield* harness.sessions.start(session, [
           { type: "user", text: "Old raw request." },
           assistant("Old raw answer."),
           { type: "user", text: "Recent request." },
@@ -112,10 +122,13 @@ describe("compaction", () => {
         );
 
         const opened = yield* agent.open(Option.some(session.id), harness.directory);
+
         expect(runEnd(yield* prompt(opened, "Continue."))?.reason).toBe("answered");
         expect(promptText(harness.prompts[1])).toContain("The first saved note.");
+
         expect(promptText(harness.prompts[1])).not.toContain("Old raw request.");
         expect(promptText(harness.prompts[1])).toContain("Recent request.");
+
         expect(promptText(harness.prompts[1])).toContain("Your handoff at the checkpoint");
 
         yield* harness.notes.appendShortTerm(session.id, {
@@ -126,8 +139,10 @@ describe("compaction", () => {
         });
 
         yield* prompt(opened, "More work.");
+
         expect(promptText(harness.prompts[2])).not.toContain("The second saved note.");
         yield* prompt(opened, "Checkpoint again.");
+
         expect(promptText(harness.prompts[4])).toContain("The second saved note.");
 
         // Cache marks move to the new last note; the cached role and content stay the same.
@@ -150,9 +165,9 @@ describe("compaction", () => {
   test("forced context blocks tools without changing the toolkit, then a checkpoint enables them", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
-        const session = yield* harness.sessions.create(harness.directory);
+        const session = yield* harness.sessions.allocate(harness.directory);
 
-        yield* harness.sessions.append(session.id, [
+        yield* harness.sessions.start(session, [
           { type: "user", text: "Earlier work." },
           assistant("Earlier answer."),
         ]);
@@ -182,8 +197,10 @@ describe("compaction", () => {
         );
 
         const opened = yield* agent.open(Option.some(session.id), harness.directory);
+
         expect(runEnd(yield* prompt(opened, "Work."))?.reason).toBe("answered");
         const fileSystem = yield* FileSystem.FileSystem;
+
         expect(yield* fileSystem.exists(`${harness.directory}/blocked.txt`)).toBe(false);
         expect(yield* fileSystem.readFileString(`${harness.directory}/allowed.txt`)).toBe("done");
 
@@ -198,6 +215,7 @@ describe("compaction", () => {
         ).toBe(true);
 
         expect(new Set(harness.tools).size).toBe(1);
+
         const saved = yield* harness.sessions.entries(session.id, 0);
 
         expect(
@@ -221,6 +239,7 @@ describe("compaction", () => {
         );
 
         const opened = yield* agent.open(Option.none(), harness.directory);
+
         yield* prompt(opened, "Work.");
 
         expect(
@@ -239,10 +258,10 @@ describe("compaction", () => {
   test("the note writer receives full user, assistant and tool messages, instructions and nudges in a complete range", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
-        const session = yield* harness.sessions.create(harness.directory);
+        const session = yield* harness.sessions.allocate(harness.directory);
         const output = `START-OUTPUT ${"x".repeat(70000)} END-OUTPUT`;
 
-        const entries = yield* harness.sessions.append(session.id, [
+        const entries = yield* harness.sessions.start(session, [
           { type: "user", text: "Keep this exact request." },
           {
             type: "assistant",
@@ -282,10 +301,13 @@ describe("compaction", () => {
         );
 
         const opened = yield* agent.open(Option.some(session.id), harness.directory);
+
         const notes = yield* waitForNotes(harness.notes, session.id, 1);
         expect(notes[0]?.from).toBe(1);
+
         expect(notes[0]?.through).toBe(5);
         expect(notes[0]?.model.model).toBe(provider.smallModel);
+
         const received = userTexts(harness.notePrompts[0]).join("\n");
 
         for (const text of [
@@ -299,8 +321,10 @@ describe("compaction", () => {
           expect(received).toContain(text);
 
         expect(received).not.toContain("Recent raw tail.");
+
         expect(received).not.toContain("The call ended before it returned a result");
         expect(transcript(entries)).toContain(output);
+
         expect(runEnd(yield* prompt(opened, "Continue."))?.reason).toBe("answered");
       }),
     ));
@@ -320,6 +344,7 @@ describe("compaction", () => {
         );
 
         const opened = yield* agent.open(Option.none(), harness.directory);
+
         expect(runEnd(yield* prompt(opened, "Work."))?.reason).toBe("answered");
 
         expect(toolResults(harness.prompts[2]).at(-1)).toContain(
@@ -327,6 +352,7 @@ describe("compaction", () => {
         );
 
         expect(toolResults(harness.prompts[4]).at(-1)).toBe("third");
+
         expect(new Set(harness.tools).size).toBe(1);
       }),
     ));
@@ -343,6 +369,7 @@ describe("compaction", () => {
         );
 
         const opened = yield* agent.open(Option.none(), harness.directory);
+
         const events = yield* opened.subscribe;
 
         yield* opened.send({
@@ -366,9 +393,9 @@ describe("compaction", () => {
   test("notes fall back to the session model when the cheap model is not offered", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
-        const session = yield* harness.sessions.create(harness.directory);
+        const session = yield* harness.sessions.allocate(harness.directory);
 
-        yield* harness.sessions.append(session.id, [
+        yield* harness.sessions.start(session, [
           { type: "user", text: "x".repeat(70000) },
           assistant("Recent reply."),
         ]);
@@ -389,10 +416,10 @@ describe("compaction", () => {
   test("the writer saves successive whole-message ranges and keeps the latest reply raw", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
-        const session = yield* harness.sessions.create(harness.directory);
+        const session = yield* harness.sessions.allocate(harness.directory);
         const large = "x".repeat(70000);
 
-        yield* harness.sessions.append(session.id, [
+        yield* harness.sessions.start(session, [
           { type: "user", text: large },
           assistant("First answer."),
           { type: "user", text: large },
@@ -402,6 +429,7 @@ describe("compaction", () => {
         ]);
 
         const agent = yield* harness.startAgentUsing([], contextLayer({ notesStartTokens: 1 }));
+
         yield* agent.open(Option.some(session.id), harness.directory);
         const notes = yield* waitForNotes(harness.notes, session.id, 3);
 
@@ -412,6 +440,7 @@ describe("compaction", () => {
         ]);
 
         expect(promptText(harness.notePrompts[1])).toContain("Earlier notes:");
+
         expect(promptText(harness.notePrompts[1])).toContain("Saved background note.");
         expect(promptText(harness.notePrompts[2])).not.toContain("Latest raw answer.");
       }),
@@ -422,9 +451,9 @@ describe("compaction", () => {
     (failure) =>
       withHarness((harness) =>
         Effect.gen(function* () {
-          const session = yield* harness.sessions.create(harness.directory);
+          const session = yield* harness.sessions.allocate(harness.directory);
 
-          const entries = yield* harness.sessions.append(session.id, [
+          const entries = yield* harness.sessions.start(session, [
             { type: "user", text: "x".repeat(70000) },
             assistant("Recent reply."),
           ]);
@@ -451,10 +480,13 @@ describe("compaction", () => {
           );
 
           const opened = yield* agent.open(Option.some(session.id), harness.directory);
+
           yield* Deferred.await(finished);
           expect(yield* harness.notes.shortTerm(session.id)).toHaveLength(0);
+
           expect(yield* harness.sessions.entries(session.id, 0)).toEqual(entries);
           expect(runEnd(yield* prompt(opened, "Continue."))?.reason).toBe("answered");
+
           expect((yield* waitForNotes(harness.notes, session.id, 1))[0]?.from).toBe(1);
           expect(harness.notePrompts).toHaveLength(2);
         }),
@@ -464,14 +496,15 @@ describe("compaction", () => {
   test("closing the session cancels an unfinished note without blocking the main run, then reopening retries", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
-        const session = yield* harness.sessions.create(harness.directory);
+        const session = yield* harness.sessions.allocate(harness.directory);
 
-        yield* harness.sessions.append(session.id, [
+        yield* harness.sessions.start(session, [
           { type: "user", text: "x".repeat(70000) },
           assistant("Recent reply."),
         ]);
 
         const started = yield* Deferred.make<void>();
+
         const cancelled = yield* Deferred.make<void>();
 
         const unfinished = Deferred.succeed(started, undefined).pipe(
@@ -488,15 +521,19 @@ describe("compaction", () => {
             );
 
             const opened = yield* agent.open(Option.some(session.id), harness.directory);
+
             yield* Deferred.await(started);
             expect(runEnd(yield* prompt(opened, "Continue."))?.reason).toBe("answered");
+
             expect(yield* harness.notes.shortTerm(session.id)).toHaveLength(0);
           }),
         );
 
         yield* Deferred.await(cancelled);
+
         expect(yield* harness.notes.shortTerm(session.id)).toHaveLength(0);
         const restarted = yield* harness.startAgentUsing([], contextLayer({ notesStartTokens: 1 }));
+
         yield* restarted.open(Option.some(session.id), harness.directory);
         expect((yield* waitForNotes(harness.notes, session.id, 1))[0]?.from).toBe(1);
       }),
@@ -505,9 +542,9 @@ describe("compaction", () => {
   test("the first context estimate after checkpoint includes pinned notes instead of the checkpoint call", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
-        const session = yield* harness.sessions.create(harness.directory);
+        const session = yield* harness.sessions.allocate(harness.directory);
 
-        yield* harness.sessions.append(session.id, [
+        yield* harness.sessions.start(session, [
           { type: "user", text: "Earlier work." },
           assistant("Earlier answer."),
         ]);
@@ -529,6 +566,7 @@ describe("compaction", () => {
         );
 
         const opened = yield* agent.open(Option.some(session.id), harness.directory);
+
         expect(runEnd(yield* prompt(opened, "Continue."))?.reason).toBe("answered");
 
         expect(userTexts(harness.prompts[2]).some((text) => text.includes("Context warning"))).toBe(
@@ -594,6 +632,7 @@ describe("compaction", () => {
         );
 
         const opened = yield* agent.open(Option.none(), harness.directory);
+
         expect(runEnd(yield* prompt(opened, "Work."))?.reason).toBe("answered");
         const entries = yield* harness.sessions.entries(opened.session.id, 0);
 
@@ -609,9 +648,9 @@ describe("compaction", () => {
   test("forks copy only notes within the fork range and notes survive reopening the database", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
-        const session = yield* harness.sessions.create(harness.directory);
+        const session = yield* harness.sessions.allocate(harness.directory);
 
-        yield* harness.sessions.append(session.id, [
+        yield* harness.sessions.start(session, [
           { type: "user", text: "One." },
           assistant("Two."),
           { type: "user", text: "Three." },
@@ -663,9 +702,9 @@ describe("compaction", () => {
   test("history can recall a note's full raw entries from a run script after a checkpoint", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
-        const session = yield* harness.sessions.create(harness.directory);
+        const session = yield* harness.sessions.allocate(harness.directory);
 
-        yield* harness.sessions.append(session.id, [
+        yield* harness.sessions.start(session, [
           { type: "user", text: "Recall this exact request." },
           assistant("Recall this exact reply."),
         ]);
@@ -687,8 +726,10 @@ describe("compaction", () => {
         );
 
         const opened = yield* agent.open(Option.some(session.id), harness.directory);
+
         yield* prompt(opened, "Recall.");
         const result = toolResults(harness.prompts[2]).at(-1);
+
         expect(result).toContain("Recall this exact request.");
         expect(result).toContain("Recall this exact reply.");
       }),
@@ -713,8 +754,10 @@ describe("compaction", () => {
         );
 
         const opened = yield* agent.open(Option.none(), harness.directory);
+
         yield* prompt(opened, "Work.");
         expect(toolResults(harness.prompts[1])[0]).toContain("Call checkpoint alone");
+
         expect(toolResults(harness.prompts[1])[1]).toBe("still here");
         const entries = yield* harness.sessions.entries(opened.session.id, 0);
 
@@ -735,8 +778,10 @@ describe("compaction", () => {
         );
 
         const opened = yield* agent.open(Option.none(), harness.directory);
+
         yield* prompt(opened, "Raw request.");
         expect(userTexts(harness.prompts[0])).toContain("Raw request.");
+
         expect(harness.tools[0]).not.toContain("Compact your context instantly");
         expect(harness.notePrompts).toHaveLength(0);
 

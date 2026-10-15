@@ -3,7 +3,19 @@
  * session share its runner, so the session has one writer.
  */
 
-import { Context, Crypto, Effect, FileSystem, Layer, Option, RcMap, type Scope } from "effect";
+import {
+  Context,
+  Crypto,
+  Effect,
+  Equal,
+  Hash,
+  FileSystem,
+  Layer,
+  Option,
+  Predicate,
+  RcMap,
+  type Scope,
+} from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import type { ListedModel, ModelRef } from "../ai/Catalog.ts";
 import type { CredentialStoreError } from "../ai/Credential.ts";
@@ -27,6 +39,8 @@ import { FileTags } from "./FileTags.ts";
 import { Stashes } from "./Stashes.ts";
 import { type SidebarChoice, TuiMemory, type TuiMemoryError } from "./TuiMemory.ts";
 
+import type { SessionState } from "./SessionState.ts";
+
 export type { OpenSession } from "./internal/runner/runner.ts";
 
 export class Agent extends Context.Service<
@@ -37,7 +51,7 @@ export class Agent extends Context.Service<
      * the caller's scope closes.
      */
     readonly open: (
-      session: Option.Option<SessionId>,
+      session: Option.Option<SessionId | Extract<SessionState, { kind: "draft" }>>,
       directory: string,
     ) => Effect.Effect<OpenSession, SessionNotFound | SessionStoreError, Scope.Scope>;
     /** The sessions of `directory`, the latest first. */
@@ -87,17 +101,22 @@ export class Agent extends Context.Service<
       const tuiMemory = yield* TuiMemory;
       const files = yield* FileTags;
       const stashes = yield* Stashes;
-      const runners = yield* RcMap.make({ lookup: (id: SessionId) => makeRunner(services, id) });
+
+      const runners = yield* RcMap.make({ lookup: (key: RunnerKey) => openRunner(services, key) });
 
       const open = Effect.fn("Agent.open")(function* (
-        session: Option.Option<SessionId>,
+        session: Option.Option<SessionId | Extract<SessionState, { kind: "draft" }>>,
         directory: string,
       ) {
-        const id = Option.isSome(session)
+        const target = Option.isSome(session)
           ? session.value
-          : (yield* services.sessions.create(directory)).id;
+          : {
+              kind: "draft" as const,
+              session: yield* services.sessions.allocate(directory),
+              references: [],
+            };
 
-        return yield* RcMap.get(runners, id);
+        return yield* RcMap.get(runners, new RunnerKey(target));
       });
 
       return Agent.of({
@@ -115,3 +134,37 @@ export class Agent extends Context.Service<
     }),
   );
 }
+
+// Runner identity stays the same when a draft becomes a saved session.
+class RunnerKey implements Equal.Equal {
+  readonly id: SessionId;
+
+  constructor(readonly target: SessionId | Extract<SessionState, { kind: "draft" }>) {
+    this.id = Predicate.isString(target) ? target : target.session.id;
+  }
+
+  [Equal.symbol](other: Equal.Equal): boolean {
+    return other instanceof RunnerKey && other.id === this.id;
+  }
+
+  [Hash.symbol](): number {
+    return Hash.string(this.id);
+  }
+}
+
+const openRunner = Effect.fn("openRunner")(function* (services: RunServices, key: RunnerKey) {
+  if (!Predicate.isString(key.target)) {
+    const draft = key.target;
+
+    // A crash can follow commit before the supervisor learns that the draft was saved.
+    const restored = yield* services.sessions.get(key.id).pipe(
+      Effect.map((session): SessionState => ({ kind: "saved", session })),
+      Effect.catchTag("SessionNotFound", () => Effect.succeed(draft)),
+    );
+
+    return yield* makeRunner(services, restored);
+  }
+
+  const session = yield* services.sessions.get(key.target);
+  return yield* makeRunner(services, { kind: "saved", session });
+});

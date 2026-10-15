@@ -1,8 +1,9 @@
 /** Builds the agent with the services it needs, and opens a session on it for print mode or the TUI. */
 
-import { Effect, Layer, Option, Stdio, Stream } from "effect";
+import { Effect, Predicate, Layer, Option, Stdio, Stream } from "effect";
 import { Catalog } from "../../ai/Catalog.ts";
 import { Models } from "../../ai/Models.ts";
+import type { SessionState } from "../../core/SessionState.ts";
 import { Agent } from "../../core/Agent.ts";
 import { ContextMethod } from "../../core/ContextMethod.ts";
 import { FileTags } from "../../core/FileTags.ts";
@@ -36,9 +37,11 @@ export const printSessionId = (id: SessionId) =>
  * Opens the session with the ID of `--session`, or a new one in the current folder. Also refreshes
  * a stale model catalog in the background while the session stays open.
  */
-export const openSession = Effect.fn("openSession")(function* (flag: Option.Option<string>) {
+export const openSession = Effect.fn("openSession")(function* (
+  flag: Option.Option<string | Extract<SessionState, { kind: "draft" }>>,
+) {
   yield* Effect.forkScoped((yield* Catalog).refreshIfStale);
-  const id = Option.map(flag, (text) => SessionId.make(text));
+  const id = Option.map(flag, (text) => (Predicate.isString(text) ? SessionId.make(text) : text));
 
   return yield* (yield* Agent)
     .open(id, process.cwd())

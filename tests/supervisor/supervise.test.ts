@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { type Cause, Deferred, Effect, Fiber, type FileSystem, Layer, Queue, Stream } from "effect";
 import { type Build, Builds } from "../../src/supervisor/Builds.ts";
 import { Children } from "../../src/supervisor/Children.ts";
-import type { ToChild, ToSupervisor } from "../../src/supervisor/Messages.ts";
+import type { ResumeTarget, ToChild, ToSupervisor } from "../../src/supervisor/Messages.ts";
 import { superviseChat } from "../../src/supervisor/Supervisor.ts";
 
 const FIRST: Build = { id: 1, command: ["tau-1"] };
@@ -34,12 +34,12 @@ const fakeServices = Effect.fn("fakeServices")(function* (build: Builds["Service
   });
 
   const children = Layer.succeed(Children, {
-    startChat: (build, args, draft) =>
+    startChat: (build, args, start) =>
       Effect.gen(function* () {
         const chat: FakeChat = {
           build,
           args,
-          draft,
+          draft: start.draft,
           says: yield* Queue.unbounded<ToSupervisor, Cause.Done>(),
           got: yield* Queue.unbounded<ToChild>(),
           exit: yield* Deferred.make<number>(),
@@ -60,8 +60,12 @@ const fakeServices = Effect.fn("fakeServices")(function* (build: Builds["Service
 });
 
 /** The first chat continues no session; later ones continue the one it opened. */
-const argsFor = (session: string | undefined) =>
-  session === undefined ? ["first prompt"] : ["--session", session];
+const argsFor = (session: ResumeTarget | undefined) =>
+  session === undefined
+    ? ["first prompt"]
+    : typeof session === "string"
+      ? ["--session", session]
+      : [];
 
 const exitChat = (chat: FakeChat, code: number) =>
   Queue.end(chat.says).pipe(Effect.andThen(Deferred.succeed(chat.exit, code)));

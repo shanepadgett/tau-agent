@@ -31,6 +31,7 @@ import { FetchHttpClient } from "effect/http";
 import { referencesLayer } from "../../src/host/References.ts";
 import { tuiMemoryLayer } from "../../src/host/TuiMemory.ts";
 import { Settings } from "../../src/host/Settings.ts";
+import { ProjectDirectory } from "../../src/host/ProjectDirectory.ts";
 import { userInstructionsLayer } from "../../src/host/UserInstructions.ts";
 import { Sessions } from "../../src/session/Sessions.ts";
 import { Memories } from "../../src/session/Memories.ts";
@@ -199,7 +200,11 @@ export const withPreparedHarness = <A, E, P>(
 
       // Settings are read when an agent starts, so a test can write settings.json first.
       const user = userInstructionsLayer.pipe(
-        Layer.provide(Settings.layer),
+        Layer.provide(
+          Settings.layer.pipe(
+            Layer.provide(Layer.succeed(ProjectDirectory, { directory: directory })),
+          ),
+        ),
         Layer.provide(tauHome),
         Layer.provide(BunServices.layer),
       );

@@ -74,6 +74,7 @@ const EntryRow = Schema.Struct({
 });
 
 const LastNumber = Schema.Struct({ last: Schema.Int });
+const FirstPromptNumber = Schema.Struct({ first_prompt: Schema.Int });
 
 const SESSION_COLUMNS = "id, directory, origin, created_at, updated_at";
 
@@ -89,7 +90,14 @@ class EntryNotFound extends Schema.TaggedError<EntryNotFound>()("EntryNotFound",
 export class Sessions extends Context.Service<
   Sessions,
   {
-    readonly create: (directory: string) => Effect.Effect<Session, SessionStoreError>;
+    /** Allocates metadata without writing a database row. */
+    readonly allocate: (directory: string) => Effect.Effect<Session>;
+
+    /** Saves metadata and entries atomically; bodies must contain a user prompt. */
+    readonly start: (
+      session: Session,
+      bodies: readonly EntryBody[],
+    ) => Effect.Effect<readonly Entry[], SessionStoreError>;
 
     readonly get: (id: SessionId) => Effect.Effect<Session, SessionNotFound | SessionStoreError>;
 
@@ -166,13 +174,24 @@ const makeSessions = (path: string, database: Database, crypto: Crypto.Crypto) =
       })),
     );
 
-  const create = (directory: string) =>
-    newSession(directory, { kind: "new" }).pipe(
-      Effect.tap((session) =>
-        database.writeTransaction((transaction) => insertSession(transaction, session)),
-      ),
-      Effect.mapError(fail),
-    );
+  const allocate = (directory: string) => newSession(directory, { kind: "new" });
+
+  const start = (session: Session, bodies: readonly EntryBody[]) =>
+    database
+      .writeTransaction(
+        Effect.fn("Sessions.start")(function* (transaction: Transaction) {
+          if (!bodies.some((body) => body.type === "user")) {
+            return yield* Effect.fail(fail(new Error("A session needs a user prompt.")));
+          }
+
+          yield* insertSession(transaction, session);
+          return yield* appendWithin(database, session.id, bodies)(transaction);
+        }),
+      )
+      .pipe(
+        Effect.catchTag("DatabaseError", (error) => Effect.fail(fail(error))),
+        Effect.catchTag("SessionNotFound", (error) => Effect.die(error)),
+      );
 
   const fork = (from: SessionId, through: number) =>
     database
@@ -208,7 +227,7 @@ const makeSessions = (path: string, database: Database, crypto: Crypto.Crypto) =
       Effect.catchTag("DatabaseError", (error) => Effect.fail(fail(error))),
     );
 
-  return Sessions.of({ create, get, fork, list, append, entries });
+  return Sessions.of({ allocate, start, get, fork, list, append, entries });
 };
 
 const forkWithin = (database: Database, newSession: NewSession, from: SessionId, through: number) =>
@@ -216,6 +235,16 @@ const forkWithin = (database: Database, newSession: NewSession, from: SessionId,
     const parent = yield* readSession(database, from);
     const isEntry = through >= 1 && through <= (yield* lastNumber(database, from));
     if (!isEntry) return yield* new EntryNotFound({ session: from, number: through });
+
+    const [prompt] = yield* database.query(
+      "SELECT COALESCE(MIN(number), 0) AS first_prompt FROM entry WHERE session_id = ? AND body ->> '$.type' = 'user'",
+      [from],
+      FirstPromptNumber,
+    );
+
+    if (prompt === undefined || prompt.first_prompt === 0 || prompt.first_prompt > through) {
+      return yield* new EntryNotFound({ session: from, number: through });
+    }
 
     const branch = yield* newSession(parent.directory, { kind: "fork", from, through });
     yield* insertSession(transaction, branch);

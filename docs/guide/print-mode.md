@@ -25,6 +25,7 @@ Print mode runs one prompt, prints the answer and exits, so you can use Tau in s
 
 - The answer goes to stdout. A line for each script Tau runs, and `Session: <id>` at the end, go to stderr. So `tau -p "..." > answer.md` keeps only the answer.
 - Tau runs commands and changes files with your permissions. It does not ask first.
+- The session is saved together with the first user prompt, before the model runs. A cancelled or failed model call leaves that session resumable. If the first save fails, no partial session remains and Tau prints no session ID.
 - Ctrl+C stops the run. The session keeps everything up to that point.
 - When the model call fails with a rate limit or a server error, stderr shows a line before each retry (see [rate-limits.md](rate-limits.md)).
 - Instructions from `AGENTS.md` files apply (see [write-agents-md.md](write-agents-md.md)).

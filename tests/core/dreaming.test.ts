@@ -37,10 +37,10 @@ const quietNotes = contextLayer({ notesStartTokens: 1_000_000 });
 
 /** Sixteen notes of about 2000 tokens each, over entries 1–32: past the 30k trigger. */
 const seedLongSession = Effect.fn("seedLongSession")(function* (stores: Stores) {
-  const session = yield* stores.sessions.create(stores.directory);
+  const session = yield* stores.sessions.allocate(stores.directory);
 
-  yield* stores.sessions.append(
-    session.id,
+  yield* stores.sessions.start(
+    session,
     Array.from({ length: 16 }, (_, index) => [
       { type: "user" as const, text: `Request ${index + 1}` },
       assistant(`Answer ${index + 1}`),
@@ -253,7 +253,8 @@ describe("dreaming", () => {
   test("appendLongTerm refuses a stale parent, a missing note and a memory with no new notes", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
-        const session = yield* harness.sessions.create(harness.directory);
+        const session = yield* harness.sessions.allocate(harness.directory);
+        yield* harness.sessions.start(session, [{ type: "user", text: "Seed prompt." }]);
 
         for (const number of [1, 2, 3]) {
           yield* harness.notes.appendShortTerm(session.id, {
@@ -298,9 +299,9 @@ describe("dreaming", () => {
   test("a fork keeps only the memories within its range and memories survive reopening the database", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
-        const session = yield* harness.sessions.create(harness.directory);
+        const session = yield* harness.sessions.allocate(harness.directory);
 
-        yield* harness.sessions.append(session.id, [
+        yield* harness.sessions.start(session, [
           { type: "user", text: "One." },
           assistant("Two."),
           { type: "user", text: "Three." },
@@ -355,9 +356,9 @@ describe("dreaming", () => {
   test("a checkpoint whose memory covers every note starts the raw tail after the memory's last entry", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
-        const session = yield* harness.sessions.create(harness.directory);
+        const session = yield* harness.sessions.allocate(harness.directory);
 
-        yield* harness.sessions.append(session.id, [
+        yield* harness.sessions.start(session, [
           { type: "user", text: "Request 1" },
           assistant("Answer 1"),
           { type: "user", text: "Request 2" },

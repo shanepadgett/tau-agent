@@ -35,7 +35,7 @@ const printRun = Effect.fn("printRun")(function* (
     Effect.onInterrupt(() => opened.send({ type: "cancel" })),
   );
 
-  yield* printSessionId(opened.session.id);
+  if ((yield* opened.snapshot).kind === "saved") yield* printSessionId(opened.session.id);
   const message = runEndMessage(end);
   if (message !== undefined) return yield* showFailure({ message });
 }, Effect.scoped);

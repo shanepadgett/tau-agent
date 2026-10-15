@@ -471,7 +471,11 @@ describe("the chat in the terminal", () => {
 
         expect(frame).toMatch(/one\s*│?\s*\n.*two/);
         terminal.mockInput.pressKey("d", { ctrl: true });
-        expect(yield* Fiber.join(chat)).toEqual({ reason: "quit", session: opened.session.id });
+
+        expect(yield* Fiber.join(chat)).toEqual({
+          reason: "quit",
+          session: yield* opened.snapshot,
+        });
       }).pipe(Effect.scoped),
     ));
 
@@ -528,7 +532,7 @@ describe("the chat in the terminal", () => {
         expect(yield* Fiber.join(chat)).toEqual({
           reason: "restart",
           draft: "carried over and more",
-          session: opened.session.id,
+          session: yield* opened.snapshot,
         });
       }).pipe(Effect.scoped),
     ));
@@ -661,18 +665,15 @@ describe("the chat in the terminal", () => {
         yield* frameWith(terminal, "2 attached");
         terminal.mockInput.pressEnter();
 
-        const savedNames = Effect.gen(function* () {
-          const entries = yield* harness.sessions.entries(opened.session.id, 0);
-          return entries.flatMap(({ body }) => (body.type === "references" ? [body.names] : []));
-        });
-
-        const saved = yield* savedNames.pipe(
+        const selected = yield* opened.snapshot.pipe(
           Effect.tap(() => Effect.yieldNow),
-          Effect.repeat({ until: (found) => found.length > 0 }),
+          Effect.repeat({
+            until: (state) => state.kind === "draft" && state.references.length === 2,
+          }),
         );
 
-        const attached = saved.at(-1);
-        expect(attached).toEqual(["opencode", "pi"]);
+        expect(selected.kind === "draft" && selected.references).toEqual(["opencode", "pi"]);
+        expect(yield* harness.sessions.list(harness.directory)).toEqual([]);
       }).pipe(Effect.scoped),
     ));
 
@@ -762,7 +763,11 @@ describe("the chat in the terminal", () => {
         yield* frameWith(terminal, "enter send · shift+enter new line · ctrl+d quit");
 
         pressCtrlC();
-        expect(yield* Fiber.join(chat)).toEqual({ reason: "quit", session: opened.session.id });
+
+        expect(yield* Fiber.join(chat)).toEqual({
+          reason: "quit",
+          session: yield* opened.snapshot,
+        });
       }).pipe(Effect.scoped),
     ));
 

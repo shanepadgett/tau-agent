@@ -20,7 +20,7 @@ The sidebar has a References section that lists the attached names, or "None att
 
 The agent learns the references folder and the attached names from an instruction. If you attach before the first message, it is in the system prompt. If you attach later, the agent gets one labeled reminder that repeats the folder and the read-only rule, and a compaction keeps it. A clone you delete outside Tau drops out of the list.
 
-The attached list belongs to the session. A fork keeps it.
+The attached list belongs to the session. Before the first prompt, choices stay in memory and create no saved session. The first prompt saves them with the session. A restart preserves draft choices; closing an unused chat discards them. A fork keeps saved choices.
 
 ## Limits
 
