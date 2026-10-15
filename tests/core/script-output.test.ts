@@ -202,5 +202,6 @@ describe("script console capture", () => {
     expect(result.logs).toHaveLength(65537);
     expect(result.logs?.[65535]).toBe("");
     expect(result.logs?.[65536]).toBe("[logs truncated: showing 65536 of 65540 lines]");
-  });
+    // 65,540 calls take about 150 ms alone; the limit leaves room for a loaded machine.
+  }, 15_000);
 });

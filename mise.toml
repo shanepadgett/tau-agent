@@ -72,8 +72,12 @@ description = "Duplicated code"
 run = "bun tools/report-failures.ts fallow -- bunx --bun --no-install fallow dupes --fail-on-issues"
 
 [tasks.test]
-description = "Application tests, run after agent runs"
-# A test slower than one second fails here and belongs in a before-commit task.
+description = "Application tests of the files changed since the last commit, run after agent runs"
+# Only test files that import a changed file run. A test slower than one second sets its own timeout.
+run = "bun tools/report-failures.ts bun-test -- bun test ./src ./tests --path-ignore-patterns 'tests/binary/**' --only-failures --parallel --timeout 1000 --changed"
+
+[tasks."test:all"]
+description = "Every application test, run before commit"
 run = "bun tools/report-failures.ts bun-test -- bun test ./src ./tests --path-ignore-patterns 'tests/binary/**' --only-failures --parallel --timeout 1000"
 
 [tasks."test:binary"]

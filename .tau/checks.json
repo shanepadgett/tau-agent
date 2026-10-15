@@ -161,6 +161,11 @@
   ],
   "commit": [
     {
+      "name": "All application tests",
+      "command": "mise run test:all",
+      "details": "Run every application test, not only those affected by changed files."
+    },
+    {
       "name": "Compiled binary tests",
       "command": "mise run test:binary",
       "details": "Build the tau binary and drive its commands as a user would."
