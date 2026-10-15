@@ -117,5 +117,10 @@
     "version": "1.9.12",
     "fingerprint": "e2287ac004a69d86",
     "commits": []
+  },
+  "@ff-labs/fff-bun": {
+    "version": "0.11.0",
+    "fingerprint": "82a61f86551e18a8",
+    "commits": []
   }
 }

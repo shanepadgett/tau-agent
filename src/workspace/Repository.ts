@@ -14,3 +14,26 @@ export const repositoryRoot = (directory: string) =>
     ),
     Effect.orElseSucceed(() => Option.none<string>()),
   );
+
+/**
+ * The names directly in `folder` that git ignores. Outside a repository, or without git, there are
+ * none.
+ */
+export const ignoredNames = (folder: string) =>
+  runProgram(
+    "git",
+    ["ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"],
+    folder,
+    GIT_TIMEOUT,
+  ).pipe(
+    Effect.map(({ exitCode, output }): ReadonlySet<string> =>
+      exitCode === 0 ? new Set(output.split("\0").flatMap(directName)) : new Set(),
+    ),
+    Effect.orElseSucceed((): ReadonlySet<string> => new Set()),
+  );
+
+/** git names an ignored folder with a trailing `/`; deeper paths are not in the folder itself. */
+const directName = (path: string) => {
+  const name = path.replace(/\/$/, "");
+  return name === "" || name.includes("/") ? [] : [name];
+};

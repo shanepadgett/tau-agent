@@ -440,6 +440,13 @@
           "path": "solid-js/store/types"
         }
       ]
+    },
+    {
+      "package": "@ff-labs/fff-bun",
+      "versionSource": "lock",
+      "summary": "FFF fuzzy file finder for Bun through `bun:ffi`: `FileFinder.create` with a base path, `fileSearch`, `directorySearch`, `mixedSearch`, `getScanProgress`, `trackQuery`, frecency and query-history databases, a file watcher, and `destroy`. Linux builds need `--define FFF_LIBC`.",
+      "docs": [{ "origin": { "kind": "installed" }, "files": ["README.md"] }],
+      "api": [{ "kind": "types", "path": "@ff-labs/fff-bun" }]
     }
   ]
 }

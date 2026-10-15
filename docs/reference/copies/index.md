@@ -156,3 +156,10 @@ Fine-grained reactivity used by Tau's TUI: signals, memos, effects, control flow
 - Docs: `docs/reference/copies/solid-js/1.9.12/` (1 file: README.md)
 - API (types): `node_modules/solid-js/types/`, modules: `docs/reference/copies/solid-js/1.9.12/api-index/solid-js-types.md`
 - API (types): `node_modules/solid-js/store/types/`, modules: `docs/reference/copies/solid-js/1.9.12/api-index/solid-js-store-types.md`
+
+## @ff-labs/fff-bun 0.11.0
+
+FFF fuzzy file finder for Bun through `bun:ffi`: `FileFinder.create` with a base path, `fileSearch`, `directorySearch`, `mixedSearch`, `getScanProgress`, `trackQuery`, frecency and query-history databases, a file watcher, and `destroy`. Linux builds need `--define FFF_LIBC`.
+
+- Docs: `docs/reference/copies/@ff-labs/fff-bun/0.11.0/` (1 file: README.md)
+- API (types): `node_modules/@ff-labs/fff-bun/`, modules: `docs/reference/copies/@ff-labs/fff-bun/0.11.0/api-index/@ff-labs-fff-bun.md`

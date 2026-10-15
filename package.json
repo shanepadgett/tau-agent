@@ -15,6 +15,7 @@
     "@effect/ai-openai-compat": "4.0.3",
     "@effect/ai-openrouter": "4.0.3",
     "@effect/platform-bun": "4.0.3",
+    "@ff-labs/fff-bun": "0.11.0",
     "@opencode/codemode": "2.0.27",
     "@opentui/core": "0.6.1",
     "@opentui/keymap": "0.6.1",
