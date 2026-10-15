@@ -7,7 +7,7 @@ import { TauHome } from "../../src/database/TauHome.ts";
 import { Settings } from "../../src/host/Settings.ts";
 import { Notes } from "../../src/session/Notes.ts";
 import { Sessions } from "../../src/session/Sessions.ts";
-import { transcript } from "../../src/session/transcript.ts";
+import { transcript } from "../../src/session/Transcript.ts";
 import {
   options,
   profile,

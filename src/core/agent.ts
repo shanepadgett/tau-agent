@@ -21,6 +21,7 @@ import { OutputFolder } from "./OutputFolder.ts";
 import { ContextMethod } from "./ContextMethod.ts";
 import { FavoriteModels, type FavoriteModelsError } from "./FavoriteModels.ts";
 import { CommitSettings } from "./Commits.ts";
+import { Web } from "./Web.ts";
 import { type SidebarChoice, TuiMemory, type TuiMemoryError } from "./TuiMemory.ts";
 
 export type { OpenSession } from "./internal/runner/runner.ts";
@@ -69,6 +70,7 @@ export class Agent extends Context.Service<
         writeQueue: yield* makeWriteQueue,
         fileProblems: yield* makeFileProblems(yield* Status),
         commitSettings: yield* CommitSettings,
+        web: yield* Web,
       };
 
       const favorites = yield* FavoriteModels;

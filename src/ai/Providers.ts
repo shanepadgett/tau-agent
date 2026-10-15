@@ -103,6 +103,8 @@ export type Provider = {
    * prompt cache of a conversation only when its requests carry a `session-id` header.
    */
   readonly conversationHeaders: "opencode" | "openai" | undefined;
+  /** The web search tool that runs on the provider's side, for a provider that has one. */
+  readonly hostedSearch: "anthropic" | "openai" | undefined;
 };
 
 // Both clients are the providers' own CLI clients, which these subscription logins require.
@@ -186,6 +188,7 @@ export const builtInProviders: ReadonlyArray<Provider> = [
     liveList: undefined,
     decisions: undefined,
     conversationHeaders: undefined,
+    hostedSearch: "anthropic",
   },
   {
     id: ProviderId.make("openai"),
@@ -200,6 +203,7 @@ export const builtInProviders: ReadonlyArray<Provider> = [
       models: [{ id: "gpt-6-luna", name: "Luna", contextTokens: LUNA_INPUT_TOKENS }],
     },
     conversationHeaders: "openai",
+    hostedSearch: "openai",
   },
   {
     id: ProviderId.make("chatgpt"),
@@ -211,6 +215,7 @@ export const builtInProviders: ReadonlyArray<Provider> = [
     smallModel: "gpt-6-luna",
     decisions: undefined,
     conversationHeaders: "openai",
+    hostedSearch: "openai",
   },
   {
     id: ProviderId.make("codex"),
@@ -222,6 +227,7 @@ export const builtInProviders: ReadonlyArray<Provider> = [
     smallModel: "gpt-6-luna",
     decisions: undefined,
     conversationHeaders: "openai",
+    hostedSearch: "openai",
   },
   {
     id: ProviderId.make("openrouter"),
@@ -239,6 +245,7 @@ export const builtInProviders: ReadonlyArray<Provider> = [
       ],
     },
     conversationHeaders: undefined,
+    hostedSearch: undefined,
   },
   {
     // One subscription. Its models use three protocols at the same address.
@@ -251,5 +258,6 @@ export const builtInProviders: ReadonlyArray<Provider> = [
     liveList: undefined,
     decisions: undefined,
     conversationHeaders: "opencode",
+    hostedSearch: undefined,
   },
 ];

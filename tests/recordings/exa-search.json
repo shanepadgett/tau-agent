@@ -1,0 +1,5 @@
+{
+  "status": 200,
+  "contentType": "text/event-stream",
+  "body": "event: message\ndata: {\"result\": {\"content\": [{\"type\": \"text\", \"text\": \"Title: Bun v1.4.3\\nURL: https://bun.com/blog/bun-v1.4.3\\nPublished: 2026-10-10\\nText: Bun v1.4.3 is out.\\n\\nTitle: Bun releases\\nURL: https://github.com/oven-sh/bun/releases\\nText: Release list.\"}]}, \"jsonrpc\": \"2.0\", \"id\": 1}\n\n"
+}

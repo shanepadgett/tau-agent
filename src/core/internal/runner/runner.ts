@@ -26,6 +26,7 @@ import {
   type ProcessSessions,
   type ProcessSummary,
 } from "../../../proc/ProcessSessions.ts";
+import type { ModelRef } from "../../../ai/Catalog.ts";
 import { ConversationId } from "../../../ai/ConversationId.ts";
 import type { Models } from "../../../ai/Models.ts";
 import type { WriteQueue } from "../../../sandbox/WriteQueue.ts";
@@ -38,6 +39,8 @@ import type { ContextMethod } from "../../ContextMethod.ts";
 import { historyFunction } from "../context/history.ts";
 import { historyEvents, replyProfiles } from "./history-events.ts";
 import { PROCESS_GROUP, processFunctions } from "../process/process-functions.ts";
+import { WEB_GROUP, webFunctions } from "../web/web-functions.ts";
+import type { Web } from "../../Web.ts";
 import { processNotices } from "../process/process-notices.ts";
 import type { UserInstructions } from "../../UserInstructions.ts";
 import type { OutputFolder } from "../../OutputFolder.ts";
@@ -72,6 +75,7 @@ export type RunServices = {
   /** Starts the record of the skill and instruction files a run could not use. */
   readonly fileProblems: Effect.Effect<RunFileProblems>;
   readonly commitSettings: CommitSettings;
+  readonly web: Web["Service"];
 };
 
 /** A session opened for runs. */
@@ -215,7 +219,12 @@ const runPrompt = (
       processes.list.pipe(Effect.map(runningProcesses)),
     );
 
-    const run = runToolOf({ services, session, processes }, skills.skills, timeouts, checks);
+    const run = runToolOf(
+      { services, session, processes, model: prompt.options.model },
+      skills.skills,
+      timeouts,
+      checks,
+    );
 
     const context: RunContext<Platform> = {
       session: session.id,
@@ -248,7 +257,12 @@ const runPrompt = (
 
 /** The `run` tool of one run, with the functions its scripts can call. */
 const runToolOf = (
-  { services, session, processes }: Pick<SessionRuns, "services" | "session" | "processes">,
+  {
+    services,
+    session,
+    processes,
+    model,
+  }: Pick<SessionRuns, "services" | "session" | "processes"> & { readonly model: ModelRef },
   skills: readonly Skill[],
   timeouts: Timeouts,
   checks: Option.Option<ProjectChecks>,
@@ -260,6 +274,7 @@ const runToolOf = (
       ...scriptFunctions(session.directory, timeouts, touched, services.writeQueue),
       history: historyFunction(session.id, services.sessions),
       [PROCESS_GROUP]: processFunctions(processes, session.directory),
+      [WEB_GROUP]: webFunctions(services.web, model, ConversationId.make(`${session.id}:web`)),
       [SKILLS_GROUP]: skillFunctions(skills, touched, used),
     }),
     timeouts,
