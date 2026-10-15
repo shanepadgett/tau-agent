@@ -29,7 +29,7 @@ Decisions to make later. Each line is the question and what brings it up. When t
 - The finish reason on assistant entries (usage is already saved). Comes up at build step 5, when compaction needs the context size.
 - Reading only new entries each step instead of rereading the whole session, so a long session does not slow every step. Comes up at build step 5.
 - A `child` session origin for subagents. Comes up at build step 7; the origin is JSON, so it needs no migration.
-- Images and files in user entries, session titles, and deleting or exporting sessions. Comes up with the TUI (step 6), the auto-name extension and manage-sessions.
+- Files in user entries, session titles, and deleting or exporting sessions. Comes up with the TUI (step 6), the auto-name extension and manage-sessions.
 - The HTTP fake provider that speaks all three protocols ([architecture.md](architecture.md#testing)). Comes up with the first flow that depends on protocol behavior, such as prompt caching or tool-history repair. When it is built, move the agent-loop tests from the scripted in-process model to it and delete the scripted model. Also move the login tests' signed-header checks to it and remove the `tests` → `ai-internal` allowance in `.fallowrc.jsonc`.
 - Multi-repository sessions and projects ([features.md](features.md#context)). Comes up before build step 6, because the session list depends on it.
 - Cache warnings, the long-lived cache setting, `/settings`, and asking to compact when the cache is cold and the context is large ([features.md](features.md#interface)). The TUI parts come up at build step 6; asking to compact comes up at build step 5.

@@ -43,6 +43,7 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 | [work/keys.md](work/keys.md) | Key handling in one place: `@opentui/keymap`, layers, leader keys later (built). |
 | [work/checks-stop.md](work/checks-stop.md) | Let the model stop after it has seen failing checks (built). |
 | [work/web-and-references.md](work/web-and-references.md) | Web search and fetch as `run` functions, and `/references` (web built, live check pending; references built, live check pending). |
+| [work/images.md](work/images.md) | Images: the model sees them through `run`; the user pastes or attaches them (proposed). |
 | [work/simulation.md](work/simulation.md) | Simulation mode: the real chat on scripted model replies (paused; round 1 proposed). |
 | [compaction-research.md](compaction-research.md) | How Tau main, Pi durable and Mastra compact, what compaction costs, and how that led to step 5's design. |
 | `archive/` | Finished plans, kept as a record of how decisions were reached. Not kept up to date. |
