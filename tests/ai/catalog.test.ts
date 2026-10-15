@@ -211,6 +211,39 @@ describe("catalog", () => {
       }),
     ));
 
+  test("a fresh catalog still gets a plan list it lacks, and nothing else", () =>
+    run(
+      Effect.gen(function* () {
+        const server = yield* fakeServer({
+          "/api.json": failing,
+          "/claude-code": failing,
+          "/backend-api/codex/models": json({
+            models: [{ slug: "gpt-6-luna", context_window: 1000, visibility: "list" }],
+          }),
+        });
+
+        // The test clock starts two days ahead, so this date is today's.
+        const cache = {
+          ...snapshot,
+          liveModels: undefined,
+          fetchedAt: DateTime.makeUnsafe(Date.now() + Duration.toMillis(Duration.days(2))),
+        };
+
+        const setup = {
+          serverUrl: server.url,
+          cache,
+          credentials: [["codex", codexLogin] as const],
+        };
+
+        const luna = yield* withCatalog(setup, (catalog) =>
+          catalog.refreshIfStale.pipe(Effect.andThen(catalog.model(codexRef("gpt-6-luna")))),
+        );
+
+        expect(luna.profile.contextTokens).toBe(1000);
+        expect(server.received).not.toContain("/api.json");
+      }),
+    ));
+
   test.each([
     {
       npm: "answers below the floor",

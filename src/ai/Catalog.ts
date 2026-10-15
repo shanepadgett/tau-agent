@@ -145,7 +145,8 @@ export class Catalog extends Context.Service<
     readonly claudeCodeVersion: Effect.Effect<string>;
     /**
      * Gets new catalog data if the data is more than one day old. If one part fails, that part
-     * keeps its last value.
+     * keeps its last value. Whatever the age, it also gets the model list of each signed-in plan
+     * provider that has none yet.
      */
     readonly refreshIfStale: Effect.Effect<void>;
   }
@@ -238,7 +239,10 @@ const makeCatalog = Effect.fn("makeCatalog")(function* (options: CatalogOptions)
   return Catalog.of({ model, decisionModel, providerModels, claudeCodeVersion, refreshIfStale });
 });
 
-/** Gets new catalog data if `current` is more than one day old, and caches it. */
+/**
+ * Gets new catalog data if `current` is more than one day old, and caches it. A fresh catalog still
+ * gets the plan lists that it lacks, so a new login or a failed fetch does not wait a day.
+ */
 const refreshCatalog = Effect.fn("refreshCatalog")(function* (
   current: Ref.Ref<CatalogData>,
   options: CatalogOptions,
@@ -248,7 +252,7 @@ const refreshCatalog = Effect.fn("refreshCatalog")(function* (
   const last = yield* Ref.get(current);
   const now = yield* DateTime.now;
   const isFresh = Duration.isLessThan(DateTime.distance(last.fetchedAt, now), REFRESH_INTERVAL);
-  if (isFresh) return;
+  if (isFresh) return yield* refreshMissingLists(current, options);
 
   const [modelsDev, latestClaudeCode, liveModels] = yield* Effect.all(
     [
@@ -270,6 +274,29 @@ const refreshCatalog = Effect.fn("refreshCatalog")(function* (
     liveModels: { ...last.liveModels, ...liveModels },
   };
 
+  yield* Ref.set(current, next);
+
+  yield* cache
+    .write(next)
+    .pipe(Effect.catch((error) => Effect.logWarning("Could not cache the model catalog", error)));
+});
+
+/** Gets the plan lists that a fresh catalog lacks. A provider with no login has none and is skipped. */
+const refreshMissingLists = Effect.fn("refreshMissingLists")(function* (
+  current: Ref.Ref<CatalogData>,
+  options: CatalogOptions,
+) {
+  const cache = yield* CatalogCache;
+  const last = yield* Ref.get(current);
+
+  const missing = options.providers.filter(
+    (provider) => last.liveModels?.[provider.id] === undefined,
+  );
+
+  const liveModels = yield* fetchPlanLists(missing, last.claudeCodeVersion);
+  if (Object.keys(liveModels).length === 0) return;
+
+  const next: CatalogData = { ...last, liveModels: { ...last.liveModels, ...liveModels } };
   yield* Ref.set(current, next);
 
   yield* cache

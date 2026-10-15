@@ -18,7 +18,7 @@ export type LiveModel = typeof LiveModel.Type;
 // All recent Codex versions see all models.
 const CODEX_CLIENT_VERSION = "0.200.0";
 
-const CodexModels = Schema.Struct({
+const PlanModels = Schema.Struct({
   models: Schema.Array(
     Schema.Struct({
       slug: Schema.String,
@@ -29,8 +29,6 @@ const CodexModels = Schema.Struct({
   ),
 });
 
-const OpenAiModels = Schema.Struct({ data: Schema.Array(Schema.Struct({ id: Schema.String })) });
-
 /**
  * Reads the list at `apiUrl` through `client`. The client must already sign requests for the provider.
  */
@@ -39,34 +37,21 @@ export const fetchLiveModels = Effect.fn("fetchLiveModels")(function* (
   list: LiveList,
   client: HttpClient.HttpClient,
 ) {
-  switch (list) {
-    case "codexModels": {
-      const { models } = yield* client
-        .get(`${apiUrl}/models`, { urlParams: { client_version: CODEX_CLIENT_VERSION } })
-        .pipe(
-          Effect.flatMap(HttpClientResponse.filterStatusOk),
-          Effect.flatMap(HttpClientResponse.schemaBodyJson(CodexModels)),
-        );
+  // Both lists have the same shape: the public API answers a ChatGPT plan token as the Codex backend does.
+  // Only the Codex backend asks for the client version.
+  const urlParams = list === "codexModels" ? { client_version: CODEX_CLIENT_VERSION } : {};
 
-      return models.flatMap((model): ReadonlyArray<LiveModel> => {
-        if (model.visibility !== "list") return [];
-        const contextTokens = model.context_window;
+  const { models } = yield* client
+    .get(`${apiUrl}/models`, { urlParams })
+    .pipe(
+      Effect.flatMap(HttpClientResponse.filterStatusOk),
+      Effect.flatMap(HttpClientResponse.schemaBodyJson(PlanModels)),
+    );
 
-        return [
-          contextTokens === undefined ? { id: model.slug } : { id: model.slug, contextTokens },
-        ];
-      });
-    }
+  return models.flatMap((model): ReadonlyArray<LiveModel> => {
+    if (model.visibility !== "list") return [];
+    const contextTokens = model.context_window;
 
-    case "openaiModels": {
-      const { data } = yield* client
-        .get(`${apiUrl}/models`)
-        .pipe(
-          Effect.flatMap(HttpClientResponse.filterStatusOk),
-          Effect.flatMap(HttpClientResponse.schemaBodyJson(OpenAiModels)),
-        );
-
-      return data.map((model): LiveModel => ({ id: model.id }));
-    }
-  }
+    return [contextTokens === undefined ? { id: model.slug } : { id: model.slug, contextTokens }];
+  });
 });
