@@ -19,12 +19,16 @@ import { Settings } from "../host/Settings.ts";
 import { tuiMemoryLayer } from "../host/TuiMemory.ts";
 import { outputFolderLayer } from "../host/OutputFolder.ts";
 import { ReloadLink } from "../supervisor/ReloadLink.ts";
+import { FileIndex } from "../workspace/FileIndex.ts";
 import { showFailure } from "./internal/failure.ts";
 import { loginCommand, logoutCommand, terminalLoginPrompt } from "./internal/login.ts";
 import { rootCommand } from "./internal/root-command.ts";
 
+const TAU_DIRECTORY = join(homedir(), ".tau");
+
 const appLayer = Layer.mergeAll(
   referencesLayer,
+  FileIndex.at(join(TAU_DIRECTORY, "files")),
   credentialStoreLayer,
   catalogCacheLayer,
   favoriteModelsLayer,
@@ -38,7 +42,7 @@ const appLayer = Layer.mergeAll(
 ).pipe(
   Layer.provideMerge(FetchHttpClient.layer),
   Layer.provideMerge(Settings.layer),
-  Layer.provideMerge(TauHome.at(join(homedir(), ".tau"))),
+  Layer.provideMerge(TauHome.at(TAU_DIRECTORY)),
   Layer.provideMerge(BunServices.layer),
 );
 

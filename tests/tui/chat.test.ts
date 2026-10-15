@@ -122,6 +122,7 @@ const startChat = Effect.fn("startChat")(function* (
     favoriteModels: agent.favoriteModels,
     toggleFavoriteModel: agent.toggleFavoriteModel,
     references: agent.references,
+    files: agent.files,
     sidebarChoice: agent.sidebarChoice,
     saveSidebarChoice: agent.saveSidebarChoice,
   };
@@ -213,6 +214,19 @@ const frameWhere = (terminal: TestRendererSetup, isWanted: (frame: string) => bo
     check();
     return Effect.sync(() => terminal.renderer.off("frame", check));
   });
+
+/** Presses Down until the list's `▸` is on the row that shows `row`. */
+const chooseRow = Effect.fn("chooseRow")(function* (terminal: TestRendererSetup, row: string) {
+  const chosenOf = (frame: string) => frame.split("\n").find((line) => line.includes("▸"));
+
+  for (;;) {
+    const frame = yield* frameWith(terminal, row);
+    const chosen = chosenOf(frame);
+    if (chosen?.includes(`▸ ${row}`) === true) return;
+    terminal.mockInput.pressArrow("down");
+    yield* frameWhere(terminal, (now) => chosenOf(now) !== chosen);
+  }
+});
 
 describe("the chat in the terminal", () => {
   test("a completed live turn requests a notification through the renderer", () =>
@@ -768,6 +782,62 @@ describe("the chat in the terminal", () => {
         terminal.mockInput.pressEscape();
         const frame = yield* frameWhere(terminal, (shown) => !shown.includes("Type to filter"));
         expect(frame).toContain("Type a prompt");
+      }).pipe(Effect.scoped),
+    ));
+
+  test("@ lists matching files; Tab opens a folder, Enter tags a file, and Escape closes the list", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        yield* fileSystem.makeDirectory(`${harness.directory}/src/tui`, { recursive: true });
+        yield* fileSystem.writeFileString(`${harness.directory}/src/tui/Input.tsx`, "");
+        yield* fileSystem.writeFileString(`${harness.directory}/README.md`, "");
+        const agent = yield* harness.startAgent([]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options));
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("look at @src/t"));
+        const listed = yield* frameWith(terminal, "📁 src/tui/");
+        expect(listed).toContain("tab open folder · enter tag");
+        yield* chooseRow(terminal, "📁 src/tui/");
+        terminal.mockInput.pressTab();
+        yield* frameWith(terminal, "│look at @src/tui/");
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("inpt"));
+        yield* frameWith(terminal, "📄 src/tui/Input.tsx");
+        yield* chooseRow(terminal, "📄 src/tui/Input.tsx");
+        terminal.mockInput.pressEnter();
+        const tagged = yield* frameWhere(terminal, (frame) => !frame.includes("Files"));
+        expect(tagged).toContain("│look at @src/tui/Input.tsx");
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("@zzqx"));
+        yield* frameWith(terminal, 'No files match "zzqx"');
+        terminal.mockInput.pressEscape();
+        yield* frameWhere(terminal, (frame) => !frame.includes("No files match"));
+      }).pipe(Effect.scoped),
+    ));
+
+  test("Enter on a reference row tags the reference's folder by its full path", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+
+        yield* fileSystem.makeDirectory(`${harness.home}/.tau/references/opencode`, {
+          recursive: true,
+        });
+
+        const agent = yield* harness.startAgent([]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        yield* opened.references.set(["opencode"]);
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options));
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("@openc"));
+        yield* frameWith(terminal, "📚 opencode/");
+        yield* chooseRow(terminal, "📚 opencode/");
+        terminal.mockInput.pressEnter();
+        const tagged = yield* frameWhere(terminal, (frame) => !frame.includes("📚"));
+
+        expect(tagged.replaceAll(/\s*│\s*/g, "")).toContain("references/opencode/");
       }).pipe(Effect.scoped),
     ));
 

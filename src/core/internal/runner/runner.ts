@@ -61,6 +61,7 @@ import { runSteps } from "../loop/step.ts";
 import { runTool, scriptFunctions, type Timeouts } from "../run-tool/run-tool.ts";
 import { findSkills, type Skill, SKILLS_GROUP, skillFunctions } from "../skills/skills.ts";
 import type { Platform } from "../tools/model-tool.ts";
+import { withListings } from "../folder-listings/folder-listings.ts";
 import { failureText } from "./failure-text.ts";
 
 export type RunServices = {
@@ -217,7 +218,9 @@ const runPrompt = (
     const { timeouts, maxTurns, thinking } = prompt.options;
     // The reply saves the level with its model, so a resumed chat goes on at the same level.
     const model = { ...prompt.options.model, thinking };
-    yield* sessions.append(session.id, [{ type: "user", text: prompt.text }]);
+    const entered = { type: "user", text: prompt.text } as const;
+    yield* sessions.append(session.id, yield* withListings(session.directory, entered));
+
     yield* PubSub.publish(events, { type: "run-started", prompt: prompt.text });
     const { root, folders } = yield* projectFolders(session.directory);
     const files = yield* services.fileProblems;
@@ -264,6 +267,7 @@ const runPrompt = (
       takeSteering: takeSteering(steering).pipe(
         Effect.map((steered) => steered.map(({ text }) => text)),
       ),
+      withListings: (user) => withListings(session.directory, user),
       maxTurns,
       emit: (event) => PubSub.publish(events, event).pipe(Effect.asVoid),
     };

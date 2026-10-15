@@ -1,8 +1,12 @@
-/** The transcript: the user's prompts, the answers as Markdown, one line per tool call, and notices. */
+/**
+ * The transcript: the user's prompts, with `@` tags in the accent color, the answers as Markdown,
+ * one line per tool call, and notices.
+ */
 
 import type { ScrollBoxRenderable, SyntaxStyle } from "@opentui/core";
 import { For } from "solid-js";
 import type { ChatItem, ChatState } from "./chat-state.ts";
+import { tagRanges } from "../../core/TagText.ts";
 import { COLORS } from "./theme.ts";
 
 type ToolCall = Extract<ChatItem, { kind: "tool" }>;
@@ -40,7 +44,13 @@ function ChatLine(props: { readonly item: ChatItem; readonly syntax: SyntaxStyle
     case "user":
       return (
         <box border borderColor={COLORS.border} paddingLeft={1} marginTop={1}>
-          <text>{item.text}</text>
+          <text>
+            <For each={promptParts(item.text)}>
+              {(part) =>
+                part.isTag ? <span style={{ fg: COLORS.accent }}>{part.text}</span> : part.text
+              }
+            </For>
+          </text>
         </box>
       );
     case "assistant":
@@ -76,3 +86,21 @@ function ToolLine(props: { readonly call: ToolCall }) {
 
 /** For text drawn on one line, cut with an ellipsis where the screen ends. */
 export const oneLine = (text: string) => text.replaceAll("\n", " ");
+
+/** The prompt cut into its tags and the text between them. */
+const promptParts = (text: string) => {
+  const parts: { readonly text: string; readonly isTag: boolean }[] = [];
+  let from = 0;
+
+  for (const [start, end] of tagRanges(text)) {
+    parts.push(
+      { text: text.slice(from, start), isTag: false },
+      { text: text.slice(start, end), isTag: true },
+    );
+
+    from = end;
+  }
+
+  parts.push({ text: text.slice(from), isTag: false });
+  return parts.filter((part) => part.text !== "");
+};

@@ -6,8 +6,8 @@
 import { useKeymapSelector } from "@opentui/keymap/solid";
 import type { Accessor } from "solid-js";
 import type { ChatClient } from "./chat-client.ts";
-import type { CommandSuggestions } from "./command-suggestions.ts";
 import { keyText, type TauKeymap } from "./keymap.ts";
+import type { InputSuggestions } from "./suggestion-list.ts";
 import { COLORS } from "./theme.ts";
 
 /** A hint: the commands whose first keys show side by side, and what they do. */
@@ -33,10 +33,17 @@ const RUNNING_HINTS: readonly Hint[] = [
   [["chat.quit"], "quit"],
 ];
 
-const LIST_HINTS: readonly Hint[] = [
+const COMMAND_LIST_HINTS: readonly Hint[] = [
   [["list.up", "list.down"], "move"],
   [["list.complete"], "complete"],
   [["list.choose"], "select"],
+  [["list.close"], "close"],
+];
+
+const FILE_LIST_HINTS: readonly Hint[] = [
+  [["list.up", "list.down"], "move"],
+  [["list.complete"], "open folder"],
+  [["list.choose"], "tag"],
   [["list.close"], "close"],
 ];
 
@@ -48,7 +55,7 @@ const GAP = 2;
 
 export function InputFooter(props: {
   readonly client: ChatClient;
-  readonly suggestions: CommandSuggestions;
+  readonly suggestions: InputSuggestions;
   /** The width of the line. */
   readonly columns: Accessor<number>;
 }) {
@@ -58,11 +65,13 @@ export function InputFooter(props: {
     idle: choicesText(keymap, IDLE_HINTS),
     idleThinking: choicesText(keymap, IDLE_THINKING_HINTS),
     running: choicesText(keymap, RUNNING_HINTS),
-    list: [hintsText(keymap, LIST_HINTS)],
+    commands: [hintsText(keymap, COMMAND_LIST_HINTS)],
+    files: [hintsText(keymap, FILE_LIST_HINTS)],
   }));
 
   const choices = () => {
-    if (props.suggestions.completes()) return hints().list;
+    const list = props.suggestions.open();
+    if (list?.completes() === true) return hints()[list.kind];
     if (props.client.chat.run !== "idle") return hints().running;
     return props.client.thinking() === undefined ? hints().idle : hints().idleThinking;
   };

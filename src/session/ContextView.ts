@@ -64,6 +64,7 @@ export const conversationMessages = (entries: readonly Entry[]): readonly Prompt
   for (const { body } of entries) {
     if (body.type === "user") messages.push(userText(body.text));
     if (body.type === "nudge") messages.push(hiddenText("nudge", body.text));
+    if (body.type === "folder-listings") messages.push(hiddenText("folder-listings", body.text));
 
     if (body.type === "assistant" && !body.interrupted) {
       messages.push(...replyMessages(body, savedResults));

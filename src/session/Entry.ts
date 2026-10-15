@@ -190,6 +190,15 @@ const NudgeEntry = Schema.Struct({
 export type NudgeEntry = typeof NudgeEntry.Type;
 
 /**
+ * The folders a user message tagged, each listed one level deep as the message was sent. Hidden from
+ * the chat; saved once, so later model calls send the same text.
+ */
+const FolderListingsEntry = Schema.Struct({
+  type: Schema.Literal("folder-listings"),
+  text: Schema.String,
+});
+
+/**
  * The reference repositories the user attached to the session, saved on each change; the newest
  * entry holds the current list.
  */
@@ -210,6 +219,7 @@ export const EntryBody = Schema.Union([
   ChecksEntry,
   NudgeEntry,
   ReferencesEntry,
+  FolderListingsEntry,
   RunFailedEntry,
 ]);
 

@@ -19,6 +19,7 @@ import { Models } from "../../src/ai/Models.ts";
 import { ProviderId } from "../../src/ai/Providers.ts";
 import { Agent, type OpenSession } from "../../src/core/Agent.ts";
 import { ContextMethod } from "../../src/core/ContextMethod.ts";
+import { FileTags } from "../../src/core/FileTags.ts";
 import { OutputFolder } from "../../src/core/OutputFolder.ts";
 import type { AgentEvent, RunOptions } from "../../src/core/Client.ts";
 import { Status } from "../../src/core/Status.ts";
@@ -32,6 +33,7 @@ import { Settings } from "../../src/host/Settings.ts";
 import { userInstructionsLayer } from "../../src/host/UserInstructions.ts";
 import { Sessions } from "../../src/session/Sessions.ts";
 import { Memories } from "../../src/session/Memories.ts";
+import { FileIndex } from "../../src/workspace/FileIndex.ts";
 
 export type Reply = Stream.Stream<Response.StreamPartEncoded, AiError.AiError>;
 type NoteReply = Effect.Effect<Response.PartEncoded[], AiError.AiError>;
@@ -216,6 +218,7 @@ export const withPreparedHarness = <A, E, P>(
             Layer.provide(
               favoriteModelsLayer.pipe(Layer.provide(tauHome), Layer.provide(BunServices.layer)),
             ),
+            Layer.provide(FileTags.layer.pipe(Layer.provide(FileIndex.at(`${home}/.tau/files`)))),
             Layer.provide(
               referencesLayer.pipe(
                 Layer.provide(tauHome),

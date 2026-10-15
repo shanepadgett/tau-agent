@@ -17,7 +17,9 @@ import { Chat } from "./Chat.tsx";
 import type { ChatClient } from "./chat-client.ts";
 import { addCodeLanguages } from "./code-languages.ts";
 import { CommandList } from "./CommandList.tsx";
-import { commandSuggestions } from "./command-suggestions.ts";
+import { type CommandSuggestions, commandSuggestions } from "./command-suggestions.ts";
+import { FileList } from "./FileList.tsx";
+import { type FileSuggestions, fileSuggestions } from "./file-suggestions.ts";
 import { Input } from "./Input.tsx";
 import { InputFooter } from "./InputFooter.tsx";
 import { PRIORITY, tauKeymap } from "./keymap.ts";
@@ -29,6 +31,7 @@ import { RunPanel } from "./RunPanel.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { SIDEBAR_COLUMNS, type SidebarState, sidebarState } from "./sidebar-state.ts";
 import { StatusStrip } from "./StatusStrip.tsx";
+import type { InputSuggestions } from "./suggestion-list.ts";
 import { useSyntaxStyle } from "./theme.ts";
 
 /**
@@ -61,7 +64,9 @@ function Screen(props: { readonly client: Accessor<ChatClient | undefined> }) {
 }
 
 function App(props: { readonly client: ChatClient; readonly syntax: SyntaxStyle }) {
-  const suggestions = commandSuggestions(props.client.commands);
+  const commands = commandSuggestions(props.client.commands);
+  const files = fileSuggestions(props.client);
+  const suggestions = inputSuggestions(commands, files);
 
   // A widget the user answers replaces the composer (the input editor; the status line under it stays) while open.
   const panelOpen = () =>
@@ -98,12 +103,15 @@ function App(props: { readonly client: ChatClient; readonly syntax: SyntaxStyle 
               <Show when={props.client.qna.state()} keyed>
                 {(state) => <QnaPanel flow={props.client.qna} state={state} />}
               </Show>
-              <CommandList suggestions={suggestions} />
+              <Show when={!files.isOpen()}>
+                <CommandList suggestions={commands} />
+              </Show>
+              <FileList suggestions={files} columns={chatColumns} />
             </Place>
             {/* Hidden, not removed, so the draft stays in the editor. */}
             <box flexDirection="column" visible={!panelOpen()}>
               <Place name="input.editor">
-                <Input client={props.client} suggestions={suggestions} />
+                <Input client={props.client} suggestions={suggestions} syntax={props.syntax} />
               </Place>
             </box>
             <Place name="input.below">
@@ -116,6 +124,21 @@ function App(props: { readonly client: ChatClient; readonly syntax: SyntaxStyle 
     </Place>
   );
 }
+
+/** Both lists follow the input. A tag can sit in a command's arguments; the file list then takes the keys. */
+const inputSuggestions = (
+  commands: CommandSuggestions,
+  files: FileSuggestions,
+): InputSuggestions => ({
+  setInput: (text, cursor) => {
+    commands.setText(text);
+    files.setInput(text, cursor);
+  },
+  open: () => {
+    if (files.isOpen()) return files;
+    return commands.isOpen() ? commands : undefined;
+  },
+});
 
 /**
  * Copies text when the user lets go of the mouse after selecting it: to the system clipboard, or

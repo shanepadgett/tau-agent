@@ -8,6 +8,7 @@ import { type Accessor, createSignal } from "solid-js";
 import { createStore, reconcile, unwrap } from "solid-js/store";
 import type { Agent, OpenSession } from "../../core/Agent.ts";
 import type { AgentEvent, RunOptions } from "../../core/Client.ts";
+import type { TagRow, TagSearch } from "../../core/FileTags.ts";
 import type { Attention, NotificationOptions } from "../Notifications.ts";
 import type { SidebarChoice } from "../../core/TuiMemory.ts";
 import { type Condition, Status } from "../../core/Status.ts";
@@ -57,7 +58,7 @@ export type RestartLink = {
 
 /**
  * What the chat asks of the agent besides its open session: the sessions of the folder and the
- * models for `/sessions` and `/model`, the favorite models, the sidebar's remembered choice, and opening the session the user picks, or a new one.
+ * models for `/sessions` and `/model`, the favorite models, the files for `@`, the sidebar's remembered choice, and opening the session the user picks, or a new one.
  */
 export type ChatAgent = Pick<
   Agent["Service"],
@@ -66,6 +67,7 @@ export type ChatAgent = Pick<
   | "favoriteModels"
   | "toggleFavoriteModel"
   | "references"
+  | "files"
   | "sidebarChoice"
   | "saveSidebarChoice"
 > & {
@@ -111,6 +113,10 @@ export type ChatClient = {
   /** The open picker, if a command opened one. */
   readonly picker: Accessor<PickerList | undefined>;
   readonly closePicker: () => void;
+  /** The rows of the `@` list for `query`, the text after `@`. */
+  readonly findTags: (query: string) => Promise<TagSearch>;
+  /** Tells file search the user chose `row` for `query`, so it ranks the row higher next time. */
+  readonly choseTag: (query: string, row: Extract<TagRow, { kind: "file" | "folder" }>) => void;
   /** The commands that `send` runs, for the suggestion list. */
   readonly commands: readonly CommandInfo[];
   /** The text the input editor starts with. */
@@ -179,6 +185,7 @@ export const chatClient = Effect.fn("chatClient")(function* (
     closePicker,
     commit,
     qna,
+    ...(yield* tagFinder(agent, opened.session.directory, chat)),
     commands: list,
     draft: link.draft,
     readDraftWith: (read) => {
@@ -199,6 +206,27 @@ export const chatClient = Effect.fn("chatClient")(function* (
   };
 
   return { client, ended: Deferred.await(ended) };
+});
+
+/**
+ * Finds `@` tags in the session's folder and its attached references. It starts the folder's index
+ * at once, so the index is ready when the user types `@`.
+ */
+const tagFinder = Effect.fn("tagFinder")(function* (
+  agent: ChatAgent,
+  directory: string,
+  chat: ChatState,
+) {
+  yield* Effect.forkScoped(agent.files.find(directory, [], ""));
+
+  const tags: Pick<ChatClient, "findTags" | "choseTag"> = {
+    findTags: (query) => Effect.runPromise(agent.files.find(directory, chat.references, query)),
+    choseTag: (query, row) => {
+      runInBackground(agent.files.chose(directory, chat.references, query, row));
+    },
+  };
+
+  return tags;
 });
 
 /**

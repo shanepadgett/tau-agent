@@ -23,6 +23,7 @@ import { FavoriteModels, type FavoriteModelsError } from "./FavoriteModels.ts";
 import { CommitSettings } from "./Commits.ts";
 import { Web } from "./Web.ts";
 import { References } from "./References.ts";
+import { FileTags } from "./FileTags.ts";
 import { type SidebarChoice, TuiMemory, type TuiMemoryError } from "./TuiMemory.ts";
 
 export type { OpenSession } from "./internal/runner/runner.ts";
@@ -54,6 +55,8 @@ export class Agent extends Context.Service<
     readonly sidebarChoice: Effect.Effect<SidebarChoice>;
     /** The library of reference repositories. */
     readonly references: References["Service"];
+    /** The files, folders and references that `@` tags. */
+    readonly files: FileTags["Service"];
     readonly saveSidebarChoice: (choice: SidebarChoice) => Effect.Effect<void, TuiMemoryError>;
   }
 >()("tau/core/Agent") {
@@ -79,6 +82,7 @@ export class Agent extends Context.Service<
 
       const favorites = yield* FavoriteModels;
       const tuiMemory = yield* TuiMemory;
+      const files = yield* FileTags;
       const runners = yield* RcMap.make({ lookup: (id: SessionId) => makeRunner(services, id) });
 
       const open = Effect.fn("Agent.open")(function* (
@@ -100,6 +104,7 @@ export class Agent extends Context.Service<
         toggleFavoriteModel: favorites.toggle,
         sidebarChoice: tuiMemory.sidebar,
         references: services.references,
+        files,
         saveSidebarChoice: tuiMemory.saveSidebar,
       });
     }),

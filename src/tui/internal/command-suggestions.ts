@@ -4,6 +4,7 @@
  */
 
 import { createMemo, createSignal } from "solid-js";
+import { type Completion, type SuggestionKeys, suggestionList } from "./suggestion-list.ts";
 
 /** A command as the suggestion list shows it. */
 export type CommandInfo = {
@@ -37,37 +38,26 @@ export const suggestions = (text: string, commands: readonly CommandInfo[]) => {
 
 export type CommandSuggestions = ReturnType<typeof commandSuggestions>;
 
-/** What Tab or Enter does with the chosen command: put text in the input, or run the command. */
-export type Completion =
-  | { readonly type: "complete"; readonly text: string }
-  | { readonly type: "run"; readonly name: string };
-
 /**
  * The list's state: the input's text, the chosen command, and whether Escape closed the list.
  * Escape closes it until the text changes.
  */
 export const commandSuggestions = (commands: readonly CommandInfo[]) => {
   const [text, setText] = createSignal("");
-  const [selected, setSelected] = createSignal(0);
-  const [dismissed, setDismissed] = createSignal(false);
-  const shown = createMemo(() => (dismissed() ? [] : suggestions(text(), commands)));
+  const matching = createMemo(() => suggestions(text(), commands));
+  const list = suggestionList(matching);
+  const shown = () => (list.dismissed() ? [] : matching());
   const isOpen = () => shown().length > 0;
   /** Whether the input already holds the chosen command whole, so there is nothing to complete. */
-  const isWhole = () => wordOf(text()) === shown()[selected()]?.name;
+  const isWhole = () => wordOf(text()) === list.chosen()?.name;
   const hasSpace = () => /\s/.test(text());
-
-  const move = (step: number) => {
-    const count = shown().length;
-    setSelected((index) => (index + step + count) % count);
-  };
 
   /**
    * Tab puts the chosen command in the input, with a space after it when it takes an argument. Enter
-   * does the same for a command that requires an argument, and runs any other command. Nothing, so
-   * the key goes on to the input and the chat, when there is nothing to complete.
+   * does the same for a command that requires an argument, and runs any other command.
    */
   const completionFor = (key: "tab" | "return"): Completion | undefined => {
-    const chosen = shown()[selected()];
+    const chosen = list.chosen();
     if (chosen === undefined) return undefined;
     // A command typed whole, with a space after it, is complete: Enter sends it with its arguments.
     if (isWhole() && hasSpace()) return undefined;
@@ -77,25 +67,27 @@ export const commandSuggestions = (commands: readonly CommandInfo[]) => {
     if (key === "return" && chosen.argument !== "required")
       return { type: "run", name: chosen.name };
 
-    const text = chosen.argument === "none" ? chosen.name : `${chosen.name} `;
-    return { type: "complete", text };
+    const completed = chosen.argument === "none" ? chosen.name : `${chosen.name} `;
+    return { type: "replace", start: 0, end: text().length, text: completed };
+  };
+
+  const keys: SuggestionKeys = {
+    kind: "commands",
+    completes: () => isOpen() && !(isWhole() && hasSpace()),
+    move: list.move,
+    dismiss: list.dismiss,
+    completionFor,
   };
 
   return {
+    ...keys,
     shown,
-    selected,
+    selected: list.selected,
     isOpen,
-    /** Whether Tab and Enter would complete the chosen command. */
-    completes: () => isOpen() && !(isWhole() && hasSpace()),
-    move,
-    /** Closes the list until the text changes. */
-    dismiss: () => setDismissed(true),
-    completionFor,
     setText: (now: string) => {
       if (now === text()) return;
       setText(now);
-      setSelected(0);
-      setDismissed(false);
+      list.reset();
     },
   };
 };

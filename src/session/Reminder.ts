@@ -6,6 +6,7 @@ export type ReminderKind =
   | "checks"
   | "run-failed"
   | "handoff"
+  | "folder-listings"
   | "short-term-memory"
   | "long-term-memory";
 

@@ -9,7 +9,7 @@ Run `tau` with no `-p` to chat with Tau in your terminal: send prompts, watch th
    tau
    ```
 
-3. Type a prompt and press Enter to send it. To add a line instead, press Shift+Enter, Ctrl+Enter, Alt+Enter or Ctrl+J.
+3. Type a prompt and press Enter to send it. To add a line instead, press Shift+Enter, Ctrl+Enter, Alt+Enter or Ctrl+J. Type `@` to tag a file or folder (see [file-tags.md](file-tags.md)).
 4. To send a first prompt as the chat opens, give it on the command line:
 
    ```sh

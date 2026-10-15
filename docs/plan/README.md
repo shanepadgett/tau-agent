@@ -31,6 +31,7 @@ Tau becomes its own coding agent, built from the ground up on this branch. It do
 | [work/daily-driver.md](work/daily-driver.md) | The work that makes Tau the user's daily driver: the set, how it meets the systems, the order (built, waiting for live checks). |
 | [work/markdown.md](work/markdown.md) | Markdown in the chat, after OpenCode's use of OpenTUI (built). |
 | [work/slash-commands.md](work/slash-commands.md) | A filtered list of slash commands above the input while you type one (built). |
+| [work/file-tags.md](work/file-tags.md) | `@` file and folder tags in the input, with icons (built 2026-10-15). |
 | [work/qna.md](work/qna.md) | `/qna`: the model asks its open questions in a panel (built, waiting for a live check). |
 | [work/commit.md](work/commit.md) | `/commit`: commit checks, a model-made commit plan, review, push (built, waiting for a live check). |
 | [work/thinking.md](work/thinking.md) | Thinking levels: shown under the input, Shift+Tab to change (built, waiting for a live check). |

@@ -5,6 +5,7 @@ import { Catalog } from "../../ai/Catalog.ts";
 import { Models } from "../../ai/Models.ts";
 import { Agent } from "../../core/Agent.ts";
 import { ContextMethod } from "../../core/ContextMethod.ts";
+import { FileTags } from "../../core/FileTags.ts";
 import { Web } from "../../core/Web.ts";
 import { userInstructionsLayer } from "../../host/UserInstructions.ts";
 import { SessionId } from "../../session/Entry.ts";
@@ -14,6 +15,7 @@ import { showFailure } from "./failure.ts";
 /** The agent with everything it needs: the models of the catalog, and the session store. */
 export const agentLayer = Agent.layer.pipe(
   Layer.provideMerge(ContextMethod.layer),
+  Layer.provideMerge(FileTags.layer),
   Layer.provideMerge(Web.layer),
   Layer.provideMerge(Models.layer),
   Layer.provideMerge(Catalog.layer),

@@ -34,15 +34,20 @@ export const openCalls = (entries: readonly Entry[]) => {
   return callsOf(latest.body.parts).filter((call) => !handled.has(call.id));
 };
 
+const NOT_INPUT: ReadonlySet<Entry["body"]["type"]> = new Set([
+  "tool-started",
+  "instructions",
+  "nudge",
+  "folder-listings",
+]);
+
 /**
  * The model answers next when the session ends with a prompt, a tool result or checks that failed.
- * Started calls and instructions saved for the next model call do not count.
+ * Started calls, instructions saved for the next model call and a prompt's folder listings do not
+ * count.
  */
 export const needsReply = (entries: readonly Entry[]) => {
-  const last = entries.findLast(
-    ({ body }) =>
-      body.type !== "tool-started" && body.type !== "instructions" && body.type !== "nudge",
-  )?.body;
+  const last = entries.findLast(({ body }) => !NOT_INPUT.has(body.type))?.body;
 
   if (last?.type === "checks") return hasFailures(last.report);
   return last?.type === "user" || last?.type === "tool-result";

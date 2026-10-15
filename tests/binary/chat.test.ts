@@ -30,15 +30,21 @@ const modesLeftOn = (output: string) =>
 /** `stty -a` names a mode the terminal has turned off with a leading `-`. */
 const isOn = (stty: string, mode: string) => new RegExp(`(^|\\s)${mode}(\\s|$)`).test(stty);
 
+/** A file in the project, which `@` must list: FFF's native library has to load from the binary. */
+const PROJECT_FILE = "findme.txt";
+
 /**
- * Runs the compiled `tau` in a terminal from a shell, quits the chat once it opens, and then lets
- * the shell print Tau's exit code and the terminal's settings.
+ * Runs the compiled `tau` in a terminal from a shell, types `@` and part of a file's name once the
+ * chat opens, quits once the list shows the file, and then lets the shell print Tau's exit code and
+ * the terminal's settings.
  */
 const chatAndQuit = Effect.fn("chatAndQuit")(function* (binary: string) {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped();
   const project = yield* fs.makeTempDirectoryScoped();
+  yield* fs.writeFileString(`${project}/${PROJECT_FILE}`, "");
   const opened = yield* Deferred.make<void>();
+  const found = yield* Deferred.make<void>();
   const decoder = new TextDecoder();
   let output = "";
 
@@ -51,6 +57,7 @@ const chatAndQuit = Effect.fn("chatAndQuit")(function* (binary: string) {
           data: (_terminal, bytes) => {
             output += decoder.decode(bytes, { stream: true });
             if (output.includes(CHAT_OPENED)) Deferred.doneUnsafe(opened, Effect.void);
+            if (output.includes(PROJECT_FILE)) Deferred.doneUnsafe(found, Effect.void);
           },
         }),
     ),
@@ -66,6 +73,8 @@ const chatAndQuit = Effect.fn("chatAndQuit")(function* (binary: string) {
   });
 
   yield* Deferred.await(opened);
+  terminal.write("@findm");
+  yield* Deferred.await(found);
   terminal.write(CTRL_D);
   yield* Effect.promise(() => shell.exited);
   return output;
@@ -73,7 +82,7 @@ const chatAndQuit = Effect.fn("chatAndQuit")(function* (binary: string) {
 
 describe("compiled tau", () => {
   test(
-    "opens the chat, quits, and gives the terminal back",
+    "opens the chat, lists a file after @, quits, and gives the terminal back",
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;

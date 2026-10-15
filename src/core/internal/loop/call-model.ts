@@ -5,7 +5,7 @@
 
 import { Chunk, Effect, Option, Ref, Stream } from "effect";
 import { AiError, type Response } from "effect/ai";
-import type { Entry, EntryBody } from "../../../session/Entry.ts";
+import type { Entry } from "../../../session/Entry.ts";
 import { BASE_PROMPT } from "../run-tool/soul.ts";
 import { toolkit } from "../tools/model-tool.ts";
 import { interruptedEntry, modelCall, replyEntry } from "./reply.ts";
@@ -127,8 +127,11 @@ export const withSteering = Effect.fn("withSteering")(function* <R>(
   const texts = yield* run.takeSteering;
   if (texts.length === 0) return entries;
 
-  const bodies = texts.map((text): EntryBody => ({ type: "user", text, steering: true }));
-  const saved = yield* run.sessions.append(run.session, bodies);
+  const bodies = yield* Effect.forEach(texts, (text) =>
+    run.withListings({ type: "user", text, steering: true }),
+  );
+
+  const saved = yield* run.sessions.append(run.session, bodies.flat());
   yield* Effect.forEach(texts, (text) => run.emit({ type: "steered", text }));
 
   return [...entries, ...saved];

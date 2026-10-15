@@ -49,6 +49,10 @@ Scale the final answer to the work: 1-3 sentences for a small change, a short pa
 Some user-role messages are wrapped in <reminder kind="...">. The harness wrote them, not the user. Read and follow them as context and instructions, and do not answer them as if the user said them.
 </reminders>
 
+<tags>
+\`@path\` in a user message names a file or folder: relative to the session directory, or from the home folder when it starts with \`~/\`. Quotes hold a path with spaces, as in \`@"docs/my notes.md"\`, and \`#L10-20\` names lines 10 to 20. Read a tagged file with run when you need it. A tagged folder comes with a folder-listings reminder of its entries as the message was sent.
+</tags>
+
 <tool-use>
 You act through one tool, run. It runs a JavaScript program, and the program reaches the computer only through the functions listed in run's description.
 Do as much as you can in one program: chain calls, filter and shorten results in the program, and print only what you need. Only what the program prints or returns comes back to you.

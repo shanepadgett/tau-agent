@@ -1,28 +1,31 @@
 /** The input editor, where the user writes prompts, steering messages and commands. */
 
 // Enter sends, Tab queues during a run, and Shift-Enter, Ctrl-Enter, Alt-Enter or Ctrl-J add a
-// line (see `keymap.ts`). While the command suggestion list is open, it takes Up, Down, Tab, Enter,
-// Escape and Ctrl-C. Prompts that were cancelled or not sent come back into it, and its text survives
+// line (see `keymap.ts`). While the command list or the `@` file list is open, it takes Up, Down,
+// Tab, Enter, Escape and Ctrl-C. Tags show in the accent color. Prompts that were cancelled or not sent come back into it, and its text survives
 // a restart.
 
-import type { TextareaRenderable } from "@opentui/core";
+import type { SyntaxStyle, TextareaRenderable } from "@opentui/core";
 import { useBindings } from "@opentui/keymap/solid";
 import { createEffect, on } from "solid-js";
 import type { ChatClient } from "./chat-client.ts";
-import type { CommandSuggestions, Completion } from "./command-suggestions.ts";
 import { PRIORITY } from "./keymap.ts";
-import { COLORS } from "./theme.ts";
+import type { Completion, InputSuggestions } from "./suggestion-list.ts";
+import { tagRanges } from "../../core/TagText.ts";
+import { COLORS, TAG_STYLE } from "./theme.ts";
 
 const MAX_INPUT_LINES = 10;
 
 export function Input(props: {
   readonly client: ChatClient;
-  readonly suggestions: CommandSuggestions;
+  readonly suggestions: InputSuggestions;
+  readonly syntax: SyntaxStyle;
 }) {
   return (
     <box border borderColor={COLORS.accent}>
       <textarea
         ref={(editor: TextareaRenderable) => {
+          editor.syntaxStyle = props.syntax;
           connectEditor(editor, props.client, props.suggestions);
         }}
         // An open picker takes the keys; the text stays.
@@ -42,11 +45,18 @@ export function Input(props: {
 const connectEditor = (
   editor: TextareaRenderable,
   client: ChatClient,
-  suggestions: CommandSuggestions,
+  suggestions: InputSuggestions,
 ) => {
-  editor.onContentChange = () => {
-    suggestions.setText(editor.plainText);
+  const follow = () => {
+    suggestions.setInput(editor.plainText, editor.cursorOffset);
   };
+
+  editor.onContentChange = () => {
+    follow();
+    colorTags(editor);
+  };
+
+  editor.onCursorChange = follow;
 
   editor.setText(client.draft);
   editor.gotoBufferEnd();
@@ -73,17 +83,23 @@ const connectEditor = (
   );
 };
 
-/** Up and Down move in the open command list, Escape and Ctrl-C close it, Tab and Enter complete. */
+/** Up and Down move in the open list, Escape and Ctrl-C close it, Tab and Enter complete. */
 const listKeys = (
   editor: TextareaRenderable,
   client: ChatClient,
-  suggestions: CommandSuggestions,
+  suggestions: InputSuggestions,
 ) => {
   const apply = (completion: Completion | undefined) => {
     if (completion === undefined) return false;
 
-    if (completion.type === "complete") {
-      replaceText(editor, completion.text);
+    if (completion.type === "replace") {
+      const text = editor.plainText;
+
+      editor.setText(
+        text.slice(0, completion.start) + completion.text + text.slice(completion.end),
+      );
+
+      editor.cursorOffset = completion.start + completion.text.length;
       return;
     }
 
@@ -95,23 +111,28 @@ const listKeys = (
     target: () => editor,
     targetMode: "focus",
     priority: PRIORITY.list,
-    enabled: suggestions.isOpen,
+    enabled: () => suggestions.open() !== undefined,
     commands: [
       {
         name: "list.up",
         run: () => {
-          suggestions.move(-1);
+          suggestions.open()?.move(-1);
         },
       },
       {
         name: "list.down",
         run: () => {
-          suggestions.move(1);
+          suggestions.open()?.move(1);
         },
       },
-      { name: "list.close", run: suggestions.dismiss },
-      { name: "list.complete", run: () => apply(suggestions.completionFor("tab")) },
-      { name: "list.choose", run: () => apply(suggestions.completionFor("return")) },
+      {
+        name: "list.close",
+        run: () => {
+          suggestions.open()?.dismiss();
+        },
+      },
+      { name: "list.complete", run: () => apply(suggestions.open()?.completionFor("tab")) },
+      { name: "list.choose", run: () => apply(suggestions.open()?.completionFor("return")) },
     ],
     bindings: [
       { key: "up", cmd: "list.up" },
@@ -169,4 +190,20 @@ const sendWith = (editor: TextareaRenderable, send: (text: string) => void) => {
 const replaceText = (editor: TextareaRenderable, text: string) => {
   editor.setText(text);
   editor.gotoBufferEnd();
+};
+
+/**
+ * Colors each tag. Highlight offsets skip the newlines that the text's offsets count, and they match
+ * the text's offsets only while no character wider than one column comes before a tag.
+ */
+const colorTags = (editor: TextareaRenderable) => {
+  const styleId = editor.syntaxStyle?.getStyleId(TAG_STYLE);
+  if (styleId === undefined || styleId === null) return;
+  const text = editor.plainText;
+  editor.clearAllHighlights();
+
+  for (const [start, end] of tagRanges(text)) {
+    const newlines = text.slice(0, start).split("\n").length - 1;
+    editor.addHighlightByCharRange({ start: start - newlines, end: end - newlines, styleId });
+  }
 };

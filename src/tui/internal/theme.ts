@@ -23,6 +23,9 @@ export const COLORS = {
 
 type Color = (typeof COLORS)[keyof typeof COLORS];
 
+/** The style of an `@` tag in the input. */
+export const TAG_STYLE = "tau.file-tag";
+
 const rule = (
   scope: string[],
   foreground: Color,
@@ -60,6 +63,7 @@ const RULES: ThemeTokenStyle[] = [
   rule(["punctuation", "punctuation.bracket", "punctuation.delimiter"], COLORS.text),
   rule(["diff.plus"], COLORS.success),
   rule(["diff.minus"], COLORS.error),
+  rule([TAG_STYLE], COLORS.accent),
 ];
 
 /** The style for Markdown and code. Make it once per renderer; it holds native memory until exit. */

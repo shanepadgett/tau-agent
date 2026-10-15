@@ -45,6 +45,10 @@ export type RunContext<R> = {
   readonly processNotices: Effect.Effect<readonly NudgeEntry[]>;
   /** The steering messages the user sent since the last model call. Taking them empties the list. */
   readonly takeSteering: Effect.Effect<readonly string[]>;
+  /** A steering message's entry, then the listings of the folders it tags. */
+  readonly withListings: (
+    user: Extract<EntryBody, { type: "user" }>,
+  ) => Effect.Effect<readonly EntryBody[], never, R>;
   readonly maxTurns: number | undefined;
   readonly emit: (event: AgentEvent) => Effect.Effect<void>;
 };
