@@ -144,6 +144,15 @@ export const commitFiles = Effect.fn("commitFiles")(function* (
 ) {
   if ((yield* base(root)) === "HEAD") yield* gitOk(root, ["reset", "--mixed", "--quiet"]);
   yield* gitOk(root, ["add", "-A", "--", ...paths]);
+
+  if ((yield* gitOk(root, ["diff", "--cached", "--name-only"])).trim() === "") {
+    const gitDir = (yield* gitOk(root, ["rev-parse", "--git-dir"])).trim();
+
+    return yield* new GitFailed({
+      message: `git add staged nothing. root: ${root}; git dir: ${gitDir}; paths: ${paths.join(", ")}`,
+    });
+  }
+
   yield* gitOk(root, ["commit", "--quiet", "-m", message], WRITE_TIMEOUT);
   return (yield* gitOk(root, ["rev-parse", "--short", "HEAD"])).trim();
 });
