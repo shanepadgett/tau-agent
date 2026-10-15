@@ -30,6 +30,11 @@ const MIGRATIONS = [
   CHECK_REPORT_TEXT_MIGRATION,
   NOTE_TABLE,
   MEMORY_TABLE,
+  // A model is named by its provider; the old name for a provider was a route.
+  "ALTER TABLE note RENAME COLUMN route TO provider",
+  "ALTER TABLE memory RENAME COLUMN route TO provider",
+  "UPDATE entry SET body = json_remove(json_set(body, '$.model.provider', " +
+    "body ->> '$.model.route'), '$.model.route') WHERE body ->> '$.type' = 'assistant'",
 ];
 
 const Origin = Schema.Union([
@@ -47,6 +52,9 @@ export type Session = {
   readonly updatedAt: DateTime.Utc;
 };
 
+/** A session in a list, with its first prompt to tell it apart; a session with no prompt has none. */
+export type ListedSession = Session & { readonly firstPrompt: string | undefined };
+
 const OriginJson = Schema.fromJsonString(Origin);
 const BodyJson = Schema.fromJsonString(EntryBody);
 
@@ -56,6 +64,11 @@ const SessionRow = Schema.Struct({
   origin: OriginJson,
   created_at: Schema.DateTimeUtcFromMillis,
   updated_at: Schema.DateTimeUtcFromMillis,
+});
+
+const ListedSessionRow = Schema.Struct({
+  ...SessionRow.fields,
+  first_prompt: Schema.NullOr(Schema.String),
 });
 
 const EntryRow = Schema.Struct({
@@ -92,7 +105,9 @@ export class Sessions extends Context.Service<
     ) => Effect.Effect<Session, SessionNotFound | EntryNotFound | SessionStoreError>;
 
     /** The sessions started in `directory`, most recently changed first. */
-    readonly list: (directory: string) => Effect.Effect<readonly Session[], SessionStoreError>;
+    readonly list: (
+      directory: string,
+    ) => Effect.Effect<readonly ListedSession[], SessionStoreError>;
 
     readonly append: (
       session: SessionId,
@@ -129,6 +144,18 @@ const openSessionStore = Effect.fn("openSessionStore")(function* (path: string) 
   );
 });
 
+/** The sessions of a directory with their first prompts, most recently changed first. */
+const LIST_QUERY =
+  `SELECT ${SESSION_COLUMNS}, (SELECT body ->> '$.text' FROM entry ` +
+  "WHERE session_id = session.id AND body ->> '$.type' = 'user' " +
+  "ORDER BY number LIMIT 1) AS first_prompt " +
+  "FROM session WHERE directory = ? ORDER BY updated_at DESC, id DESC";
+
+const listedFromRow = (row: typeof ListedSessionRow.Type): ListedSession => ({
+  ...sessionFromRow(row),
+  firstPrompt: row.first_prompt ?? undefined,
+});
+
 const makeSessions = (path: string, database: Database, crypto: Crypto.Crypto) => {
   const fail = (cause: unknown) => new SessionStoreError({ path, cause });
 
@@ -158,17 +185,10 @@ const makeSessions = (path: string, database: Database, crypto: Crypto.Crypto) =
       .pipe(Effect.catchTag("DatabaseError", (error) => Effect.fail(fail(error))));
 
   const list = (directory: string) =>
-    database
-      .query(
-        `SELECT ${SESSION_COLUMNS} FROM session WHERE directory = ? ` +
-          "ORDER BY updated_at DESC, id DESC",
-        [directory],
-        SessionRow,
-      )
-      .pipe(
-        Effect.map((rows) => rows.map(sessionFromRow)),
-        Effect.mapError(fail),
-      );
+    database.query(LIST_QUERY, [directory], ListedSessionRow).pipe(
+      Effect.map((rows) => rows.map(listedFromRow)),
+      Effect.mapError(fail),
+    );
 
   const append = (session: SessionId, bodies: readonly EntryBody[]) =>
     database
@@ -212,13 +232,13 @@ const forkWithin = (database: Database, newSession: NewSession, from: SessionId,
     );
 
     yield* transaction.run(
-      "INSERT INTO note SELECT ?, number, from_entry, through_entry, text, route, model, at " +
+      "INSERT INTO note SELECT ?, number, from_entry, through_entry, text, provider, model, at " +
         "FROM note WHERE session_id = ? AND through_entry <= ?",
       [branch.id, from, through],
     );
 
     yield* transaction.run(
-      "INSERT INTO memory SELECT ?, number, through_note, through_entry, text, route, model, at " +
+      "INSERT INTO memory SELECT ?, number, through_note, through_entry, text, provider, model, at " +
         "FROM memory WHERE session_id = ? AND through_entry <= ?",
       [branch.id, from, through],
     );

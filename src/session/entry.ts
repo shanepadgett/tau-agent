@@ -4,7 +4,8 @@
  */
 
 import { type DateTime, Schema } from "effect";
-import { RouteId } from "../ai/Routes.ts";
+import { ThinkingLevel } from "../ai/ModelProfile.ts";
+import { ProviderId } from "../ai/Providers.ts";
 import { CheckReport } from "./CheckReport.ts";
 
 export const SessionId = Schema.String.pipe(Schema.brand("SessionId"));
@@ -47,7 +48,15 @@ const Tokens = Schema.Struct({
   cacheWrite: Schema.optional(Schema.Int),
 });
 
-const UserEntry = Schema.Struct({ type: Schema.Literal("user"), text: Schema.String });
+/**
+ * A prompt starts a run. A steering message is one the user sent during a run; the run takes it
+ * before its next model call and goes on.
+ */
+const UserEntry = Schema.Struct({
+  type: Schema.Literal("user"),
+  text: Schema.String,
+  steering: Schema.optional(Schema.Literal(true)),
+});
 
 /**
  * An interrupted reply holds the text the model sent before the user or a crash stopped it. The
@@ -56,7 +65,12 @@ const UserEntry = Schema.Struct({ type: Schema.Literal("user"), text: Schema.Str
  */
 const AssistantEntry = Schema.Struct({
   type: Schema.Literal("assistant"),
-  model: Schema.Struct({ route: RouteId, model: Schema.String }),
+  /** `thinking` is the level the user chose for the run; replies saved before levels have none. */
+  model: Schema.Struct({
+    provider: ProviderId,
+    model: Schema.String,
+    thinking: Schema.optional(ThinkingLevel),
+  }),
   parts: Schema.Array(Schema.Union([TextPart, ReasoningPart, ToolCallPart])),
   interrupted: Schema.Boolean,
   tokens: Schema.optional(Tokens),

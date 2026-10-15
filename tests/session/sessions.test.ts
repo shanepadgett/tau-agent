@@ -3,14 +3,14 @@ import { BunCrypto, BunFileSystem } from "@effect/platform-bun";
 import { Context, type Crypto, Effect, FileSystem, Layer, type Scope } from "effect";
 import type { Prompt } from "effect/ai";
 import { TestClock } from "effect/testing";
-import { RouteId } from "../../src/ai/Routes.ts";
+import { ProviderId } from "../../src/ai/Providers.ts";
 import { contextView } from "../../src/session/ContextView.ts";
 import { type EntryBody, SessionId } from "../../src/session/Entry.ts";
 import { TauHome } from "../../src/database/TauHome.ts";
 import { Sessions } from "../../src/session/Sessions.ts";
 
 const project = "/work/project";
-const model = { route: RouteId.make("anthropic"), model: "claude-sonnet-5-5" };
+const model = { provider: ProviderId.make("anthropic"), model: "claude-sonnet-5-5" };
 const thinking = { anthropic: { info: { type: "thinking", signature: "signature-1" } } } as const;
 
 const user = (text: string): EntryBody => ({ type: "user", text });
@@ -195,6 +195,10 @@ describe("sessions", () => {
         yield* TestClock.adjust("1 second");
         yield* sessions.append(older.id, [user("again")]);
         expect(yield* ids).toEqual([older.id, newer.id]);
+
+        yield* sessions.append(older.id, [answer("done"), user("later")]);
+        const prompts = (yield* sessions.list(project)).map((session) => session.firstPrompt);
+        expect(prompts).toEqual(["again", undefined]);
 
         const other = yield* sessions.list("/work/other");
         expect(other.map((session) => session.id)).toEqual([elsewhere.id]);
