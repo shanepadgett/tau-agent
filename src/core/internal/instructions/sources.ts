@@ -10,6 +10,8 @@ import { runProgram } from "../../../proc/Command.ts";
 import { GIT_TIMEOUT } from "../../../workspace/Repository.ts";
 import type { Entry } from "../../../session/Entry.ts";
 import type { UserInstructions } from "../../UserInstructions.ts";
+import type { References } from "../../References.ts";
+import { referencesSource } from "../references/references-source.ts";
 import { type FoundSkills, skillListSource } from "../skills/skills.ts";
 import { projectFolders } from "./folders.ts";
 import { alwaysSources, findInstructionFiles, readWhenSource } from "./instruction-files.ts";
@@ -24,6 +26,7 @@ export type Where = {
   readonly directory: string;
   readonly user: UserInstructions["Service"];
   readonly skills: FoundSkills;
+  readonly references: References["Service"];
 };
 
 /**
@@ -42,11 +45,18 @@ export const instructionSources = Effect.fn("instructionSources")(function* (
     ...folders.map((folder) => join(folder, ".tau", "instructions")),
   ]);
 
+  const library = yield* where.references.list;
+
   return [
     ...agentsSources(where, folders, entries),
     ...alwaysSources(files, entries),
     readWhenSource(files),
     skillListSource(where.skills, entries),
+    referencesSource(
+      where.references.folder,
+      library.map(({ name }) => name),
+      entries,
+    ),
     dateSource,
     environmentSource(where.directory, root),
     filesSource(where.directory, root),

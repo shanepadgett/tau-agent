@@ -55,6 +55,8 @@ export type ChatState = {
   readonly steering: readonly QueuedPrompt[];
   readonly usage: Usage | undefined;
   readonly processes: ChatProcesses;
+  /** The reference repositories attached to the session. */
+  readonly references: readonly string[];
   /** The last session entry the background notes cover, or none before the first note. */
   readonly notesThrough: number | undefined;
   readonly returned: ReturnedPrompts | undefined;
@@ -81,6 +83,7 @@ const EMPTY_CHAT: ChatState = {
   steering: [],
   usage: undefined,
   processes: [],
+  references: [],
   notesThrough: undefined,
   returned: undefined,
   run: "idle",
@@ -148,6 +151,8 @@ export const reduce = (state: ChatState, action: ChatAction): ChatState => {
       return add(state, { kind: "notice", text: checksText(action.failed) });
     case "processes-changed":
       return { ...state, processes: action.processes };
+    case "references-changed":
+      return { ...state, references: action.names };
     case "notes-written":
       return { ...state, notesThrough: action.through };
     case "run-ended":

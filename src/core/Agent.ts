@@ -22,6 +22,7 @@ import { ContextMethod } from "./ContextMethod.ts";
 import { FavoriteModels, type FavoriteModelsError } from "./FavoriteModels.ts";
 import { CommitSettings } from "./Commits.ts";
 import { Web } from "./Web.ts";
+import { References } from "./References.ts";
 import { type SidebarChoice, TuiMemory, type TuiMemoryError } from "./TuiMemory.ts";
 
 export type { OpenSession } from "./internal/runner/runner.ts";
@@ -51,6 +52,8 @@ export class Agent extends Context.Service<
     ) => Effect.Effect<readonly ModelRef[], FavoriteModelsError>;
     /** Whether the user last left the chat's docked sidebar open or closed. */
     readonly sidebarChoice: Effect.Effect<SidebarChoice>;
+    /** The library of reference repositories. */
+    readonly references: References["Service"];
     readonly saveSidebarChoice: (choice: SidebarChoice) => Effect.Effect<void, TuiMemoryError>;
   }
 >()("tau/core/Agent") {
@@ -71,6 +74,7 @@ export class Agent extends Context.Service<
         fileProblems: yield* makeFileProblems(yield* Status),
         commitSettings: yield* CommitSettings,
         web: yield* Web,
+        references: yield* References,
       };
 
       const favorites = yield* FavoriteModels;
@@ -95,6 +99,7 @@ export class Agent extends Context.Service<
         favoriteModels: favorites.read,
         toggleFavoriteModel: favorites.toggle,
         sidebarChoice: tuiMemory.sidebar,
+        references: services.references,
         saveSidebarChoice: tuiMemory.saveSidebar,
       });
     }),

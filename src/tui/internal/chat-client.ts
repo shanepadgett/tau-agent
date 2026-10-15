@@ -64,6 +64,7 @@ export type ChatAgent = Pick<
   | "models"
   | "favoriteModels"
   | "toggleFavoriteModel"
+  | "references"
   | "sidebarChoice"
   | "saveSidebarChoice"
 > & {

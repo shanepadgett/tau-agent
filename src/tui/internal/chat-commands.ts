@@ -9,12 +9,13 @@ import type { CommitFlow } from "./commit-flow.ts";
 import type { CommandInfo } from "./command-suggestions.ts";
 import { type ModelRef, modelPicker } from "./model-picker.ts";
 import type { PickerItem, PickerList } from "./Picker.tsx";
+import { type ReferencesTarget, referencesPicker } from "./references-picker.ts";
 
 type SessionId = OpenSession["session"]["id"];
 
 type ChatAgent = Pick<
   Agent["Service"],
-  "sessions" | "models" | "favoriteModels" | "toggleFavoriteModel"
+  "sessions" | "models" | "favoriteModels" | "toggleFavoriteModel" | "references"
 >;
 
 type ListedSession = Effect.Success<ReturnType<ChatAgent["sessions"]>>[number];
@@ -88,6 +89,7 @@ const sessionItem = (target: CommandTarget, listed: ListedSession): PickerItem =
   const note = isOpen ? "this session" : dateText(listed.updatedAt);
 
   return {
+    id: listed.id,
     label,
     note,
     search: `${label} ${note}`,
@@ -114,6 +116,40 @@ const favoriteSaver =
     );
   };
 
+/** The `/model` picker for the chat. */
+const modelPickerFor = (target: CommandTarget) =>
+  modelPicker({
+    apply: target.apply,
+    setModel: target.setModel,
+    saveFavorite: favoriteSaver(target),
+  });
+
+/** What the references picker acts on, from the chat. */
+const referencesTarget = (
+  target: CommandTarget,
+  show: (picker: PickerList | undefined) => void,
+): ReferencesTarget => ({
+  library: target.agent.references,
+  attached: () => target.chat.references,
+  attach: (names) => {
+    target.fork(
+      target.opened.references.set(names).pipe(
+        Effect.catch((error) =>
+          Effect.sync(() => {
+            target.apply({
+              type: "notice",
+              text: `Could not save the attached references: ${error.message}`,
+            });
+          }),
+        ),
+      ),
+    );
+  },
+  apply: target.apply,
+  fork: target.fork,
+  show,
+});
+
 /**
  * The commands by their text, their names and descriptions for the suggestion list, and the picker
  * the last one opened.
@@ -122,12 +158,6 @@ export const chatCommands = (target: CommandTarget) => {
   const { chat, apply, agent, opened } = target;
   const [picker, setPicker] = createSignal<PickerList | undefined>();
   const pick = picking(apply, setPicker);
-
-  const modelPickerOf = modelPicker({
-    apply,
-    setModel: target.setModel,
-    saveFavorite: favoriteSaver(target),
-  });
 
   // In alphabetical order, the order of the suggestion list.
   const commands: Readonly<Record<string, ChatCommand>> = {
@@ -147,7 +177,7 @@ export const chatCommands = (target: CommandTarget) => {
     },
     "/model": {
       description: "Change the model for this chat",
-      run: () => pick(Effect.all([agent.models, agent.favoriteModels]), modelPickerOf),
+      run: () => pick(Effect.all([agent.models, agent.favoriteModels]), modelPickerFor(target)),
     },
     "/new": {
       description: "Start a new session in this folder",
@@ -155,6 +185,10 @@ export const chatCommands = (target: CommandTarget) => {
         Effect.sync(() => {
           whenIdle(target, target.openNew);
         }),
+    },
+    "/references": {
+      description: "Attach reference repositories, and manage the library",
+      run: () => pick(agent.references.list, referencesPicker(referencesTarget(target, setPicker))),
     },
     "/restart": {
       description: "Restart Tau into new code",

@@ -35,6 +35,7 @@ export function SessionPanel(props: {
       <Section title="Context" lines={[contextText(props.chat.usage)]} />
       <Section title="Cost" lines={[costText(props.chat.usage)]} />
       <Processes processes={props.processes} />
+      <Section title="References" lines={referenceLines(props.chat.references)} />
       <Section title="Compaction" lines={compactionLines(props.chat)} />
     </box>
   );
@@ -117,6 +118,10 @@ const markColor = (state: ChatProcess["state"]) => {
 
 const cut = (text: string, cells: number) =>
   text.length <= cells ? text : `${text.slice(0, Math.max(0, cells - 1))}…`;
+
+/** The attached reference repositories, one per line. */
+const referenceLines = (names: readonly string[]) =>
+  names.length === 0 ? ["None attached"] : names;
 
 /** How far the background notes reach, and how many times the model compacted its context. */
 const compactionLines = (chat: ChatState) => {

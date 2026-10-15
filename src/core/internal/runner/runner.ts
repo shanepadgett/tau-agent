@@ -41,6 +41,8 @@ import { historyEvents, replyProfiles } from "./history-events.ts";
 import { PROCESS_GROUP, processFunctions } from "../process/process-functions.ts";
 import { WEB_GROUP, webFunctions } from "../web/web-functions.ts";
 import type { Web } from "../../Web.ts";
+import type { References } from "../../References.ts";
+import { type SessionReferences, sessionReferences } from "../references/references-source.ts";
 import { processNotices } from "../process/process-notices.ts";
 import type { UserInstructions } from "../../UserInstructions.ts";
 import type { OutputFolder } from "../../OutputFolder.ts";
@@ -76,6 +78,7 @@ export type RunServices = {
   readonly fileProblems: Effect.Effect<RunFileProblems>;
   readonly commitSettings: CommitSettings;
   readonly web: Web["Service"];
+  readonly references: References["Service"];
 };
 
 /** A session opened for runs. */
@@ -90,6 +93,8 @@ export type OpenSession = {
   readonly lastModel: Effect.Effect<SavedModel | undefined, SessionStoreError>;
   /** The steps of `/commit` in the session's repository. */
   readonly commits: Commits;
+  /** The reference repositories attached to the session. */
+  readonly references: SessionReferences;
 };
 
 type QueuedPrompt = Extract<Command, { type: "prompt" | "steer" }>;
@@ -173,6 +178,7 @@ export const makeRunner = Effect.fn("makeRunner")(function* (services: RunServic
     send,
     ...savedRuns(services, id),
     commits: commitsOf(services, session),
+    references: sessionReferences(services.sessions, id, events),
   };
 
   return opened;
@@ -239,7 +245,10 @@ const runPrompt = (
       shouldReply: method.shouldReply,
       checks,
       updateInstructions: (entries) =>
-        instructionSources({ directory: session.directory, user, skills }, entries).pipe(
+        instructionSources(
+          { directory: session.directory, user, skills, references: services.references },
+          entries,
+        ).pipe(
           Effect.flatMap((sources) => instructionsUpdate(sources, entries)),
           withProblems,
           Effect.tap(files.show),

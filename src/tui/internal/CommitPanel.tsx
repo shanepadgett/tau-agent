@@ -140,8 +140,6 @@ function PlanLines(props: { readonly step: Step<"review">; readonly top: number 
           item={{
             label: commit.message.split("\n")[0] ?? "",
             note: filesText(commit.files.length),
-            search: "",
-            choose: () => {},
           }}
           isSelected={false}
         />

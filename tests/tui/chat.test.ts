@@ -121,6 +121,7 @@ const startChat = Effect.fn("startChat")(function* (
     models: agent.models,
     favoriteModels: agent.favoriteModels,
     toggleFavoriteModel: agent.toggleFavoriteModel,
+    references: agent.references,
     sidebarChoice: agent.sidebarChoice,
     saveSidebarChoice: agent.saveSidebarChoice,
   };
@@ -581,6 +582,48 @@ describe("the chat in the terminal", () => {
       }).pipe(Effect.scoped),
     ));
 
+  test("/references marks clones with Tab and attaches the marked ones on Enter", () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const folder = `${harness.home}/.tau/references`;
+        yield* fileSystem.makeDirectory(`${folder}/opencode`, { recursive: true });
+        yield* fileSystem.makeDirectory(`${folder}/pi`, { recursive: true });
+        const agent = yield* harness.startAgent([]);
+        const opened = yield* agent.open(Option.none(), harness.directory);
+        const { terminal } = yield* startChat(agent, opened, withoutRestarts(options));
+
+        yield* Effect.promise(() => terminal.mockInput.typeText("/references"));
+        terminal.mockInput.pressEnter();
+        const listed = yield* frameWith(terminal, "0 attached");
+        expect(listed).toContain("[ ] opencode");
+        expect(listed).toContain("[ ] pi");
+        expect(listed).toContain("enter ok");
+        expect(listed).toContain("^x del");
+
+        terminal.mockInput.pressTab();
+        const marked = yield* frameWith(terminal, "1 attached");
+        expect(marked).toContain("[x] opencode");
+
+        terminal.mockInput.pressTab();
+        yield* frameWith(terminal, "2 attached");
+        terminal.mockInput.pressEnter();
+
+        const savedNames = Effect.gen(function* () {
+          const entries = yield* harness.sessions.entries(opened.session.id, 0);
+          return entries.flatMap(({ body }) => (body.type === "references" ? [body.names] : []));
+        });
+
+        const saved = yield* savedNames.pipe(
+          Effect.tap(() => Effect.yieldNow),
+          Effect.repeat({ until: (found) => found.length > 0 }),
+        );
+
+        const attached = saved.at(-1);
+        expect(attached).toEqual(["opencode", "pi"]);
+      }).pipe(Effect.scoped),
+    ));
+
   test("Shift+Tab steps the thinking level the footer shows, and the next reply saves it", () =>
     withHarness((harness) =>
       Effect.gen(function* () {
@@ -625,7 +668,7 @@ describe("the chat in the terminal", () => {
         yield* Effect.promise(() => terminal.mockInput.typeText("Hi."));
         terminal.mockInput.pressEnter();
         yield* frameWith(terminal, "esc cancel");
-        yield* Effect.promise(() => terminal.mockInput.typeText("/re"));
+        yield* Effect.promise(() => terminal.mockInput.typeText("/res"));
         yield* frameWith(terminal, "▸ /restart");
         terminal.mockInput.pressEscape();
         const frame = yield* frameWith(terminal, "esc cancel");
@@ -646,7 +689,7 @@ describe("the chat in the terminal", () => {
         yield* Effect.promise(() => terminal.mockInput.typeText("Hi."));
         terminal.mockInput.pressEnter();
         yield* frameWith(terminal, "esc cancel");
-        yield* Effect.promise(() => terminal.mockInput.typeText("/re"));
+        yield* Effect.promise(() => terminal.mockInput.typeText("/res"));
         yield* frameWith(terminal, "▸ /restart");
 
         pressCtrlC();

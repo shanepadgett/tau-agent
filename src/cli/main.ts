@@ -14,6 +14,7 @@ import { credentialStoreLayer } from "../host/CredentialStore.ts";
 import { favoriteModelsLayer } from "../host/FavoriteModels.ts";
 import { hostIdLayer } from "../host/HostId.ts";
 import { logFileLayer } from "../host/LogFile.ts";
+import { referencesLayer } from "../host/References.ts";
 import { Settings } from "../host/Settings.ts";
 import { tuiMemoryLayer } from "../host/TuiMemory.ts";
 import { outputFolderLayer } from "../host/OutputFolder.ts";
@@ -23,18 +24,19 @@ import { loginCommand, logoutCommand, terminalLoginPrompt } from "./internal/log
 import { rootCommand } from "./internal/root-command.ts";
 
 const appLayer = Layer.mergeAll(
+  referencesLayer,
   credentialStoreLayer,
   catalogCacheLayer,
   favoriteModelsLayer,
   tuiMemoryLayer,
   hostIdLayer,
   outputFolderLayer,
-  FetchHttpClient.layer,
   terminalLoginPrompt,
   ReloadLink.layer,
   Status.layer,
   logFileLayer,
 ).pipe(
+  Layer.provideMerge(FetchHttpClient.layer),
   Layer.provideMerge(Settings.layer),
   Layer.provideMerge(TauHome.at(join(homedir(), ".tau"))),
   Layer.provideMerge(BunServices.layer),

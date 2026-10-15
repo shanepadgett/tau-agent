@@ -7,7 +7,7 @@ import type { Effect } from "effect";
 import { createSignal } from "solid-js";
 import type { Agent } from "../../core/Agent.ts";
 import type { ChatAction } from "./chat-state.ts";
-import type { PickerItem, PickerList } from "./Picker.tsx";
+import type { PickerAction, PickerItem, PickerList } from "./Picker.tsx";
 
 export type ListedModel = Effect.Success<Agent["Service"]["models"]>[number];
 export type ModelRef = ListedModel["ref"];
@@ -45,6 +45,7 @@ export const modelPicker =
     };
 
     const modelItem = (listed: ListedModel): PickerItem => ({
+      id: refText(listed.ref),
       label: listed.name,
       note: listed.ref.provider,
       search: `${listed.name} ${refText(listed.ref)}`,
@@ -52,14 +53,20 @@ export const modelPicker =
         target.setModel(listed.ref);
         target.apply({ type: "info", text: `The model is now ${refText(listed.ref)}.` });
       },
-      mark: () => {
-        toggleFavorite(listed.ref);
-      },
     });
+
+    const pin: PickerAction = {
+      key: "ctrl+f",
+      run: (selected) => {
+        const listed = models.find((model) => refText(model.ref) === selected?.id);
+        if (listed !== undefined) toggleFavorite(listed.ref);
+      },
+    };
 
     return {
       title: "Model",
-      markHint: "ctrl+f pin",
+      hint: "ctrl+f pin",
+      actions: [pin],
       sections: () => modelSections(models, favorites()).map((section) => section.map(modelItem)),
     };
   };

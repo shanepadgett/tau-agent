@@ -75,6 +75,7 @@ const printEvent = (stdio: Stdio.Stdio, event: AgentEvent) => {
     case "model-call-ended":
     case "processes-changed":
     case "notes-written":
+    case "references-changed":
       return Effect.succeed(Option.none<RunEnded>());
     case "run-ended":
       return Effect.succeed(Option.some(event));

@@ -1,0 +1,116 @@
+{
+  "terms": [
+    {
+      "term": "Agent loop",
+      "definition": "The loop that runs steps until a run ends."
+    },
+    {
+      "term": "Branch",
+      "definition": "A new session that starts with a copy of another session up to a chosen entry."
+    },
+    {
+      "term": "Checkpoint",
+      "definition": "A compaction the agent starts by calling `checkpoint` with a handoff. Its context becomes the session's memory, its notes, the recent entries not yet noted, and the handoff."
+    },
+    {
+      "term": "Compaction",
+      "definition": "Replacing older context with a summary entry; the older entries stay saved."
+    },
+    {
+      "term": "Context",
+      "definition": "What the model sees on one model call, built from the entries."
+    },
+    {
+      "term": "Entry",
+      "definition": "One saved record in a session: a prompt, a reply, a tool result, an instructions update or a summary."
+    },
+    {
+      "term": "Event",
+      "definition": "Live progress, such as text as it streams; not saved."
+    },
+    {
+      "term": "Fold",
+      "definition": "Render the current instruction values into the system prompt at a checkpoint and drop the old updates. Not built."
+    },
+    {
+      "term": "Follow-up",
+      "definition": "A message sent during a run that waits for the run to end, then starts a new run."
+    },
+    {
+      "term": "Handoff",
+      "definition": "The text the agent writes when it calls checkpoint; shown again after the checkpoint as a reminder."
+    },
+    {
+      "term": "Instructions",
+      "definition": "Guidance other than the base prompt, such as AGENTS.md, the date, the environment and the attached references; a change is saved as an entry."
+    },
+    {
+      "term": "Interrupted",
+      "definition": "A reply or tool call cut short by the user or a crash."
+    },
+    {
+      "term": "Long-term memory",
+      "definition": "One durable snapshot of what matters in a session, rewritten by dreaming. It belongs to one session, not a project. Saved in the long_term_memory table."
+    },
+    {
+      "term": "Merge",
+      "definition": "The background job that combines older short-term memory into long-term memory."
+    },
+    {
+      "term": "Message",
+      "definition": "Anything the model receives on one call. Roles: system prompt, user, assistant, tool result."
+    },
+    {
+      "term": "Model call",
+      "definition": "One request to a model; a turn makes more than one when a call is retried."
+    },
+    {
+      "term": "Nudge",
+      "definition": "A reminder in which Tau asks the model to act, such as a context-stage warning or a process exit notice."
+    },
+    {
+      "term": "Operation",
+      "definition": "One rule a step tries, such as running open tool calls or calling the model."
+    },
+    {
+      "term": "Prompt",
+      "definition": "What the user submits."
+    },
+    {
+      "term": "Reminder",
+      "definition": "A hidden message Tau writes into the context as a user-role message, wrapped in <reminder kind=\"...\">. Kinds: instructions, nudge, checks, run-failed, handoff, short-term-memory, long-term-memory. The chat does not show it."
+    },
+    {
+      "term": "Run",
+      "definition": "Everything Tau does for one prompt, until it answers, fails or is stopped."
+    },
+    {
+      "term": "Session",
+      "definition": "One saved conversation in one working directory."
+    },
+    {
+      "term": "Short-term memory",
+      "definition": "Summaries of older ranges of entries, written continuously by a cheap model. Saved in the short_term_memory table."
+    },
+    {
+      "term": "Steering message",
+      "definition": "A message sent during a run; it joins the run after the current turn."
+    },
+    {
+      "term": "Step",
+      "definition": "One pass of the agent loop: read the entries, try the operations in order, save what the first one produces."
+    },
+    {
+      "term": "Turn",
+      "definition": "One model reply and the tool calls it makes."
+    },
+    {
+      "term": "Update",
+      "definition": "An instruction change saved after the first message; the model gets it as an instructions reminder."
+    },
+    {
+      "term": "Working memory",
+      "definition": "The context: what the model sees on one call."
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Web search, web fetch and references
 
-Status: round 1 (web) and round 3 (the web code-level plan) agreed 2026-10-15. Web is built (2026-10-15); its live check is in [live-checks.md](../live-checks.md). Round 2 (the references design and mockups) proposed; its open decisions are in [questions.md](../questions.md).
+Status: round 1 (web) and round 3 (the web code-level plan) agreed 2026-10-15. Web is built (2026-10-15); its live check is in [live-checks.md](../live-checks.md). Round 2 (the references design and mockups) agreed 2026-10-15. Round 4 (the references code-level plan) agreed 2026-10-15.
 
 Two pieces of work, web first. **Web**: the model can search the web and read a page from a `run` script. **References**: the user keeps a library of reference repositories (read-only git clones of other projects) and attaches some of them to a session, so the model knows where they are. Both are built-ins from `main` that [features.md](../features.md) lists for step 7; like `/commit`, they are built in core now and move onto the extension SDK in step 7.
 
@@ -156,7 +156,7 @@ fetch(input)
 
 `main`'s system prompt section (`guidance.ts`), its temporary output store (`tool-output.ts`), turndown and its GFM plugin, and the xAI route.
 
-## References (round 2, proposed)
+## References (round 2, agreed 2026-10-15)
 
 The library and the session are separate, as with favorite models. The library is every clone in the references folder; `/references` adds, updates and removes clones. Attaching a reference to a session is a separate toggle in the same panel. Attached references show in the sidebar, and the model learns their names and folder from an instruction source, not from the prompt.
 
@@ -240,3 +240,191 @@ Sidebar, below Processes:
 ```
 
 Empty: `References   None attached`.
+
+## References code-level plan (round 4, agreed 2026-10-15)
+
+### What exists
+
+| Piece | Today |
+| --- | --- |
+| `Picker.tsx` | Filtered list with sections and a divider; Enter calls `choose` and closes; Ctrl+F calls `mark`. `/model` and `/sessions` use it through `chat-commands.ts`. |
+| `FavoriteModels` | Interface in `core/`, file-backed layer in `host/`, exposed through `Agent`. The library half of references copies this. |
+| `instructions/sources.ts` | Sources get `entries`, so one can read a session entry (as `skillListSource` reads saved values). |
+| `Sessions.append`, `fork` | Fork copies entries up to a number, so a `references` entry survives forks with no code. |
+| `processes-changed` event, `SessionPanel.tsx` | The pattern for a sidebar section fed by an event. |
+| `runProgramWith` | Runs a program and gives its output when it ends. No line streaming, so clone progress uses the process spawner directly (`ChildProcessSpawner`, as `Command.ts` does) and reads stderr as a stream. |
+
+### Shape
+
+Two parts that meet only at attached names. The **library** is global: the folder and git work, behind a `References` service like `FavoriteModels`. **Attachment** is per session: an entry, an instruction source and a sidebar section.
+
+```mermaid
+flowchart LR
+  P["references panel"] --> R["References service: folder and git"]
+  P --> S["OpenSession.references: attach, detach"]
+  S --> E["entry: references"]
+  E --> I["instruction source"]
+  S --> V["event: references-changed"] --> B["sidebar"]
+```
+
+Picker shape, two options: (a) widen `Picker` with row actions, a text-input mode and a stay-open flag; (b) a separate `ReferencesPanel.tsx` that reuses `filteredList`. Recommend (a): (b) copies the filter, cursor, scroll and divider code, and `/model` and `/sessions` take the same widening for free. The panel's modes (list, URL, branches, delete) are a small state machine in `references-picker.ts`, not flags in `Picker`.
+
+### Files
+
+```text
+src/core/References.ts                 service interface (library), ReferenceFailed
+src/host/References.ts                 layer: folder reads, .git/HEAD, git clone/pull/switch, rm, editor
+src/core/internal/references/references-source.ts   instruction source tau/references
+src/session/Entry.ts                   + ReferencesEntry { type: "references", names }
+src/core/internal/runner/runner.ts     OpenSession.references; appends the entry; publishes the event
+src/core/Client.ts                     + AgentEvent "references-changed"
+src/core/Agent.ts                      exposes References["Service"] as `references`
+src/tui/internal/Picker.tsx            + actions, text-input mode, keepsOpen (widened)
+src/tui/internal/references-picker.ts  the panel's state machine; builds PickerLists
+src/tui/internal/chat-commands.ts      + /references
+src/tui/internal/chat-state.ts         + references: readonly string[]
+src/tui/internal/SessionPanel.tsx      + References section below Processes
+docs/guide/references.md               the command, keys, folder, what the model sees
+tests/host/references.test.ts          temp folder and a local bare repo: list, clone, pull, branches, delete
+tests/core/references.test.ts          source text, attach/detach entries, dropped missing folder
+```
+
+### Types
+
+```ts
+type CloneProgress = { phase: "receiving" | "resolving" | "updating"; percent: number }; // parsed from git clone --progress stderr
+type Reference = { name: string; branch: string | undefined }; // branch from .git/HEAD; a detached head shows the short hash
+
+class References extends Context.Service<References, {
+  list: Effect<readonly Reference[]>;                       // folder names + .git/HEAD, no git process
+  clone: (url: string, onProgress: (progress: CloneProgress) => Effect<void>) => Effect<Reference, ReferenceFailed>; // built as a callback, not a Stream; name = last URL segment without .git; ends when the clone is in place
+  update: (name: string) => Effect<void, ReferenceFailed>;      // git pull --ff-only
+  branches: (name: string) => Effect<readonly string[], ReferenceFailed>;
+  switchBranch: (name: string, branch: string) => Effect<Reference, ReferenceFailed>;
+  remove: (name: string) => Effect<void, ReferenceFailed>;
+  open: (name: string) => Effect<void, ReferenceFailed>;    // $VISUAL, else $EDITOR, else code
+}>
+
+// ReferenceFailed.message is the first line of git's output.
+// clone follows main: `git clone --progress --single-branch` into `.clone-<name>-<id>` in the references folder, renamed on success, removed on failure or cancel, killed after 180 s with no output. list skips `.clone-*`.
+
+// OpenSession gains:
+references: {
+  attached: Effect<readonly string[], SessionStoreError>;           // newest references entry
+  set: (names: readonly string[]) => Effect<void, SessionStoreError>; // appends the entry, publishes the event
+};
+
+// Entry: { type: "references"; names: readonly string[] }
+// Event: { type: "references-changed"; names: readonly string[] }
+
+// Picker widening
+type PickerAction = { key: string; hint: string; run: (item: PickerItem | undefined) => void };
+type PickerList = { title; sections; actions: readonly PickerAction[]; hint: Accessor<string>;
+  placeholder: Accessor<string>; submit?: (text: string) => void;  // text-input mode
+  back?: () => void; keepsOpen?: boolean };   // Esc calls back when set, else closes
+```
+
+`mark`/`markHint` become one `PickerAction` on Ctrl+F, so `/model` changes by a few lines.
+
+### Call path and logic
+
+```text
+/references
+  library = agent.references.list; attached = opened.references.attached
+  open panel in mode list
+
+panel (mode list)
+  sections = [attached rows, other rows]; row label = name, note = branch or its action state
+  enter: toggle name in attached; opened.references.set(new list); stay open
+  ctrl+n: mode url (placeholder "Git URL", submit = clone; row note "↓ 37%" from each progress item, then the branch)
+  ctrl+r: mode branches of cursor row; enter switches, esc back
+  ctrl+u: for each name, 4 at a time: note "…", agent.references.update, note "✓" or "! first line"
+  ctrl+x: mode delete (hint "Delete <name> from disk? y / n"); y: remove, detach if attached
+  ctrl+o: agent.references.open(name)
+  an action's failure sets the row note to "! <message>" until the row's next action
+
+source tau/references (reads entries)
+  names = names of the newest references entry, kept where <references folder>/<name> exists
+  none if empty
+  first   = folder text + "Attached: " + names
+  changed = "The attached references are now: " + names
+  removed = "No references are attached any more."
+```
+
+The source needs the references folder, so `Where` in `sources.ts` gains it from `References`. Row state (clone progress, updating, errors) lives in the panel, not in the service.
+
+### Injection
+
+| | Production | Tests |
+| --- | --- | --- |
+| Folder | `TauHome` directory + `references/` | temporary `TauHome` |
+| Git | real `git` through `runProgramWith` | a bare repo made in the test folder as the clone URL |
+| Editor | spawns `$VISUAL`/`$EDITOR`/`code` | not tested; `open` is a single spawn |
+| Panel state machine | `references-picker.ts` over `Agent["Service"]["references"]` | a fake service, as `chat-state.test.ts` does |
+
+### Replaces
+
+`main`'s `reference` extension (the `/reference` picker that wrote text into the input, and its per-repository git calls on open). Nothing in this branch is removed.
+
+
+## References: repository description (considering, 2026-10-15)
+
+Show a muted, single-line description after the branch in each row, cut with `…` at a width limit. Agreed and built 2026-10-15 with the recommended source below. Live check pending.
+
+Sources for the text:
+
+| Source | Network | Notes |
+| --- | --- | --- |
+| GitHub API `GET /repos/{owner}/{repo}` at clone time | once per clone, github.com URLs only | The text GitHub shows. Saved in `.git/tau-description`, so listing stays offline and runs no git. Existing clones have none until the user presses a refresh key. Rate limit 60 per hour without a token. |
+| First paragraph of the README | none | Works for any host and existing clones. Often a badge line or a title, not a description. |
+
+Recommendation: GitHub API at clone time, with the README line as the fallback for other hosts and for existing clones.
+
+Mockup (80 columns; branch is plain text, description is muted and cut to fit):
+
+```
+References
+  opencode    dev   Open source AI coding agent built for the terminal
+  opentui     main  Terminal UI framework for TypeScript and Zig, with…
+  ──────────
+  codex       ↓ 37%
+  pi          main  A minimal terminal coding harness
+```
+
+
+## Multi-select picker (considering, 2026-10-15)
+
+A picker where the user marks several items and confirms them together, with the same type-to-filter input. Not designed yet; the use is open (see questions.md).
+
+Proposed keys. The input stays focused so letters and Space always filter:
+
+| Key | Action |
+| --- | --- |
+| Tab | Mark or unmark the row, then move down |
+| Shift+Tab | Mark or unmark the row, then move up |
+| Ctrl+A | Mark every row the filter shows, or unmark them when all are marked |
+| Up, Down | Move |
+| Enter | Confirm the marked rows; with none marked, confirm the row under the cursor |
+| Escape | Cancel without applying |
+
+Marks stay when the filter changes. Rows show `[x]` or `[ ]`, and the hint line shows the count. Build it as a `multi` option on `Picker` (marked ids, `confirm(ids)`), not a new component.
+
+Decision 2026-10-15: build `multi` on `Picker` and move `/references` onto it. The marks start as the attached set. Enter applies the marks as the session's attached list; Escape cancels. The mockup below waits for approval before any code.
+
+```
+Before (today)                                    After
+References                                        References
+  opencode (dev)  The open source coding agent.     [x] opencode (dev)  The open source coding agent.
+  ──────────                                        [ ] pi (main)       AI agent toolkit: unified LLM…
+  pi (main)  AI agent toolkit: unified LLM…         [ ] codex  ↓ 37%
+  Type to filter                                    Type to filter
+  enter attach · ^n new · ^r branch …               2 attached · tab mark · enter apply · ^n new · ^r branch · ^u update · ^o open · ^x delete
+
+Filtered ("pi"), mark kept from before          Nothing in the library
+  [x] opencode is hidden but still counted          No references. ^n adds one from a git URL.
+  [ ] pi (main)       AI agent toolkit…             0 attached · ^n new
+  Type to filter: pi
+  2 attached · tab mark · enter apply
+```
+
+Built 2026-10-15. Differences from the table above: Enter confirms exactly the marked set (an empty set detaches everything), so references can detach all; the count is in the title (`References · 2 attached`) and the bottom line reads `tab mark · enter ok · ^n new · ^r branch · ^u pull · ^o open · ^x del` so it fits 80 columns (a longer line is not drawn).

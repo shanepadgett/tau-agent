@@ -79,6 +79,8 @@ export type AgentEvent =
   | { readonly type: "checks-ended"; readonly failed: readonly string[] }
   /** The commands the agent started in process sessions changed: one started, exited or was killed. */
   | { readonly type: "processes-changed"; readonly processes: readonly ProcessSummary[] }
+  /** The user attached or detached a reference repository; `names` are all the attached ones. */
+  | { readonly type: "references-changed"; readonly names: readonly string[] }
   /** Background notes now cover the session's entries 1 through `through`. */
   | { readonly type: "notes-written"; readonly through: number }
   | ({ readonly type: "run-ended" } & RunEnd)

@@ -3,7 +3,7 @@
  */
 
 // Before each model call Tau reads every source and saves the values that changed, as rendered
-// text. The first reading goes in the system prompt; later changes go in the chat as notes, so the
+// text. The first reading goes in the system prompt; later changes go in the chat as updates, so the
 // cached start of each request never changes.
 
 import { Effect, Option } from "effect";
@@ -109,7 +109,13 @@ const noteEntry = <E, R>(
   );
 
   const text = changed.map((source) => changeText(source, saved[source.key], current[source.key]));
-  return Option.some({ type: "instructions", placement: "note", values, text: text.join("\n\n") });
+
+  return Option.some({
+    type: "instructions",
+    placement: "update",
+    values,
+    text: text.join("\n\n"),
+  });
 };
 
 const changeText = <E, R>(
