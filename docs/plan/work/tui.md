@@ -140,3 +140,7 @@ These change check configuration. The user approved them on 2026-10-14.
 
 - The "interactive mode is not built yet" message in `print.ts`.
 - `spikes/opentui/` stays as a record; its `app.tsx` is the starting point, not code to copy: the spike's fake streaming and `session` signal are replaced by the reducer.
+
+## Interactive widgets replace the composer (considered 2026-10-14)
+
+Rule: any widget the user must answer (the `/model` picker, the `/commit` panel) replaces the composer (the input editor only; the status line under it stays) while visible. The composer returns, with its draft, when the widget closes. Today the widgets sit above the composer, which stays on screen. Also: `/commit` shows a spinner while pushing. Mockup pending approval.

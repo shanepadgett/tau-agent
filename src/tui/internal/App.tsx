@@ -51,12 +51,13 @@ function Screen(props: { readonly client: Accessor<ChatClient | undefined> }) {
 function App(props: { readonly client: ChatClient; readonly syntax: SyntaxStyle }) {
   const suggestions = commandSuggestions(props.client.commands);
 
+  // A widget the user answers replaces the composer (the input editor; the status line under it stays) while open.
+  const panelOpen = () =>
+    props.client.picker() !== undefined || props.client.commit.step() !== undefined;
+
   useKeyboard((key) => {
     // The open picker or commit panel takes the keys, and the open suggestion list its own keys, such as Escape.
-    const panelOpen =
-      props.client.picker() !== undefined || props.client.commit.step() !== undefined;
-
-    if (panelOpen || suggestions.takes(key)) return;
+    if (panelOpen() || suggestions.takes(key)) return;
     const action = keyAction(key, props.client.chat);
     if (action === undefined) return;
     key.preventDefault();
@@ -82,9 +83,12 @@ function App(props: { readonly client: ChatClient; readonly syntax: SyntaxStyle 
             </Show>
             <CommandList suggestions={suggestions} />
           </Place>
-          <Place name="input.editor">
-            <Input client={props.client} suggestions={suggestions} />
-          </Place>
+          {/* Hidden, not removed, so the draft stays in the editor. */}
+          <box flexDirection="column" visible={!panelOpen()}>
+            <Place name="input.editor">
+              <Input client={props.client} suggestions={suggestions} />
+            </Place>
+          </box>
           <Place name="input.below">
             <InputFooter client={props.client} suggestions={suggestions} />
           </Place>

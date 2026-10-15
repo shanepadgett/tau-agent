@@ -34,7 +34,7 @@ export function Input(props: {
           connectEditor(editor, props.client, props.suggestions);
         }}
         // An open picker takes the keys; the text stays.
-        focused={props.client.picker() === undefined}
+        focused={props.client.picker() === undefined && props.client.commit.step() === undefined}
         keyBindings={KEY_BINDINGS}
         minHeight={1}
         maxHeight={MAX_INPUT_LINES}
