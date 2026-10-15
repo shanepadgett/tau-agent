@@ -35,6 +35,7 @@ Lint, the type checker and the formatter already reject the mechanical problems 
 - Model states that exclude each other as a tagged union, not optional fields or flags that are valid only in some combinations. `{ status: "failed", error }` and `{ status: "done", output }`, not `{ status, error?, output? }`.
 - Parse external input into domain types at the edge. Give easily confused values (ids, paths) distinct types.
 - Let inference work for locals. Write out types at module boundaries.
+- Store what Tau saves in a SQLite database opened with `openDatabase`, unless the user is meant to edit it by hand, as with `settings.json`.
 
 ## Effect
 
