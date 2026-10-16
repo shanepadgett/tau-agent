@@ -1,20 +1,15 @@
 # Roadmap
 
-What is left to do. Built work is in the code and in `docs/guide/`. A file named here holds the thinking for that item.
-
-## Verify what is built
-
-Use Tau daily and report what breaks. Not yet tried in a real terminal: emoji alignment of file tags (Ghostty, iTerm, tmux), pasted images, the sidebar's docked slide on a long transcript, the bundled notification sound in the compiled binary.
+Only what is not done.
 
 ## Next, in order
 
 1. Expired-login warning (today it shows only as a failed run's reason).
-2. Stash a draft with Ctrl+S. Decisions agreed; footer mockup awaits approval ([stash.md](stash.md)).
-3. New front end designed in a gallery, then swapped in ([gallery.md](gallery.md)).
-4. Notifications: remaining question and live terminal check ([notifications.md](notifications.md)).
-5. Commands: `/compact`, `/settings`.
-6. Extension SDK (`@shanepadgett/tau`), then rebuild the built-ins from `main` on it: md-lint, attention, auto-name, branch, cost-report, stash, tool-approval, web, image-gen, worktree, run-summary, handoff, reference, aside, manage-sessions ([sdk.md](sdk.md), [sdk-catalog.md](sdk-catalog.md)).
-7. Packages, install, updates ([sdk-packages.md](sdk-packages.md)).
+2. New front end: design the chat transcript as a gallery scenario, then swap it in ([gallery.md](gallery.md)).
+3. Notifications: the remaining question ([notifications.md](notifications.md)).
+4. Commands: `/compact`, `/settings`.
+5. Extension SDK (`@shanepadgett/tau`), then rebuild on it the built-ins from `main`: md-lint, attention, auto-name, branch, cost-report, tool-approval, image-gen, worktree, run-summary, handoff, aside, manage-sessions ([sdk.md](sdk.md), [sdk-catalog.md](sdk-catalog.md)).
+6. Packages, install, updates ([sdk-packages.md](sdk-packages.md)).
 
 ## Agreed, not scheduled
 

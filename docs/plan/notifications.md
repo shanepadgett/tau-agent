@@ -1,6 +1,6 @@
 # Terminal notifications and custom sound
 
-Status: generic OpenCode-style delivery, bundled custom sound, and enabled-by-default behavior agreed; implemented; formatting, lint, types, filenames, application tests, import boundaries, dead code and duplicate-code checks pass; standalone-binary and live terminal verification pending.
+Status: generic OpenCode-style delivery, bundled custom sound, and enabled-by-default behavior agreed; implemented; formatting, lint, types, filenames, application tests, import boundaries, dead code and duplicate-code checks pass; standalone-binary and live terminal verification done.
 
 ## Agreed asset
 

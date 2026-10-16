@@ -104,13 +104,13 @@
 | cost-report | |
 | stash | |
 | tool-approval | |
-| web | Search and fetch, as `run` functions. |
+| web | Search and fetch, as `run` functions. Built in core. |
 | image-gen | As `run` functions. |
 | worktree | |
 | run-summary | |
-| qna | Keep how it is invoked. Wanted soon, ahead of the SDK (roadmap). On `main`: `/qna [context]` turns on an `ask_question` tool and has the model ask its last questions again in a panel (select, multi, input, confirm, plus an Additional Context tab). |
+| qna | Keep how it is invoked. On `main`: `/qna [context]` turns on an `ask_question` tool and has the model ask its last questions again in a panel (select, multi, input, confirm, plus an Additional Context tab). Built in core. |
 | handoff | Plus the classifier's off-topic prompt. |
-| reference | Build soon; must be faster and less laggy than today. |
+| reference | Built in core (`/references`). |
 | aside | Opens in a side panel. |
 | manage-sessions | A mix of Tau's and Pi's session management, or something new. Designed when we get there. |
 
