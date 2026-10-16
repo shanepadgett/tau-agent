@@ -1,4 +1,4 @@
-import { Type } from "typebox";
+import { Type, type TSchema } from "typebox";
 import { defineTauExtensionSettings } from "../../shared/settings/define.ts";
 
 const commandProperties = {
@@ -32,6 +32,20 @@ const commandSchema = Type.Object(
 	{ additionalProperties: false },
 );
 
+const beforeCommitCommandSchema = Type.Object(commandProperties, { additionalProperties: false });
+
+function parallelGroupSchema(command: TSchema) {
+	return Type.Object(
+		{
+			parallel: Type.Array(command, {
+				minItems: 2,
+				description: "Commands to start concurrently as one ordered step.",
+			}),
+		},
+		{ additionalProperties: false },
+	);
+}
+
 type CommandSettings = {
 	name: string;
 	command: string;
@@ -43,13 +57,18 @@ type CommandSettings = {
 	timeoutMs?: number;
 };
 
+type ParallelGroupSettings<T> = { parallel: T[] };
+
 export default defineTauExtensionSettings({
 	key: "silentCommandRunner",
 	defaults: {
 		maxOutputBytes: 51200 as number,
 		afterWrite: [] as CommandSettings[],
-		afterRun: [] as CommandSettings[],
-		beforeCommit: [] as Omit<CommandSettings, "includeGlobs" | "excludeGlobs">[],
+		afterRun: [] as (CommandSettings | ParallelGroupSettings<CommandSettings>)[],
+		beforeCommit: [] as (
+			| Omit<CommandSettings, "includeGlobs" | "excludeGlobs">
+			| ParallelGroupSettings<Omit<CommandSettings, "includeGlobs" | "excludeGlobs">>
+		)[],
 	},
 	schema: Type.Object(
 		{
@@ -68,17 +87,17 @@ export default defineTauExtensionSettings({
 				}),
 			),
 			afterRun: Type.Optional(
-				Type.Array(commandSchema, {
+				Type.Array(Type.Union([commandSchema, parallelGroupSchema(commandSchema)]), {
 					default: [],
 					description:
-						"Read-only final checks run by the checks tool, with automatic settlement fallback when verification is missing or stale.",
+						"Read-only final checks run by the checks tool, with automatic settlement fallback when verification is missing or stale. Entries run in order; parallel groups run concurrently.",
 				}),
 			),
 			beforeCommit: Type.Optional(
-				Type.Array(Type.Object(commandProperties, { additionalProperties: false }), {
+				Type.Array(Type.Union([beforeCommitCommandSchema, parallelGroupSchema(beforeCommitCommandSchema)]), {
 					default: [],
 					description:
-						"Read-only checks run in order once per /commit, before plan generation. Failures stop the commit and go to the agent.",
+						"Read-only checks run once per /commit before plan generation. Entries run in order; parallel groups run concurrently. Failures stop the commit and go to the agent.",
 				}),
 			),
 		},

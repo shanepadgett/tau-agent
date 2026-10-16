@@ -52,11 +52,16 @@ interface CommandConfig {
 	timeoutMs: number;
 }
 
+type CommandBatch = { kind: "sequential"; commands: CommandConfig[] } | { kind: "parallel"; commands: CommandConfig[] };
+
+type CommandSetting = (typeof silentCommandRunnerSettings.defaults.afterWrite)[number];
+type ScheduledCommandSetting = CommandSetting | { parallel: CommandSetting[] };
+
 interface Settings {
 	maxOutputBytes: number;
 	afterWrite: CommandConfig[];
-	afterRun: CommandConfig[];
-	beforeCommit: CommandConfig[];
+	afterRun: CommandBatch[];
+	beforeCommit: CommandBatch[];
 }
 
 type Snapshot = Map<string, string>;
@@ -111,7 +116,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	let checkTool = defineTool<typeof checkParams, CheckDetails | { progress: string } | undefined>({
 		name: "checks",
 		label: "Repository Checks",
-		description: formatCheckInstructions(settings.afterRun),
+		description: formatCheckInstructions(flattenCommandBatches(settings.afterRun)),
 		parameters: checkParams,
 		exposure: "hidden",
 		executionMode: "sequential",
@@ -173,7 +178,8 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 				instructions.push(
 					`Configured fixes run automatically after modifying tools finish; do not run them manually or claim checks passed from them: ${formatCommandNames(settings.afterWrite)}.`,
 				);
-			if (settings.afterRun.length) instructions.push(formatCheckInstructions(settings.afterRun));
+			if (settings.afterRun.length)
+				instructions.push(formatCheckInstructions(flattenCommandBatches(settings.afterRun)));
 			return instructions.join("\n\n");
 		},
 	});
@@ -188,7 +194,11 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		writeRevision = 0;
 		checkedRevision = 0;
 		changedPaths.clear();
-		runBaseline = await snapshotFiles(await resolveProjectRoot(ctx.cwd), settings.afterRun, ctx.signal);
+		runBaseline = await snapshotFiles(
+			await resolveProjectRoot(ctx.cwd),
+			flattenCommandBatches(settings.afterRun),
+			ctx.signal,
+		);
 	});
 
 	pi.on("agent_settled", () => {
@@ -219,7 +229,11 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		const projectRoot = await resolveProjectRoot(ctx.cwd);
 		snapshots.set(event.toolCallId, {
 			projectRoot,
-			files: await snapshotFiles(projectRoot, [...settings.afterWrite, ...settings.afterRun], ctx.signal),
+			files: await snapshotFiles(
+				projectRoot,
+				[...settings.afterWrite, ...flattenCommandBatches(settings.afterRun)],
+				ctx.signal,
+			),
 		});
 	});
 
@@ -288,7 +302,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 	async function flushFixes(snapshot: WriteSnapshot, ctx: ExtensionContext): Promise<void> {
 		const task = fixerQueue.then(async () => {
 			if (!sessionActive || ctx.signal?.aborted) return;
-			const commands = [...settings.afterWrite, ...settings.afterRun];
+			const commands = [...settings.afterWrite, ...flattenCommandBatches(settings.afterRun)];
 			const current = await snapshotFiles(snapshot.projectRoot, commands, ctx.signal);
 			recordChanges(snapshot.files, current, changedPaths);
 			const changed = [...current]
@@ -345,18 +359,17 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 
 	async function runBeforeCommit(
 		cwd: string,
-		commands: readonly CommandConfig[],
+		commands: readonly CommandBatch[],
 		signal: AbortSignal,
 	): Promise<{ passed: boolean; text: string }> {
 		const output = new BoundedTextResultBuilder(temporaryOutput, "tail");
 		try {
 			const projectRoot = await resolveProjectRoot(cwd);
 			const failed: string[] = [];
-			for (const command of commands) {
-				signal.throwIfAborted();
-				const result = await runCommand(pi, projectRoot, command, signal, []);
+			const results = await runCommandBatches(pi, projectRoot, commands, signal, undefined);
+			for (const result of results) {
 				if (result.code === 0 && !result.killed) continue;
-				failed.push(command.name);
+				failed.push(result.name);
 				await output.append(`${formatAgentFailure(result)}\n\n`);
 			}
 			signal.throwIfAborted();
@@ -373,7 +386,7 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 		const next = normalizeSettings(await loadTauExtensionSettings(ctx, silentCommandRunnerSettings));
 		if (JSON.stringify(next.afterRun) !== JSON.stringify(settings.afterRun)) checkedRevision = undefined;
 		settings = next;
-		const description = formatCheckInstructions(settings.afterRun);
+		const description = formatCheckInstructions(flattenCommandBatches(settings.afterRun));
 		const exposure = settings.afterRun.length ? "direct" : "hidden";
 		if (
 			(settings.afterRun.length > 0 || checkToolRegistered) &&
@@ -419,18 +432,28 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 			controller.signal.throwIfAborted();
 			const revision = writeRevision;
 			const projectRoot = await resolveProjectRoot(cwd);
-			const current = await snapshotFiles(projectRoot, settings.afterRun, controller.signal);
+			const commands = flattenCommandBatches(settings.afterRun);
+			const current = await snapshotFiles(projectRoot, commands, controller.signal);
 			recordChanges(runBaseline, current, changedPaths);
-			const selected = settings.afterRun.filter((command) =>
-				[...changedPaths].some((path) => command.scope.matches(path)),
-			);
+			const changed = [...changedPaths];
+			const selected = settings.afterRun.flatMap((batch) => {
+				const selectedCommands = batch.commands.filter((command) =>
+					changed.some((path) => command.scope.matches(path)),
+				);
+				return selectedCommands.length > 0 ? [{ ...batch, commands: selectedCommands }] : [];
+			});
+			const selectedCount = selected.reduce((count, batch) => count + batch.commands.length, 0);
 			const failed: FailedCommandDetails[] = [];
 			const passed: string[] = [];
-			for (const command of selected) {
-				controller.signal.throwIfAborted();
-				reportProgress(`Running ${command.name} · ${passed.length + failed.length + 1}/${selected.length}`);
-				const result = await runCommand(pi, projectRoot, command, controller.signal, []);
-				controller.signal.throwIfAborted();
+			const results = await runCommandBatches(pi, projectRoot, selected, controller.signal, (batch, completed) => {
+				const first = completed + 1;
+				const last = completed + batch.commands.length;
+				const position = first === last ? `${first}` : `${first}-${last}`;
+				reportProgress(
+					`Running ${batch.commands.map((command) => command.name).join(", ")} · ${position}/${selectedCount}`,
+				);
+			});
+			for (const result of results) {
 				if (result.code !== 0 || result.killed) {
 					await output.append(`${formatAgentFailure(result)}\n\n`);
 					failed.push({
@@ -439,10 +462,10 @@ export default function silentCommandRunnerExtension(pi: ExtensionAPI): void {
 						stderr: tailBytes(result.stderr.content, settings.maxOutputBytes),
 					});
 				} else {
-					passed.push(command.name);
+					passed.push(result.name);
 				}
 			}
-			if (selected.length === 0) await output.append("No checks apply to the changes in this run.");
+			if (selectedCount === 0) await output.append("No checks apply to the changes in this run.");
 			if (passed.length > 0) {
 				const summary = `The following checks passed: ${passed.join(", ")}`;
 				await output.append(summary);
@@ -485,8 +508,8 @@ function normalizeSettings(value: typeof silentCommandRunnerSettings.defaults): 
 	return {
 		maxOutputBytes: positiveInteger(value.maxOutputBytes, DEFAULT_MAX_OUTPUT_BYTES),
 		afterWrite: normalizeCommands(value.afterWrite),
-		afterRun: normalizeCommands(value.afterRun),
-		beforeCommit: normalizeCommands(value.beforeCommit),
+		afterRun: normalizeCommandBatches(value.afterRun),
+		beforeCommit: normalizeCommandBatches(value.beforeCommit),
 	};
 }
 
@@ -511,6 +534,24 @@ function normalizeCommands(commands: typeof silentCommandRunnerSettings.defaults
 			},
 		];
 	});
+}
+
+function normalizeCommandBatches(commands: readonly ScheduledCommandSetting[]): CommandBatch[] {
+	const batches: CommandBatch[] = [];
+	for (const entry of commands) {
+		if ("parallel" in entry) {
+			const normalized = normalizeCommands(entry.parallel);
+			if (normalized.length > 0) batches.push({ kind: "parallel", commands: normalized });
+			continue;
+		}
+		const normalized = normalizeCommands([entry]);
+		if (normalized.length > 0) batches.push({ kind: "sequential", commands: normalized });
+	}
+	return batches;
+}
+
+function flattenCommandBatches(batches: readonly CommandBatch[]): CommandConfig[] {
+	return batches.flatMap((batch) => batch.commands);
 }
 
 async function snapshotFiles(
@@ -546,8 +587,41 @@ function formatCheckInstructions(commands: readonly CommandConfig[]): string {
 		"During development, builds and focused tests are allowed only when needed for the work in progress; batch them at meaningful boundaries. The focused-test exception allows a relevant subset of a registered suite, never the full suite. Do not use a build or another command name to bypass the restriction on configured checks.",
 		"A completed checks call counts as current whether commands pass or fail. Treat failures as actionable problems and fix them directly. Ask the user only if resolving a failure requires changing the check infrastructure itself. In a run with file edits, any later write-capable call invalidates the result, even if it changes nothing; finish that work and call checks again. Summarize file-editing work only after checks are current, and report unresolved failures clearly.",
 		"You may call it last in the same codemode script as your final edits: await all writes, then text(await tools.checks({})). Pending automatic fixes finish before checks.",
+		"Checks run in configuration order. Commands inside a parallel group run concurrently; the runner waits for the full group before continuing.",
 		`Checks: ${commands.length ? commands.map((command) => `${command.name} [${command.command}]${command.details ? `: ${command.details}` : ""}`).join("; ") : "none configured"}`,
 	].join("\n");
+}
+
+async function runCommandBatches(
+	pi: ExtensionAPI,
+	projectRoot: string,
+	batches: readonly CommandBatch[],
+	signal: AbortSignal,
+	reportProgress: ((batch: CommandBatch, completed: number) => void) | undefined,
+): Promise<FailedCommandDetails[]> {
+	const results: FailedCommandDetails[] = [];
+	let completed = 0;
+	for (const batch of batches) {
+		signal.throwIfAborted();
+		reportProgress?.(batch, completed);
+		if (batch.kind === "parallel") {
+			const settled = await Promise.allSettled(
+				batch.commands.map((command) => runCommand(pi, projectRoot, command, signal, [])),
+			);
+			signal.throwIfAborted();
+			for (const result of settled) {
+				if (result.status === "rejected") throw result.reason;
+				results.push(result.value);
+			}
+		} else {
+			for (const command of batch.commands) {
+				signal.throwIfAborted();
+				results.push(await runCommand(pi, projectRoot, command, signal, []));
+			}
+		}
+		completed += batch.commands.length;
+	}
+	return results;
 }
 
 async function runCommand(

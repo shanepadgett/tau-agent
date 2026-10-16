@@ -41,6 +41,26 @@ File scanning follows each command's globs and skips directories outside its sco
 
 Fixer output and ordinary command failures stay out of the conversation. Configure corresponding read-only `afterRun` checks to report problems the fixers cannot resolve. `checks` takes no arguments and selects applicable checks from this array. Use a readable `name`, such as `Type checking`, and optional `details` to describe the check; `command` is the separate shell invocation. Results show names. The agent must not manually run configured checks or equivalent commands during development or final verification, including direct binaries, task-runner commands, wrappers, and alternate flags. Builds and relevant focused tests remain available when needed for the work in progress; a subset of a registered test suite is allowed, but full suites and other configured checks belong exclusively to `checks`.
 
+Commands in `afterRun` and `beforeCommit` run in array order by default. To run independent, read-only commands concurrently, group them under `parallel`; the runner waits for every command in the group before moving to the next entry. It reports results in configuration order and still runs the rest of the group if one command fails. Use this only for commands that are safe to run at the same time. `afterWrite` fixers always run sequentially.
+
+```json
+{
+  "extensions": {
+    "silentCommandRunner": {
+      "afterRun": [
+        {
+          "parallel": [
+            { "name": "Lint", "command": "npm run lint" },
+            { "name": "Type checking", "command": "npm run typecheck" }
+          ]
+        },
+        { "name": "Integration checks", "command": "npm run integration-check" }
+      ]
+    }
+  }
+}
+```
+
 Successful tool output lists passed names: `The following checks passed: Lint, Type checking`. Failures return actionable output in the same tool result. The agent should fix reported problems directly, then call `checks` again. It should ask the user only if resolving a failure requires changing the check infrastructure itself. A completed call counts as current whether commands pass or fail. Output is bounded; complete overflow stays in a session-scoped temporary file referenced by the result.
 
 Direct calls show the active check and its position in the tool row, then replace progress with the result. Calls inside codemode and automatic settlement checks show progress in a temporary widget that disappears when checks finish. Tool calls do not send separate progress or success notifications; automatic settlement checks still notify about passed checks.
@@ -49,23 +69,30 @@ In a run with file edits, any later write-capable tool call invalidates verifica
 
 Applicable checks are selected from changed file contents, additions, or deletions covered by a configured check during the current run. Failures do not independently trigger reruns. Read-only shell commands and web-only codemode calls do not show check progress or run commands when they leave matching files unchanged in a run without edits.
 
-Both arrays support `name`, `command`, `cwd` (relative to the project root), `env`, `details`, `includeGlobs`, `excludeGlobs`, and `timeoutMs`. `beforeCommit` supports the same fields except the globs. Commands default to a 120-second timeout and match all project files except generated/cache directories. `maxOutputBytes` controls each stream retained in expanded failure details; shared output limits bound the text sent to the agent. Remove an array entry to stop a command; use Pi's extension controls to disable the extension. The `checks` tool is registered and exposed only when `afterRun` contains runnable checks; if checks are removed during a loaded session, the tool is hidden. Run `/reload` after changing extension code or settings.
+Command objects in `afterWrite`, `afterRun`, and `beforeCommit` support `name`, `command`, `cwd` (relative to the project root), `env`, `details`, and `timeoutMs`. The first two also support `includeGlobs` and `excludeGlobs`; `beforeCommit` runs regardless of changed files. Commands default to a 120-second timeout and match all project files except generated/cache directories. `maxOutputBytes` controls each stream retained in expanded failure details; shared output limits bound the text sent to the agent. Remove an array entry to stop a command; use Pi's extension controls to disable the extension. The `checks` tool is registered and exposed only when `afterRun` contains runnable checks; if checks are removed during a loaded session, the tool is hidden. Run `/reload` after changing extension code or settings.
 
 ## Pre-commit checks
 
-`beforeCommit` commands run once each time you run `/commit`, before Tau generates a commit plan. Every command runs, in array order, regardless of which files changed. Use this list for checks such as the full test suite that would otherwise run once per commit in a Git `pre-commit` hook, because `/commit` can create several commits. If any command fails, `/commit` stops without committing and sends the failures to the agent to fix. Remove matching Git hooks yourself if you no longer want them; `/commit` still runs them.
+`beforeCommit` commands run once each time you run `/commit`, before Tau generates a commit plan. Every command runs regardless of which files changed. Ordinary entries run in array order; a `parallel` group starts its commands concurrently and finishes the whole group before the next entry. Use this list for checks such as the full test suite that would otherwise run once per commit in a Git `pre-commit` hook, because `/commit` can create several commits. If any command fails, `/commit` stops without committing and sends the failures to the agent to fix. Remove matching Git hooks yourself if you no longer want them; `/commit` still runs them.
 
 ```json
 {
   "extensions": {
     "silentCommandRunner": {
-      "beforeCommit": [{ "name": "Unit tests", "command": "npm test" }]
+      "beforeCommit": [
+        {
+          "parallel": [
+            { "name": "Unit tests", "command": "npm test" },
+            { "name": "Type checking", "command": "npm run typecheck" }
+          ]
+        }
+      ]
     }
   }
 }
 ```
 
-Commands must not change files. If the working tree changes while they run, `/commit` stops.
+Commands must not change files. If the working tree changes while they run, `/commit` stops. Only group commands that are safe to run concurrently.
 
 ## Reduce check-output tokens
 

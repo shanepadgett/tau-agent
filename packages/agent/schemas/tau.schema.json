@@ -838,114 +838,252 @@
 						"afterRun": {
 							"type": "array",
 							"items": {
-								"type": "object",
-								"required": [
-									"name",
-									"command"
-								],
-								"properties": {
-									"name": {
-										"type": "string",
-										"description": "Short command name shown in notifications and failure messages."
-									},
-									"command": {
-										"type": "string",
-										"description": "Shell command run with sh -lc. In afterWrite, use unquoted {files} for changed-file arguments."
-									},
-									"cwd": {
-										"type": "string",
-										"default": ".",
-										"description": "Command working directory, relative to project root."
-									},
-									"env": {
+								"anyOf": [
+									{
 										"type": "object",
-										"patternProperties": {
-											"^.*$": {
-												"type": "string"
+										"required": [
+											"name",
+											"command"
+										],
+										"properties": {
+											"name": {
+												"type": "string",
+												"description": "Short command name shown in notifications and failure messages."
+											},
+											"command": {
+												"type": "string",
+												"description": "Shell command run with sh -lc. In afterWrite, use unquoted {files} for changed-file arguments."
+											},
+											"cwd": {
+												"type": "string",
+												"default": ".",
+												"description": "Command working directory, relative to project root."
+											},
+											"env": {
+												"type": "object",
+												"patternProperties": {
+													"^.*$": {
+														"type": "string"
+													}
+												},
+												"description": "Extra environment values."
+											},
+											"details": {
+												"type": "string",
+												"description": "Free-text explanation of what this command checks or runs."
+											},
+											"timeoutMs": {
+												"type": "integer",
+												"default": 120000,
+												"minimum": 1,
+												"description": "Command timeout in milliseconds."
+											},
+											"includeGlobs": {
+												"type": "array",
+												"items": {
+													"type": "string"
+												},
+												"default": [
+													"**/*"
+												],
+												"description": "Project-relative files that trigger this command."
+											},
+											"excludeGlobs": {
+												"type": "array",
+												"items": {
+													"type": "string"
+												},
+												"default": [],
+												"description": "Project-relative files ignored for this command."
 											}
 										},
-										"description": "Extra environment values."
+										"additionalProperties": false
 									},
-									"details": {
-										"type": "string",
-										"description": "Free-text explanation of what this command checks or runs."
-									},
-									"timeoutMs": {
-										"type": "integer",
-										"default": 120000,
-										"minimum": 1,
-										"description": "Command timeout in milliseconds."
-									},
-									"includeGlobs": {
-										"type": "array",
-										"items": {
-											"type": "string"
-										},
-										"default": [
-											"**/*"
+									{
+										"type": "object",
+										"required": [
+											"parallel"
 										],
-										"description": "Project-relative files that trigger this command."
-									},
-									"excludeGlobs": {
-										"type": "array",
-										"items": {
-											"type": "string"
+										"properties": {
+											"parallel": {
+												"type": "array",
+												"items": {
+													"type": "object",
+													"required": [
+														"name",
+														"command"
+													],
+													"properties": {
+														"name": {
+															"type": "string",
+															"description": "Short command name shown in notifications and failure messages."
+														},
+														"command": {
+															"type": "string",
+															"description": "Shell command run with sh -lc. In afterWrite, use unquoted {files} for changed-file arguments."
+														},
+														"cwd": {
+															"type": "string",
+															"default": ".",
+															"description": "Command working directory, relative to project root."
+														},
+														"env": {
+															"type": "object",
+															"patternProperties": {
+																"^.*$": {
+																	"type": "string"
+																}
+															},
+															"description": "Extra environment values."
+														},
+														"details": {
+															"type": "string",
+															"description": "Free-text explanation of what this command checks or runs."
+														},
+														"timeoutMs": {
+															"type": "integer",
+															"default": 120000,
+															"minimum": 1,
+															"description": "Command timeout in milliseconds."
+														},
+														"includeGlobs": {
+															"type": "array",
+															"items": {
+																"type": "string"
+															},
+															"default": [
+																"**/*"
+															],
+															"description": "Project-relative files that trigger this command."
+														},
+														"excludeGlobs": {
+															"type": "array",
+															"items": {
+																"type": "string"
+															},
+															"default": [],
+															"description": "Project-relative files ignored for this command."
+														}
+													},
+													"additionalProperties": false
+												},
+												"minItems": 2,
+												"description": "Commands to start concurrently as one ordered step."
+											}
 										},
-										"default": [],
-										"description": "Project-relative files ignored for this command."
+										"additionalProperties": false
 									}
-								},
-								"additionalProperties": false
+								]
 							},
 							"default": [],
-							"description": "Read-only final checks run by the checks tool, with automatic settlement fallback when verification is missing or stale."
+							"description": "Read-only final checks run by the checks tool, with automatic settlement fallback when verification is missing or stale. Entries run in order; parallel groups run concurrently."
 						},
 						"beforeCommit": {
 							"type": "array",
 							"items": {
-								"type": "object",
-								"required": [
-									"name",
-									"command"
-								],
-								"properties": {
-									"name": {
-										"type": "string",
-										"description": "Short command name shown in notifications and failure messages."
-									},
-									"command": {
-										"type": "string",
-										"description": "Shell command run with sh -lc. In afterWrite, use unquoted {files} for changed-file arguments."
-									},
-									"cwd": {
-										"type": "string",
-										"default": ".",
-										"description": "Command working directory, relative to project root."
-									},
-									"env": {
+								"anyOf": [
+									{
 										"type": "object",
-										"patternProperties": {
-											"^.*$": {
-												"type": "string"
+										"required": [
+											"name",
+											"command"
+										],
+										"properties": {
+											"name": {
+												"type": "string",
+												"description": "Short command name shown in notifications and failure messages."
+											},
+											"command": {
+												"type": "string",
+												"description": "Shell command run with sh -lc. In afterWrite, use unquoted {files} for changed-file arguments."
+											},
+											"cwd": {
+												"type": "string",
+												"default": ".",
+												"description": "Command working directory, relative to project root."
+											},
+											"env": {
+												"type": "object",
+												"patternProperties": {
+													"^.*$": {
+														"type": "string"
+													}
+												},
+												"description": "Extra environment values."
+											},
+											"details": {
+												"type": "string",
+												"description": "Free-text explanation of what this command checks or runs."
+											},
+											"timeoutMs": {
+												"type": "integer",
+												"default": 120000,
+												"minimum": 1,
+												"description": "Command timeout in milliseconds."
 											}
 										},
-										"description": "Extra environment values."
+										"additionalProperties": false
 									},
-									"details": {
-										"type": "string",
-										"description": "Free-text explanation of what this command checks or runs."
-									},
-									"timeoutMs": {
-										"type": "integer",
-										"default": 120000,
-										"minimum": 1,
-										"description": "Command timeout in milliseconds."
+									{
+										"type": "object",
+										"required": [
+											"parallel"
+										],
+										"properties": {
+											"parallel": {
+												"type": "array",
+												"items": {
+													"type": "object",
+													"required": [
+														"name",
+														"command"
+													],
+													"properties": {
+														"name": {
+															"type": "string",
+															"description": "Short command name shown in notifications and failure messages."
+														},
+														"command": {
+															"type": "string",
+															"description": "Shell command run with sh -lc. In afterWrite, use unquoted {files} for changed-file arguments."
+														},
+														"cwd": {
+															"type": "string",
+															"default": ".",
+															"description": "Command working directory, relative to project root."
+														},
+														"env": {
+															"type": "object",
+															"patternProperties": {
+																"^.*$": {
+																	"type": "string"
+																}
+															},
+															"description": "Extra environment values."
+														},
+														"details": {
+															"type": "string",
+															"description": "Free-text explanation of what this command checks or runs."
+														},
+														"timeoutMs": {
+															"type": "integer",
+															"default": 120000,
+															"minimum": 1,
+															"description": "Command timeout in milliseconds."
+														}
+													},
+													"additionalProperties": false
+												},
+												"minItems": 2,
+												"description": "Commands to start concurrently as one ordered step."
+											}
+										},
+										"additionalProperties": false
 									}
-								},
-								"additionalProperties": false
+								]
 							},
 							"default": [],
-							"description": "Read-only checks run in order once per /commit, before plan generation. Failures stop the commit and go to the agent."
+							"description": "Read-only checks run once per /commit before plan generation. Entries run in order; parallel groups run concurrently. Failures stop the commit and go to the agent."
 						}
 					},
 					"additionalProperties": false
