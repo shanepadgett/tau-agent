@@ -75,6 +75,14 @@ export async function summarize(
 	}
 	const readFiles = [...read].filter((file) => !modified.has(file)).sort();
 	const modifiedFiles = [...modified].sort();
+	// Preserve what the user actually saw, not a summary's reconstruction of it.
+	let lastDelivered = "";
+	for (const message of [...history].reverse()) {
+		if (message.role === "user") break;
+		if (message.role !== "assistant") continue;
+		lastDelivered = message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
+		if (lastDelivered.trim()) break;
+	}
 	const settings = SettingsManager.create(ctx.cwd);
 	const { reserveTokens } = settings.getCompactionSettings(session);
 	const retry = settings.getRetrySettings();
@@ -90,7 +98,7 @@ export async function summarize(
 				undefined,
 				undefined,
 				signal,
-				"Consolidate previous checkpoints rather than quoting or nesting them. Do not reproduce handoffs; Tau appends the current saved handoff verbatim.",
+				"Consolidate previous checkpoints rather than quoting or nesting them. Do not reproduce handoffs or Last delivered assistant message sections; Tau appends the current handoff and latest delivered assistant text verbatim.",
 				undefined,
 				reasoning,
 				async (summaryModel, context, options) => {
@@ -145,6 +153,8 @@ export async function summarize(
 			let summary = `## Durable context\n\n${durable}`;
 			if (readFiles.length) summary += `\n\n<read-files>\n${readFiles.join("\n")}\n</read-files>`;
 			if (modifiedFiles.length) summary += `\n\n<modified-files>\n${modifiedFiles.join("\n")}\n</modified-files>`;
+			if (lastDelivered.trim())
+				summary += `\n\n## Last delivered assistant message\n\nAlready shown to the user. Do not repeat it. If it already answers the request, do not generate another conclusion. Continue only unfinished work.\n\n${lastDelivered}`;
 			summary += `\n\n## Current handoff\n\n${handoff}`;
 			ctx.ui.notify(`Compaction summarized with ${model.provider}/${model.id}`, "info");
 			return {

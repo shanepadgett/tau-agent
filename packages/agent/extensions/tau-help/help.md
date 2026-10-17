@@ -50,7 +50,7 @@ Manual, automatic, and overflow-recovery compaction use Pi's normal summary form
 
 Set `extensions.compaction.selfCompact.enabled` to `false` to disable self-compaction, including its tool, instructions, handoff recovery, and post-compaction model routing. Manual and automatic compaction then use Pi's built-in summary format. Quick-model summary selection stays active in both modes. The footer continues showing context usage.
 
-Each newly reached context stage is delivered once per checkpoint. Notice is informational and lets active work continue. Warning asks the agent to finish its current bounded work unit, then compact before starting another substantial unit.
+Each newly reached context stage is delivered once per checkpoint. Notice is informational and lets active work continue. Warning asks the agent to finish its current bounded work unit, then compact before starting another substantial unit. If only the final answer remains, the agent sends it and ends the turn without a compaction reminder restarting it. Checkpoints happen between work steps or before the final answer. The latest assistant text since the last user message is preserved verbatim in a self-compaction checkpoint and marked as already delivered.
 
 At the hard cutoff, the agent must compact before using other tools. Self-compaction uses Pi's normal structured summary and output-token budget, then appends the saved handoff verbatim once. Partial summaries are never saved. Transient failures follow Pi's configured retry policy. A failed self-compaction keeps the saved handoff and tool restriction until a retry or `/compact` recovery succeeds.
 

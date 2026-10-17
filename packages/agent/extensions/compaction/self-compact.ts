@@ -19,7 +19,8 @@ import { summarize } from "./summary.ts";
 const STATE = "tau.compaction.state";
 const NOTE = "tau.compaction.note";
 const CONTINUE = "tau.compaction.continue";
-const RESUME = "Continue from the checkpoint's Current handoff and NEXT ACTION.";
+const RESUME =
+	"Continue from the checkpoint's Current handoff and NEXT ACTION. Any Last delivered assistant message was already shown to the user; do not repeat it. If it already answers the request, do not generate another conclusion. Continue only unfinished work.";
 const PROGRESS = "tau.compaction.progress";
 const GUIDANCE = "tau.compaction.guidance";
 const PROMPTS = {
@@ -29,7 +30,7 @@ const PROMPTS = {
 };
 
 type State =
-	| { phase: "watching"; cycle: number; nudged: boolean; forced: boolean }
+	| { phase: "watching"; cycle: number; forced: boolean }
 	| {
 			phase: "pending" | "compacting" | "failed" | "ready";
 			cycle: number;
@@ -39,9 +40,7 @@ type State =
 	  };
 type Level = TauAgentEvents["tau:compaction.level"];
 type GuidanceStage = keyof typeof PROMPTS;
-type GuidanceDetails =
-	| { kind: "threshold"; level: GuidanceStage }
-	| { kind: "settlement-reminder"; level: "warning" | "forced" };
+type GuidanceDetails = { kind: "threshold"; level: GuidanceStage };
 const SEVERITY: Record<GuidanceStage, number> = { notice: 1, warning: 2, forced: 3 };
 
 // Use the canonical projection so omitted or edited history cannot reappear in a summary.
@@ -72,7 +71,7 @@ export function registerSelfCompaction(
 			"Self-compaction thresholds must increase: notice < warning < forced. Using defaults.",
 			"warning",
 		);
-	let state: State = { phase: "watching", cycle: 0, nudged: false, forced: false };
+	let state: State = { phase: "watching", cycle: 0, forced: false };
 	let lifetime = new AbortController();
 	let lastLevel: string = "";
 	let progress: { ctx: ExtensionContext; loader: Loader | null } | null = null;
@@ -113,7 +112,7 @@ export function registerSelfCompaction(
 		state =
 			latest?.type === "custom" && latest.data
 				? (structuredClone(latest.data) as State)
-				: { phase: "watching", cycle: 0, nudged: false, forced: false };
+				: { phase: "watching", cycle: 0, forced: false };
 		if (state.phase !== "watching") {
 			const id = state.id;
 			const delivered = branch.some(
@@ -124,7 +123,7 @@ export function registerSelfCompaction(
 						entry.customType === NOTE &&
 						(entry.details as { id?: string } | undefined)?.id === id),
 			);
-			if (delivered) state = { phase: "watching", cycle: state.cycle + 1, nudged: false, forced: false };
+			if (delivered) state = { phase: "watching", cycle: state.cycle + 1, forced: false };
 			else if (
 				state.phase === "ready" ||
 				(latest && branch.slice(branch.indexOf(latest) + 1).some((entry) => entry.type === "compaction"))
@@ -220,7 +219,7 @@ export function registerSelfCompaction(
 		section: "context-management",
 		refresh: "append",
 		async read() {
-			return "Manage context through self_compact. Context notice is informational: continue active work without compacting solely because of the notice. At warning, finish the current bounded work unit, then compact before starting another substantial unit; if only the final answer remains, send it. At the hard cutoff, call self_compact immediately. Follow the latest context stage or settlement reminder. Call alone with a short current handoff: the user's request and authorization limits, unfinished work, immediate blockers, unanswered questions, and exact NEXT ACTION last. Aim for 500–1,500 characters; maximum 24,000. The handoff is preserved verbatim once inside the checkpoint; durable context is summarized separately.";
+			return "Manage context through self_compact. Context notice is informational: continue active work without compacting solely because of the notice. At warning, finish the current bounded work unit, then compact before starting another substantial unit; if only the final answer remains, send it and end the turn. At the hard cutoff, compact before doing more work. Checkpoint between work steps or before the final answer. After delivering the final answer, end the turn; do not checkpoint. Follow the latest context stage. Call alone with a short current handoff: the user's request and authorization limits, unfinished work, immediate blockers, unanswered questions, and exact NEXT ACTION last. Aim for 500–1,500 characters; maximum 24,000. The handoff is preserved verbatim once inside the checkpoint; durable context is summarized separately.";
 		},
 	});
 	pi.registerTool({
@@ -228,7 +227,7 @@ export function registerSelfCompaction(
 		label: "Compact context",
 		exposure: "model-only",
 		description:
-			"Compact context with a short current handoff: request and authorization limits, unfinished work, blockers, unanswered questions, NEXT ACTION last. Call alone. Preserved verbatim once inside the checkpoint, then continue. Aim for 500–1,500 characters; maximum 24,000.",
+			"Compact context between work steps or before the final answer, never after delivering the final answer. Supply a short current handoff: request and authorization limits, unfinished work, blockers, unanswered questions, NEXT ACTION last. Call alone. Preserved verbatim once inside the checkpoint, then continue. Aim for 500–1,500 characters; maximum 24,000.",
 		parameters: Type.Object(
 			{ note_to_self: Type.String({ minLength: 1, maxLength: 24000 }) },
 			{ additionalProperties: false },
@@ -310,7 +309,7 @@ export function registerSelfCompaction(
 					{
 						type: "custom" as const,
 						customType: STATE,
-						data: { phase: "watching", cycle: handoff.cycle + 1, nudged: false, forced: false },
+						data: { phase: "watching", cycle: handoff.cycle + 1, forced: false },
 					},
 				],
 				continue: true,
@@ -362,7 +361,7 @@ export function registerSelfCompaction(
 					{
 						type: "custom",
 						customType: STATE,
-						data: { phase: "watching", cycle: handoff.cycle + 1, nudged: false, forced: false },
+						data: { phase: "watching", cycle: handoff.cycle + 1, forced: false },
 					},
 				];
 				signal.removeEventListener("abort", clearProgress);
@@ -386,24 +385,6 @@ export function registerSelfCompaction(
 			);
 			return;
 		}
-		if (state.nudged || ctx.hasPendingMessages() || event.continue) return;
-		const current = publish(ctx);
-		if ((current.level === "warning" || current.level === "forced") && hasMaterial(ctx)) {
-			state.nudged = true;
-			return {
-				entries: [
-					{ type: "custom", customType: STATE, data: structuredClone(state) },
-					{
-						type: "custom_message",
-						customType: GUIDANCE,
-						content: `${guidance(current)}\nCompact now before continuing.`,
-						display: false,
-						details: { kind: "settlement-reminder", level: current.level } satisfies GuidanceDetails,
-					},
-				],
-				continue: true,
-			};
-		}
 	});
 	// Native triggers keep Pi's summary format, retained history, and progress UI.
 	pi.on("session_before_compact", async (event, ctx) => {
@@ -417,9 +398,7 @@ export function registerSelfCompaction(
 		const details = event.compactionEntry.details as { handoffId?: string } | undefined;
 		const included = !!note && details?.handoffId === note.id;
 		state =
-			note && !included
-				? { ...note, phase: "ready" }
-				: { phase: "watching", cycle: state.cycle + 1, nudged: false, forced: false };
+			note && !included ? { ...note, phase: "ready" } : { phase: "watching", cycle: state.cycle + 1, forced: false };
 		save();
 		await route(note?.note ?? event.compactionEntry.summary, ctx);
 		if (scope.aborted) return;
