@@ -126,7 +126,7 @@ Lets the agent run Python or Node.js code for calculations, data processing, and
 
 Runs configured fixes after file changes and checks before the agent reports finished work. Configure commands under `extensions.silentCommandRunner.afterWrite`, `afterRun`, and `beforeCommit` (run once per `/commit`). Group independent, read-only `afterRun` or `beforeCommit` commands under `parallel` to run them concurrently; `afterWrite` fixers remain sequential. Use `{files}` in an `afterWrite` command for the changed paths. Disable the extension through Pi's extension controls.
 
-Scanning follows the configured globs; exclusions ending in `/**` skip entire directories. Missing or stale checks run automatically when applicable files changed during the run. Completed commands count as run even if they fail; failures are reported to the agent and do not independently trigger reruns.
+Scanning follows the configured globs; exclusions ending in `/**` skip entire directories. Markdown-only edits require neither the `checks` tool nor automatic settlement checks; Markdown formatting runs separately. Otherwise, missing or stale checks run automatically when applicable files changed during the run. Completed commands count as run even if they fail; failures are reported to the agent and do not independently trigger reruns.
 
 ## soul
 
