@@ -4,6 +4,12 @@
 		"reference": {
 			"editor": "code"
 		},
+		"decisions": {
+			"enabled": false
+		},
+		"toolApproval": {
+			"enabled": false
+		},
 		"silentCommandRunner": {
 			"afterWrite": [
 				{
