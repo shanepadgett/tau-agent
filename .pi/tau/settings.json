@@ -4,6 +4,9 @@
 		"reference": {
 			"editor": "code"
 		},
+		"commit": {
+			"push": true
+		},
 		"decisions": {
 			"enabled": false
 		},
