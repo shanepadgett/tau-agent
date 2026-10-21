@@ -1,6 +1,6 @@
 # Reference
 
-Select local reference repositories, add new ones, and send a prompt that points Tau at them.
+Attach local reference repositories to a conversation so Tau knows where to find read-only examples.
 
 ## Usage
 
@@ -12,17 +12,19 @@ Select local reference repositories, add new ones, and send a prompt that points
 ## Behavior
 
 - Stores references in `~/.local/share/tau-agent/references/`.
-- `/reference` opens a TUI picker.
+- `/reference` opens a TUI picker with this conversation's attached references checked.
 - The picker shows each repository's name with its `origin` owner in muted parentheses when available, falling back to its local folder name.
-- `n` adds a new reference from a git URL, showing clone progress in the list as `↓ 37%`.
+- `Ctrl+N` adds a new reference from a git URL, showing clone progress in the list as `↓ 37%`.
 - New references clone the remote default branch.
-- `b` switches the highlighted reference to another branch.
-- `u` runs `git pull --ff-only --quiet` in each reference without closing the picker, showing `…`, `✓`, or `!` next to each name.
-- `o` opens the highlighted reference in an editor. Defaults to `$VISUAL`, `$EDITOR`, then `code`; settings can force `code` or `zed`.
-- `d` deletes the selected references from disk (with confirm). Disabled with nothing selected.
-- `f` filters references by name, branch, or path. Enter closes the filter; Esc clears/closes it.
-- Space selects references; Enter opens an editor for the request.
-- Sends the request with selected reference paths in the chat.
+- `Ctrl+B` switches the highlighted reference to another branch.
+- `Ctrl+U` runs `git pull --ff-only --quiet` in the visible references without closing the picker, showing `…`, `✓`, or `!` next to each name.
+- `Ctrl+O` opens the highlighted reference in an editor. Defaults to `$VISUAL`, `$EDITOR`, then `code`; settings can force `code` or `zed`.
+- `Ctrl+D` deletes the selected references, or the highlighted reference if none are selected, from disk after confirmation.
+- `/` filters references by name, branch, or path. Enter applies the filter; Esc clears/closes it.
+- Space toggles attachments; Enter saves the complete selection. Save with nothing checked to detach all references. Esc cancels attachment edits; completed Git and disk actions are not undone.
+- Saving leaves your prompt draft alone and does not start an agent turn. Tau receives the attached names, paths, and read-only usage guidance on the next agent run, without loading repository contents.
+- Attachments belong to the conversation branch, survive reopening and compaction, and follow conversation forks. New chats start without attachments.
+- Missing reference folders remain listed and checked until you uncheck them and save.
 
 ## Settings
 
@@ -45,4 +47,6 @@ Select local reference repositories, add new ones, and send a prompt that points
 - Requires TUI mode for the picker.
 - `/reference new <git-url>` works without the reference picker.
 - Uses the git URL basename as the folder name.
-- References are treated as read-only examples by the generated prompt.
+- Pi saves a new chat after its first message. Closing it before sending that message discards any attachment selections.
+- References are treated as read-only examples by the agent's instructions.
+- Updating or switching a reference's Git branch changes the shared local checkout for every chat using it; attachments do not pin repository versions.

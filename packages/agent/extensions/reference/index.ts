@@ -1,13 +1,31 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import { createGitRunner } from "../../shared/git.ts";
+import { registerPromptSource } from "../../shared/prompt-contributions.ts";
 import { loadTauExtensionSettings } from "../../shared/settings/load.ts";
-import { cloneFromCommand, type ReferenceItem, showReferencePanel } from "./panel.ts";
+import { ATTACHMENTS_TYPE, readReferenceAttachments, type ReferenceAttachmentState } from "./attachments.ts";
+import { cloneFromCommand, showReferencePanel } from "./panel.ts";
 import referenceSettings from "./settings.ts";
 
 export default function referenceExtension(pi: ExtensionAPI): void {
+	registerPromptSource(pi, {
+		key: "reference/attachments",
+		section: "references",
+		refresh: "append",
+		async read(ctx) {
+			const references = readReferenceAttachments(ctx.sessionManager.getBranch());
+			if (references.length === 0) return "";
+			return [
+				"Reference repositories attached to this conversation:",
+				...references.map((ref) => `- ${ref.name}: ${ref.path}`),
+				"",
+				"Use references as read-only examples. Search/read only files needed for the current task.",
+			].join("\n");
+		},
+	});
+
 	pi.registerCommand("reference", {
-		description: "Select local code references or add a new reference repo",
+		description: "Manage references attached to this conversation or add a reference repo",
 		getArgumentCompletions(prefix: string): AutocompleteItem[] | null {
 			const value = prefix.trimStart();
 			if (/\s/.test(value)) return null;
@@ -51,28 +69,21 @@ export default function referenceExtension(pi: ExtensionAPI): void {
 				ctx,
 				settings.editor,
 				settings.branchChoices,
+				readReferenceAttachments(ctx.sessionManager.getBranch()),
 			);
 			if (!references) return;
 
-			ctx.ui.setEditorText(buildReferenceDraft(references));
-			// Pi does not request a render when setEditorText runs after custom UI closes.
-			ctx.ui.setStatus("reference", undefined);
+			pi.appendEntry<ReferenceAttachmentState>(ATTACHMENTS_TYPE, {
+				references: references
+					.map(({ name, path }) => ({ name, path }))
+					.sort((left, right) => left.path.localeCompare(right.path, "en")),
+			});
+			ctx.ui.notify(
+				references.length === 0
+					? "All references detached."
+					: `Saved ${references.length} reference attachment${references.length === 1 ? "" : "s"}.`,
+				"info",
+			);
 		},
 	});
-}
-
-function buildReferenceDraft(references: readonly ReferenceItem[]): string {
-	return [
-		...(references.length === 0
-			? []
-			: [
-					"Reference repositories:",
-					...references.map((ref) => `- ${ref.name}: ${ref.path}${ref.dirty ? " (dirty)" : ""}`),
-					"",
-					"Use references as read-only examples. Search/read only files needed for this request.",
-				]),
-		"",
-		"Request:",
-		"",
-	].join("\n");
 }

@@ -15,6 +15,7 @@ import {
 } from "@shanepadgett/tau-tui";
 import { ToolPanel, type ToolPanelConfig } from "@shanepadgett/tau-tui";
 import { visibleWindow } from "@shanepadgett/tau-tui";
+import type { ReferenceAttachment } from "./attachments.ts";
 import type { ReferenceEditor } from "./settings.ts";
 
 const REFERENCES_DIR = join(homedir(), ".local", "share", "tau-agent", "references");
@@ -25,7 +26,7 @@ const CLONE_STALL_MS = 180_000;
 const REFERENCE_VISIBLE_ROWS = 10;
 const BRANCH_VISIBLE_ROWS = 5;
 
-export interface ReferenceItem {
+interface ReferenceItem {
 	name: string;
 	displayName: string;
 	path: string;
@@ -34,12 +35,7 @@ export interface ReferenceItem {
 }
 
 interface ReferenceListItem extends ReferenceItem, SelectableListItem {
-	state?: "loading" | "updating" | "updated" | "failed" | "switching";
-}
-
-interface ReferenceLocation {
-	name: string;
-	path: string;
+	state?: "loading" | "updating" | "updated" | "failed" | "switching" | "missing";
 }
 
 interface CloneProgress {
@@ -75,8 +71,9 @@ export async function showReferencePanel(
 	ctx: ExtensionCommandContext,
 	editor: ReferenceEditor,
 	branchChoices: number,
+	attachments: readonly ReferenceAttachment[],
 ): Promise<ReferenceItem[] | undefined> {
-	let initial: ReferenceLocation[];
+	let initial: ReferenceAttachment[];
 	try {
 		initial = await loadReferenceLocations();
 	} catch (error) {
@@ -86,7 +83,7 @@ export async function showReferencePanel(
 
 	return ctx.ui.custom<ReferenceItem[] | undefined>(
 		(tui, theme, _keybindings, done) =>
-			new ReferencePanel(tui, theme, git, ctx, editor, branchChoices, initial, done),
+			new ReferencePanel(tui, theme, git, ctx, editor, branchChoices, initial, attachments, done),
 	);
 }
 
@@ -139,7 +136,8 @@ class ReferencePanel implements Component {
 		ctx: ExtensionCommandContext,
 		editor: ReferenceEditor,
 		branchChoices: number,
-		initial: readonly ReferenceLocation[],
+		initial: readonly ReferenceAttachment[],
+		attachments: readonly ReferenceAttachment[],
 		done: (result: ReferenceItem[] | undefined) => void,
 	) {
 		this.tui = tui;
@@ -152,6 +150,13 @@ class ReferencePanel implements Component {
 		this.refs = initial.map((item) =>
 			toListItem({ ...item, displayName: item.name, dirty: false, branch: "" }, "loading"),
 		);
+		for (const attachment of attachments) {
+			if (!this.refs.some((item) => item.path === attachment.path))
+				this.refs.push(
+					toListItem({ ...attachment, displayName: attachment.name, dirty: false, branch: "" }, "missing"),
+				);
+		}
+		this.refs.sort(compareReferenceItems);
 		this.list = this.createList(this.refs);
 		this.body = {
 			render: (width) => this.renderBody(width),
@@ -165,6 +170,7 @@ class ReferencePanel implements Component {
 			footer: { kind: "hints", hints: this.footerHints() },
 		};
 		this.panel = new ToolPanel(theme, this.panelConfig);
+		this.list.setSelection(attachments.map((item) => item.path));
 		void this.hydrateInitialReferences(initial);
 	}
 
@@ -198,7 +204,7 @@ class ReferencePanel implements Component {
 		return new SelectableList(this.theme, {
 			items,
 			emptyMessage: "No references. Press ctrl+n for new.",
-			selection: { kind: "multi", primaryLabel: "attach" },
+			selection: { kind: "multi", primaryLabel: "save" },
 			filter: { searchText: (item) => `${item.displayName} ${item.name} ${item.branch} ${item.path}` },
 			actions: [
 				{ id: "new", key: Key.ctrl("n"), hint: rawHint("ctrl+n", "new") },
@@ -224,7 +230,7 @@ class ReferencePanel implements Component {
 			return;
 		}
 		if (result.kind === "primary") {
-			if (result.items.length > 0) this.done(result.items.map(toReferenceItem));
+			this.done(result.items.map(toReferenceItem));
 			return;
 		}
 		this.handleListAction(result);
@@ -236,7 +242,7 @@ class ReferencePanel implements Component {
 			return;
 		}
 		if (result.actionId === "updateVisible") {
-			void this.updateVisibleReferences(result.items);
+			void this.updateVisibleReferences(result.items.filter((item) => item.state !== "missing"));
 			return;
 		}
 		if (result.items.length === 0) {
@@ -246,6 +252,10 @@ class ReferencePanel implements Component {
 
 		const [item] = result.items;
 		if (!item) return;
+		if (item.state === "missing" && result.actionId !== "delete") {
+			this.ctx.ui.notify(`Reference folder is missing: ${item.path}`, "warning");
+			return;
+		}
 		if (result.actionId === "open") this.openReference(item);
 		else if (result.actionId === "branch") void this.startBranchPicker(item);
 		else if (result.actionId === "delete") this.startDeleteReferences(result.items);
@@ -320,6 +330,7 @@ class ReferencePanel implements Component {
 	}
 
 	private referenceStatusMark(state: NonNullable<ReferenceListItem["state"]>): string {
+		if (state === "missing") return this.theme.fg("warning", "(missing)");
 		if (state === "failed") return this.theme.fg("error", "!");
 		if (state === "updated") return this.theme.fg("success", "✓");
 		return this.theme.fg("muted", "…");
@@ -404,7 +415,7 @@ class ReferencePanel implements Component {
 		}
 
 		const path = join(REFERENCES_DIR, name);
-		if (this.refs.some((item) => item.path === path) || this.cloneStatus?.path === path) {
+		if (this.refs.some((item) => item.path === path && item.state !== "missing") || this.cloneStatus?.path === path) {
 			this.ctx.ui.notify(`Reference already exists: ${name}`, "error");
 			this.syncPanel();
 			return;
@@ -418,7 +429,7 @@ class ReferencePanel implements Component {
 				this.syncPanel();
 			});
 			const item = toListItem(await loadReference(this.git, name, path));
-			this.refs = [...this.refs, item].sort(compareReferenceItems);
+			this.refs = [...this.refs.filter((ref) => ref.path !== path), item].sort(compareReferenceItems);
 			this.list.setItems(this.refs);
 			this.ctx.ui.notify(`Added ${name} to ${path}`, "info");
 		} catch (error) {
@@ -570,7 +581,8 @@ class ReferencePanel implements Component {
 					throw new Error(`Invalid reference name: ${item.name}`);
 				}
 				const target = join(REFERENCES_DIR, item.name);
-				if (!target.startsWith(`${REFERENCES_DIR}/`)) throw new Error(`Invalid reference path: ${item.name}`);
+				if (!target.startsWith(`${REFERENCES_DIR}/`) || target !== item.path)
+					throw new Error(`Invalid reference path: ${item.name}`);
 				await rm(target, { recursive: true, force: true });
 				deleted.push(item.name);
 			} catch (error) {
@@ -598,13 +610,21 @@ class ReferencePanel implements Component {
 	}
 
 	private async reloadReferences(preserveStates = false): Promise<void> {
-		const states = new Map(preserveStates ? this.refs.map((item) => [item.path, item.state]) : []);
-		this.refs = (await loadReferences(this.git)).map((item) => toListItem(item, states.get(item.path)));
+		const states = new Map(
+			preserveStates
+				? this.refs.filter((item) => item.state !== "missing").map((item) => [item.path, item.state])
+				: [],
+		);
+		const refs = (await loadReferences(this.git)).map((item) => toListItem(item, states.get(item.path)));
+		for (const item of this.selected) {
+			if (!refs.some((ref) => ref.path === item.path)) refs.push({ ...item, state: "missing" });
+		}
+		this.refs = refs.sort(compareReferenceItems);
 		this.list.setItems(this.refs);
 		this.syncPanel();
 	}
 
-	private async hydrateInitialReferences(locations: readonly ReferenceLocation[]): Promise<void> {
+	private async hydrateInitialReferences(locations: readonly ReferenceAttachment[]): Promise<void> {
 		if (locations.length === 0) return;
 		const results = await Promise.all(
 			locations.map(async (location) => {
@@ -653,6 +673,8 @@ class ReferencePanel implements Component {
 
 	private headerLines(): readonly string[] {
 		const lines: string[] = [];
+		if (this.refs.some((item) => item.state === "missing"))
+			lines.push(this.theme.fg("warning", "Missing references stay attached until unchecked and saved."));
 		if (this.refs.some((item) => item.dirty)) {
 			lines.push(this.theme.fg("warning", "Warning: dirty reference repos are read-only."));
 		}
@@ -788,7 +810,7 @@ function compareReferenceItems(left: ReferenceListItem, right: ReferenceListItem
 	return left.name.localeCompare(right.name);
 }
 
-async function loadReferenceLocations(): Promise<ReferenceLocation[]> {
+async function loadReferenceLocations(): Promise<ReferenceAttachment[]> {
 	await mkdir(REFERENCES_DIR, { recursive: true });
 	return (await readdir(REFERENCES_DIR, { withFileTypes: true }))
 		.filter((entry) => entry.isDirectory() && !entry.name.startsWith(".clone-"))

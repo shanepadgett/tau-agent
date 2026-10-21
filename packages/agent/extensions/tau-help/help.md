@@ -108,7 +108,7 @@ Use `/ready` to scan how well a repository supports agent work, including setup,
 
 ## reference
 
-Use `/reference` to manage separate repositories for comparison or inspiration. `/reference new <git-url>` adds one. Select references and explain why they matter; Tau puts their paths and your explanation in the editor for the agent.
+Use `/reference` to attach separate repositories for comparison or inspiration. Space toggles attachments; Enter saves, including an empty selection to detach all; Esc cancels attachment edits. The picker restores this conversation's attachments. Tau receives their paths as read-only reference context on the next agent run, without changing your prompt draft. Attachments survive reopening and compaction and follow conversation forks. `/reference new <git-url>` adds a repository to the shared library.
 
 ## run-summary
 
