@@ -1,6 +1,5 @@
 import {
 	compact,
-	estimateTokens,
 	SettingsManager,
 	type ExtensionAPI,
 	type ExtensionContext,
@@ -38,12 +37,7 @@ export async function summarizeNativeCompaction(
 				event.customInstructions,
 				event.signal,
 				reasoning,
-				(summaryModel, context, options) => {
-					const inputTokens = context.messages.reduce((total, message) => total + estimateTokens(message), 0);
-					if (inputTokens + (options?.maxTokens ?? 0) > summaryModel.contextWindow)
-						throw new Error("Compaction input and output budget exceed the model window");
-					return ctx.modelRegistry.streamSimple(summaryModel, context, options);
-				},
+				(summaryModel, context, options) => ctx.modelRegistry.streamSimple(summaryModel, context, options),
 				undefined,
 				retry,
 			);

@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
 	convertToLlm,
-	estimateTokens,
 	generateSummaryWithUsage,
 	SettingsManager,
 	type ExtensionAPI,
@@ -43,8 +42,6 @@ export async function summarize(
 	signal: AbortSignal,
 	pi: Pick<ExtensionAPI, "appendEntry">,
 ) {
-	const session = ctx.model;
-	if (!session) throw new Error("No model available for compaction");
 	// Use only canonical projected content, never the raw branch's message bodies.
 	const history = messages.flatMap<(typeof messages)[number]>((message) => {
 		if (message.role === "system") return [];
@@ -83,9 +80,7 @@ export async function summarize(
 		lastDelivered = message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
 		if (lastDelivered.trim()) break;
 	}
-	const settings = SettingsManager.create(ctx.cwd);
-	const { reserveTokens } = settings.getCompactionSettings(session);
-	const retry = settings.getRetrySettings();
+	const retry = SettingsManager.create(ctx.cwd).getRetrySettings();
 	const candidates = await resolveCompactionCandidates(ctx);
 	for (const { model, reasoning } of candidates) {
 		const captured: { stopReason: AssistantMessage["stopReason"] | null } = { stopReason: null };
@@ -94,7 +89,7 @@ export async function summarize(
 			const result = await generateSummaryWithUsage(
 				history,
 				model,
-				reserveTokens,
+				undefined,
 				undefined,
 				undefined,
 				signal,
@@ -103,12 +98,6 @@ export async function summarize(
 				reasoning,
 				async (summaryModel, context, options) => {
 					signal.throwIfAborted();
-					// Check Pi's final serialized request, including its system and format prompts.
-					const inputTokens =
-						context.messages.reduce((total, message) => total + estimateTokens(message), 0) + 1024;
-					const maxTokens = options?.maxTokens ?? 0;
-					if (maxTokens <= 0 || inputTokens + maxTokens > summaryModel.contextWindow)
-						throw new Error("Complete checkpoint input and output budget exceed the model window");
 					const stream = ctx.modelRegistry.streamSimple(summaryModel, context, options);
 					const response = await stream.result();
 					signal.throwIfAborted();
@@ -120,8 +109,6 @@ export async function summarize(
 							model: model.id.slice(0, 200),
 							reason: "response",
 							stopReason: response.stopReason,
-							inputTokens,
-							maxTokens,
 							textChars: response.content.reduce(
 								(n, part) => n + (part.type === "text" ? part.text.length : 0),
 								0,
