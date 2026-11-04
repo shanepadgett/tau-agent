@@ -1,8 +1,8 @@
-import { StringEnum } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
 import { BoundedTextResultBuilder, type BoundedTextOverflowDetails } from "../../shared/bounded-text-result.ts";
+import { stringEnum } from "../../shared/string-enum.ts";
 import type { TemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { formatToolRowTitle, type ToolRowStateStore } from "../../shared/tool-row-state.js";
 import { htmlToMarkdown, htmlToText } from "./html.ts";
@@ -15,7 +15,7 @@ const webFetchParams = Type.Object(
 	{
 		url: Type.String({ description: "URL to fetch (http:// or https://)" }),
 		format: Type.Optional(
-			StringEnum(["markdown", "text", "html"] as const, { description: "Output format (default: markdown)" }),
+			stringEnum(["markdown", "text", "html"] as const, { description: "Output format (default: markdown)" }),
 		),
 		timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (default: 30, max: 600)" })),
 	},

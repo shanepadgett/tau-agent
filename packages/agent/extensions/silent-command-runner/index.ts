@@ -671,7 +671,7 @@ async function runCommand(
 		);
 	} catch (error) {
 		signal.throwIfAborted();
-		result = { code: 1, killed: false, stdout: "", stderr: errorMessage(error) };
+		result = { code: 1, killed: false, truncated: false, stdout: "", stderr: errorMessage(error) };
 	}
 	return commandDetails(command, cwd, result, Date.now() - start);
 }

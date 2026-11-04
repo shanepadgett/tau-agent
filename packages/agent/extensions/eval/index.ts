@@ -3,7 +3,6 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { StringEnum } from "@earendil-works/pi-ai";
 import {
 	defineTool,
 	getLanguageFromPath,
@@ -17,6 +16,7 @@ import { Type } from "typebox";
 import { BoundedTextResultBuilder } from "../../shared/bounded-text-result.ts";
 import { onTauEventImmediately } from "../../shared/events.ts";
 import { createScriptSourceStore } from "../../shared/script-source.ts";
+import { stringEnum } from "../../shared/string-enum.ts";
 import { createTemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { renderToolOutputPreview } from "../../shared/text.ts";
 
@@ -111,7 +111,7 @@ export default function evalExtension(pi: ExtensionAPI): void {
 
 	const paramsSchema = Type.Object(
 		{
-			language: StringEnum(detected, {
+			language: stringEnum(detected, {
 				description: "Execution runtime.",
 			}),
 			script: Type.Optional(

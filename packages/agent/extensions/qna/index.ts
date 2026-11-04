@@ -1,8 +1,9 @@
-import { StringEnum, Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+import { Type } from "typebox";
 import { emitAgentBlocked } from "../../shared/agent-blocked.ts";
 import { BoundedTextResultBuilder, type BoundedTextOverflowDetails } from "../../shared/bounded-text-result.ts";
+import { stringEnum } from "../../shared/string-enum.ts";
 import { createTemporaryOutputStore, type TemporaryOutputStore } from "../../shared/temporary-output-store.ts";
 import { normalizeParams, type QnaParams, type QnaResult } from "./model.ts";
 import { runQnaUi } from "./ui.ts";
@@ -40,7 +41,7 @@ const askQuestionParamsSchema = Type.Object(
 				{
 					id: Type.String({ minLength: 1, description: "Unique question id; also used as the tab label" }),
 					prompt: Type.String({ minLength: 1, description: "Question shown to the user" }),
-					kind: StringEnum(["select", "multi", "input", "confirm"] as const, {
+					kind: stringEnum(["select", "multi", "input", "confirm"] as const, {
 						description:
 							"select: one choice; multi: combinable choices; input: typed answer; confirm: fixed yes/no",
 					}),

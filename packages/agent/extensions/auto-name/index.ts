@@ -1,5 +1,6 @@
-import { type Tool, Type } from "@earendil-works/pi-ai";
+import type { Tool } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import {
 	getBranchInjectedContexts,
 	getPendingInjectedContexts,

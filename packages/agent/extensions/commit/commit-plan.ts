@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { type Tool, Type } from "@earendil-works/pi-ai";
+import type { Tool } from "@earendil-works/pi-ai";
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import { resolveEffortCandidates } from "../../shared/model-effort.ts";
 import { generateToolValidated, generateValidated } from "../../shared/model-fallback/index.ts";
 import { truncAt } from "../../shared/text.ts";
